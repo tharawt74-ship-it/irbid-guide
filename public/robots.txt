@@ -1,0 +1,21 @@
+User-agent: *
+Allow: /
+Allow: /business/
+Allow: /b/
+Allow: /@*
+Allow: /jobs
+Allow: /offers
+Allow: /housing
+Allow: /transportation
+Allow: /news
+Allow: /tourism
+Allow: /prayer-times
+Allow: /pricing
+
+# Disallow private and dashboard routes
+Disallow: /admin
+Disallow: /profile/settings
+Disallow: /messages
+
+# Sitemap URL
+Sitemap: https://shofierbid.com/sitemap.xml

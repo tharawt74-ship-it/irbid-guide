@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xhtml="http://www.w3.org/1999/xhtml"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+  <!-- الصفحة الرئيسية - دليل إربد الشامل -->
+  <url>
+    <loc>https://shofierbid.com/</loc>
+    <lastmod>2026-08-26</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+  
+  <!-- وظائف إربد وسوق العمل -->
+  <url>
+    <loc>https://shofierbid.com/jobs</loc>
+    <lastmod>2026-08-26</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <!-- عروض وتخفيضات إربد -->
+  <url>
+    <loc>https://shofierbid.com/offers</loc>
+    <lastmod>2026-08-26</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <!-- سكنات إربد وسكنات طلاب جامعة اليرموك والتكنو -->
+  <url>
+    <loc>https://shofierbid.com/housing</loc>
+    <lastmod>2026-08-26</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <!-- دليل مواصلات وخطوط باصات وتكاسي إربد -->
+  <url>
+    <loc>https://shofierbid.com/transportation</loc>
+    <lastmod>2026-08-26</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- السياحة ومعالم محافظة إربد وأم قيس وطبقة فحل -->
+  <url>
+    <loc>https://shofierbid.com/tourism</loc>
+    <lastmod>2026-08-26</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- أخبار إربد وفعاليات عروس الشمال -->
+  <url>
+    <loc>https://shofierbid.com/news</loc>
+    <lastmod>2026-08-26</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- مواقيت الصلاة في إربد -->
+  <url>
+    <loc>https://shofierbid.com/prayer-times</loc>
+    <lastmod>2026-08-26</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <!-- أضف محلك وباقات الإعلانات في إربد -->
+  <url>
+    <loc>https://shofierbid.com/pricing</loc>
+    <lastmod>2026-08-26</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://shofierbid.com/contact</loc>
+    <lastmod>2026-08-26</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+</urlset>

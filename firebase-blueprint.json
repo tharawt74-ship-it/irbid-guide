@@ -1,0 +1,109 @@
+{
+  "entities": {
+    "Business": {
+      "title": "Business",
+      "description": "Directory listing for a business or shop in Irbid",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "category": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "description": { "type": "string", "maxLength": 2000 },
+        "phone": { "type": "string", "maxLength": 50 },
+        "address": { "type": "string", "maxLength": 300 },
+        "district": { "type": "string", "maxLength": 100 },
+        "rating": { "type": "number" },
+        "reviewCount": { "type": "number" },
+        "views": { "type": "number" },
+        "image": { "type": "string", "maxLength": 1000 },
+        "isFeatured": { "type": "boolean" },
+        "isVip": { "type": "boolean" },
+        "isDemo": { "type": "boolean" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["name", "category"]
+    },
+    "BusinessRequest": {
+      "title": "BusinessRequest",
+      "description": "User submission to register a new shop in the directory",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "category": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "description": { "type": "string", "maxLength": 2000 },
+        "phone": { "type": "string", "maxLength": 50 },
+        "address": { "type": "string", "maxLength": 300 },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "userId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["name", "phone", "category"]
+    },
+    "Review": {
+      "title": "Review",
+      "description": "User rating and feedback for a business",
+      "type": "object",
+      "properties": {
+        "businessId": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "userName": { "type": "string", "maxLength": 100 },
+        "rating": { "type": "number" },
+        "comment": { "type": "string", "maxLength": 1000 },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["businessId", "rating", "comment"]
+    },
+    "JobOffer": {
+      "title": "JobOffer",
+      "description": "Job vacancy listing in Irbid",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "company": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "category": { "type": "string", "maxLength": 100 },
+        "jobType": { "type": "string", "maxLength": 50 },
+        "location": { "type": "string", "maxLength": 200 },
+        "description": { "type": "string", "maxLength": 3000 },
+        "contactPhone": { "type": "string", "maxLength": 50 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["title", "company", "description", "contactPhone"]
+    },
+    "BannerBookingRequest": {
+      "title": "BannerBookingRequest",
+      "description": "Request submitted by users or business owners to book ad banners",
+      "type": "object",
+      "properties": {
+        "bannerId": { "type": "string", "maxLength": 128 },
+        "applicantName": { "type": "string", "maxLength": 100 },
+        "applicantPhone": { "type": "string", "maxLength": 50 },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "status": { "type": "string", "enum": ["pending", "contacted", "completed", "rejected"] },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["applicantName", "applicantPhone"]
+    }
+  },
+  "firestore": {
+    "/businesses/{businessId}": {
+      "schema": { "$ref": "#/entities/Business" },
+      "description": "Public directory of businesses in Irbid"
+    },
+    "/businessRequests/{requestId}": {
+      "schema": { "$ref": "#/entities/BusinessRequest" },
+      "description": "User requests for adding new businesses"
+    },
+    "/reviews/{reviewId}": {
+      "schema": { "$ref": "#/entities/Review" },
+      "description": "Business reviews and ratings"
+    },
+    "/jobs/{jobId}": {
+      "schema": { "$ref": "#/entities/JobOffer" },
+      "description": "Employment listings in Irbid"
+    },
+    "/bannerBookingRequests/{bookingId}": {
+      "schema": { "$ref": "#/entities/BannerBookingRequest" },
+      "description": "Banner ad booking requests"
+    }
+  }
+}

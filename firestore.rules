@@ -1,0 +1,138 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny all access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper Primitives & Security Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        request.auth.token.email == "princessofx2344@gmail.com"
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // 1. Users & User Profiles Collection
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isOwner(userId) && incoming().keys().hasAll(['email']);
+      allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // 2. Businesses Collection
+    match /businesses/{businessId} {
+      allow read: if isValidId(businessId);
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && (
+        isAdmin() || 
+        (existing().ownerId != null && existing().ownerId == request.auth.uid) ||
+        // Allow public view incrementing safely
+        incoming().diff(existing()).affectedKeys().hasOnly(['views'])
+      );
+      allow delete: if isAdmin() || (isSignedIn() && existing().ownerId == request.auth.uid);
+    }
+
+    // 3. Business Requests Collection (Submission for verification/addition)
+    match /businessRequests/{requestId} {
+      allow read: if isSignedIn() && (isAdmin() || existing().userId == request.auth.uid);
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid;
+      allow update, delete: if isAdmin() || (isSignedIn() && existing().userId == request.auth.uid);
+    }
+
+    // 4. Reviews Collection
+    match /reviews/{reviewId} {
+      allow read: if isValidId(reviewId);
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid;
+      allow update, delete: if isAdmin() || (isSignedIn() && existing().userId == request.auth.uid);
+    }
+
+    // 5. Job Offers Collection
+    match /jobs/{jobId} {
+      allow read: if isValidId(jobId);
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin() || (isSignedIn() && existing().userId == request.auth.uid);
+    }
+
+    // 6. Offers & Discounts Collection
+    match /offers/{offerId} {
+      allow read: if isValidId(offerId);
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin() || (isSignedIn() && existing().userId == request.auth.uid);
+    }
+
+    // 7. Housing & Real Estate Collection
+    match /housing/{housingId} {
+      allow read: if isValidId(housingId);
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin() || (isSignedIn() && existing().userId == request.auth.uid);
+    }
+
+    // 8. Messages & Conversations Collection
+    match /messages/{messageId} {
+      allow read: if isSignedIn() && (
+        isAdmin() || 
+        existing().senderId == request.auth.uid || 
+        existing().receiverId == request.auth.uid
+      );
+      allow create: if isSignedIn() && incoming().senderId == request.auth.uid;
+      allow update, delete: if isAdmin() || (isSignedIn() && existing().senderId == request.auth.uid);
+    }
+
+    // 9. Marketing Requests Collection
+    match /marketingRequests/{marketingId} {
+      allow read: if isSignedIn() && (isAdmin() || existing().userId == request.auth.uid);
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // 10. Banner Booking Requests Collection
+    match /bannerBookingRequests/{bookingId} {
+      allow read: if isSignedIn() && (isAdmin() || existing().userId == request.auth.uid);
+      allow create: if true; // Public contact/booking submission
+      allow update, delete: if isAdmin();
+    }
+
+    // 11. App Notifications Collection
+    match /notifications/{notificationId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // 12. App Configuration Collection
+    match /config/{configId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // 13. Admin Registry
+    match /admins/{adminId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+  }
+}

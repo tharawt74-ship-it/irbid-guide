@@ -1,0 +1,6 @@
+{
+  "name": "شو في بإربد؟",
+  "description": "دليل إربد الشامل لاكتشاف أفضل المطاعم والمقاهي والمحلات التجارية",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

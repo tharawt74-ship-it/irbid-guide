@@ -9,6 +9,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import { NotificationsProvider } from './contexts/NotificationsContext';
 import { Layout } from './components/layout/Layout';
 import { ScrollToTop } from './components/ScrollToTop';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { Loader2 } from 'lucide-react';
 
 // Eagerly load critical Home page for immediate initial paint
@@ -47,40 +48,42 @@ function PageLoader() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <NotificationsProvider>
-        <BrowserRouter>
-          <ScrollToTop />
-          <Suspense fallback={<PageLoader />}>
-            <Routes>
-              <Route path="/" element={<Layout />}>
-                <Route index element={<Home />} />
-                <Route path="admin" element={<AdminDashboard />} />
-                <Route path="profile" element={<Profile />} />
-                <Route path="profile/settings" element={<ProfileSettings />} />
-                <Route path="settings" element={<ProfileSettings />} />
-                <Route path="notifications" element={<NotificationsPage />} />
-                <Route path="messages" element={<Messages />} />
-                <Route path="business/:id" element={<BusinessDetail />} />
-                <Route path="b/:id" element={<BusinessDetail />} />
-                <Route path="@:id" element={<BusinessDetail />} />
-                <Route path="news" element={<News />} />
-                <Route path="jobs" element={<Jobs />} />
-                <Route path="offers" element={<Offers />} />
-                <Route path="housing" element={<Housing />} />
-                <Route path="tourism" element={<Tourism />} />
-                <Route path="transportation" element={<Transportation />} />
-                <Route path="prayer-times" element={<PrayerTimes />} />
-                <Route path="packages" element={<Pricing />} />
-                <Route path="pricing" element={<Pricing />} />
-                <Route path="contact" element={<Contact />} />
-                <Route path="login" element={<Login />} />
-                <Route path="register" element={<Register />} />
-              </Route>
-            </Routes>
-          </Suspense>
-        </BrowserRouter>
-      </NotificationsProvider>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <NotificationsProvider>
+          <BrowserRouter>
+            <ScrollToTop />
+            <Suspense fallback={<PageLoader />}>
+              <Routes>
+                <Route path="/" element={<Layout />}>
+                  <Route index element={<Home />} />
+                  <Route path="admin" element={<AdminDashboard />} />
+                  <Route path="profile" element={<Profile />} />
+                  <Route path="profile/settings" element={<ProfileSettings />} />
+                  <Route path="settings" element={<ProfileSettings />} />
+                  <Route path="notifications" element={<NotificationsPage />} />
+                  <Route path="messages" element={<Messages />} />
+                  <Route path="business/:id" element={<BusinessDetail />} />
+                  <Route path="b/:id" element={<BusinessDetail />} />
+                  <Route path="@:id" element={<BusinessDetail />} />
+                  <Route path="news" element={<News />} />
+                  <Route path="jobs" element={<Jobs />} />
+                  <Route path="offers" element={<Offers />} />
+                  <Route path="housing" element={<Housing />} />
+                  <Route path="tourism" element={<Tourism />} />
+                  <Route path="transportation" element={<Transportation />} />
+                  <Route path="prayer-times" element={<PrayerTimes />} />
+                  <Route path="packages" element={<Pricing />} />
+                  <Route path="pricing" element={<Pricing />} />
+                  <Route path="contact" element={<Contact />} />
+                  <Route path="login" element={<Login />} />
+                  <Route path="register" element={<Register />} />
+                </Route>
+              </Routes>
+            </Suspense>
+          </BrowserRouter>
+        </NotificationsProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }

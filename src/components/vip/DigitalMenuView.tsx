@@ -196,28 +196,28 @@ export function DigitalMenuView({
     switch (badgeType) {
       case 'popular':
         return (
-          <div className="absolute -top-1.5 -left-1.5 sm:-top-2 sm:-left-2 bg-gradient-to-r from-amber-500 to-amber-600 text-white text-[9px] sm:text-[10px] font-black px-1.5 sm:px-2 py-0.5 rounded-md shadow-xs flex items-center gap-1 z-10 animate-fade-in">
-            <Flame className="h-2.5 w-2.5 sm:h-3 sm:w-3 fill-current animate-pulse" />
-            <span>{theme.badges.popular}</span>
+          <div className="absolute top-2 right-2 bg-gradient-to-r from-amber-500 to-amber-600 text-white text-[9px] sm:text-[10px] font-black px-2 py-0.5 rounded-lg shadow-sm flex items-center gap-1 z-10 whitespace-nowrap backdrop-blur-xs">
+            <Flame className="h-2.5 w-2.5 sm:h-3 sm:w-3 fill-current animate-pulse shrink-0" />
+            <span className="whitespace-nowrap">{theme.badges.popular}</span>
           </div>
         );
       case 'new':
         return (
-          <div className="absolute -top-1.5 -left-1.5 sm:-top-2 sm:-left-2 bg-gradient-to-r from-sky-500 to-indigo-600 text-white text-[9px] sm:text-[10px] font-black px-1.5 sm:px-2 py-0.5 rounded-md shadow-xs flex items-center gap-1 z-10 animate-fade-in">
-            <Sparkles className="h-2.5 w-2.5 sm:h-3 sm:w-3 animate-pulse" />
-            <span>{theme.badges.new}</span>
+          <div className="absolute top-2 right-2 bg-gradient-to-r from-sky-500 to-indigo-600 text-white text-[9px] sm:text-[10px] font-black px-2 py-0.5 rounded-lg shadow-sm flex items-center gap-1 z-10 whitespace-nowrap backdrop-blur-xs">
+            <Sparkles className="h-2.5 w-2.5 sm:h-3 sm:w-3 animate-pulse shrink-0" />
+            <span className="whitespace-nowrap">{theme.badges.new}</span>
           </div>
         );
       case 'spicy':
         return (
-          <div className="absolute -top-1.5 -left-1.5 sm:-top-2 sm:-left-2 bg-gradient-to-r from-red-500 to-rose-600 text-white text-[9px] sm:text-[10px] font-black px-1.5 sm:px-2 py-0.5 rounded-md shadow-xs flex items-center gap-1 z-10 animate-fade-in">
-            <span>{theme.badges.spicyOrFeatured}</span>
+          <div className="absolute top-2 right-2 bg-gradient-to-r from-red-500 to-rose-600 text-white text-[9px] sm:text-[10px] font-black px-2 py-0.5 rounded-lg shadow-sm flex items-center gap-1 z-10 whitespace-nowrap backdrop-blur-xs">
+            <span className="whitespace-nowrap">{theme.badges.spicyOrFeatured}</span>
           </div>
         );
       case 'vegetarian':
         return (
-          <div className="absolute -top-1.5 -left-1.5 sm:-top-2 sm:-left-2 bg-gradient-to-r from-emerald-500 to-green-600 text-white text-[9px] sm:text-[10px] font-black px-1.5 sm:px-2 py-0.5 rounded-md shadow-xs flex items-center gap-1 z-10 animate-fade-in">
-            <span>{theme.badges.vegetarianOrPromo}</span>
+          <div className="absolute top-2 right-2 bg-gradient-to-r from-emerald-500 to-green-600 text-white text-[9px] sm:text-[10px] font-black px-2 py-0.5 rounded-lg shadow-sm flex items-center gap-1 z-10 whitespace-nowrap backdrop-blur-xs">
+            <span className="whitespace-nowrap">{theme.badges.vegetarianOrPromo}</span>
           </div>
         );
       default:
@@ -424,40 +424,170 @@ export function DigitalMenuView({
         /* Items Grid / List Display */
         <div className={cn(
           viewMode === 'grid' 
-            ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5" 
-            : "flex flex-col gap-3.5"
+            ? "grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-4.5" 
+            : "grid grid-cols-1 gap-2.5 sm:gap-3.5"
         )}>
           {filteredItems.map((item) => {
             const discount = getItemDiscount(item);
             const cartQty = cart[item.id]?.quantity || 0;
 
+            if (viewMode === 'grid') {
+              // --- GRID CARD (Mobile 2-Column Responsive Card) ---
+              return (
+                <motion.div
+                  layout
+                  key={item.id}
+                  className={cn(
+                    "bg-white border border-stone-200/80 transition-all relative flex flex-col justify-between group overflow-hidden rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.03)] hover:shadow-md hover:border-amber-500/30 text-right min-w-0",
+                    (item.isPopular || item.badge === 'popular') && "border-amber-200 bg-amber-50/10"
+                  )}
+                >
+                  {/* Top Aspect Ratio Image Box */}
+                  <div className="relative w-full aspect-[4/3] bg-stone-100 overflow-hidden shrink-0 select-none">
+                    {renderPremiumBadge(item)}
+
+                    {item.imageUrl ? (
+                      <div 
+                        onClick={() => setLightboxItem(item)}
+                        className="w-full h-full cursor-pointer relative group/img"
+                        title="انقر لمعاينة الصورة كاملة"
+                      >
+                        <img
+                          referrerPolicy="no-referrer"
+                          src={item.imageUrl}
+                          alt={item.name}
+                          className="w-full h-full object-cover group-hover/img:scale-105 transition-transform duration-300"
+                        />
+                        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
+                          <Eye className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="w-full h-full bg-amber-50/60 text-amber-700 flex items-center justify-center border-b border-amber-100 relative overflow-hidden">
+                        {theme.cartIconType === 'home' ? (
+                          <Home className="h-6 w-6 sm:h-8 sm:w-8 text-amber-600/40" />
+                        ) : theme.cartIconType === 'medical' ? (
+                          <Activity className="h-6 w-6 sm:h-8 sm:w-8 text-amber-600/40" />
+                        ) : theme.cartIconType === 'edu' ? (
+                          <GraduationCap className="h-6 w-6 sm:h-8 sm:w-8 text-amber-600/40" />
+                        ) : theme.cartIconType === 'wrench' ? (
+                          <Wrench className="h-6 w-6 sm:h-8 sm:w-8 text-amber-600/40" />
+                        ) : (
+                          <UtensilsCrossed className="h-6 w-6 sm:h-8 sm:w-8 text-amber-600/40" />
+                        )}
+                      </div>
+                    )}
+
+                    {discount && (
+                      <div className="absolute bottom-2 left-2 bg-rose-600 text-white text-[9px] sm:text-[10px] font-black px-1.5 py-0.5 rounded-md shadow-xs z-10 whitespace-nowrap">
+                        %{discount.discountPercent}-
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Card Body */}
+                  <div className="p-2.5 sm:p-4 flex-1 flex flex-col justify-between space-y-2 min-w-0">
+                    <div className="space-y-1">
+                      <h3 className="text-xs sm:text-base font-bold text-stone-900 line-clamp-1 leading-snug group-hover:text-amber-950">
+                        {item.name}
+                      </h3>
+
+                      <div className="flex flex-wrap items-center gap-1">
+                        {item.category && (
+                          <span className="inline-block text-[9px] sm:text-[10px] font-medium text-stone-500 bg-stone-100 px-1.5 py-0.5 rounded truncate max-w-full">
+                            {item.category}
+                          </span>
+                        )}
+                        {discount && (
+                          <span className="text-[9px] sm:text-xs text-stone-400 font-bold line-through">
+                            {discount.originalPrice} د.أ
+                          </span>
+                        )}
+                      </div>
+
+                      {item.description && (
+                        <p className="text-[10px] sm:text-xs text-stone-500 line-clamp-2 leading-relaxed pt-0.5">
+                          {item.description}
+                        </p>
+                      )}
+
+                      {item.options && item.options.length > 0 && (
+                        <div className="flex flex-wrap gap-1 pt-1">
+                          {item.options.map((opt, oIdx) => (
+                            <span key={oIdx} className="text-[8px] sm:text-[10px] bg-stone-50 text-stone-500 border border-stone-200/60 px-1 py-0.5 rounded font-medium truncate max-w-full">
+                              {opt}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Footer Actions */}
+                    <div className="flex items-center justify-between gap-1 pt-2 border-t border-dashed border-stone-100 mt-auto">
+                      <div className="text-xs sm:text-sm font-black text-amber-950 whitespace-nowrap bg-amber-50/80 px-1.5 py-0.5 sm:px-2.5 sm:py-1 rounded-lg border border-amber-200/50">
+                        {item.price} <span className="text-[9px] font-normal">د.أ</span>
+                      </div>
+
+                      {item.isAvailable !== false ? (
+                        <div className="flex items-center">
+                          {cartQty > 0 ? (
+                            <div className="flex items-center bg-[#1a4d2e] text-white rounded-lg p-0.5 shadow-2xs border border-[#1a4d2e]">
+                              <button
+                                type="button"
+                                onClick={() => removeFromCart(item)}
+                                className="w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center hover:bg-[#133b22] rounded transition-colors cursor-pointer active:scale-90"
+                              >
+                                <Minus className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
+                              </button>
+                              <span className="px-1.5 text-[11px] sm:text-xs font-black min-w-[14px] text-center">{cartQty}</span>
+                              <button
+                                type="button"
+                                onClick={() => addToCart(item)}
+                                className="w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center hover:bg-[#133b22] rounded transition-colors cursor-pointer active:scale-90"
+                              >
+                                <Plus className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => addToCart(item)}
+                              className="inline-flex items-center gap-1 bg-[#1a4d2e] hover:bg-[#133b22] text-white px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg text-[10px] sm:text-xs font-black transition-all shadow-2xs active:scale-95 cursor-pointer whitespace-nowrap"
+                            >
+                              <ShoppingBag className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                              <span>{theme.buttonAddShort}</span>
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-[9px] sm:text-xs font-bold text-stone-400 bg-stone-100 px-1.5 py-0.5 rounded-lg">
+                          غير متوفر
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              );
+            }
+
+            // --- LIST CARD (Full Row Layout) ---
             return (
               <motion.div
                 layout
                 key={item.id}
                 className={cn(
-                  "bg-white border border-stone-200/80 transition-all relative flex group overflow-hidden rounded-2xl p-3.5 sm:p-5 shadow-[0_2px_12px_rgba(0,0,0,0.03)] hover:shadow-md hover:border-amber-500/20",
-                  (item.isPopular || item.badge === 'popular') && "border-amber-100 bg-amber-50/5",
-                  viewMode === 'grid'
-                    ? "flex-row md:flex-col gap-3 md:gap-4 md:items-stretch" // Row on mobile, Col on desktop
-                    : "flex-row gap-3 sm:gap-5 items-stretch"             // Always Row
+                  "bg-white border border-stone-200/80 transition-all relative flex flex-row items-center gap-2.5 sm:gap-4 p-2.5 sm:p-4 rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.03)] hover:shadow-md hover:border-amber-500/30 text-right min-w-0 group",
+                  (item.isPopular || item.badge === 'popular') && "border-amber-200 bg-amber-50/10"
                 )}
               >
-                {/* 1. Image Block */}
-                {/* In flex-row RTL, DOM order 2 puts it on the Left. In flex-col, DOM order 1 puts it on Top. */}
-                <div className={cn(
-                  "relative shrink-0 select-none flex items-center justify-center",
-                  viewMode === 'grid'
-                    ? "order-2 md:order-1 md:w-full md:aspect-[4/3] md:h-auto"
-                    : "order-2 w-20 h-20 sm:w-28 sm:h-28" // Fixed size for list
-                )}>
-                  {/* Floating Premium Badge */}
+                {/* Fixed Image Thumbnail (Order-1 in RTL means Right Side) */}
+                <div className="relative w-20 h-20 sm:w-28 sm:h-28 rounded-xl bg-stone-100 overflow-hidden shrink-0 select-none">
                   {renderPremiumBadge(item)}
 
                   {item.imageUrl ? (
                     <div 
                       onClick={() => setLightboxItem(item)}
-                      className="w-full h-full rounded-xl overflow-hidden border border-stone-100 bg-stone-100 cursor-pointer relative group/img shadow-2xs"
+                      className="w-full h-full cursor-pointer relative group/img"
                       title="انقر لمعاينة الصورة كاملة"
                     >
                       <img
@@ -467,86 +597,56 @@ export function DigitalMenuView({
                         className="w-full h-full object-cover group-hover/img:scale-105 transition-transform duration-300"
                       />
                       <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
-                        <Eye className="h-5 w-5 text-white" />
+                        <Eye className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
                       </div>
-
-                      {discount && (
-                        <div className="absolute bottom-1 right-1 bg-rose-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow-xs z-10">
-                          %{discount.discountPercent}-
-                        </div>
-                      )}
                     </div>
                   ) : (
-                    <div className="w-full h-full rounded-xl bg-amber-50/60 text-amber-700 flex items-center justify-center border border-amber-200/30 shadow-3xs relative overflow-hidden">
+                    <div className="w-full h-full bg-amber-50/60 text-amber-700 flex items-center justify-center relative overflow-hidden">
                       {theme.cartIconType === 'home' ? (
-                        <Home className="h-5 w-5 sm:h-7 sm:w-7 text-amber-600/40" />
+                        <Home className="h-6 w-6 sm:h-7 sm:w-7 text-amber-600/40" />
                       ) : theme.cartIconType === 'medical' ? (
-                        <Activity className="h-5 w-5 sm:h-7 sm:w-7 text-amber-600/40" />
+                        <Activity className="h-6 w-6 sm:h-7 sm:w-7 text-amber-600/40" />
                       ) : theme.cartIconType === 'edu' ? (
-                        <GraduationCap className="h-5 w-5 sm:h-7 sm:w-7 text-amber-600/40" />
+                        <GraduationCap className="h-6 w-6 sm:h-7 sm:w-7 text-amber-600/40" />
                       ) : theme.cartIconType === 'wrench' ? (
-                        <Wrench className="h-5 w-5 sm:h-7 sm:w-7 text-amber-600/40" />
+                        <Wrench className="h-6 w-6 sm:h-7 sm:w-7 text-amber-600/40" />
                       ) : (
-                        <UtensilsCrossed className="h-5 w-5 sm:h-7 sm:w-7 text-amber-600/40" />
+                        <UtensilsCrossed className="h-6 w-6 sm:h-7 sm:w-7 text-amber-600/40" />
                       )}
+                    </div>
+                  )}
 
-                      {discount && (
-                        <div className="absolute bottom-1 right-1 bg-rose-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow-xs z-10">
-                          %{discount.discountPercent}-
-                        </div>
-                      )}
+                  {discount && (
+                    <div className="absolute bottom-1.5 left-1.5 bg-rose-600 text-white text-[8px] sm:text-[10px] font-black px-1.5 py-0.5 rounded shadow-xs z-10 whitespace-nowrap">
+                      %{discount.discountPercent}-
                     </div>
                   )}
                 </div>
 
-                {/* 2. Content Block */}
-                <div className={cn(
-                  "flex-1 flex flex-col min-w-0 text-right justify-between",
-                  viewMode === 'grid'
-                    ? "order-1 md:order-2 md:text-center md:items-center"
-                    : "order-1"
-                )}>
-                  {/* Text Details */}
-                  <div className={cn(
-                    "space-y-1.5",
-                    viewMode === 'grid' && "md:flex md:flex-col md:items-center"
-                  )}>
-                    <h3 className="text-sm sm:text-base font-black text-stone-900 line-clamp-1 leading-snug group-hover:text-amber-950">
-                      {item.name}
-                    </h3>
-
-                    <div className={cn(
-                      "flex flex-wrap items-center gap-1.5",
-                      viewMode === 'grid' && "md:justify-center"
-                    )}>
+                {/* Content Block */}
+                <div className="flex-1 min-w-0 flex flex-col justify-between self-stretch py-0.5 space-y-1">
+                  <div>
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="text-xs sm:text-base font-bold text-stone-900 line-clamp-1 group-hover:text-amber-950">
+                        {item.name}
+                      </h3>
                       {item.category && (
-                        <span className="inline-block text-[9px] sm:text-[10px] font-bold text-stone-400 bg-stone-50 px-1.5 py-0.5 rounded border border-stone-100">
+                        <span className="inline-block text-[9px] sm:text-[10px] font-medium text-stone-500 bg-stone-100 px-1.5 py-0.5 rounded shrink-0">
                           {item.category}
-                        </span>
-                      )}
-                      {discount && (
-                        <span className="text-[10px] sm:text-xs text-stone-400 font-bold line-through">
-                          {discount.originalPrice} د.أ
                         </span>
                       )}
                     </div>
 
                     {item.description && (
-                      <p className={cn(
-                        "text-[11px] sm:text-xs text-stone-500 leading-relaxed pt-0.5",
-                        viewMode === 'grid' ? "line-clamp-2" : "line-clamp-2 sm:line-clamp-3"
-                      )}>
+                      <p className="text-[10px] sm:text-xs text-stone-500 line-clamp-2 leading-relaxed pt-0.5">
                         {item.description}
                       </p>
                     )}
 
                     {item.options && item.options.length > 0 && (
-                      <div className={cn(
-                        "flex flex-wrap gap-1 pt-1",
-                        viewMode === 'grid' && "md:justify-center"
-                      )}>
+                      <div className="flex flex-wrap gap-1 pt-1">
                         {item.options.map((opt, oIdx) => (
-                          <span key={oIdx} className="text-[9px] sm:text-[10px] bg-stone-50 text-stone-500 border border-stone-200/60 px-1.5 py-0.5 rounded font-bold">
+                          <span key={oIdx} className="text-[8px] sm:text-[10px] bg-stone-50 text-stone-500 border border-stone-200/60 px-1 py-0.5 rounded font-medium">
                             {opt}
                           </span>
                         ))}
@@ -554,42 +654,44 @@ export function DigitalMenuView({
                     )}
                   </div>
 
-                  {/* Actions (Price + Cart) */}
-                  <div className={cn(
-                    "flex items-center justify-between border-stone-100",
-                    viewMode === 'grid'
-                      ? "mt-3 pt-3 border-t border-dashed md:w-full md:mt-4 md:pt-4"
-                      : "mt-3 pt-3 border-t border-dashed sm:mt-auto sm:pt-4 sm:border-0" 
-                  )}>
-                    <div className="text-sm sm:text-base font-black text-amber-900 whitespace-nowrap bg-amber-50/70 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg border border-amber-100/50">
-                      {item.price} <span className="text-[10px] font-normal">د.أ</span>
+                  {/* Footer Row */}
+                  <div className="flex items-center justify-between gap-2 pt-1 border-t border-dashed border-stone-100/80 mt-auto">
+                    <div className="flex items-center gap-1.5">
+                      <div className="text-xs sm:text-sm font-black text-amber-950 whitespace-nowrap bg-amber-50/80 px-2 py-0.5 rounded-lg border border-amber-200/50">
+                        {item.price} <span className="text-[9px] font-normal">د.أ</span>
+                      </div>
+                      {discount && (
+                        <span className="text-[9px] sm:text-xs text-stone-400 font-bold line-through">
+                          {discount.originalPrice} د.أ
+                        </span>
+                      )}
                     </div>
 
                     {item.isAvailable !== false ? (
-                      <div className="flex items-center gap-1.5 sm:gap-2">
+                      <div>
                         {cartQty > 0 ? (
-                          <div className="flex items-center bg-[#1a4d2e] text-white rounded-lg sm:rounded-xl p-0.5 sm:p-1 shadow-xs border border-[#1a4d2e]">
+                          <div className="flex items-center bg-[#1a4d2e] text-white rounded-lg p-0.5 shadow-2xs border border-[#1a4d2e]">
                             <button
                               type="button"
                               onClick={() => removeFromCart(item)}
-                              className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center hover:bg-[#133b22] rounded-md transition-colors cursor-pointer active:scale-90"
+                              className="w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center hover:bg-[#133b22] rounded transition-colors cursor-pointer active:scale-90"
                             >
-                              <Minus className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                              <Minus className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
                             </button>
-                            <span className="px-2 sm:px-2.5 text-xs font-black min-w-[16px] sm:min-w-[20px] text-center">{cartQty}</span>
+                            <span className="px-1.5 text-[11px] sm:text-xs font-black min-w-[14px] text-center">{cartQty}</span>
                             <button
                               type="button"
                               onClick={() => addToCart(item)}
-                              className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center hover:bg-[#133b22] rounded-md transition-colors cursor-pointer active:scale-90"
+                              className="w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center hover:bg-[#133b22] rounded transition-colors cursor-pointer active:scale-90"
                             >
-                              <Plus className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                              <Plus className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
                             </button>
                           </div>
                         ) : (
                           <button
                             type="button"
                             onClick={() => addToCart(item)}
-                            className="inline-flex items-center gap-1 bg-[#1a4d2e] hover:bg-[#133b22] text-white px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black transition-all shadow-3xs sm:shadow-xs active:scale-95 cursor-pointer"
+                            className="inline-flex items-center gap-1 bg-[#1a4d2e] hover:bg-[#133b22] text-white px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg text-[10px] sm:text-xs font-black transition-all shadow-2xs active:scale-95 cursor-pointer whitespace-nowrap"
                           >
                             <ShoppingBag className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
                             <span>{theme.buttonAddShort}</span>
@@ -597,7 +699,7 @@ export function DigitalMenuView({
                         )}
                       </div>
                     ) : (
-                      <span className="text-[10px] sm:text-xs font-bold text-stone-400 bg-stone-100 px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg">
+                      <span className="text-[9px] sm:text-xs font-bold text-stone-400 bg-stone-100 px-1.5 py-0.5 rounded-lg">
                         غير متوفر
                       </span>
                     )}

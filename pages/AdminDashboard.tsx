@@ -1,0 +1,3824 @@
+import React, { useEffect, useState, useMemo } from 'react';
+import { 
+  collection, 
+  query, 
+  getDocs, 
+  updateDoc, 
+  doc, 
+  deleteDoc, 
+  setDoc, 
+  orderBy,
+  addDoc 
+} from 'firebase/firestore';
+import { db } from '../lib/firebase';
+import { useAuth } from '../contexts/AuthContext';
+import { useNotifications } from '../contexts/NotificationsContext';
+import { Link } from 'react-router';
+import { 
+  Store, 
+  CheckCircle, 
+  XCircle, 
+  Trash2, 
+  ShieldAlert, 
+  Search, 
+  Filter, 
+  Plus, 
+  Edit3, 
+  Star, 
+  Flame, 
+  Briefcase, 
+  Bell, 
+  Send, 
+  ExternalLink, 
+  Phone, 
+  MessageSquare, 
+  Eye, 
+  EyeOff, 
+  Globe, 
+  RefreshCw, 
+  TrendingUp, 
+  Users, 
+  Check, 
+  MapPin, 
+  AlertCircle, 
+  Sparkles, 
+  Download, 
+  LayoutGrid, 
+  List, 
+  Megaphone, 
+  Settings, 
+  ShieldCheck, 
+  CheckCircle2, 
+  SlidersHorizontal,
+  ChevronDown,
+  Info,
+  Layers,
+  Clock,
+  Crown,
+  Newspaper,
+  Home,
+  Compass
+} from 'lucide-react';
+import { Business, MarketingRequest, JobOffer, AppNotification, BannerBookingRequest, EditSuggestion, ReviewReport } from '../types';
+import { AdminHeader } from '../components/admin/AdminHeader';
+import { AdminStatsOverview } from '../components/admin/AdminStatsOverview';
+import { BusinessEditModal } from '../components/admin/BusinessEditModal';
+import { BusinessAddModal } from '../components/admin/BusinessAddModal';
+import { BroadcastNotificationModal } from '../components/admin/BroadcastNotificationModal';
+import { MarketingDetailsModal } from '../components/admin/MarketingDetailsModal';
+import { VipUpgradeModal } from '../components/admin/VipUpgradeModal';
+import { SupervisorsManager } from '../components/admin/SupervisorsManager';
+import { AccountsManager } from '../components/admin/AccountsManager';
+import { AdminAuditLogs } from '../components/admin/AdminAuditLogs';
+import { AdminSubscriptionsOverview } from '../components/admin/AdminSubscriptionsOverview';
+import { EditSuggestionsPanel } from '../components/admin/EditSuggestionsPanel';
+import { ReviewReportsPanel } from '../components/admin/ReviewReportsPanel';
+import { ClaimVerificationPanel } from '../components/admin/ClaimVerificationPanel';
+import { CategoriesManager } from '../components/admin/CategoriesManager';
+import { VipPlansManager } from '../components/admin/VipPlansManager';
+import { GlobalSettingsManager } from '../components/admin/GlobalSettingsManager';
+import { NeighborhoodsManager } from '../components/admin/NeighborhoodsManager';
+import { StaticPagesManager } from '../components/admin/StaticPagesManager';
+import { BannersManager } from '../components/admin/BannersManager';
+import { recordAuditLog } from '../lib/auditLogHelper';
+import { getBusinessVipStatus } from '../lib/vipHelper';
+import { sanitizeFirestorePayload } from '../lib/firestoreHelper';
+import { getAppConfig, setAppConfig, seedDemoDataToFirestore, clearDemoDataFromFirestore } from '../lib/demoDataHelper';
+import { getWhatsAppUrl } from '../lib/contactHelper';
+
+export function AdminDashboard() {
+  const { currentUser, isAdmin, isSupervisor, isStaff, userRole, supervisorPermissions } = useAuth();
+  const { addNotification } = useNotifications();
+
+  // Primary Data State
+  const [requests, setRequests] = useState<any[]>([]);
+  const [businesses, setBusinesses] = useState<Business[]>([]);
+  const [marketingRequests, setMarketingRequests] = useState<MarketingRequest[]>([]);
+  const [jobs, setJobs] = useState<JobOffer[]>([]);
+  const [bannerBookings, setBannerBookings] = useState<BannerBookingRequest[]>([]);
+  const [editSuggestions, setEditSuggestions] = useState<EditSuggestion[]>([]);
+  const [reviewReports, setReviewReports] = useState<ReviewReport[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // News, Housings, Tourism states
+  const [news, setNews] = useState<any[]>([]);
+  const [housings, setHousings] = useState<any[]>([]);
+  const [tourismSpots, setTourismSpots] = useState<any[]>([]);
+
+  // News creation / edit state
+  const [isNewsFormOpen, setIsNewsFormOpen] = useState(false);
+  const [editingNews, setEditingNews] = useState<any | null>(null);
+  const [newNews, setNewNews] = useState({
+    title: '',
+    summary: '',
+    content: '',
+    image: '',
+    category: 'أخبار عامة',
+    source: 'إدارة المنصة',
+    videoUrl: '',
+    isHot: false
+  });
+
+  // Housing creation / edit state
+  const [isHousingFormOpen, setIsHousingFormOpen] = useState(false);
+  const [editingHousing, setEditingHousing] = useState<any | null>(null);
+  const [newHousing, setNewHousing] = useState({
+    title: '',
+    type: 'سكن طالبات',
+    university: 'اليرموك',
+    price: '',
+    pricePeriod: 'شهري',
+    location: '',
+    distanceToCampus: '',
+    roomsCount: '',
+    servicesString: '',
+    description: '',
+    contactPhone: '',
+    contactWhatsapp: '',
+    ownerName: '',
+    image: ''
+  });
+
+  // Tourism creation / edit state
+  const [isTourismFormOpen, setIsTourismFormOpen] = useState(false);
+  const [editingTourism, setEditingTourism] = useState<any | null>(null);
+  const [newTourism, setNewTourism] = useState({
+    name: '',
+    category: 'أثري',
+    image: '',
+    description: '',
+    location: '',
+    googleMapsUrl: '',
+    openingHours: '',
+    entryFee: '',
+    rating: '4.5',
+    tagsString: '',
+    tipsString: ''
+  });
+
+  // Job creation / edit state
+  const [isJobFormOpen, setIsJobFormOpen] = useState(false);
+  const [editingJob, setEditingJob] = useState<any | null>(null);
+  const [newJob, setNewJob] = useState({
+    title: '',
+    company: '',
+    jobType: 'دوام كامل',
+    category: 'مطاعم ومقاهي',
+    location: '',
+    salary: '',
+    description: '',
+    requirements: '',
+    contactPhone: '',
+    isUrgent: false
+  });
+
+  // UI Navigation State
+  const [activeTab, setActiveTab] = useState<string>('overview');
+  const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'info' | 'error' } | null>(null);
+
+  // Search & Filter States
+  const [businessSearch, setBusinessSearch] = useState('');
+  const [businessCategoryFilter, setBusinessCategoryFilter] = useState('الكل');
+  const [businessFeaturedFilter, setBusinessFeaturedFilter] = useState<'all' | 'featured' | 'regular'>('all');
+  const [businessVipFilter, setBusinessVipFilter] = useState<'all' | 'vip' | 'regular'>('all');
+  const [businessViewMode, setBusinessViewMode] = useState<'table' | 'grid'>('table');
+
+  const [requestSearch, setRequestSearch] = useState('');
+  const [requestStatusFilter, setRequestStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+
+  const [marketingSearch, setMarketingSearch] = useState('');
+  const [marketingStatusFilter, setMarketingStatusFilter] = useState<'all' | 'pending' | 'contacted' | 'completed' | 'rejected'>('all');
+  const [marketingServiceFilter, setMarketingServiceFilter] = useState<string>('all');
+
+  const [jobSearch, setJobSearch] = useState('');
+  const [jobTypeFilter, setJobTypeFilter] = useState<string>('all');
+
+  const [housingSearch, setHousingSearch] = useState('');
+  const [housingStatusFilter, setHousingStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+
+  // Modals Control State
+  const [isAddBusinessOpen, setIsAddBusinessOpen] = useState(false);
+  const [isEditBusinessOpen, setIsEditBusinessOpen] = useState(false);
+  const [selectedBusinessForEdit, setSelectedBusinessForEdit] = useState<Business | null>(null);
+
+  const [isVipUpgradeModalOpen, setIsVipUpgradeModalOpen] = useState(false);
+  const [selectedBusinessForVip, setSelectedBusinessForVip] = useState<Business | null>(null);
+
+  const [isBroadcastModalOpen, setIsBroadcastModalOpen] = useState(false);
+  const [isMarketingDetailsOpen, setIsMarketingDetailsOpen] = useState(false);
+  const [selectedMarketingRequest, setSelectedMarketingRequest] = useState<MarketingRequest | null>(null);
+
+  // Demo Data Management State
+  const [showDemoData, setShowDemoData] = useState(false);
+  const [isDemoWorking, setIsDemoWorking] = useState(false);
+
+  // Announcement Bar Settings State (Local + Firestore optional)
+  const [announcementText, setAnnouncementText] = useState('🌟 مرحباً بكم في منصة شو في بإربد | دليل إربد التجاري والسياحي الشامل');
+  const [announcementActive, setAnnouncementActive] = useState(true);
+
+  // Admin management
+  const [newAdminEmail, setNewAdminEmail] = useState('');
+
+  // Show Toast
+  const showToast = (text: string, type: 'success' | 'info' | 'error' = 'success') => {
+    setToastMessage({ text, type });
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  // Fetch all collections
+  const fetchData = async () => {
+    if (!db) return;
+    setIsRefreshing(true);
+    try {
+      // Config
+      const config = await getAppConfig();
+      setShowDemoData(config.showDemoData);
+
+      // 1. Fetch Requests
+      const reqQuery = query(collection(db, 'businessRequests'), orderBy('createdAt', 'desc'));
+      const reqSnap = await getDocs(reqQuery);
+      const fetchedReqs: any[] = [];
+      reqSnap.forEach(d => fetchedReqs.push({ id: d.id, ...d.data() }));
+      setRequests(fetchedReqs);
+
+      // 2. Fetch Businesses
+      const busQuery = query(collection(db, 'businesses'), orderBy('createdAt', 'desc'));
+      const busSnap = await getDocs(busQuery);
+      const fetchedBus: Business[] = [];
+      busSnap.forEach(d => fetchedBus.push({ id: d.id, ...d.data() } as Business));
+      setBusinesses(fetchedBus);
+
+      // 3. Fetch Marketing Requests
+      const mktQuery = query(collection(db, 'marketingRequests'), orderBy('createdAt', 'desc'));
+      const mktSnap = await getDocs(mktQuery);
+      const fetchedMkt: MarketingRequest[] = [];
+      mktSnap.forEach(d => fetchedMkt.push({ id: d.id, ...d.data() } as MarketingRequest));
+      setMarketingRequests(fetchedMkt);
+
+      // 4. Fetch Jobs
+      const jobsQuery = query(collection(db, 'jobs'), orderBy('createdAt', 'desc'));
+      const jobsSnap = await getDocs(jobsQuery);
+      const fetchedJobs: JobOffer[] = [];
+      jobsSnap.forEach(d => fetchedJobs.push({ id: d.id, ...d.data() } as JobOffer));
+      setJobs(fetchedJobs);
+
+      // 5. Fetch Banner Booking Requests
+      try {
+        const bbQuery = query(collection(db, 'bannerBookingRequests'), orderBy('createdAt', 'desc'));
+        const bbSnap = await getDocs(bbQuery);
+        const fetchedBB: BannerBookingRequest[] = [];
+        bbSnap.forEach(d => fetchedBB.push({ id: d.id, ...d.data() } as BannerBookingRequest));
+        setBannerBookings(fetchedBB);
+      } catch (bbErr) {
+        console.warn("Could not fetch banner booking requests:", bbErr);
+      }
+
+      // 6. Fetch News
+      try {
+        const newsQuery = query(collection(db, 'news'), orderBy('createdAt', 'desc'));
+        const newsSnap = await getDocs(newsQuery);
+        const fetchedNews: any[] = [];
+        newsSnap.forEach(d => fetchedNews.push({ id: d.id, ...d.data() }));
+        setNews(fetchedNews);
+      } catch (newsErr) {
+        console.warn("Could not fetch news:", newsErr);
+      }
+
+      // 7. Fetch Housings
+      try {
+        const housingsQuery = query(collection(db, 'housings'), orderBy('createdAt', 'desc'));
+        const housingsSnap = await getDocs(housingsQuery);
+        const fetchedHousings: any[] = [];
+        housingsSnap.forEach(d => {
+          const data = d.data();
+          if (data.isDemo || ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(d.id)) {
+            deleteDoc(doc(db, 'housings', d.id)).catch(() => {});
+            return;
+          }
+          fetchedHousings.push({ id: d.id, ...data });
+        });
+        setHousings(fetchedHousings);
+      } catch (hErr) {
+        console.warn("Could not fetch housings:", hErr);
+      }
+
+      // 8. Fetch Tourism Spots
+      try {
+        const tourismQuery = query(collection(db, 'tourism'));
+        const tourismSnap = await getDocs(tourismQuery);
+        const fetchedTourism: any[] = [];
+        tourismSnap.forEach(d => fetchedTourism.push({ id: d.id, ...d.data() }));
+        setTourismSpots(fetchedTourism);
+      } catch (tErr) {
+        console.warn("Could not fetch tourism:", tErr);
+      }
+
+      // 9. Fetch Edit Suggestions
+      try {
+        const esQuery = query(collection(db, 'edit_suggestions'), orderBy('createdAt', 'desc'));
+        const esSnap = await getDocs(esQuery);
+        const fetchedEs: EditSuggestion[] = [];
+        esSnap.forEach(d => fetchedEs.push({ id: d.id, ...d.data() } as EditSuggestion));
+        setEditSuggestions(fetchedEs);
+      } catch (esErr) {
+        console.warn("Could not fetch edit suggestions:", esErr);
+      }
+
+      // 10. Fetch Review Reports
+      try {
+        const rrQuery = query(collection(db, 'review_reports'), orderBy('createdAt', 'desc'));
+        const rrSnap = await getDocs(rrQuery);
+        const fetchedRr: ReviewReport[] = [];
+        rrSnap.forEach(d => fetchedRr.push({ id: d.id, ...d.data() } as ReviewReport));
+        setReviewReports(fetchedRr);
+      } catch (rrErr) {
+        console.warn("Could not fetch review reports:", rrErr);
+      }
+
+    } catch (err) {
+      console.error("Error fetching admin data:", err);
+      showToast('حدث خطأ أثناء جلب البيانات من الخادم', 'error');
+    } finally {
+      setLoading(false);
+      setIsRefreshing(false);
+    }
+  };
+
+  const handleToggleDemoData = async () => {
+    setIsDemoWorking(true);
+    const nextState = !showDemoData;
+    try {
+      await setAppConfig({ showDemoData: nextState });
+      setShowDemoData(nextState);
+      showToast(nextState ? 'تم تفعيل إظهار البيانات التجريبية للمستخدمين' : 'تم إخفاء البيانات التجريبية من التطبيق بالكامل');
+    } catch (e) {
+      showToast('تعذر تغيير حالة البيانات التجريبية', 'error');
+    } finally {
+      setIsDemoWorking(false);
+    }
+  };
+
+  const handleSeedDemoData = async () => {
+    setIsDemoWorking(true);
+    try {
+      const res = await seedDemoDataToFirestore();
+      setShowDemoData(true);
+      await fetchData();
+      showToast(`تم زرع ${res.count} عناصر بيانات تجريبية في قاعدة البيانات وتفعيل إظهارها بنجاح! 🎉`);
+    } catch (e) {
+      console.error("Error seeding demo data:", e);
+      showToast('فشل في زرع البيانات التجريبية، يرجى التحقق من اتصال قاعدة البيانات', 'error');
+    } finally {
+      setIsDemoWorking(false);
+    }
+  };
+
+  const handleClearDemoData = async () => {
+    setIsDemoWorking(true);
+    try {
+      const res = await clearDemoDataFromFirestore();
+      await fetchData();
+      showToast(`تم حذف ${res.count} عنصر بيانات تجريبية من قاعدة البيانات بنجاح`);
+    } catch (e) {
+      console.error("Error clearing demo data:", e);
+      showToast('فشل في إزالة البيانات التجريبية', 'error');
+    } finally {
+      setIsDemoWorking(false);
+    }
+  };
+
+  // --- NEWS CRUD HANDLERS ---
+  const handleSaveNews = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newNews.title || !newNews.summary || !newNews.content) {
+      showToast('يرجى تعبئة الحقول الأساسية للأخبار', 'error');
+      return;
+    }
+    const payload = {
+      title: newNews.title,
+      summary: newNews.summary,
+      content: newNews.content,
+      image: newNews.image || 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&w=800&q=80',
+      category: newNews.category,
+      source: newNews.source || 'إدارة المنصة',
+      videoUrl: newNews.videoUrl || '',
+      isHot: newNews.isHot,
+      createdAt: editingNews?.createdAt || new Date().toISOString()
+    };
+
+    try {
+      if (editingNews?.id) {
+        await updateDoc(doc(db, 'news', editingNews.id), payload);
+        showToast('تم تحديث الخبر بنجاح');
+      } else {
+        await addDoc(collection(db, 'news'), payload);
+        showToast('تم نشر الخبر بنجاح');
+      }
+      setIsNewsFormOpen(false);
+      setEditingNews(null);
+      setNewNews({
+        title: '',
+        summary: '',
+        content: '',
+        image: '',
+        category: 'أخبار عامة',
+        source: 'إدارة المنصة',
+        videoUrl: '',
+        isHot: false
+      });
+      fetchData();
+    } catch (err) {
+      console.error("Error saving news:", err);
+      showToast('تعذر حفظ الخبر', 'error');
+    }
+  };
+
+  const handleEditNewsClick = (item: any) => {
+    setEditingNews(item);
+    setNewNews({
+      title: item.title || '',
+      summary: item.summary || '',
+      content: item.content || '',
+      image: item.image || '',
+      category: item.category || 'أخبار عامة',
+      source: item.source || 'إدارة المنصة',
+      videoUrl: item.videoUrl || '',
+      isHot: item.isHot || false
+    });
+    setIsNewsFormOpen(true);
+  };
+
+  const handleDeleteNews = async (id: string) => {
+    if (!window.confirm('هل أنت متأكد من حذف هذا الخبر؟')) return;
+    try {
+      await deleteDoc(doc(db, 'news', id));
+      showToast('تم حذف الخبر بنجاح');
+      fetchData();
+    } catch (err) {
+      console.error(err);
+      showToast('تعذر حذف الخبر', 'error');
+    }
+  };
+
+  const handleToggleNewsHot = async (item: any) => {
+    try {
+      await updateDoc(doc(db, 'news', item.id), { isHot: !item.isHot });
+      showToast(item.isHot ? 'تم إلغاء الوسم العاجل' : 'تم وسم الخبر كخبر ساخن وعاجل');
+      fetchData();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+
+  // --- HOUSING CRUD HANDLERS ---
+  const handleSaveHousing = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newHousing.title || !newHousing.price || !newHousing.location || !newHousing.contactPhone) {
+      showToast('يرجى تعبئة الحقول الأساسية للعقارات', 'error');
+      return;
+    }
+    const services = newHousing.servicesString
+      ? newHousing.servicesString.split('،').map((s: any) => s.trim()).filter(Boolean)
+      : ['ماء وكهرباء', 'إنترنت سريع'];
+
+    const payload = {
+      title: newHousing.title,
+      type: newHousing.type,
+      university: newHousing.university,
+      price: Number(newHousing.price),
+      pricePeriod: newHousing.pricePeriod,
+      location: newHousing.location,
+      distanceToCampus: newHousing.distanceToCampus || 'قريب من المواصلات',
+      roomsCount: newHousing.roomsCount || 'أستوديو / شقة مفروشة',
+      services,
+      description: newHousing.description || 'لا يوجد وصف إضافي.',
+      contactPhone: newHousing.contactPhone,
+      contactWhatsapp: newHousing.contactWhatsapp || newHousing.contactPhone,
+      ownerName: newHousing.ownerName || 'المالك',
+      image: newHousing.image || 'https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=800&q=80',
+      isVerified: editingHousing ? (editingHousing.isVerified ?? false) : false,
+      status: editingHousing?.status || 'approved',
+      paymentStatus: editingHousing?.paymentStatus || 'paid',
+      approvedAt: editingHousing?.approvedAt || Date.now(),
+      createdAt: editingHousing?.createdAt || Date.now()
+    };
+
+    try {
+      if (editingHousing?.id) {
+        await updateDoc(doc(db, 'housings', editingHousing.id), payload);
+        showToast('تم تحديث العقار بنجاح');
+      } else {
+        await addDoc(collection(db, 'housings'), payload);
+        showToast('تم نشر العقار بنجاح');
+      }
+      setIsHousingFormOpen(false);
+      setEditingHousing(null);
+      setNewHousing({
+        title: '',
+        type: 'سكن طالبات',
+        university: 'اليرموك',
+        price: '',
+        pricePeriod: 'شهري',
+        location: '',
+        distanceToCampus: '',
+        roomsCount: '',
+        servicesString: '',
+        description: '',
+        contactPhone: '',
+        contactWhatsapp: '',
+        ownerName: '',
+        image: ''
+      });
+      fetchData();
+    } catch (err) {
+      console.error(err);
+      showToast('تعذر حفظ العقار', 'error');
+    }
+  };
+
+  const handleEditHousingClick = (item: any) => {
+    setEditingHousing(item);
+    setNewHousing({
+      title: item.title || '',
+      type: item.type || 'سكن طالبات',
+      university: item.university || 'اليرموك',
+      price: String(item.price || ''),
+      pricePeriod: item.pricePeriod || 'شهري',
+      location: item.location || '',
+      distanceToCampus: item.distanceToCampus || '',
+      roomsCount: item.roomsCount || '',
+      servicesString: (item.services || []).join('، '),
+      description: item.description || '',
+      contactPhone: item.contactPhone || '',
+      contactWhatsapp: item.contactWhatsapp || '',
+      ownerName: item.ownerName || '',
+      image: item.image || ''
+    });
+    setIsHousingFormOpen(true);
+  };
+
+  const handleDeleteHousing = async (id: string) => {
+    if (!window.confirm('هل أنت متأكد من حذف هذا الإعلان العقاري؟')) return;
+    try {
+      await deleteDoc(doc(db, 'housings', id));
+      showToast('تم حذف الإعلان بنجاح');
+      fetchData();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleToggleHousingVerified = async (item: any) => {
+    try {
+      await updateDoc(doc(db, 'housings', item.id), { isVerified: !item.isVerified });
+      showToast(item.isVerified ? 'تم إلغاء التوثيق للعقار' : 'تم توثيق واعتماد العقار بنجاح 🛡️');
+      fetchData();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleToggleHousingFeatured = async (item: any) => {
+    try {
+      const isCurrentlyFeatured = item.isFeatured && (!item.featuredExpiryDate || item.featuredExpiryDate > Date.now());
+      const nextFeatured = !isCurrentlyFeatured;
+      const now = Date.now();
+      const featuredExpiryDate = nextFeatured ? now + (7 * 24 * 60 * 60 * 1000) : 0;
+      await updateDoc(doc(db, 'housings', item.id), {
+        isFeatured: nextFeatured,
+        featuredExpiryDate
+      });
+      showToast(nextFeatured ? 'تم تمييز الإعلان في صدارة البحث ⭐' : 'تم إلغاء تمييز الإعلان');
+      fetchData();
+    } catch (err) {
+      console.error(err);
+      showToast('تعذر تغيير حالة التمييز', 'error');
+    }
+  };
+
+  const handleApproveHousing = async (item: any) => {
+    try {
+      const now = Date.now();
+      const extraWeeks = item.extraWeeks || 0;
+      const totalDays = 2 + (extraWeeks * 7);
+      const expiryDate = item.expiryDate && item.expiryDate > now ? item.expiryDate : now + (totalDays * 24 * 60 * 60 * 1000);
+      const featuredDays = item.featuredDays || 0;
+      const featuredExpiryDate = featuredDays > 0 ? (item.featuredExpiryDate && item.featuredExpiryDate > now ? item.featuredExpiryDate : now + (featuredDays * 24 * 60 * 60 * 1000)) : 0;
+
+      await updateDoc(doc(db, 'housings', item.id), {
+        status: 'approved',
+        paymentStatus: (item.totalFee || 0) > 0 ? 'paid' : 'free',
+        approvedAt: now,
+        expiryDate,
+        featuredExpiryDate
+      });
+
+      showToast(`تمت الموافقة على إعلان (${item.title}) ونشره رسمياً على المنصة ✅`);
+      fetchData();
+
+      if (item.userId && item.userId !== 'guest') {
+        try {
+          await addNotification({
+            userId: item.userId,
+            title: 'تمت الموافقة على إعلان شقتك/سكنك 🎉',
+            message: `تم اعتماد ونشر إعلان "${item.title}" في قسم سكنات وعقارات إربد بنجاح.`,
+            type: 'system',
+            link: '/housing'
+          });
+        } catch (nErr) {
+          console.warn("Notification error:", nErr);
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('تعذر اعتماد إعلان العقار', 'error');
+    }
+  };
+
+  const handleRejectHousing = async (item: any) => {
+    const reason = window.prompt(
+      'يرجى كتابة سبب عدم الموافقة (لتوضيحه للمعلن):',
+      'يرجى التواصل مع إدارة المنصة لتأكيد الرسوم وتفاصيل السكن.'
+    );
+    if (reason === null) return;
+
+    try {
+      await updateDoc(doc(db, 'housings', item.id), {
+        status: 'rejected',
+        rejectionReason: reason || 'تم رفض الإعلان من قبل الإدارة'
+      });
+
+      showToast(`تم رفض إعلان (${item.title}) ❌`);
+      fetchData();
+
+      if (item.userId && item.userId !== 'guest') {
+        try {
+          await addNotification({
+            userId: item.userId,
+            title: 'تحديث بخصوص إعلان العقار ⚠️',
+            message: `لم تتم الموافقة على نشر إعلان "${item.title}". السبب: ${reason || 'يرجى التواصل مع الإدارة'}`,
+            type: 'system',
+            link: '/housing'
+          });
+        } catch (nErr) {
+          console.warn("Notification error:", nErr);
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('تعذر تحديث حالة الإعلان', 'error');
+    }
+  };
+
+
+  // --- TOURISM CRUD HANDLERS ---
+  const handleSaveTourism = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTourism.name || !newTourism.description || !newTourism.location) {
+      showToast('يرجى تعبئة الحقول الأساسية للمعلّم السياحي', 'error');
+      return;
+    }
+    const tags = newTourism.tagsString
+      ? newTourism.tagsString.split('،').map((t: any) => t.trim()).filter(Boolean)
+      : ['معلم مميز', 'إربد السياحية'];
+
+    const tips = newTourism.tipsString
+      ? newTourism.tipsString.split('\n').map((t: any) => t.trim()).filter(Boolean)
+      : ['زر المكان مع بزوغ الشمس لالتقاط أفضل الصور الممكنة.'];
+
+    const payload = {
+      name: newTourism.name,
+      category: newTourism.category,
+      image: newTourism.image || 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=800&q=80',
+      description: newTourism.description,
+      location: newTourism.location,
+      googleMapsUrl: newTourism.googleMapsUrl || 'https://maps.google.com/?q=' + encodeURIComponent(newTourism.name),
+      openingHours: newTourism.openingHours || 'مفتوح طوال اليوم',
+      entryFee: newTourism.entryFee || 'مجاني',
+      rating: Number(newTourism.rating) || 4.5,
+      tags,
+      tips,
+      createdAt: editingTourism?.createdAt || Date.now()
+    };
+
+    try {
+      if (editingTourism?.id) {
+        await updateDoc(doc(db, 'tourism', editingTourism.id), payload);
+        showToast('تم تحديث المعلم السياحي بنجاح');
+      } else {
+        await addDoc(collection(db, 'tourism'), payload);
+        showToast('تم إضافة المعلم السياحي بنجاح');
+      }
+      setIsTourismFormOpen(false);
+      setEditingTourism(null);
+      setNewTourism({
+        name: '',
+        category: 'أثري',
+        image: '',
+        description: '',
+        location: '',
+        googleMapsUrl: '',
+        openingHours: '',
+        entryFee: '',
+        rating: '4.5',
+        tagsString: '',
+        tipsString: ''
+      });
+      fetchData();
+    } catch (err) {
+      console.error(err);
+      showToast('تعذر حفظ المعلم السياحي', 'error');
+    }
+  };
+
+  const handleEditTourismClick = (item: any) => {
+    setEditingTourism(item);
+    setNewTourism({
+      name: item.name || '',
+      category: item.category || 'أثري',
+      image: item.image || '',
+      description: item.description || '',
+      location: item.location || '',
+      googleMapsUrl: item.googleMapsUrl || '',
+      openingHours: item.openingHours || '',
+      entryFee: item.entryFee || '',
+      rating: String(item.rating || '4.5'),
+      tagsString: (item.tags || []).join('، '),
+      tipsString: (item.tips || []).join('\n')
+    });
+    setIsTourismFormOpen(true);
+  };
+
+  const handleDeleteTourismSpot = async (id: string) => {
+    if (!window.confirm('هل أنت متأكد من حذف هذا المعلم السياحي؟')) return;
+    try {
+      await deleteDoc(doc(db, 'tourism', id));
+      showToast('تم حذف المعلم بنجاح');
+      fetchData();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+
+  // --- JOBS ADD/EDIT CRUD HANDLERS ---
+  const handleSaveJob = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newJob.title || !newJob.company || !newJob.description || !newJob.contactPhone) {
+      showToast('يرجى تعبئة الحقول الأساسية للوظيفة', 'error');
+      return;
+    }
+    const requirements = newJob.requirements
+      ? newJob.requirements.split('،').map((r: any) => r.trim()).filter(Boolean)
+      : ['خبرة جيدة في العمل', 'اللباقة والالتزام'];
+
+    const payload = {
+      title: newJob.title,
+      company: newJob.company,
+      jobType: newJob.jobType,
+      category: newJob.category,
+      location: newJob.location || 'إربد، الأردن',
+      salary: newJob.salary || 'يحدد عند المقابلة',
+      description: newJob.description,
+      requirements,
+      contactPhone: newJob.contactPhone,
+      isUrgent: newJob.isUrgent,
+      createdAt: editingJob?.createdAt || new Date().toISOString()
+    };
+
+    try {
+      if (editingJob?.id) {
+        await updateDoc(doc(db, 'jobs', editingJob.id), payload);
+        showToast('تم تحديث الشاغر الوظيفي بنجاح');
+      } else {
+        await addDoc(collection(db, 'jobs'), payload);
+        showToast('تم نشر الشاغر الوظيفي بنجاح');
+      }
+      setIsJobFormOpen(false);
+      setEditingJob(null);
+      setNewJob({
+        title: '',
+        company: '',
+        jobType: 'دوام كامل',
+        category: 'مطاعم ومقاهي',
+        location: '',
+        salary: '',
+        description: '',
+        requirements: '',
+        contactPhone: '',
+        isUrgent: false
+      });
+      fetchData();
+    } catch (err) {
+      console.error(err);
+      showToast('تعذر حفظ الشاغر الوظيفي', 'error');
+    }
+  };
+
+  const handleEditJobClick = (item: any) => {
+    setEditingJob(item);
+    setNewJob({
+      title: item.title || '',
+      company: item.company || '',
+      jobType: item.jobType || 'دوام كامل',
+      category: item.category || 'مطاعم ومقاهي',
+      location: item.location || '',
+      salary: item.salary || '',
+      description: item.description || '',
+      requirements: (item.requirements || []).join('، '),
+      contactPhone: item.contactPhone || '',
+      isUrgent: item.isUrgent || false
+    });
+    setIsJobFormOpen(true);
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, [isAdmin]);
+
+  // Handler: Approve Business Request
+  const handleApproveRequest = async (request: any) => {
+    if (!db) return;
+    try {
+      const newBusiness: Omit<Business, 'id'> = {
+        name: request.name || '',
+        category: request.category || 'أخرى',
+        description: request.description || '',
+        address: request.address || '',
+        phone: request.phone || '',
+        imageUrl: request.imageUrl || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&q=80',
+        googlePlaceUrl: request.googlePlaceUrl || '',
+        userId: request.userId || null,
+        ownerName: request.ownerName || '',
+        rating: 4.8,
+        reviewCount: 1,
+        createdAt: Date.now(),
+        isFeatured: false,
+        hideSiteReviews: false,
+        hideGoogleReviews: false
+      };
+
+      const docRef = doc(collection(db, 'businesses'));
+      await setDoc(docRef, newBusiness);
+      await updateDoc(doc(db, 'businessRequests', request.id), { status: 'approved' });
+
+      setRequests(prev => prev.map(r => r.id === request.id ? { ...r, status: 'approved' } : r));
+      setBusinesses(prev => [{ id: docRef.id, ...newBusiness }, ...prev]);
+
+      // Push notification
+      await addNotification({
+        title: `تم توثيق محل جديد: ${request.name} 🏬`,
+        message: `انضم محل ${request.name} رسمياً إلى دليل شو في بإربد في قسم ${request.category}.`,
+        type: 'business',
+        link: `/business/${docRef.id}`,
+        badge: 'محل جديد 🌟',
+        userId: 'all',
+        businessId: docRef.id,
+        businessName: request.name,
+        businessLogoUrl: request.logoUrl || request.logo || ''
+      });
+
+      showToast(`تم قبول وتوثيق محل (${request.name}) بنجاح!`);
+
+      // Record Audit Log
+      recordAuditLog({
+        action: 'VERIFY_BUSINESS',
+        actionAr: 'توثيق وتسجيل محل جديد',
+        details: `تم قبول وتوثيق محل "${request.name}" وتفعيله في المنصة قسم ${request.category}`,
+        performedBy: currentUser?.email || userRole || 'المشرف الإداري',
+        userRole: userRole,
+        targetId: docRef.id,
+        targetName: request.name,
+        timestamp: Date.now()
+      });
+    } catch (err) {
+      console.error("Error approving request:", err);
+      showToast('تعذر قبول الطلب، يرجى المحاولة لاحقاً', 'error');
+    }
+  };
+
+  // Handler: Reject Business Request
+  const handleRejectRequest = async (id: string) => {
+    if (!db) return;
+    try {
+      await updateDoc(doc(db, 'businessRequests', id), { status: 'rejected' });
+      setRequests(prev => prev.map(r => r.id === id ? { ...r, status: 'rejected' } : r));
+      showToast('تم رفض الطلب', 'info');
+    } catch (err) {
+      console.error("Error rejecting request:", err);
+      showToast('تعذر رفض الطلب', 'error');
+    }
+  };
+
+  // Handler: Delete Business Request
+  const handleDeleteRequest = async (id: string) => {
+    if (!db) return;
+    try {
+      await deleteDoc(doc(db, 'businessRequests', id));
+      setRequests(prev => prev.filter(r => r.id !== id));
+      showToast('تم حذف الطلب بنجاح');
+    } catch (err) {
+      console.error("Error deleting request:", err);
+      showToast('تعذر حذف الطلب', 'error');
+    }
+  };
+
+  // Handler: Add New Business as Admin
+  const handleAddBusiness = async (newBiz: Omit<Business, 'id'>) => {
+    if (!db) return;
+    try {
+      const docRef = doc(collection(db, 'businesses'));
+      const sanitized = sanitizeFirestorePayload(newBiz, false);
+      await setDoc(docRef, sanitized);
+      const created = { id: docRef.id, ...newBiz } as Business;
+      setBusinesses(prev => [created, ...prev]);
+
+      await addNotification({
+        title: `إضافة مميزة: ${newBiz.name} ✨`,
+        message: `تم إضافة ${newBiz.name} في ${newBiz.address} إلى دليل إربد.`,
+        type: 'business',
+        link: `/business/${docRef.id}`,
+        badge: 'جديد بالدليل 📍',
+        userId: 'all',
+        businessId: docRef.id,
+        businessName: newBiz.name,
+        businessLogoUrl: newBiz.logoUrl || ''
+      });
+
+      showToast(`تمت إضافة محل (${newBiz.name}) بنجاح!`);
+    } catch (error) {
+      console.error('Error creating business:', error);
+      showToast('حدث خطأ أثناء إضافة المحل', 'error');
+    }
+  };
+
+  // Handler: Update Existing Business
+  const handleSaveBusiness = async (updated: Business) => {
+    if (!db || !updated.id) return;
+    try {
+      const { id, ...data } = updated;
+      const sanitized = sanitizeFirestorePayload(data, true);
+      await updateDoc(doc(db, 'businesses', id), sanitized);
+      setBusinesses(prev => prev.map(b => b.id === id ? updated : b));
+      showToast(`تم حفظ تعديلات (${updated.name}) بنجاح!`);
+    } catch (error) {
+      console.error('Error updating business:', error);
+      showToast('حدث خطأ أثناء حفظ التعديلات', 'error');
+    }
+  };
+
+  // Handler: Quick Toggle Featured (Sponsored in Slideshow & Top)
+  const handleToggleFeatured = async (biz: Business) => {
+    if (!db || !biz.id) return;
+    const newStatus = !biz.isFeatured;
+    try {
+      await updateDoc(doc(db, 'businesses', biz.id), { isFeatured: newStatus });
+      setBusinesses(prev => prev.map(b => b.id === biz.id ? { ...b, isFeatured: newStatus } : b));
+      showToast(newStatus ? `تم تمييز محل (${biz.name}) في البانر والصدارة ⭐` : `تم إلغاء تمييز (${biz.name})`, 'info');
+    } catch (error) {
+      console.error('Error toggling featured status:', error);
+      showToast('تعذر تغيير حالة التمييز', 'error');
+    }
+  };
+
+  // Handler: Quick Toggle Site Reviews
+  const handleToggleSiteReviews = async (biz: Business) => {
+    if (!db || !biz.id) return;
+    const newStatus = !biz.hideSiteReviews;
+    try {
+      await updateDoc(doc(db, 'businesses', biz.id), { hideSiteReviews: newStatus });
+      setBusinesses(prev => prev.map(b => b.id === biz.id ? { ...b, hideSiteReviews: newStatus } : b));
+      showToast(newStatus ? `تم إخفاء تقييمات الموقع لمحل (${biz.name})` : `تم إظهار تقييمات الموقع لمحل (${biz.name})`, 'info');
+    } catch (error) {
+      console.error('Error toggling site reviews:', error);
+      showToast('تعذر تحديث إعدادات التقييمات', 'error');
+    }
+  };
+
+  // Handler: Quick Toggle Google Reviews
+  const handleToggleGoogleReviews = async (biz: Business) => {
+    if (!db || !biz.id) return;
+    const newStatus = !biz.hideGoogleReviews;
+    try {
+      await updateDoc(doc(db, 'businesses', biz.id), { hideGoogleReviews: newStatus });
+      setBusinesses(prev => prev.map(b => b.id === biz.id ? { ...b, hideGoogleReviews: newStatus } : b));
+      showToast(newStatus ? `تم إخفاء تقييمات Google Maps لمحل (${biz.name})` : `تم إظهار تقييمات Google Maps لمحل (${biz.name})`, 'info');
+    } catch (error) {
+      console.error('Error toggling google reviews:', error);
+      showToast('تعذر تحديث إعدادات التقييمات', 'error');
+    }
+  };
+
+  // Handler: Delete Business
+  const handleDeleteBusiness = async (id: string, name: string) => {
+    if (!db) return;
+    try {
+      await deleteDoc(doc(db, 'businesses', id));
+      setBusinesses(prev => prev.filter(b => b.id !== id));
+      showToast(`تم حذف محل (${name}) من الدليل`, 'info');
+    } catch (err) {
+      console.error("Error deleting business:", err);
+      showToast('تعذر حذف المحل', 'error');
+    }
+  };
+
+  // Handler: Marketing Status Update
+  const handleMarketingStatusUpdate = async (
+    reqId: string, 
+    newStatus: MarketingRequest['status'], 
+    businessId?: string, 
+    serviceType?: string
+  ) => {
+    if (!db || !reqId) return;
+    try {
+      await updateDoc(doc(db, 'marketingRequests', reqId), { status: newStatus });
+      setMarketingRequests(prev => prev.map(r => r.id === reqId ? { ...r, status: newStatus } : r));
+
+      // Side Effect: If sponsored or homepage banner is approved, mark the business as featured in Firestore
+      if ((serviceType === 'sponsored' || serviceType === 'homepage_banner') && businessId) {
+        const isApproved = newStatus === 'completed' || newStatus === 'approved';
+        
+        // Helper to convert duration string to weeks count
+        const getDurationWeeksValue = (durationStr?: string): number => {
+          if (!durationStr) return 1;
+          if (durationStr.includes('أسبوع واحد') || durationStr === '1') return 1;
+          if (durationStr.includes('أسبوعين') || durationStr === '2') return 2;
+          if (durationStr.includes('شهر كامل') || durationStr === '4') return 4;
+          if (durationStr.includes('3 أشهر') || durationStr === '12') return 12;
+          return 1;
+        };
+
+        const reqDoc = marketingRequests.find(r => r.id === reqId);
+        let startDate = Date.now();
+        if (reqDoc?.publishTimeOption === 'scheduled' && reqDoc?.publishStartDate) {
+          startDate = new Date(reqDoc.publishStartDate).getTime();
+        }
+
+        const weeks = getDurationWeeksValue(reqDoc?.durationWeeks);
+        const durationMs = weeks * 7 * 24 * 60 * 60 * 1000;
+        const expiryDate = startDate + durationMs;
+
+        if (isApproved) {
+          await updateDoc(doc(db, 'businesses', businessId), { 
+            isFeatured: true,
+            featuredStartDate: startDate,
+            featuredExpiryDate: expiryDate
+          });
+          setBusinesses(prev => prev.map(b => b.id === businessId ? { 
+            ...b, 
+            isFeatured: true,
+            featuredStartDate: startDate,
+            featuredExpiryDate: expiryDate
+          } : b));
+        } else {
+          // If rejected or reset, clear feature flags
+          await updateDoc(doc(db, 'businesses', businessId), { 
+            isFeatured: false,
+            featuredStartDate: null,
+            featuredExpiryDate: null
+          });
+          setBusinesses(prev => prev.map(b => b.id === businessId ? { 
+            ...b, 
+            isFeatured: false,
+            featuredStartDate: undefined,
+            featuredExpiryDate: undefined
+          } : b));
+        }
+
+        if (serviceType === 'homepage_banner') {
+          if (isApproved) {
+            const biz = businesses.find(b => b.id === businessId);
+            if (biz) {
+              const bannerData: any = {
+                type: reqDoc?.bannerType || 'business',
+                title: reqDoc?.bannerTitle || biz.name,
+                subtitle: reqDoc?.bannerSubtitle || biz.description || '',
+                imageUrl: reqDoc?.bannerImageUrl || biz.imageUrl || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1200&q=80',
+                businessId: biz.id,
+                businessName: biz.name,
+                category: biz.category || '',
+                rating: biz.rating || 5,
+                address: biz.address || '',
+                active: true,
+                createdAt: reqDoc?.createdAt || Date.now(),
+                marketingRequestId: reqId,
+                bannerStartDate: startDate,
+                bannerExpiryDate: expiryDate
+              };
+              if (reqDoc?.buttonText) bannerData.buttonText = reqDoc.buttonText;
+              if (reqDoc?.buttonLink) bannerData.buttonLink = reqDoc.buttonLink;
+              if (reqDoc?.badgeText) bannerData.badgeText = reqDoc.badgeText;
+              
+              await setDoc(doc(db, 'banners', `business_banner_${businessId}`), bannerData);
+              
+              // Redirect/switch active tab to banners list!
+              setTimeout(() => {
+                setActiveTab('banners');
+              }, 100);
+            }
+          } else {
+            // Remove the banner on rejection or cancel
+            await deleteDoc(doc(db, 'banners', `business_banner_${businessId}`));
+          }
+        }
+      }
+
+      // Side Effect: If push notification request is approved, publish it to notifications collection in Firestore
+      if (serviceType === 'push_notifications') {
+        const isApproved = newStatus === 'completed' || newStatus === 'approved';
+        const reqDoc = marketingRequests.find(r => r.id === reqId);
+        if (isApproved && reqDoc) {
+          let publishDate = Date.now();
+          if (reqDoc.publishTimeOption === 'scheduled' && reqDoc.publishStartDate) {
+            publishDate = new Date(reqDoc.publishStartDate).getTime();
+          } else if (reqDoc.scheduledTime && reqDoc.scheduledTime !== 'immediately') {
+            publishDate = new Date(reqDoc.scheduledTime).getTime();
+          }
+
+          const biz = businessId ? businesses.find(b => b.id === businessId) : undefined;
+          const notifId = `notif_marketing_${reqId}`;
+          const notifData = {
+            id: notifId,
+            title: reqDoc.notificationTitle || `إعلان جديد`,
+            message: reqDoc.notificationBody || '',
+            type: 'marketing',
+            link: reqDoc.targetLink || (businessId ? `/business/${businessId}` : ''),
+            userId: 'all',
+            createdAt: publishDate,
+            isRead: false,
+            businessId: businessId || undefined,
+            businessName: biz?.name || reqDoc.businessName || undefined,
+            businessLogoUrl: biz?.logoUrl || reqDoc.businessLogoUrl || undefined,
+          };
+          await setDoc(doc(db, 'notifications', notifId), notifData);
+        } else {
+          // If unapproved or rejected, remove the notification document
+          await deleteDoc(doc(db, 'notifications', `notif_marketing_${reqId}`));
+        }
+      }
+
+      showToast(`تم تحديث حالة الطلب التسويقي إلى: ${
+        newStatus === 'completed' || newStatus === 'approved' ? 'مفعّل ومعتمد ✅' : newStatus === 'contacted' ? 'تم التواصل 📞' : 'مرفوض ❌'
+      }`);
+    } catch (error) {
+      console.error("Error updating marketing request status:", error);
+      showToast('تعذر تحديث حالة الطلب التسويقي', 'error');
+    }
+  };
+
+  // Handler: Delete Marketing Request
+  const handleDeleteMarketingRequest = async (reqId: string) => {
+    if (!db || !reqId) return;
+    try {
+      const reqToDelete = marketingRequests.find(r => r.id === reqId);
+      if (reqToDelete && reqToDelete.serviceType === 'homepage_banner' && reqToDelete.businessId) {
+        await deleteDoc(doc(db, 'banners', `business_banner_${reqToDelete.businessId}`));
+      }
+      if (reqToDelete && reqToDelete.serviceType === 'push_notifications') {
+        await deleteDoc(doc(db, 'notifications', `notif_marketing_${reqId}`));
+      }
+      await deleteDoc(doc(db, 'marketingRequests', reqId));
+      setMarketingRequests(prev => prev.filter(r => r.id !== reqId));
+      showToast('تم حذف الطلب التسويقي بنجاح');
+    } catch (error) {
+      console.error("Error deleting marketing request:", error);
+      showToast('تعذر حذف الطلب', 'error');
+    }
+  };
+
+  // Handler: Toggle Job Urgency
+  const handleToggleJobUrgent = async (job: JobOffer) => {
+    if (!db || !job.id) return;
+    const newUrgent = !job.isUrgent;
+    try {
+      await updateDoc(doc(db, 'jobs', job.id), { isUrgent: newUrgent });
+      setJobs(prev => prev.map(j => j.id === job.id ? { ...j, isUrgent: newUrgent } : j));
+      showToast(newUrgent ? `تم تمييز وظيفة (${job.title}) كشاغر عاجل 🔥` : `تم إلغاء شارة العاجل عن الوظيفة`);
+    } catch (error) {
+      console.error('Error toggling job urgency:', error);
+      showToast('تعذر تحديث حالة الوظيفة', 'error');
+    }
+  };
+
+  // Handler: Delete Job
+  const handleDeleteJob = async (jobId: string, title: string) => {
+    if (!db) return;
+    try {
+      await deleteDoc(doc(db, 'jobs', jobId));
+      setJobs(prev => prev.filter(j => j.id !== jobId));
+      showToast(`تم حذف شاغر (${title}) بنجاح`);
+    } catch (error) {
+      console.error('Error deleting job:', error);
+      showToast('تعذر حذف الوظيفة', 'error');
+    }
+  };
+
+  // Handler: Broadcast Notification Send
+  const handleSendBroadcast = async (notification: Omit<AppNotification, 'id' | 'createdAt'>) => {
+    await addNotification(notification);
+    showToast(`تم بث الإشعار الجماعي: "${notification.title}" بنجاح!`);
+  };
+
+  // Handler: Export Backup JSON
+  const handleExportBackup = () => {
+    const backupData = {
+      exportDate: new Date().toISOString(),
+      platform: 'Show Fee B Irbid Admin Console',
+      stats: {
+        totalBusinesses: businesses.length,
+        totalRequests: requests.length,
+        totalMarketing: marketingRequests.length,
+        totalJobs: jobs.length
+      },
+      businesses,
+      requests,
+      marketingRequests,
+      jobs
+    };
+
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupData, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute("href", dataStr);
+    downloadAnchor.setAttribute("download", `irbid_platform_backup_${new Date().toISOString().slice(0, 10)}.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+    showToast('تم تصدير ملف النسخة الاحتياطية بنجاح 📥');
+  };
+
+  // Filtered Businesses
+  const filteredBusinesses = useMemo(() => {
+    return businesses.filter(b => {
+      if (businessCategoryFilter !== 'الكل' && b.category !== businessCategoryFilter) return false;
+      if (businessFeaturedFilter === 'featured' && !b.isFeatured) return false;
+      if (businessFeaturedFilter === 'regular' && b.isFeatured) return false;
+      
+      if (businessVipFilter !== 'all') {
+        const vipStatus = getBusinessVipStatus(b);
+        if (businessVipFilter === 'vip' && !vipStatus.isVip) return false;
+        if (businessVipFilter === 'regular' && vipStatus.isVip) return false;
+      }
+
+      if (businessSearch.trim()) {
+        const q = businessSearch.toLowerCase().trim();
+        const matchName = b.name?.toLowerCase().includes(q);
+        const matchCat = b.category?.toLowerCase().includes(q);
+        const matchAddr = b.address?.toLowerCase().includes(q);
+        const matchPhone = b.phone?.includes(q);
+        const matchOwner = b.ownerName?.toLowerCase().includes(q);
+        return matchName || matchCat || matchAddr || matchPhone || matchOwner;
+      }
+      return true;
+    });
+  }, [businesses, businessCategoryFilter, businessFeaturedFilter, businessVipFilter, businessSearch]);
+
+  // Filtered Requests
+  const filteredRequests = useMemo(() => {
+    return requests.filter(r => {
+      if (requestStatusFilter !== 'all' && r.status !== requestStatusFilter) return false;
+      if (requestSearch.trim()) {
+        const q = requestSearch.toLowerCase().trim();
+        const matchName = r.name?.toLowerCase().includes(q);
+        const matchCat = r.category?.toLowerCase().includes(q);
+        const matchOwner = r.ownerName?.toLowerCase().includes(q);
+        const matchPhone = r.phone?.includes(q);
+        return matchName || matchCat || matchOwner || matchPhone;
+      }
+      return true;
+    });
+  }, [requests, requestStatusFilter, requestSearch]);
+
+  // Filtered Marketing Requests
+  const filteredMarketing = useMemo(() => {
+    return marketingRequests.filter(m => {
+      if (marketingStatusFilter !== 'all' && m.status !== marketingStatusFilter) return false;
+      if (marketingServiceFilter !== 'all' && m.serviceType !== marketingServiceFilter) return false;
+      if (marketingSearch.trim()) {
+        const q = marketingSearch.toLowerCase().trim();
+        const matchBiz = m.businessName?.toLowerCase().includes(q);
+        const matchSrv = m.serviceName?.toLowerCase().includes(q);
+        const matchEmail = m.userEmail?.toLowerCase().includes(q);
+        return matchBiz || matchSrv || matchEmail;
+      }
+      return true;
+    });
+  }, [marketingRequests, marketingStatusFilter, marketingServiceFilter, marketingSearch]);
+
+  // Filtered Jobs
+  const filteredJobs = useMemo(() => {
+    return jobs.filter(j => {
+      if (jobTypeFilter !== 'all' && j.jobType !== jobTypeFilter) return false;
+      if (jobSearch.trim()) {
+        const q = jobSearch.toLowerCase().trim();
+        const matchTitle = j.title?.toLowerCase().includes(q);
+        const matchCompany = j.company?.toLowerCase().includes(q);
+        const matchCat = j.category?.toLowerCase().includes(q);
+        return matchTitle || matchCompany || matchCat;
+      }
+      return true;
+    });
+  }, [jobs, jobTypeFilter, jobSearch]);
+
+  // Filtered Housings
+  const filteredHousings = useMemo(() => {
+    return housings.filter(h => {
+      const status = h.status || 'pending';
+      if (housingStatusFilter !== 'all') {
+        if (housingStatusFilter === 'approved' && status !== 'approved') return false;
+        if (housingStatusFilter === 'pending' && status !== 'pending') return false;
+        if (housingStatusFilter === 'rejected' && status !== 'rejected') return false;
+      }
+      if (housingSearch.trim()) {
+        const q = housingSearch.toLowerCase().trim();
+        const matchTitle = h.title?.toLowerCase().includes(q);
+        const matchOwner = h.ownerName?.toLowerCase().includes(q);
+        const matchPhone = h.contactPhone?.includes(q);
+        const matchLoc = h.location?.toLowerCase().includes(q);
+        const matchUniv = h.university?.toLowerCase().includes(q);
+        return matchTitle || matchOwner || matchPhone || matchLoc || matchUniv;
+      }
+      return true;
+    });
+  }, [housings, housingStatusFilter, housingSearch]);
+
+  // Categories list for filters
+  const uniqueCategories = useMemo(() => {
+    const cats = new Set<string>();
+    businesses.forEach(b => { if (b.category) cats.add(b.category); });
+    return Array.from(cats);
+  }, [businesses]);
+
+  if (!isStaff) {
+    return (
+      <div className="max-w-xl mx-auto py-16 px-4 text-center space-y-6" dir="rtl">
+        <div className="w-20 h-20 rounded-3xl bg-red-50 text-red-600 flex items-center justify-center mx-auto shadow-md">
+          <ShieldAlert className="h-10 w-10" />
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-2xl font-black text-stone-800">صلاحيات إدارة المنصة والإشراف فقط</h2>
+          <p className="text-sm text-stone-600 leading-relaxed">
+            هذه اللوحة مخصصة لإدارة منصة "شو في بإربد" والمشرفين المعتمدين. تم عزل وتأمين هذه اللوحة لضمان عدم وصول الزوار أو أصحاب المحلات لبيانات غير مصرح لهم بها.
+          </p>
+        </div>
+        
+        {currentUser ? (
+          <div className="p-4 bg-stone-50 rounded-2xl border border-stone-200 text-xs text-stone-600 space-y-1">
+            <div>حسابك الحالي: <span className="font-bold font-mono text-stone-800">{currentUser.email}</span></div>
+            <div>نوع الحساب الحالي: <span className="font-bold text-amber-700">{userRole === 'merchant' ? 'صاحب محل' : 'زائر مسجل'}</span></div>
+            <div>معرف المستخدم (UID): <span className="font-mono text-stone-500">{currentUser.uid}</span></div>
+          </div>
+        ) : (
+          <Link
+            to="/login"
+            className="inline-flex items-center gap-2 bg-[#1a4d2e] text-white px-6 py-3 rounded-2xl font-bold text-sm hover:bg-[#133b22] transition-colors shadow-md"
+          >
+            تسجيل الدخول كمسؤول أو مشرف
+          </Link>
+        )}
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex flex-col justify-center items-center h-80 space-y-4" dir="rtl">
+        <div className="w-12 h-12 rounded-full border-4 border-[#1a4d2e]/20 border-t-[#1a4d2e] animate-spin"></div>
+        <p className="text-sm font-bold text-stone-600">جاري تحميل لوحة التحكم الشاملة...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-7xl mx-auto space-y-8 pb-16" dir="rtl">
+      
+      {/* Toast Floating Alert */}
+      {toastMessage && (
+        <div className="fixed bottom-6 left-6 z-50 animate-in fade-in slide-in-from-bottom-5 duration-300">
+          <div className={`px-5 py-3.5 rounded-2xl shadow-xl border flex items-center gap-3 text-sm font-black ${
+            toastMessage.type === 'error'
+              ? 'bg-red-900 text-white border-red-700'
+              : toastMessage.type === 'info'
+              ? 'bg-stone-900 text-white border-stone-700'
+              : 'bg-[#1a4d2e] text-white border-emerald-600'
+          }`}>
+            <Sparkles className="h-4 w-4 text-[#ff9f1c]" />
+            <span>{toastMessage.text}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Header Bar */}
+      <AdminHeader
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        pendingRequestsCount={requests.filter(r => r.status === 'pending').length}
+        pendingMarketingCount={marketingRequests.filter(m => m.status === 'pending').length}
+        businessesCount={businesses.length}
+        jobsCount={jobs.length}
+        pendingSuggestionsCount={editSuggestions.filter(s => s.status === 'pending').length}
+        pendingReportsCount={reviewReports.filter(r => r.status === 'pending').length}
+        pendingHousingCount={housings.filter(h => h.status === 'pending').length}
+        onRefresh={fetchData}
+        onOpenAddBusiness={() => setIsAddBusinessOpen(true)}
+        onOpenBroadcastModal={() => setIsBroadcastModalOpen(true)}
+        onExportData={handleExportBackup}
+        isRefreshing={isRefreshing}
+      />
+
+      {/* TAB 1: OVERVIEW & ANALYTICS */}
+      {activeTab === 'overview' && (
+        <div className="space-y-6">
+          {/* DEMO DATA CONTROL CARD */}
+          <div className="p-5 rounded-3xl border border-amber-200/90 bg-amber-50/60 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-amber-200/70">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-amber-500/10 text-amber-800 flex items-center justify-center font-bold">
+                  <Sparkles className="h-5 w-5 text-amber-600" />
+                </div>
+                <div>
+                  <h4 className="text-base font-black text-stone-900">التحكم بالبيانات التجريبية (Demo Data)</h4>
+                  <p className="text-xs text-stone-600">زرع، مسح، أو التبديل في إظهار البيانات التجريبية للمستخدمين في أرجاء الموقع</p>
+                </div>
+              </div>
+
+              {/* Toggle Button */}
+              <button
+                onClick={handleToggleDemoData}
+                disabled={isDemoWorking}
+                className={`inline-flex items-center gap-2.5 px-5 py-2.5 rounded-2xl font-black text-xs transition-all shadow-xs cursor-pointer ${
+                  showDemoData 
+                    ? 'bg-amber-600 hover:bg-amber-700 text-white' 
+                    : 'bg-stone-200 hover:bg-stone-300 text-stone-800'
+                }`}
+              >
+                {showDemoData ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                <span>{showDemoData ? 'البيانات التجريبية: مفعّلة (ظاهرة)' : 'البيانات التجريبية: مخفية (البيانات الحقيقية فقط)'}</span>
+              </button>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+              <p className="text-xs text-stone-600 max-w-xl leading-relaxed">
+                تستند المنصة إلى قاعدة بيانات Firestore. يمكنك إضافة نموذج بيانات تجريبية لقاعدة البيانات لاستعراض شكل الواجهات، أو مسحها نهائياً بضغطة زر.
+              </p>
+
+              <div className="flex flex-wrap items-center gap-2.5">
+                <button
+                  onClick={handleSeedDemoData}
+                  disabled={isDemoWorking}
+                  className="inline-flex items-center gap-2 bg-stone-900 hover:bg-black text-white px-4 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer shadow-xs"
+                >
+                  <Plus className="h-4 w-4 text-amber-400" />
+                  <span>زرع بيانات تجريبية في Firestore</span>
+                </button>
+
+                <button
+                  onClick={handleClearDemoData}
+                  disabled={isDemoWorking}
+                  className="inline-flex items-center gap-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-4 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer"
+                >
+                  <Trash2 className="h-4 w-4 text-rose-600" />
+                  <span>مسح كافة البيانات التجريبية</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <AdminStatsOverview
+            businesses={businesses}
+            requests={requests}
+            marketingRequests={marketingRequests}
+            jobs={jobs}
+            onNavigateTab={setActiveTab}
+            onOpenAddBusiness={() => setIsAddBusinessOpen(true)}
+            onOpenBroadcastModal={() => setIsBroadcastModalOpen(true)}
+          />
+
+          {/* Site Announcement Banner Control */}
+          <div className="bg-white p-6 rounded-3xl border border-[#e5e1da] shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
+                  <Megaphone className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="font-black text-base text-[#2d2a26]">شريط الإعلانات العاجل أعلى المنصة</h3>
+                  <p className="text-[11px] text-stone-500">تحديث الرسالة الترحيبية أو إعلان التخفيضات الذي يظهر لجميع زوار الموقع</p>
+                </div>
+              </div>
+
+              <label className="flex items-center gap-2 cursor-pointer">
+                <span className="text-xs font-bold text-stone-600">{announcementActive ? 'مفعّل' : 'معطّل'}</span>
+                <input
+                  type="checkbox"
+                  checked={announcementActive}
+                  onChange={e => {
+                    setAnnouncementActive(e.target.checked);
+                    showToast(e.target.checked ? 'تم تفعيل شريط الإعلان' : 'تم تعطيل شريط الإعلان');
+                  }}
+                  className="h-5 w-5 rounded text-[#1a4d2e] focus:ring-[#1a4d2e] border-stone-300 cursor-pointer"
+                />
+              </label>
+            </div>
+
+            <div className="flex gap-3">
+              <input
+                type="text"
+                value={announcementText}
+                onChange={e => setAnnouncementText(e.target.value)}
+                placeholder="اكتب نص الإعلان الترحيبي هنا..."
+                className="flex-1 bg-stone-50 border border-stone-200 rounded-xl px-4 py-2.5 text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+              />
+              <button
+                onClick={() => showToast('تم تحديث شريط الإعلان بنجاح')}
+                className="bg-[#1a4d2e] hover:bg-[#133b22] text-white px-5 py-2.5 rounded-xl text-xs font-black transition-colors"
+              >
+                حفظ النص
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 2: CATEGORIES MANAGER */}
+      {activeTab === 'categories' && <CategoriesManager showToast={showToast} />}
+
+      {/* TAB: VIP PLANS MANAGER */}
+      {activeTab === 'vipPlans' && <VipPlansManager showToast={showToast} />}
+
+      {/* TAB: GLOBAL SETTINGS MANAGER */}
+      {activeTab === 'globalSettings' && <GlobalSettingsManager showToast={showToast} />}
+
+      {/* TAB: NEIGHBORHOODS MANAGER */}
+      {activeTab === 'neighborhoods' && <NeighborhoodsManager showToast={showToast} />}
+
+      {/* TAB: STATIC PAGES MANAGER */}
+      {activeTab === 'staticPages' && <StaticPagesManager showToast={showToast} />}
+
+       {/* TAB: BANNERS & STORIES MANAGER */}
+       {activeTab === 'banners' && <BannersManager showToast={showToast} />}
+
+      {/* TAB: SEASONAL CAMPAIGNS MANAGER */}
+
+      {/* TAB 2: BUSINESS REQUESTS */}
+      {activeTab === 'requests' && (
+        <div className="space-y-6">
+          
+          {/* Filter and Search Bar */}
+          <div className="bg-white p-4.5 rounded-3xl border border-[#e5e1da] shadow-xs flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="relative flex-1 w-full">
+              <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
+              <input
+                type="text"
+                value={requestSearch}
+                onChange={e => setRequestSearch(e.target.value)}
+                placeholder="ابحث بالاسم، اسم المالك، رقم الهاتف، أو التصنيف..."
+                className="w-full bg-stone-50 border border-stone-200 rounded-xl pr-10 pl-4 py-2.5 text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+              />
+            </div>
+
+            {/* Status Filter Chips */}
+            <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto">
+              {[
+                { id: 'all', label: `الكل (${requests.length})` },
+                { id: 'pending', label: `قيد الانتظار (${requests.filter(r => r.status === 'pending').length})` },
+                { id: 'approved', label: `مقبول (${requests.filter(r => r.status === 'approved').length})` },
+                { id: 'rejected', label: `مرفوض (${requests.filter(r => r.status === 'rejected').length})` }
+              ].map(status => (
+                <button
+                  key={status.id}
+                  onClick={() => setRequestStatusFilter(status.id as any)}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-black whitespace-nowrap transition-colors cursor-pointer ${
+                    requestStatusFilter === status.id
+                      ? 'bg-[#1a4d2e] text-white shadow-xs'
+                      : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                  }`}
+                >
+                  {status.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Requests List */}
+          {filteredRequests.length === 0 ? (
+            <div className="text-center py-16 bg-white rounded-3xl border border-[#e5e1da] space-y-3">
+              <Store className="h-12 w-12 text-stone-300 mx-auto" />
+              <h3 className="font-bold text-stone-700">لا توجد طلبات تطابق هذا الفلتر</h3>
+              <p className="text-xs text-stone-500">سيظهر هنا أي طلب انضمام جديد يرسله أصحاب المحلات في إربد</p>
+            </div>
+          ) : (
+            <div className="grid gap-4">
+              {filteredRequests.map(req => (
+                <div 
+                  key={req.id} 
+                  className={`bg-white p-6 rounded-3xl border transition-all shadow-xs flex flex-col lg:flex-row gap-6 justify-between items-start lg:items-center ${
+                    req.status === 'pending' ? 'border-amber-300 bg-amber-50/20' : 'border-[#e5e1da]'
+                  }`}
+                >
+                  <div className="space-y-3 flex-1">
+                    <div className="flex flex-wrap items-center gap-2.5">
+                      <h3 className="text-lg font-black text-[#2d2a26]">{req.name}</h3>
+                      <span className="bg-stone-100 text-stone-700 px-3 py-1 rounded-full text-xs font-bold">
+                        {req.category}
+                      </span>
+                      {req.status === 'pending' && (
+                        <span className="bg-amber-100 text-amber-800 px-3 py-1 rounded-full text-xs font-black flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          قيد المراجعة
+                        </span>
+                      )}
+                      {req.status === 'approved' && (
+                        <span className="bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full text-xs font-black flex items-center gap-1">
+                          <CheckCircle2 className="h-3 w-3" />
+                          مقبول وموثق
+                        </span>
+                      )}
+                      {req.status === 'rejected' && (
+                        <span className="bg-red-100 text-red-800 px-3 py-1 rounded-full text-xs font-black flex items-center gap-1">
+                          <XCircle className="h-3 w-3" />
+                          مرفوض
+                        </span>
+                      )}
+                    </div>
+
+                    <p className="text-stone-600 text-xs sm:text-sm leading-relaxed max-w-3xl">
+                      {req.description || 'لا يوجد وصف مرفق'}
+                    </p>
+
+                    <div className="flex flex-wrap items-center gap-4 text-xs text-stone-500 pt-1">
+                      <span className="flex items-center gap-1 font-bold text-stone-700">
+                        <Users className="h-3.5 w-3.5 text-stone-400" />
+                        صاحب الطلب: {req.ownerName || 'غير محدد'}
+                      </span>
+
+                      {req.phone && (
+                        <a 
+                          href={`tel:${req.phone}`}
+                          className="flex items-center gap-1 font-mono font-bold text-stone-700 hover:text-[#1a4d2e]"
+                        >
+                          <Phone className="h-3.5 w-3.5 text-emerald-600" />
+                          <span dir="ltr">{req.phone}</span>
+                        </a>
+                      )}
+
+                      <span className="flex items-center gap-1">
+                        <MapPin className="h-3.5 w-3.5 text-red-500" />
+                        العنوان: {req.address || 'إربد'}
+                      </span>
+
+                      {req.googlePlaceUrl && (
+                        <a 
+                          href={req.googlePlaceUrl} 
+                          target="_blank" 
+                          rel="noreferrer" 
+                          className="text-blue-600 font-bold hover:underline inline-flex items-center gap-1"
+                        >
+                          <Globe className="h-3.5 w-3.5" />
+                          رابط خرائط Google Maps
+                        </a>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto pt-2 lg:pt-0 border-t lg:border-t-0 border-stone-100">
+                    {req.status === 'pending' ? (
+                      <>
+                        <button
+                          onClick={() => handleApproveRequest(req)}
+                          className="flex-1 lg:flex-none inline-flex items-center justify-center gap-1.5 bg-[#1a4d2e] hover:bg-[#143e25] text-white px-4 py-2.5 rounded-xl text-xs font-black shadow-xs transition-colors cursor-pointer"
+                        >
+                          <CheckCircle2 className="h-4 w-4 text-[#ff9f1c]" />
+                          <span>قبول وتوثيق</span>
+                        </button>
+
+                        <button
+                          onClick={() => handleRejectRequest(req.id)}
+                          className="flex-1 lg:flex-none inline-flex items-center justify-center gap-1.5 bg-red-50 hover:bg-red-100 text-red-700 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                        >
+                          <XCircle className="h-4 w-4" />
+                          <span>رفض</span>
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        onClick={() => handleDeleteRequest(req.id)}
+                        className="p-2.5 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors cursor-pointer"
+                        title="حذف هذا الطلب"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB: EDIT SUGGESTIONS */}
+      {activeTab === 'editSuggestions' && (
+        <EditSuggestionsPanel onShowToast={showToast} onRefreshTrigger={fetchData} />
+      )}
+
+      {/* TAB: OWNERSHIP CLAIMS VERIFICATION */}
+      {activeTab === 'ownershipClaims' && (
+        <ClaimVerificationPanel />
+      )}
+
+      {/* TAB: REVIEW REPORTS */}
+      {activeTab === 'reviewReports' && (
+        <ReviewReportsPanel onShowToast={showToast} onRefreshTrigger={fetchData} />
+      )}
+
+      {/* TAB 3: BUSINESSES DIRECTORY */}
+      {activeTab === 'businesses' && (
+        <div className="space-y-6">
+          
+          {/* Toolbar */}
+          <div className="bg-white p-5 rounded-3xl border border-[#e5e1da] shadow-xs space-y-4">
+            <div className="flex flex-col lg:flex-row items-center justify-between gap-4">
+              
+              {/* Search */}
+              <div className="relative flex-1 w-full">
+                <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
+                <input
+                  type="text"
+                  value={businessSearch}
+                  onChange={e => setBusinessSearch(e.target.value)}
+                  placeholder="ابحث باسم المحل، التصنيف، العنوان، أو اسم المالك..."
+                  className="w-full bg-stone-50 border border-stone-200 rounded-xl pr-10 pl-4 py-2.5 text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2.5 w-full lg:w-auto">
+                <button
+                  onClick={() => setIsAddBusinessOpen(true)}
+                  className="flex-1 lg:flex-none inline-flex items-center justify-center gap-2 bg-[#ff9f1c] hover:bg-[#f39209] text-white px-4.5 py-2.5 rounded-xl text-xs font-black transition-all shadow-xs cursor-pointer"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>إضافة محل جديد</span>
+                </button>
+
+                {/* View Switcher */}
+                <div className="flex items-center bg-stone-100 p-1 rounded-xl">
+                  <button
+                    onClick={() => setBusinessViewMode('table')}
+                    className={`p-2 rounded-lg transition-colors ${businessViewMode === 'table' ? 'bg-white shadow-xs text-[#1a4d2e]' : 'text-stone-500'}`}
+                    title="عرض جدول"
+                  >
+                    <List className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => setBusinessViewMode('grid')}
+                    className={`p-2 rounded-lg transition-colors ${businessViewMode === 'grid' ? 'bg-white shadow-xs text-[#1a4d2e]' : 'text-stone-500'}`}
+                    title="عرض بطاقات"
+                  >
+                    <LayoutGrid className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Filters Row */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-stone-100">
+              
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-bold text-stone-500">تصفية حسب:</span>
+                
+                {/* Category Dropdown */}
+                <select
+                  value={businessCategoryFilter}
+                  onChange={e => setBusinessCategoryFilter(e.target.value)}
+                  className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-1.5 text-xs font-bold text-stone-700 focus:outline-none focus:ring-1 focus:ring-[#1a4d2e]"
+                >
+                  <option value="الكل">جميع الأقسام ({businesses.length})</option>
+                  {uniqueCategories.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+
+                {/* Featured Filter */}
+                <select
+                  value={businessFeaturedFilter}
+                  onChange={e => setBusinessFeaturedFilter(e.target.value as any)}
+                  className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-1.5 text-xs font-bold text-stone-700 focus:outline-none focus:ring-1 focus:ring-[#1a4d2e]"
+                >
+                  <option value="all">كل التمييز</option>
+                  <option value="featured">المميزة فقط ⭐ ({businesses.filter(b => b.isFeatured).length})</option>
+                  <option value="regular">غير المميزة ({businesses.filter(b => !b.isFeatured).length})</option>
+                </select>
+
+                {/* VIP Package Filter */}
+                <select
+                  value={businessVipFilter}
+                  onChange={e => setBusinessVipFilter(e.target.value as any)}
+                  className="bg-amber-50/60 border border-amber-200 text-amber-950 rounded-xl px-3 py-1.5 text-xs font-black focus:outline-none focus:ring-1 focus:ring-amber-500"
+                >
+                  <option value="all">جميع الباقات</option>
+                  <option value="vip">👑 مشتركي VIP الذهبي ({businesses.filter(b => getBusinessVipStatus(b).isVip).length})</option>
+                  <option value="regular">الباقة الأساسية ({businesses.filter(b => !getBusinessVipStatus(b).isVip).length})</option>
+                </select>
+              </div>
+
+              <div className="text-xs font-bold text-stone-500">
+                النتائج المعروضة: <span className="text-[#1a4d2e] font-black">{filteredBusinesses.length}</span> من أصل {businesses.length}
+              </div>
+            </div>
+          </div>
+
+          {/* Businesses View */}
+          {filteredBusinesses.length === 0 ? (
+            <div className="text-center py-16 bg-white rounded-3xl border border-[#e5e1da] space-y-3">
+              <Store className="h-12 w-12 text-stone-300 mx-auto" />
+              <h3 className="font-bold text-stone-700">لا توجد محلات مطابقة لمعايير البحث</h3>
+              <p className="text-xs text-stone-500">جرب تعديل كلمات البحث أو اختيار تصنيف آخر</p>
+            </div>
+          ) : businessViewMode === 'table' ? (
+            
+            /* Table View */
+            <div className="bg-white rounded-3xl border border-[#e5e1da] shadow-xs overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-right text-xs">
+                  <thead className="bg-stone-50 border-b border-stone-200 text-stone-600 font-black">
+                    <tr>
+                      <th className="p-4">المحل والتصنيف</th>
+                      <th className="p-4">الموقع والهاتف</th>
+                      <th className="p-4 text-center">التقييم</th>
+                      <th className="p-4 text-center">باقة VIP الذهبية 👑</th>
+                      <th className="p-4 text-center">صدارة البحث / مميز</th>
+                      <th className="p-4 text-center">تقييمات الموقع</th>
+                      <th className="p-4 text-center">تقييمات Google</th>
+                      <th className="p-4 text-center">الإجراءات</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-100 font-medium">
+                    {filteredBusinesses.map(biz => {
+                      const vipInfo = getBusinessVipStatus(biz);
+                      return (
+                      <tr key={biz.id} className="hover:bg-stone-50/70 transition-colors">
+                        
+                        {/* Name & Category */}
+                        <td className="p-4">
+                          <div className="flex items-center gap-3">
+                            {biz.imageUrl ? (
+                              <img
+                                src={biz.imageUrl}
+                                alt={biz.name}
+                                className="w-10 h-10 rounded-xl object-cover border border-stone-200"
+                              />
+                            ) : (
+                              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-[#1a4d2e] flex items-center justify-center font-bold">
+                                🏬
+                              </div>
+                            )}
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                <Link
+                                  to={`/business/${biz.id}`}
+                                  target="_blank"
+                                  className="font-black text-stone-900 hover:text-[#1a4d2e] transition-colors block text-sm"
+                                >
+                                  {biz.name}
+                                </Link>
+                                {vipInfo.isVip && (
+                                  <span className="text-[10px] bg-gradient-to-r from-amber-500 to-amber-600 text-white font-black px-1.5 py-0.2 rounded flex items-center gap-0.5 shadow-2xs">
+                                    <Crown className="h-2.5 w-2.5 fill-white" />
+                                    VIP
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-[11px] text-stone-500 font-bold">{biz.category}</span>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Location & Phone */}
+                        <td className="p-4 text-stone-600 max-w-xs truncate">
+                          <div className="flex flex-col gap-0.5">
+                            <span className="truncate">{biz.address || 'إربد'}</span>
+                            {biz.phone && (
+                              <span className="font-mono text-[11px] text-stone-400" dir="ltr">{biz.phone}</span>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Rating */}
+                        <td className="p-4 text-center font-bold text-stone-800">
+                          <div className="inline-flex items-center gap-1 bg-yellow-50 text-yellow-800 px-2 py-0.5 rounded-md text-xs">
+                            <Star className="h-3 w-3 fill-yellow-500 text-yellow-500" />
+                            <span>{(biz.rating && !isNaN(biz.rating)) ? biz.rating.toFixed(1) : '4.8'}</span>
+                          </div>
+                        </td>
+
+                        {/* VIP Status & Manage Button */}
+                        <td className="p-4 text-center">
+                          <button
+                            onClick={() => {
+                              setSelectedBusinessForVip(biz);
+                              setIsVipUpgradeModalOpen(true);
+                            }}
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-black transition-all cursor-pointer shadow-2xs ${
+                              vipInfo.isVip
+                                ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white hover:from-amber-600 hover:to-amber-700'
+                                : 'bg-stone-100 text-stone-600 hover:bg-amber-100 hover:text-amber-900 border border-stone-200'
+                            }`}
+                            title="ترقية أو إدارة جدولة باقة VIP الذهبية"
+                          >
+                            <Crown className={`h-3.5 w-3.5 ${vipInfo.isVip ? 'fill-white' : 'text-amber-600'}`} />
+                            <span>
+                              {vipInfo.isVip 
+                                ? (vipInfo.isScheduled ? (vipInfo.isExpiringSoon ? `متبقي ${vipInfo.daysRemaining} يوم ⏳` : 'VIP مؤقت') : 'VIP دائم') 
+                                : 'ترقية VIP'}
+                            </span>
+                          </button>
+                        </td>
+
+                        {/* Featured Toggle */}
+                        <td className="p-4 text-center">
+                          <button
+                            onClick={() => handleToggleFeatured(biz)}
+                            className={`p-1.5 rounded-xl transition-all cursor-pointer ${
+                              biz.isFeatured 
+                                ? 'bg-amber-100 text-amber-800 font-black ring-2 ring-amber-400' 
+                                : 'bg-stone-100 text-stone-400 hover:text-amber-600'
+                            }`}
+                            title={biz.isFeatured ? 'مميز - انقر لإلغاء التمييز' : 'انقر للتمييز في الصدارة والبانر'}
+                          >
+                            <Star className={`h-4 w-4 ${biz.isFeatured ? 'fill-amber-500 text-amber-500' : ''}`} />
+                          </button>
+                        </td>
+
+                        {/* Site Reviews Visibility Toggle */}
+                        <td className="p-4 text-center">
+                          <button
+                            onClick={() => handleToggleSiteReviews(biz)}
+                            className={`p-1.5 rounded-xl transition-all cursor-pointer ${
+                              biz.hideSiteReviews
+                                ? 'bg-red-50 text-red-600'
+                                : 'bg-emerald-50 text-emerald-700'
+                            }`}
+                            title={biz.hideSiteReviews ? 'التقييمات مخفية - انقر للإظهار' : 'التقييمات ظاهرة - انقر للإخفاء'}
+                          >
+                            {biz.hideSiteReviews ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          </button>
+                        </td>
+
+                        {/* Google Reviews Visibility Toggle */}
+                        <td className="p-4 text-center">
+                          <button
+                            onClick={() => handleToggleGoogleReviews(biz)}
+                            className={`p-1.5 rounded-xl transition-all cursor-pointer ${
+                              biz.hideGoogleReviews
+                                ? 'bg-red-50 text-red-600'
+                                : 'bg-blue-50 text-blue-700'
+                            }`}
+                            title={biz.hideGoogleReviews ? 'تقييمات Google مخفية - انقر للإظهار' : 'تقييمات Google ظاهرة - انقر للإخفاء'}
+                          >
+                            {biz.hideGoogleReviews ? <EyeOff className="h-4 w-4" /> : <Globe className="h-4 w-4" />}
+                          </button>
+                        </td>
+
+                        {/* Actions */}
+                        <td className="p-4 text-center">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              onClick={() => {
+                                setSelectedBusinessForVip(biz);
+                                setIsVipUpgradeModalOpen(true);
+                              }}
+                              className="p-1.5 text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
+                              title="إدارة الترقية الذهبية VIP"
+                            >
+                              <Crown className="h-4 w-4" />
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                setSelectedBusinessForEdit(biz);
+                                setIsEditBusinessOpen(true);
+                              }}
+                              className="p-1.5 text-stone-600 hover:text-[#1a4d2e] hover:bg-stone-100 rounded-lg transition-colors cursor-pointer"
+                              title="تعديل بيانات المحل والميزات"
+                            >
+                              <Edit3 className="h-4 w-4" />
+                            </button>
+
+                            <button
+                              onClick={() => handleDeleteBusiness(biz.id, biz.name)}
+                              className="p-1.5 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                              title="حذف المحل نهائياً"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+
+                            <Link
+                              to={`/business/${biz.id}`}
+                              target="_blank"
+                              className="p-1.5 text-stone-400 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition-colors"
+                              title="معاينة الصفحة العامة"
+                            >
+                              <ExternalLink className="h-4 w-4" />
+                            </Link>
+                          </div>
+                        </td>
+
+                      </tr>
+                    );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            
+            /* Grid View */
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredBusinesses.map(biz => {
+                const vipInfo = getBusinessVipStatus(biz);
+                return (
+                <div key={biz.id} className="bg-white p-5 rounded-3xl border border-[#e5e1da] shadow-xs flex flex-col justify-between group">
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <h3 className="font-black text-base text-[#2d2a26]">{biz.name}</h3>
+                          {vipInfo.isVip && (
+                            <span className="text-[10px] bg-gradient-to-r from-amber-500 to-amber-600 text-white font-black px-1.5 py-0.2 rounded flex items-center gap-0.5 shadow-2xs">
+                              <Crown className="h-2.5 w-2.5 fill-white" />
+                              VIP
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-xs font-bold text-[#1a4d2e]">{biz.category}</span>
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => {
+                            setSelectedBusinessForVip(biz);
+                            setIsVipUpgradeModalOpen(true);
+                          }}
+                          className={`p-1.5 rounded-xl transition-all cursor-pointer ${
+                            vipInfo.isVip ? 'bg-amber-100 text-amber-900' : 'bg-stone-100 text-stone-400 hover:text-amber-600'
+                          }`}
+                          title="ترقية / إدارة VIP"
+                        >
+                          <Crown className={`h-4 w-4 ${vipInfo.isVip ? 'fill-amber-600 text-amber-600' : ''}`} />
+                        </button>
+                        <button
+                          onClick={() => handleToggleFeatured(biz)}
+                          className={`p-1.5 rounded-xl transition-all ${
+                            biz.isFeatured ? 'bg-amber-100 text-amber-800' : 'bg-stone-100 text-stone-400 hover:text-amber-600'
+                          }`}
+                          title="تمييز في الصدارة"
+                        >
+                          <Star className={`h-4 w-4 ${biz.isFeatured ? 'fill-amber-500 text-amber-500' : ''}`} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteBusiness(biz.id, biz.name)}
+                          className="p-1.5 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-xl"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-stone-500 line-clamp-2 leading-relaxed">
+                      {biz.description || 'لا يوجد وصف'}
+                    </p>
+
+                    <div className="text-[11px] text-stone-400 pt-1 flex items-center justify-between">
+                      <span className="truncate">{biz.address}</span>
+                      <span className="font-bold text-yellow-600">⭐ {(biz.rating && !isNaN(biz.rating)) ? biz.rating.toFixed(1) : '4.8'}</span>
+                    </div>
+                  </div>
+
+                  <div className="pt-4 mt-3 border-t border-stone-100 flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        setSelectedBusinessForVip(biz);
+                        setIsVipUpgradeModalOpen(true);
+                      }}
+                      className="bg-amber-50 hover:bg-amber-100 text-amber-950 px-3 py-2 rounded-xl text-xs font-bold transition-all text-center flex items-center gap-1 cursor-pointer"
+                    >
+                      <Crown className="h-3.5 w-3.5 text-amber-600" />
+                      <span>{vipInfo.isVip ? 'VIP' : 'ترقية'}</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSelectedBusinessForEdit(biz);
+                        setIsEditBusinessOpen(true);
+                      }}
+                      className="flex-1 bg-stone-50 hover:bg-[#1a4d2e] hover:text-white text-stone-700 py-2 rounded-xl text-xs font-bold transition-all text-center cursor-pointer"
+                    >
+                      تعديل المحل
+                    </button>
+                    <Link
+                      to={`/business/${biz.id}`}
+                      target="_blank"
+                      className="p-2 bg-stone-50 hover:bg-stone-100 text-stone-600 rounded-xl text-xs font-bold transition-colors"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                    </Link>
+                  </div>
+                </div>
+              );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 4: MARKETING CAMPAIGNS */}
+      {activeTab === 'marketing' && (
+        <div className="space-y-6">
+          
+          {/* Marketing Header Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[
+              { title: 'صدارة البحث والتصنيف', price: '15 د.أ / أسبوع', desc: 'ظهور المحل في أعلى نتائج البحث وبانر مميز', type: 'sponsored', count: marketingRequests.filter(m => m.serviceType === 'sponsored').length },
+              { title: 'إشعار جماعي مباشر', price: '10 د.أ / إشعار', desc: 'إشعار فوري لجميع مستخدمي المنصة في إربد', type: 'push_notifications', count: marketingRequests.filter(m => m.serviceType === 'push_notifications').length },
+              { title: 'بانر الصفحة الرئيسية', price: '25 د.أ / أسبوع', desc: 'إعلان رئيسي بارز في سلايدر أعلى الصفحة', type: 'homepage_banner', count: marketingRequests.filter(m => m.serviceType === 'homepage_banner').length },
+              { title: 'ستاند طاولة NFC الذكي', price: '8 د.أ / للقطعة', desc: 'ستاند ذكي لتقييم جوجل مابس وزيادة الزبائن', type: 'nfc_stands', count: marketingRequests.filter(m => m.serviceType === 'nfc_stands').length },
+            ].map(pkg => (
+              <div key={pkg.type} className="bg-white p-4.5 rounded-3xl border border-[#e5e1da] shadow-xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-black text-purple-700 bg-purple-50 px-2.5 py-0.5 rounded-full">{pkg.price}</span>
+                  <span className="text-xs font-bold text-stone-500">{pkg.count} طلب</span>
+                </div>
+                <h4 className="font-black text-sm text-[#2d2a26]">{pkg.title}</h4>
+                <p className="text-[11px] text-stone-500 leading-relaxed">{pkg.desc}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Filters Bar */}
+          <div className="bg-white p-4.5 rounded-3xl border border-[#e5e1da] shadow-xs flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="relative flex-1 w-full">
+              <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
+              <input
+                type="text"
+                value={marketingSearch}
+                onChange={e => setMarketingSearch(e.target.value)}
+                placeholder="ابحث باسم المحل أو الخدمة أو بريد التاجر..."
+                className="w-full bg-stone-50 border border-stone-200 rounded-xl pr-10 pl-4 py-2.5 text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 w-full md:w-auto">
+              <select
+                value={marketingStatusFilter}
+                onChange={e => setMarketingStatusFilter(e.target.value as any)}
+                className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs font-bold text-stone-700"
+              >
+                <option value="all">جميع الحالات</option>
+                <option value="pending">قيد الانتظار ({marketingRequests.filter(m => m.status === 'pending').length})</option>
+                <option value="contacted">تم التواصل</option>
+                <option value="completed">مفعّل ومعتمد</option>
+                <option value="rejected">مرفوض</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Marketing Requests List */}
+          {filteredMarketing.length === 0 ? (
+            <div className="text-center py-16 bg-white rounded-3xl border border-[#e5e1da] space-y-3">
+              <Megaphone className="h-12 w-12 text-stone-300 mx-auto" />
+              <h3 className="font-bold text-stone-700">لا توجد طلبات تسويقية حالياً</h3>
+              <p className="text-xs text-stone-500">تظهر هنا جميع طلبات الترويج من أصحاب المنشآت</p>
+            </div>
+          ) : (
+            <div className="grid gap-4">
+              {filteredMarketing.map(req => {
+                const relatedBiz = businesses.find(b => b.id === req.businessId);
+                return (
+                  <div 
+                    key={req.id}
+                    className="bg-white p-6 rounded-3xl border border-[#e5e1da] shadow-xs flex flex-col lg:flex-row gap-6 justify-between items-start lg:items-center"
+                  >
+                    <div className="space-y-2 flex-1">
+                      <div className="flex flex-wrap items-center gap-2.5">
+                        <h3 className="text-lg font-black text-[#2d2a26]">{req.businessName}</h3>
+                        
+                        <span className={`px-3 py-1 rounded-full text-xs font-black ${
+                          req.status === 'completed' || req.status === 'approved' 
+                            ? 'bg-emerald-100 text-emerald-800' 
+                            : req.status === 'contacted' 
+                            ? 'bg-blue-100 text-blue-800' 
+                            : req.status === 'rejected'
+                            ? 'bg-red-100 text-red-800'
+                            : 'bg-amber-100 text-amber-800 animate-pulse'
+                        }`}>
+                          {req.status === 'completed' || req.status === 'approved' 
+                            ? 'مفعّل ومعتمد ✅' 
+                            : req.status === 'contacted' 
+                            ? 'تم التواصل 📞' 
+                            : req.status === 'rejected'
+                            ? 'مرفوض'
+                            : 'طلب جديد ⏳'}
+                        </span>
+
+                        <span className="bg-purple-100 text-purple-800 px-3 py-0.5 rounded-full text-xs font-bold">
+                          {req.serviceName}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-4 text-xs text-stone-500 pt-1">
+                        <span>تاريخ الطلب: {new Date(req.createdAt).toLocaleDateString('ar-EG')}</span>
+                        {req.userEmail && <span>البريد: {req.userEmail}</span>}
+                        {relatedBiz?.phone && <span>الهاتف: <span dir="ltr">{relatedBiz.phone}</span></span>}
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+                      <button
+                        onClick={() => {
+                          setSelectedMarketingRequest(req);
+                          setIsMarketingDetailsOpen(true);
+                        }}
+                        className="flex-1 lg:flex-none bg-stone-100 hover:bg-stone-200 text-stone-800 px-4 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                      >
+                        تفاصيل وتواصل 📋
+                      </button>
+
+                      {req.status !== 'completed' && req.status !== 'approved' ? (
+                        <button
+                          onClick={() => handleMarketingStatusUpdate(req.id!, 'completed', req.businessId, req.serviceType)}
+                          className="flex-1 lg:flex-none bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl text-xs font-black transition-colors shadow-xs cursor-pointer"
+                        >
+                          موافقة وتفعيل ⭐
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleMarketingStatusUpdate(req.id!, 'rejected', req.businessId, req.serviceType)}
+                          className="flex-1 lg:flex-none bg-stone-100 hover:bg-red-50 text-stone-700 hover:text-red-700 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                        >
+                          إلغاء التفعيل
+                        </button>
+                      )}
+
+                      <button
+                        onClick={() => handleDeleteMarketingRequest(req.id)}
+                        className="p-2.5 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors cursor-pointer"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 5: JOBS MANAGEMENT */}
+      {activeTab === 'jobs' && (
+        <div className="space-y-6">
+          {/* Header & Add Button */}
+          <div className="bg-white p-6 rounded-3xl border border-[#e5e1da] shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-black text-stone-900">إدارة الشواغر الوظيفية</h3>
+              <p className="text-xs text-stone-500">إضافة وتعديل وحذف إعلانات التوظيف في محافظة إربد</p>
+            </div>
+            <button
+              onClick={() => {
+                setEditingJob(null);
+                setNewJob({
+                  title: '',
+                  company: '',
+                  jobType: 'دوام كامل',
+                  category: 'مطاعم ومقاهي',
+                  location: '',
+                  salary: '',
+                  description: '',
+                  requirements: '',
+                  contactPhone: '',
+                  isUrgent: false
+                });
+                setIsJobFormOpen(!isJobFormOpen);
+              }}
+              className="inline-flex items-center gap-2 bg-[#1a4d2e] hover:bg-[#143e25] text-white px-4 py-2.5 rounded-2xl text-xs font-black shadow-xs cursor-pointer transition-all"
+            >
+              <Plus className="h-4 w-4" />
+              <span>{isJobFormOpen ? 'إغلاق النموذج' : 'إضافة شاغر جديد'}</span>
+            </button>
+          </div>
+
+          {isJobFormOpen && (
+            <form onSubmit={handleSaveJob} className="bg-white p-6 rounded-3xl border border-emerald-500/20 shadow-md space-y-4">
+              <h4 className="font-black text-sm text-[#1a4d2e] pb-2 border-b border-stone-100 flex items-center gap-2">
+                <Briefcase className="h-4 w-4" />
+                <span>{editingJob ? 'تعديل الشاغر الحالي' : 'نشر شاغر وظيفي جديد'}</span>
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-stone-700">المسمى الوظيفي</label>
+                  <input
+                    type="text"
+                    required
+                    value={newJob.title}
+                    onChange={e => setNewJob({...newJob, title: e.target.value})}
+                    placeholder="مثال: محاسب، كابتن صالة، مدخل بيانات..."
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-stone-700">اسم المنشأة / الشركة</label>
+                  <input
+                    type="text"
+                    required
+                    value={newJob.company}
+                    onChange={e => setNewJob({...newJob, company: e.target.value})}
+                    placeholder="مثال: مطعم موندو، شركة إربد للتقنية..."
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-stone-700">نوع العمل / الدوام</label>
+                  <select
+                    value={newJob.jobType}
+                    onChange={e => setNewJob({...newJob, jobType: e.target.value})}
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none"
+                  >
+                    <option value="دوام كامل">دوام كامل</option>
+                    <option value="دوام جزئي">دوام جزئي</option>
+                    <option value="مناسب للطلاب">مناسب للطلاب 🎓</option>
+                    <option value="عن بعد">عن بعد</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-stone-700">التصنيف</label>
+                  <select
+                    value={newJob.category}
+                    onChange={e => setNewJob({...newJob, category: e.target.value})}
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none"
+                  >
+                    <option value="مطاعم ومقاهي">مطاعم ومقاهي 🍔</option>
+                    <option value="مبيعات وتسويق">مبيعات وتسويق 📈</option>
+                    <option value="برمجة وتقنية">برمجة وتقنية 💻</option>
+                    <option value="تعليم وتدريس">تعليم وتدريس 📚</option>
+                    <option value="طب وصيدلة">طب وصيدلة 🩺</option>
+                    <option value="حرف يدوية وصيانة">حرف يدوية وصيانة 🛠️</option>
+                    <option value="أخرى">تصنيفات أخرى ✨</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-stone-700">العنوان أو موقع العمل</label>
+                  <input
+                    type="text"
+                    value={newJob.location}
+                    onChange={e => setNewJob({...newJob, location: e.target.value})}
+                    placeholder="مثال: شارع الجامعة، إربد"
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-stone-700">الراتب أو المكافأة</label>
+                  <input
+                    type="text"
+                    value={newJob.salary}
+                    onChange={e => setNewJob({...newJob, salary: e.target.value})}
+                    placeholder="مثال: 300 دينار، يحدد بالمقابلة..."
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-stone-700">رقم الهاتف للتواصل</label>
+                  <input
+                    type="text"
+                    required
+                    value={newJob.contactPhone}
+                    onChange={e => setNewJob({...newJob, contactPhone: e.target.value})}
+                    placeholder="مثال: 078xxxxxxx"
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none"
+                  />
+                </div>
+                <div className="flex items-center gap-3 pt-6">
+                  <input
+                    type="checkbox"
+                    id="isUrgentJob"
+                    checked={newJob.isUrgent}
+                    onChange={e => setNewJob({...newJob, isUrgent: e.target.checked})}
+                    className="h-4 w-4 rounded text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <label htmlFor="isUrgentJob" className="text-xs font-black text-rose-700 cursor-pointer flex items-center gap-1">
+                    <Flame className="h-4 w-4" />
+                    <span>تحديد كشاغر عاجل وفوري 🔥</span>
+                  </label>
+                </div>
+                <div className="space-y-1.5 md:col-span-2">
+                  <label className="text-xs font-bold text-stone-700">الوصف العام للوظيفة والمهام</label>
+                  <textarea
+                    required
+                    rows={3}
+                    value={newJob.description}
+                    onChange={e => setNewJob({...newJob, description: e.target.value})}
+                    placeholder="اكتب المهام والمميزات هنا بالتفصيل..."
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                  />
+                </div>
+                <div className="space-y-1.5 md:col-span-2">
+                  <label className="text-xs font-bold text-stone-700">المتطلبات والشروط (افصل بينها بـ علامة "،")</label>
+                  <input
+                    type="text"
+                    value={newJob.requirements}
+                    onChange={e => setNewJob({...newJob, requirements: e.target.value})}
+                    placeholder="مثال: اللباقة وحسن التعامل، سكان مدينة إربد، الالتزام بالوقت..."
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none"
+                  />
+                </div>
+              </div>
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsJobFormOpen(false);
+                    setEditingJob(null);
+                  }}
+                  className="bg-stone-100 hover:bg-stone-200 text-stone-700 px-4 py-2.5 rounded-xl text-xs font-bold"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  className="bg-[#1a4d2e] hover:bg-[#143e25] text-white px-5 py-2.5 rounded-xl text-xs font-black"
+                >
+                  {editingJob ? 'حفظ التغييرات' : 'نشر الشاغر الآن'}
+                </button>
+              </div>
+            </form>
+          )}
+          
+          {/* Toolbar */}
+          <div className="bg-white p-4.5 rounded-3xl border border-[#e5e1da] shadow-xs flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="relative flex-1 w-full">
+              <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
+              <input
+                type="text"
+                value={jobSearch}
+                onChange={e => setJobSearch(e.target.value)}
+                placeholder="ابحث بعنوان الوظيفة، اسم المحل أو المتطلبات..."
+                className="w-full bg-stone-50 border border-stone-200 rounded-xl pr-10 pl-4 py-2.5 text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 w-full md:w-auto">
+              <select
+                value={jobTypeFilter}
+                onChange={e => setJobTypeFilter(e.target.value)}
+                className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs font-bold text-stone-700"
+              >
+                <option value="all">جميع أنواع الدوام ({jobs.length})</option>
+                <option value="دوام كامل">دوام كامل</option>
+                <option value="دوام جزئي">دوام جزئي</option>
+                <option value="مناسب للطلاب">مناسب للطلاب 🎓</option>
+                <option value="عن بعد">عن بعد</option>
+              </select>
+
+              <Link
+                to="/jobs"
+                target="_blank"
+                className="bg-sky-50 text-sky-700 hover:bg-sky-100 px-4 py-2 rounded-xl text-xs font-bold inline-flex items-center gap-1.5"
+              >
+                <span>صفحة الوظائف للمستخدمين</span>
+                <ExternalLink className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+          </div>
+
+          {/* Jobs List */}
+          {filteredJobs.length === 0 ? (
+            <div className="text-center py-16 bg-white rounded-3xl border border-[#e5e1da] space-y-3">
+              <Briefcase className="h-12 w-12 text-stone-300 mx-auto" />
+              <h3 className="font-bold text-stone-700">لا توجد شواغر وظيفية حالياً</h3>
+              <p className="text-xs text-stone-500">استخدم زر إضافة شاغر جديد بالأعلى لنشر شواغر مباشرة</p>
+            </div>
+          ) : (
+            <div className="grid gap-4">
+              {filteredJobs.map(job => (
+                <div key={job.id} className="bg-white p-5 rounded-3xl border border-[#e5e1da] shadow-xs flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
+                  <div className="space-y-1.5 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h4 className="text-base font-black text-stone-900">{job.title}</h4>
+                      <span className="bg-stone-100 text-stone-700 px-2.5 py-0.5 rounded-full text-xs font-bold">
+                        {job.company}
+                      </span>
+                      <span className="bg-sky-50 text-sky-800 px-2.5 py-0.5 rounded-full text-xs font-bold">
+                        {job.jobType}
+                      </span>
+                      {job.isUrgent && (
+                        <span className="bg-red-100 text-red-700 px-2.5 py-0.5 rounded-full text-xs font-black">
+                          عاجل وفوري 🔥
+                        </span>
+                      )}
+                    </div>
+
+                    <p className="text-xs text-stone-600 line-clamp-2">{job.description}</p>
+                    
+                    <div className="flex flex-wrap gap-4 text-[11px] text-stone-400 pt-1">
+                      <span>الموقع: {job.location}</span>
+                      {job.salary && <span>الراتب: {job.salary}</span>}
+                      {job.contactPhone && <span>الاتصال: <span dir="ltr">{job.contactPhone}</span></span>}
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-2 w-full md:w-auto shrink-0 justify-end pt-2 md:pt-0">
+                    <button
+                      onClick={() => handleToggleJobUrgent(job)}
+                      className={`px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        job.isUrgent ? 'bg-red-100 text-red-800' : 'bg-stone-100 text-stone-600 hover:text-red-600'
+                      }`}
+                      title="تبديل وسم شاغر عاجل"
+                    >
+                      <Flame className="h-4 w-4" />
+                    </button>
+
+                    <button
+                      onClick={() => handleEditJobClick(job)}
+                      className="p-2 bg-stone-50 text-stone-600 hover:bg-stone-100 rounded-xl text-xs transition-colors cursor-pointer"
+                      title="تعديل الشاغر"
+                    >
+                      <Edit3 className="h-4 w-4" />
+                    </button>
+
+                    <button
+                      onClick={() => handleDeleteJob(job.id, job.title)}
+                      className="p-2 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors cursor-pointer"
+                      title="حذف الشاغر"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB: NEWS MANAGEMENT */}
+      {activeTab === 'news' && (
+        <div className="space-y-6">
+          <div className="bg-white p-6 rounded-3xl border border-[#e5e1da] shadow-xs flex flex-col md:flex-row items-center justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-black text-stone-900">إدارة ونشر الأخبار</h3>
+              <p className="text-xs text-stone-500">نشر أخبار المنصة والجامعة وتعديلها وحذفها</p>
+            </div>
+            <button
+              onClick={() => {
+                setEditingNews(null);
+                setNewNews({
+                  title: '',
+                  summary: '',
+                  content: '',
+                  image: '',
+                  category: 'أخبار عامة',
+                  source: 'إدارة المنصة',
+                  videoUrl: '',
+                  isHot: false
+                });
+                setIsNewsFormOpen(!isNewsFormOpen);
+              }}
+              className="inline-flex items-center gap-2 bg-[#1a4d2e] hover:bg-[#143e25] text-white px-4 py-2.5 rounded-2xl text-xs font-black shadow-xs cursor-pointer transition-all"
+            >
+              <Plus className="h-4 w-4" />
+              <span>{isNewsFormOpen ? 'إغلاق النموذج' : 'إضافة خبر جديد'}</span>
+            </button>
+          </div>
+
+          {isNewsFormOpen && (
+            <form onSubmit={handleSaveNews} className="bg-white p-6 rounded-3xl border border-emerald-500/20 shadow-md space-y-4">
+              <h4 className="font-black text-sm text-[#1a4d2e] pb-2 border-b border-stone-100 flex items-center gap-2">
+                <Newspaper className="h-4 w-4" />
+                <span>{editingNews ? 'تعديل الخبر الحالي' : 'نشر خبر جديد للمنصة'}</span>
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-stone-700">عنوان الخبر</label>
+                  <input
+                    type="text"
+                    required
+                    value={newNews.title}
+                    onChange={e => setNewNews({...newNews, title: e.target.value})}
+                    placeholder="عنوان ملفت وواضح للخبر..."
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-stone-700">التصنيف</label>
+                  <select
+                    value={newNews.category}
+                    onChange={e => setNewNews({...newNews, category: e.target.value})}
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none"
+                  >
+                    <option value="أخبار الجامعة">أخبار الجامعة 🎓</option>
+                    <option value="عروض وخصومات">عروض وخصومات 🛍️</option>
+                    <option value="فعاليات وإعلانات">فعاليات وإعلانات 📢</option>
+                    <option value="أخبار عامة">أخبار عامة 📰</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5 md:col-span-2">
+                  <label className="text-xs font-bold text-stone-700">ملخص الخبر (يظهر في القائمة)</label>
+                  <input
+                    type="text"
+                    required
+                    value={newNews.summary}
+                    onChange={e => setNewNews({...newNews, summary: e.target.value})}
+                    placeholder="سطر أو سطرين تلخص محتوى الخبر باختصار..."
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                  />
+                </div>
+                <div className="space-y-1.5 md:col-span-2">
+                  <label className="text-xs font-bold text-stone-700">المحتوى الكامل للخبر</label>
+                  <textarea
+                    required
+                    rows={4}
+                    value={newNews.content}
+                    onChange={e => setNewNews({...newNews, content: e.target.value})}
+                    placeholder="اكتب تفاصيل الخبر كاملة هنا..."
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-stone-700">رابط الصورة (Image URL)</label>
+                  <input
+                    type="text"
+                    value={newNews.image}
+                    onChange={e => setNewNews({...newNews, image: e.target.value})}
+                    placeholder="مثال: https://images.unsplash.com/..."
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-stone-700">المصدر أو الكاتب</label>
+                  <input
+                    type="text"
+                    value={newNews.source}
+                    onChange={e => setNewNews({...newNews, source: e.target.value})}
+                    placeholder="إدارة منصة شو في بإربد"
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-stone-700">رابط الفيديو إن وجد (يوتيوب أو انستغرام أو فيسبوك)</label>
+                  <input
+                    type="text"
+                    value={newNews.videoUrl}
+                    onChange={e => setNewNews({...newNews, videoUrl: e.target.value})}
+                    placeholder="رابط الفيديو المباشر لإظهاره للمستخدمين..."
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none"
+                  />
+                </div>
+                <div className="flex items-center gap-3 pt-6">
+                  <input
+                    type="checkbox"
+                    id="isHotNews"
+                    checked={newNews.isHot}
+                    onChange={e => setNewNews({...newNews, isHot: e.target.checked})}
+                    className="h-4 w-4 rounded text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <label htmlFor="isHotNews" className="text-xs font-black text-rose-700 cursor-pointer flex items-center gap-1">
+                    <Flame className="h-4 w-4" />
+                    <span>تثبيت كخبر عاجل وساخن 🔥</span>
+                  </label>
+                </div>
+              </div>
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsNewsFormOpen(false);
+                    setEditingNews(null);
+                  }}
+                  className="bg-stone-100 hover:bg-stone-200 text-stone-700 px-4 py-2.5 rounded-xl text-xs font-bold"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  className="bg-[#1a4d2e] hover:bg-[#143e25] text-white px-5 py-2.5 rounded-xl text-xs font-black"
+                >
+                  {editingNews ? 'حفظ التغييرات' : 'نشر الخبر الآن'}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* List existing News */}
+          <div className="grid gap-4">
+            {news.length === 0 ? (
+              <div className="bg-white py-12 rounded-3xl border border-[#e5e1da] text-center text-xs text-stone-500">
+                لا توجد أخبار منشورة حالياً في قاعدة البيانات
+              </div>
+            ) : (
+              news.map(item => (
+                <div key={item.id} className="bg-white p-5 rounded-3xl border border-[#e5e1da] shadow-xs flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
+                  <div className="space-y-1.5 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h4 className="text-base font-black text-stone-900">{item.title}</h4>
+                      <span className="bg-emerald-50 text-emerald-800 px-2.5 py-0.5 rounded-full text-[10px] font-bold">
+                        {item.category}
+                      </span>
+                      {item.isHot && (
+                        <span className="bg-rose-100 text-rose-800 px-2.5 py-0.5 rounded-full text-[10px] font-black flex items-center gap-0.5">
+                          <Flame className="h-3 w-3" /> عاجل
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-stone-600 line-clamp-1">{item.summary}</p>
+                    <div className="flex gap-4 text-[10px] text-stone-400">
+                      <span>المصدر: {item.source}</span>
+                      <span>تاريخ النشر: {new Date(item.createdAt).toLocaleDateString('ar-EG')}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 w-full md:w-auto shrink-0 justify-end pt-2 md:pt-0">
+                    <button
+                      onClick={() => handleToggleNewsHot(item)}
+                      className={`p-2 rounded-xl text-xs transition-colors cursor-pointer ${item.isHot ? 'bg-rose-50 text-rose-600' : 'bg-stone-50 text-stone-400 hover:text-rose-600'}`}
+                      title="تبديل وسم خبر عاجل"
+                    >
+                      <Flame className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => handleEditNewsClick(item)}
+                      className="p-2 bg-stone-50 text-stone-600 hover:bg-stone-100 rounded-xl text-xs transition-colors cursor-pointer"
+                      title="تعديل"
+                    >
+                      <Edit3 className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteNews(item.id)}
+                      className="p-2 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors cursor-pointer"
+                      title="حذف"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB: HOUSING MANAGEMENT */}
+      {activeTab === 'housing' && (
+        <div className="space-y-6">
+          
+          {/* Top Banner & Stats Header */}
+          <div className="bg-white p-6 rounded-3xl border border-[#e5e1da] shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-[#1a4d2e] flex items-center justify-center font-bold">
+                  <Home className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-stone-900">إدارة ومراجعة إعلانات العقارات والسكنات</h3>
+                  <p className="text-xs text-stone-500">مراجعة طلبات نشر الشقق والسكنات، التواصل مع المعلنين، تأكيد الرسوم والاعتماد الفوري</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2.5">
+              <button
+                onClick={() => {
+                  setEditingHousing(null);
+                  setNewHousing({
+                    title: '',
+                    type: 'سكن طالبات',
+                    university: 'اليرموك',
+                    price: '',
+                    pricePeriod: 'شهري',
+                    location: '',
+                    distanceToCampus: '',
+                    roomsCount: '',
+                    servicesString: '',
+                    description: '',
+                    contactPhone: '',
+                    contactWhatsapp: '',
+                    ownerName: '',
+                    image: ''
+                  });
+                  setIsHousingFormOpen(!isHousingFormOpen);
+                }}
+                className="inline-flex items-center gap-2 bg-[#1a4d2e] hover:bg-[#143e25] text-white px-4 py-2.5 rounded-2xl text-xs font-black shadow-xs cursor-pointer transition-all"
+              >
+                <Plus className="h-4 w-4" />
+                <span>{isHousingFormOpen ? 'إغلاق النموذج' : 'إضافة إعلان عقار جديد كإدارة'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Counter Cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div 
+              onClick={() => setHousingStatusFilter('pending')}
+              className={`p-4 rounded-2xl border transition-all cursor-pointer ${
+                housingStatusFilter === 'pending'
+                  ? 'bg-amber-500 text-white border-amber-600 shadow-md ring-2 ring-amber-400'
+                  : 'bg-white hover:bg-amber-50/50 border-stone-200 text-stone-800'
+              }`}
+            >
+              <div className="text-[11px] font-bold opacity-80">طلبات معلقة بانتظار الموافقة</div>
+              <div className="text-2xl font-black mt-1 flex items-center justify-between">
+                <span>{housings.filter(h => h.status === 'pending').length}</span>
+                <span className="text-base">⏳</span>
+              </div>
+            </div>
+
+            <div 
+              onClick={() => setHousingStatusFilter('approved')}
+              className={`p-4 rounded-2xl border transition-all cursor-pointer ${
+                housingStatusFilter === 'approved'
+                  ? 'bg-[#1a4d2e] text-white border-emerald-700 shadow-md ring-2 ring-emerald-400'
+                  : 'bg-white hover:bg-emerald-50/50 border-stone-200 text-stone-800'
+              }`}
+            >
+              <div className="text-[11px] font-bold opacity-80">إعلانات معتمدة ومنشورة</div>
+              <div className="text-2xl font-black mt-1 flex items-center justify-between">
+                <span>{housings.filter(h => h.status === 'approved').length}</span>
+                <span className="text-base">✅</span>
+              </div>
+            </div>
+
+            <div 
+              onClick={() => setHousingStatusFilter('rejected')}
+              className={`p-4 rounded-2xl border transition-all cursor-pointer ${
+                housingStatusFilter === 'rejected'
+                  ? 'bg-rose-600 text-white border-rose-700 shadow-md ring-2 ring-rose-400'
+                  : 'bg-white hover:bg-rose-50/50 border-stone-200 text-stone-800'
+              }`}
+            >
+              <div className="text-[11px] font-bold opacity-80">طلبات مرفوضة</div>
+              <div className="text-2xl font-black mt-1 flex items-center justify-between">
+                <span>{housings.filter(h => h.status === 'rejected').length}</span>
+                <span className="text-base">❌</span>
+              </div>
+            </div>
+
+            <div 
+              onClick={() => setHousingStatusFilter('all')}
+              className={`p-4 rounded-2xl border transition-all cursor-pointer ${
+                housingStatusFilter === 'all'
+                  ? 'bg-stone-800 text-white border-stone-900 shadow-md ring-2 ring-stone-500'
+                  : 'bg-white hover:bg-stone-50 border-stone-200 text-stone-800'
+              }`}
+            >
+              <div className="text-[11px] font-bold opacity-80">إجمالي إعلانات العقارات</div>
+              <div className="text-2xl font-black mt-1 flex items-center justify-between">
+                <span>{housings.length}</span>
+                <span className="text-base">🏢</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Search and Filters Toolbar */}
+          <div className="bg-white p-4 rounded-3xl border border-[#e5e1da] shadow-xs flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="relative flex-1 w-full">
+              <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
+              <input
+                type="text"
+                value={housingSearch}
+                onChange={e => setHousingSearch(e.target.value)}
+                placeholder="ابحث باسم الشقة، اسم المالك، رقم الهاتف، الموقع، أو الجامعة..."
+                className="w-full bg-stone-50 border border-stone-200 rounded-xl pr-10 pl-4 py-2.5 text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+              />
+            </div>
+
+            {/* Status Filter Chips */}
+            <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto">
+              {[
+                { id: 'all', label: `الكل (${housings.length})` },
+                { id: 'pending', label: `بانتظار الموافقة (${housings.filter(h => h.status === 'pending').length})`, isAlert: housings.filter(h => h.status === 'pending').length > 0 },
+                { id: 'approved', label: `معتمدة (${housings.filter(h => h.status === 'approved').length})` },
+                { id: 'rejected', label: `مرفوضة (${housings.filter(h => h.status === 'rejected').length})` }
+              ].map(status => (
+                <button
+                  key={status.id}
+                  onClick={() => setHousingStatusFilter(status.id as any)}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-black whitespace-nowrap transition-colors cursor-pointer flex items-center gap-1.5 ${
+                    housingStatusFilter === status.id
+                      ? 'bg-[#1a4d2e] text-white shadow-xs'
+                      : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
+                  }`}
+                >
+                  {status.isAlert && <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />}
+                  <span>{status.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Create / Edit Form Drawer */}
+          {isHousingFormOpen && (
+            <form onSubmit={handleSaveHousing} className="bg-white p-6 rounded-3xl border border-emerald-500/20 shadow-md space-y-4">
+              <h4 className="font-black text-sm text-[#1a4d2e] pb-2 border-b border-stone-100 flex items-center gap-2">
+                <Home className="h-4 w-4" />
+                <span>{editingHousing ? 'تعديل الإعلان العقاري' : 'نشر إعلان عقاري جديد كإدارة'}</span>
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-stone-700">عنوان الإعلان *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newHousing.title}
+                    onChange={e => setNewHousing({...newHousing, title: e.target.value})}
+                    placeholder="مثال: شقة استوديو فاخرة للإيجار قرب اليرموك..."
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-stone-700">نوع العقار</label>
+                  <select
+                    value={newHousing.type}
+                    onChange={e => setNewHousing({...newHousing, type: e.target.value})}
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none"
+                  >
+                    <option value="سكن طالبات">سكن طالبات 👩‍🎓</option>
+                    <option value="سكن طلاب">سكن طلاب 👨‍🎓</option>
+                    <option value="شقة مفروشة">شقة مفروشة 🛋️</option>
+                    <option value="استوديو">استوديو 🚪</option>
+                    <option value="شقة فارغة">شقة فارغة 🏢</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-stone-700">قريب من جامعة</label>
+                  <select
+                    value={newHousing.university}
+                    onChange={e => setNewHousing({...newHousing, university: e.target.value})}
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none"
+                  >
+                    <option value="اليرموك">جامعة اليرموك</option>
+                    <option value="العلوم والتكنولوجيا">جامعة العلوم والتكنولوجيا الاردنية (جدارا)</option>
+                    <option value="إربد الأهلية">جامعة إربد الأهلية</option>
+                    <option value="البلقاء التطبيقية - الحصن">كلية الحصن التطبيقية</option>
+                    <option value="جميع جامعات إربد">وسط البلد / ملائم للجميع</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-stone-700">سعر الإيجار (بالدينار الأردني) *</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      required
+                      value={newHousing.price}
+                      onChange={e => setNewHousing({...newHousing, price: e.target.value})}
+                      placeholder="مثال: 120, 150..."
+                      className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none"
+                    />
+                    <select
+                      value={newHousing.pricePeriod}
+                      onChange={e => setNewHousing({...newHousing, pricePeriod: e.target.value})}
+                      className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none shrink-0"
+                    >
+                      <option value="شهري">شهري</option>
+                      <option value="فصلي">فصلي</option>
+                      <option value="سنوي">سنوي</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-stone-700">الموقع الجغرافي بالتفصيل *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newHousing.location}
+                    onChange={e => setNewHousing({...newHousing, location: e.target.value})}
+                    placeholder="مثال: إربد - شارع الجامعة - خلف البوابة الجنوبية..."
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-stone-700">المسافة إلى بوابة الحرم الجامعي</label>
+                  <input
+                    type="text"
+                    value={newHousing.distanceToCampus}
+                    onChange={e => setNewHousing({...newHousing, distanceToCampus: e.target.value})}
+                    placeholder="مثال: 5 دقائق سيراً على الأقدام..."
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-stone-700">عدد الغرف والتفاصيل الداخلية</label>
+                  <input
+                    type="text"
+                    value={newHousing.roomsCount}
+                    onChange={e => setNewHousing({...newHousing, roomsCount: e.target.value})}
+                    placeholder="مثال: غرفتين وصالة، حمامين، مطبخ متكامل..."
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-stone-700">اسم المالك أو المسؤول</label>
+                  <input
+                    type="text"
+                    value={newHousing.ownerName}
+                    onChange={e => setNewHousing({...newHousing, ownerName: e.target.value})}
+                    placeholder="مثال: أبو أحمد، إدارة سكن التميز..."
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-stone-700">رقم هاتف الاتصال *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newHousing.contactPhone}
+                    onChange={e => setNewHousing({...newHousing, contactPhone: e.target.value})}
+                    placeholder="مثال: 079xxxxxxx"
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-stone-700">رقم الواتساب (اختياري)</label>
+                  <input
+                    type="text"
+                    value={newHousing.contactWhatsapp}
+                    onChange={e => setNewHousing({...newHousing, contactWhatsapp: e.target.value})}
+                    placeholder="مثال: 079xxxxxxx"
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none"
+                  />
+                </div>
+                <div className="space-y-1.5 md:col-span-2">
+                  <label className="text-xs font-bold text-stone-700">رابط صورة العقار / السكن (Image URL)</label>
+                  <input
+                    type="text"
+                    value={newHousing.image}
+                    onChange={e => setNewHousing({...newHousing, image: e.target.value})}
+                    placeholder="مثال: https://images.unsplash.com/..."
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none"
+                  />
+                </div>
+                <div className="space-y-1.5 md:col-span-2">
+                  <label className="text-xs font-bold text-stone-700">وصف تفصيلي وملاحظات هامة</label>
+                  <textarea
+                    rows={3}
+                    value={newHousing.description}
+                    onChange={e => setNewHousing({...newHousing, description: e.target.value})}
+                    placeholder="اكتب تفاصيل إضافية كحارس السكن، وقت الإغلاق، شمول الفواتير..."
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                  />
+                </div>
+                <div className="space-y-1.5 md:col-span-2">
+                  <label className="text-xs font-bold text-stone-700">الخدمات والمزايا المتاحة (افصل بينها بـ علامة "،")</label>
+                  <input
+                    type="text"
+                    value={newHousing.servicesString}
+                    onChange={e => setNewHousing({...newHousing, servicesString: e.target.value})}
+                    placeholder="مثال: إنترنت مجاني، تكييف، حراسة 24 ساعة، غسالة مشتركة، تنظيف أسبوعي..."
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none"
+                  />
+                </div>
+              </div>
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsHousingFormOpen(false);
+                    setEditingHousing(null);
+                  }}
+                  className="bg-stone-100 hover:bg-stone-200 text-stone-700 px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  className="bg-[#1a4d2e] hover:bg-[#143e25] text-white px-5 py-2.5 rounded-xl text-xs font-black cursor-pointer shadow-xs"
+                >
+                  {editingHousing ? 'حفظ التعديلات' : 'نشر الإعلان الآن كإدارة'}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* Housing Listings Grid */}
+          <div className="grid gap-4">
+            {filteredHousings.length === 0 ? (
+              <div className="bg-white py-16 rounded-3xl border border-[#e5e1da] text-center space-y-3">
+                <div className="w-14 h-14 bg-stone-100 rounded-2xl flex items-center justify-center mx-auto text-stone-400">
+                  <Home className="h-7 w-7" />
+                </div>
+                <h4 className="text-sm font-black text-stone-800">لا توجد إعلانات عقارات مطابقة للفلتر المحدد</h4>
+                <p className="text-xs text-stone-500 max-w-sm mx-auto">
+                  {housingStatusFilter === 'pending' ? 'لا توجد طلبات جديدة معلقة بانتظار الموافقة حالياً' : 'جرّب البحث باسم آخر أو تغيير الفلتر.'}
+                </p>
+              </div>
+            ) : (
+              filteredHousings.map(item => {
+                const isPending = item.status === 'pending';
+                const isApproved = item.status === 'approved' || !item.status;
+                const isRejected = item.status === 'rejected';
+                const totalDays = 2 + ((item.extraWeeks || 0) * 7);
+                const feeAmount = item.totalFee || 0;
+
+                const prefilledWaText = `مرحباً ${item.ownerName || 'صاحب الإعلان'}، معك إدارة منصة "شو في بإربد" بخصوص طلب إعلانكم المنشور: "${item.title}".\n` +
+                  `🏠 نوع السكن: ${item.type}\n` +
+                  `📅 مدة النشر المطلوبة: ${totalDays} يوم (${item.extraWeeks || 0} أسابيع إضافية)\n` +
+                  `⭐ التمييز في الصدارة: ${item.featuredDays || 0} يوم\n` +
+                  `💰 المبلغ المستحق: ${feeAmount > 0 ? `${feeAmount} دينار أردني` : 'مجاني'}\n` +
+                  `نود التنسيق معكم لاعتماد الإعلان وتفعيله فوراً على المنصة.`;
+
+                return (
+                  <div 
+                    key={item.id} 
+                    className={`bg-white p-5 rounded-3xl border transition-all shadow-xs flex flex-col lg:flex-row gap-5 justify-between items-start lg:items-center ${
+                      isPending 
+                        ? 'border-amber-400 bg-amber-50/20 ring-1 ring-amber-300' 
+                        : isRejected 
+                        ? 'border-rose-200 bg-rose-50/10' 
+                        : 'border-[#e5e1da]'
+                    }`}
+                  >
+                    {/* Left details */}
+                    <div className="space-y-3 flex-1 min-w-0">
+                      
+                      {/* Status Badges Row */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        {isPending && (
+                          <span className="bg-amber-500 text-white px-3 py-1 rounded-full text-xs font-black flex items-center gap-1.5 shadow-xs animate-pulse">
+                            <Clock className="h-3.5 w-3.5" />
+                            <span>طلب جديد بانتظار الموافقة</span>
+                          </span>
+                        )}
+                        {isApproved && (
+                          <span className="bg-emerald-600 text-white px-3 py-1 rounded-full text-xs font-black flex items-center gap-1.5 shadow-2xs">
+                            <CheckCircle className="h-3.5 w-3.5" />
+                            <span>معتمد ومنشور على الموقع</span>
+                          </span>
+                        )}
+                        {isRejected && (
+                          <span className="bg-rose-600 text-white px-3 py-1 rounded-full text-xs font-black flex items-center gap-1.5 shadow-2xs">
+                            <XCircle className="h-3.5 w-3.5" />
+                            <span>طلب مرفوض</span>
+                          </span>
+                        )}
+
+                        <span className="bg-emerald-50 text-emerald-900 border border-emerald-200/60 px-2.5 py-0.5 rounded-full text-[11px] font-bold">
+                          {item.type}
+                        </span>
+                        <span className="bg-stone-100 text-stone-700 px-2.5 py-0.5 rounded-full text-[11px] font-bold">
+                          جامعة {item.university}
+                        </span>
+                        <span className="text-[#1a4d2e] font-black text-xs px-2.5 py-0.5 bg-emerald-100/70 rounded-full">
+                          {item.price} د.أ / {item.pricePeriod}
+                        </span>
+
+                        {item.isVerified && (
+                          <span className="bg-blue-100 text-blue-800 px-2.5 py-0.5 rounded-full text-[10px] font-black flex items-center gap-0.5">
+                            <ShieldCheck className="h-3.5 w-3.5" />
+                            <span>موثق 🛡️</span>
+                          </span>
+                        )}
+                        {item.isFeatured && (!item.featuredExpiryDate || item.featuredExpiryDate > Date.now()) && (
+                          <span className="bg-amber-100 text-amber-900 px-2.5 py-0.5 rounded-full text-[10px] font-black flex items-center gap-0.5">
+                            <Sparkles className="h-3.5 w-3.5 text-amber-600" />
+                            <span>مميز في الصدارة ⭐</span>
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Main Title & Description */}
+                      <div>
+                        <h4 className="text-base font-black text-stone-900 leading-snug">{item.title}</h4>
+                        <p className="text-xs text-stone-600 line-clamp-2 mt-1 leading-relaxed">{item.description || item.location}</p>
+                      </div>
+
+                      {/* Plan and Financial Details Box */}
+                      <div className="bg-stone-50 p-3 rounded-2xl border border-stone-200/80 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                        <div>
+                          <span className="text-[10px] text-stone-400 block font-bold">مدة النشر:</span>
+                          <span className="font-black text-stone-800">{totalDays} يوم ({item.extraWeeks || 0} أسابيع)</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-stone-400 block font-bold">التمييز في الصدارة:</span>
+                          <span className="font-black text-amber-700">{item.featuredDays ? `${item.featuredDays} يوم ⭐` : 'بدون تمييز'}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-stone-400 block font-bold">المبلغ المستحق:</span>
+                          <span className={`font-black ${feeAmount > 0 ? 'text-[#1a4d2e]' : 'text-stone-600'}`}>
+                            {feeAmount > 0 ? `${feeAmount} دينار` : '0 دينار (مجاني 🎁)'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-stone-400 block font-bold">تاريخ التقديم:</span>
+                          <span className="font-bold text-stone-600">
+                            {item.createdAt ? new Date(item.createdAt).toLocaleDateString('ar-JO') : 'غير مسجل'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Contact & Owner Details */}
+                      <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs text-stone-600 font-bold">
+                        <div className="flex items-center gap-1 text-stone-800">
+                          <span className="text-stone-400 font-normal">صاحب الإعلان:</span>
+                          <span className="font-black text-[#1a4d2e]">{item.ownerName || 'غير محدد'}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className="text-stone-400 font-normal">رقم الهاتف:</span>
+                          <span className="font-mono font-bold text-stone-900" dir="ltr">{item.contactPhone}</span>
+                        </div>
+                        {item.userEmail && (
+                          <div className="flex items-center gap-1 text-[11px] text-stone-500">
+                            <span className="text-stone-400 font-normal">الحساب:</span>
+                            <span className="font-mono">{item.userEmail}</span>
+                          </div>
+                        )}
+                        {item.rejectionReason && isRejected && (
+                          <div className="w-full text-xs text-rose-700 bg-rose-50 p-2 rounded-xl border border-rose-200 mt-1">
+                            <b>سبب الرفض:</b> {item.rejectionReason}
+                          </div>
+                        )}
+                      </div>
+
+                    </div>
+
+                    {/* Right interactive actions */}
+                    <div className="flex flex-col sm:flex-row lg:flex-col gap-2 w-full lg:w-56 shrink-0 pt-3 lg:pt-0 border-t lg:border-t-0 border-stone-100">
+                      
+                      {/* WhatsApp Direct Contact Button */}
+                      <a
+                        href={getWhatsAppUrl(item.contactWhatsapp || item.contactPhone, prefilledWaText)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl text-xs font-black shadow-xs transition-all cursor-pointer w-full"
+                      >
+                        <MessageSquare className="h-4 w-4" />
+                        <span>تواصل واتساب مع المعلن</span>
+                      </a>
+
+                      {/* Direct Phone Call Button */}
+                      <a
+                        href={`tel:${item.contactPhone}`}
+                        className="inline-flex items-center justify-center gap-2 bg-stone-100 hover:bg-stone-200 text-stone-800 px-3 py-2 rounded-xl text-xs font-bold transition-all w-full"
+                      >
+                        <Phone className="h-3.5 w-3.5 text-stone-600" />
+                        <span>اتصال هاتفي مباشر</span>
+                      </a>
+
+                      {/* Approval / Rejection Action Row */}
+                      <div className="flex items-center gap-2 w-full pt-1">
+                        {!isApproved && (
+                          <button
+                            onClick={() => handleApproveHousing(item)}
+                            className="flex-1 inline-flex items-center justify-center gap-1.5 bg-[#1a4d2e] hover:bg-[#133b22] text-white py-2 px-3 rounded-xl text-xs font-black shadow-xs transition-all cursor-pointer"
+                            title="الموافقة على الإعلان ونشره وتأكيد الدفع"
+                          >
+                            <CheckCircle2 className="h-4 w-4 text-emerald-300" />
+                            <span>موافقة ونشر</span>
+                          </button>
+                        )}
+
+                        {!isRejected && (
+                          <button
+                            onClick={() => handleRejectHousing(item)}
+                            className="flex-1 inline-flex items-center justify-center gap-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                            title="عدم الموافقة ورفض الإعلان مع توضيح السبب"
+                          >
+                            <XCircle className="h-4 w-4" />
+                            <span>عدم الموافقة</span>
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Tool Actions (Featured, Verified, Edit, Delete) */}
+                      <div className="flex items-center justify-between gap-1 pt-1.5 border-t border-stone-100">
+                        <button
+                          onClick={() => handleToggleHousingFeatured(item)}
+                          className={`p-2 rounded-xl text-xs transition-colors cursor-pointer ${
+                            item.isFeatured ? 'bg-amber-100 text-amber-800 font-bold' : 'bg-stone-50 text-stone-500 hover:bg-amber-50 hover:text-amber-700'
+                          }`}
+                          title={item.isFeatured ? 'إلغاء التمييز في الصدارة' : 'تمييز الإعلان في الصدارة ⭐'}
+                        >
+                          <Star className="h-4 w-4" />
+                        </button>
+
+                        <button
+                          onClick={() => handleToggleHousingVerified(item)}
+                          className={`p-2 rounded-xl text-xs transition-colors cursor-pointer ${
+                            item.isVerified ? 'bg-blue-50 text-blue-600' : 'bg-stone-50 text-stone-400 hover:text-blue-600'
+                          }`}
+                          title={item.isVerified ? 'إلغاء وسم موثق' : 'توثيق واعتماد الإعلان 🛡️'}
+                        >
+                          <ShieldCheck className="h-4 w-4" />
+                        </button>
+
+                        <button
+                          onClick={() => handleEditHousingClick(item)}
+                          className="p-2 bg-stone-50 text-stone-600 hover:bg-stone-100 rounded-xl text-xs transition-colors cursor-pointer"
+                          title="تعديل بيانات الإعلان"
+                        >
+                          <Edit3 className="h-4 w-4" />
+                        </button>
+
+                        <button
+                          onClick={() => handleDeleteHousing(item.id)}
+                          className="p-2 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors cursor-pointer"
+                          title="حذف الإعلان نهائياً"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+
+                    </div>
+
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+        </div>
+      )}
+
+      {/* TAB: TOURISM MANAGEMENT */}
+      {activeTab === 'tourism' && (
+        <div className="space-y-6">
+          <div className="bg-white p-6 rounded-3xl border border-[#e5e1da] shadow-xs flex flex-col md:flex-row items-center justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-black text-stone-900">إدارة المعالم والأماكن السياحية</h3>
+              <p className="text-xs text-stone-500">إضافة وتحديث وحذف المعالم والمقاصد الترفيهية والتاريخية في إربد</p>
+            </div>
+            <button
+              onClick={() => {
+                setEditingTourism(null);
+                setNewTourism({
+                  name: '',
+                  category: 'أثري',
+                  image: '',
+                  description: '',
+                  location: '',
+                  googleMapsUrl: '',
+                  openingHours: '',
+                  entryFee: '',
+                  rating: '4.5',
+                  tagsString: '',
+                  tipsString: ''
+                });
+                setIsTourismFormOpen(!isTourismFormOpen);
+              }}
+              className="inline-flex items-center gap-2 bg-[#1a4d2e] hover:bg-[#143e25] text-white px-4 py-2.5 rounded-2xl text-xs font-black shadow-xs cursor-pointer transition-all"
+            >
+              <Plus className="h-4 w-4" />
+              <span>{isTourismFormOpen ? 'إغلاق النموذج' : 'إضافة معلَم جديد'}</span>
+            </button>
+          </div>
+
+          {isTourismFormOpen && (
+            <form onSubmit={handleSaveTourism} className="bg-white p-6 rounded-3xl border border-emerald-500/20 shadow-md space-y-4">
+              <h4 className="font-black text-sm text-[#1a4d2e] pb-2 border-b border-stone-100 flex items-center gap-2">
+                <Compass className="h-4 w-4" />
+                <span>{editingTourism ? 'تعديل المعلم السياحي' : 'إضافة معلَم سياحي جديد'}</span>
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-stone-700">اسم المعلّم / المكان</label>
+                  <input
+                    type="text"
+                    required
+                    value={newTourism.name}
+                    onChange={e => setNewTourism({...newTourism, name: e.target.value})}
+                    placeholder="مثال: مدينة أم قيس الأثرية، دار السرايا..."
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-stone-700">التصنيف السياحي</label>
+                  <select
+                    value={newTourism.category}
+                    onChange={e => setNewTourism({...newTourism, category: e.target.value})}
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none"
+                  >
+                    <option value="أثري">تاريخي وأثري 🏛️</option>
+                    <option value="طبيعي">طبيعي ومتنزهات 🌳</option>
+                    <option value="ترفيهي">ترفيهي ومطاعم 🎡</option>
+                    <option value="ثقافي">مراكز ثقافية ومتاحف 🎨</option>
+                    <option value="ديني">مراقد ومساجد أثرية 🕌</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-stone-700">الموقع الجغرافي / المنطقة</label>
+                  <input
+                    type="text"
+                    required
+                    value={newTourism.location}
+                    onChange={e => setNewTourism({...newTourism, location: e.target.value})}
+                    placeholder="مثال: لواء بني كنانة، إربد..."
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-stone-700">رابط موقع جوجل مابس (Google Maps URL)</label>
+                  <input
+                    type="text"
+                    value={newTourism.googleMapsUrl}
+                    onChange={e => setNewTourism({...newTourism, googleMapsUrl: e.target.value})}
+                    placeholder="مثال: https://maps.google.com/..."
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-stone-700">أوقات العمل واستقبال الزوار</label>
+                  <input
+                    type="text"
+                    value={newTourism.openingHours}
+                    onChange={e => setNewTourism({...newTourism, openingHours: e.target.value})}
+                    placeholder="مثال: 8:00 صباحاً - 6:00 مساءً طيلة الأسبوع..."
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-stone-700">رسوم الدخول والتذاكر</label>
+                  <input
+                    type="text"
+                    value={newTourism.entryFee}
+                    onChange={e => setNewTourism({...newTourism, entryFee: e.target.value})}
+                    placeholder="مثال: دينار للأردنيين، 5 دنانير للسياح..."
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-stone-700">التقييم العام للمكان (من 5.0)</label>
+                  <input
+                    type="text"
+                    value={newTourism.rating}
+                    onChange={e => setNewTourism({...newTourism, rating: e.target.value})}
+                    placeholder="مثال: 4.8"
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-stone-700">رابط صورة المعلم (Image URL)</label>
+                  <input
+                    type="text"
+                    value={newTourism.image}
+                    onChange={e => setNewTourism({...newTourism, image: e.target.value})}
+                    placeholder="رابط مباشر لصورة المعلم بجودة ممتازة..."
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none"
+                  />
+                </div>
+                <div className="space-y-1.5 md:col-span-2">
+                  <label className="text-xs font-bold text-stone-700">الوصف التعريفي والسياحي للمكان</label>
+                  <textarea
+                    required
+                    rows={3}
+                    value={newTourism.description}
+                    onChange={e => setNewTourism({...newTourism, description: e.target.value})}
+                    placeholder="اكتب نبذة تاريخية أو مزايا المكان والمرافق المتوفرة هنا..."
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                  />
+                </div>
+                <div className="space-y-1.5 md:col-span-2">
+                  <label className="text-xs font-bold text-stone-700">الوسوم وكلمات البحث المفتاحية (افصل بـ علامة "،")</label>
+                  <input
+                    type="text"
+                    value={newTourism.tagsString}
+                    onChange={e => setNewTourism({...newTourism, tagsString: e.target.value})}
+                    placeholder="مثال: أم قيس، آثار رومانية، إطلالة طبريا، سياحة تاريخية..."
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none"
+                  />
+                </div>
+                <div className="space-y-1.5 md:col-span-2">
+                  <label className="text-xs font-bold text-stone-700">نصائح وإرشادات للزوار (اكتب كل نصيحة في سطر منفصل)</label>
+                  <textarea
+                    rows={3}
+                    value={newTourism.tipsString}
+                    onChange={e => setNewTourism({...newTourism, tipsString: e.target.value})}
+                    placeholder="مثال:&#10;احرص على ارتداء حذاء مريح للمشي الطويل&#10;زر المطل عند الغروب لالتقاط أفضل الصور&#10;يتوفر مرشدون محليون عند مركز الزوار لشرح المعالم الأثرية"
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none"
+                  />
+                </div>
+              </div>
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsTourismFormOpen(false);
+                    setEditingTourism(null);
+                  }}
+                  className="bg-stone-100 hover:bg-stone-200 text-stone-700 px-4 py-2.5 rounded-xl text-xs font-bold"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  className="bg-[#1a4d2e] hover:bg-[#143e25] text-white px-5 py-2.5 rounded-xl text-xs font-black"
+                >
+                  {editingTourism ? 'حفظ التغييرات' : 'نشر المعلم الآن'}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* Tourism Listings */}
+          <div className="grid gap-4">
+            {tourismSpots.length === 0 ? (
+              <div className="bg-white py-12 rounded-3xl border border-[#e5e1da] text-center text-xs text-stone-500">
+                لا توجد معالم سياحية منشورة حالياً في قاعدة البيانات
+              </div>
+            ) : (
+              tourismSpots.map(item => (
+                <div key={item.id} className="bg-white p-5 rounded-3xl border border-[#e5e1da] shadow-xs flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
+                  <div className="space-y-1.5 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h4 className="text-base font-black text-stone-900">{item.name}</h4>
+                      <span className="bg-emerald-50 text-emerald-800 px-2.5 py-0.5 rounded-full text-[10px] font-bold">
+                        {item.category}
+                      </span>
+                      <span className="bg-stone-100 text-stone-700 px-2.5 py-0.5 rounded-full text-[10px] font-bold">
+                        {item.location}
+                      </span>
+                      <span className="bg-amber-50 text-amber-700 px-2.5 py-0.5 rounded-full text-[10px] font-black flex items-center gap-0.5">
+                        ⭐ {item.rating || '4.5'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-stone-600 line-clamp-1">{item.description}</p>
+                    <div className="flex gap-4 text-[10px] text-stone-400">
+                      <span>أوقات العمل: {item.openingHours || 'غير محدد'}</span>
+                      <span>التذاكر: {item.entryFee || 'مجاني'}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 w-full md:w-auto shrink-0 justify-end pt-2 md:pt-0">
+                    <button
+                      onClick={() => handleEditTourismClick(item)}
+                      className="p-2 bg-stone-50 text-stone-600 hover:bg-stone-100 rounded-xl text-xs transition-colors cursor-pointer"
+                      title="تعديل المعلم"
+                    >
+                      <Edit3 className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteTourismSpot(item.id)}
+                      className="p-2 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors cursor-pointer"
+                      title="حذف المعلم"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 6: BROADCAST CENTER */}
+      {activeTab === 'broadcast' && (
+        <div className="space-y-6">
+          <div className="bg-white p-6 rounded-3xl border border-[#e5e1da] shadow-xs space-y-6">
+            <div className="flex items-center justify-between border-b border-stone-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
+                  <Bell className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-[#2d2a26]">مركز الإشعارات والتنبيهات العامة</h3>
+                  <p className="text-xs text-stone-500">إرسال إشعارات جماعية لكافة المستخدمين وأصحاب المحلات في إربد</p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setIsBroadcastModalOpen(true)}
+                className="inline-flex items-center gap-2 bg-[#1a4d2e] hover:bg-[#143e25] text-white px-5 py-2.5 rounded-2xl text-xs font-black shadow-xs transition-colors cursor-pointer"
+              >
+                <Send className="h-4 w-4 text-[#ff9f1c]" />
+                <span>إرسال إشعار فوري الآن</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="p-4 bg-stone-50 rounded-2xl border border-stone-200 space-y-2">
+                <div className="font-black text-xs text-stone-800">🔥 إشعارات العروض والتخفيضات</div>
+                <p className="text-[11px] text-stone-500 leading-relaxed">
+                  توجيه المستخدمين لصفحة العروض الحصرية `/offers` لزيادة المبيعات للمحلات الشريكة.
+                </p>
+              </div>
+
+              <div className="p-4 bg-stone-50 rounded-2xl border border-stone-200 space-y-2">
+                <div className="font-black text-xs text-stone-800">💼 إشعارات الشواغر والوظائف</div>
+                <p className="text-[11px] text-stone-500 leading-relaxed">
+                  إبلاغ الباحثين عن عمل والطلاب فور فتح وظيفة عاجلة ومجزية في مطاعم أو شركات إربد.
+                </p>
+              </div>
+
+              <div className="p-4 bg-stone-50 rounded-2xl border border-stone-200 space-y-2">
+                <div className="font-black text-xs text-stone-800">📢 تحديثات وأخبار المنصة</div>
+                <p className="text-[11px] text-stone-500 leading-relaxed">
+                  إعلان إضافة أقسام جديدة كسكنات الطلاب، الأماكن السياحية، أو ميزات حجز واستفسار جديدة.
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <Link
+                to="/notifications"
+                target="_blank"
+                className="text-xs font-bold text-[#1a4d2e] hover:underline inline-flex items-center gap-1"
+              >
+                <span>معاينة صفحة الإشعارات للمستخدمين</span>
+                <ExternalLink className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB: SUPERVISORS */}
+      {(activeTab === 'supervisors' || activeTab === 'admins') && (
+        <SupervisorsManager />
+      )}
+
+      {/* TAB: ALL ACCOUNTS */}
+      {activeTab === 'accounts' && (
+        <AccountsManager />
+      )}
+
+      {/* TAB: SUBSCRIPTIONS OVERVIEW */}
+      {activeTab === 'subscriptions' && (
+        <AdminSubscriptionsOverview
+          businesses={businesses}
+          onOpenVipModal={(biz) => {
+            setSelectedBusinessForVip(biz);
+            setIsVipUpgradeModalOpen(true);
+          }}
+          onShowToast={showToast}
+        />
+      )}
+
+      {/* TAB: AUDIT LOGS */}
+      {activeTab === 'audit' && (
+        <AdminAuditLogs onShowToast={showToast} />
+      )}
+
+      {/* TAB 8: SETTINGS & BACKUP */}
+      {activeTab === 'settings' && (
+        <div className="space-y-6">
+          <div className="bg-white p-6 rounded-3xl border border-[#e5e1da] shadow-xs space-y-6">
+            <div className="flex items-center gap-3 border-b border-stone-100 pb-4">
+              <div className="w-10 h-10 rounded-2xl bg-stone-100 text-stone-700 flex items-center justify-center font-bold">
+                <Settings className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-xl font-black text-[#2d2a26]">إعدادات النظام والنسخ الاحتياطي</h3>
+                <p className="text-xs text-stone-500">حفظ وحماية بيانات الدليل وتصدير السجلات</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              
+              {/* DEMO DATA CONTROL CARD */}
+              <div className="p-5 rounded-2xl border border-amber-200 bg-amber-50/40 space-y-4 md:col-span-2">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-amber-200/60">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-amber-500/10 text-amber-800 flex items-center justify-center font-bold">
+                      <Sparkles className="h-5 w-5 text-amber-600" />
+                    </div>
+                    <div>
+                      <h4 className="text-base font-black text-stone-900">التحكم بالبيانات التجريبية (Demo Data)</h4>
+                      <p className="text-xs text-stone-600">إظهار أو إخفاء البيانات التجريبية للمستخدمين في جميع صفحات الموقع</p>
+                    </div>
+                  </div>
+
+                  {/* Toggle Button */}
+                  <button
+                    onClick={handleToggleDemoData}
+                    disabled={isDemoWorking}
+                    className={`inline-flex items-center gap-2.5 px-5 py-2.5 rounded-2xl font-black text-xs transition-all shadow-sm cursor-pointer ${
+                      showDemoData 
+                        ? 'bg-amber-600 hover:bg-amber-700 text-white' 
+                        : 'bg-stone-200 hover:bg-stone-300 text-stone-800'
+                    }`}
+                  >
+                    {showDemoData ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                    <span>{showDemoData ? 'البيانات التجريبية: مفعّلة (ظاهرة)' : 'البيانات التجريبية: مخفية (فقط البيانات الحقيقية)'}</span>
+                  </button>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                  <p className="text-xs text-stone-600 max-w-xl leading-relaxed">
+                    تستند المنصة بالكامل إلى قاعدة بيانات Firestore. لا توجد أي بيانات وهمية كودياً. يمكنك إضافة نموذج بيانات تجريبية لقاعدة البيانات لاستعراض شكل الواجهات، أو إزالتها نهائياً بضغطة زر.
+                  </p>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={handleSeedDemoData}
+                      disabled={isDemoWorking}
+                      className="inline-flex items-center gap-2 bg-stone-900 hover:bg-black text-white px-4 py-2 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      <span>زرع بيانات تجريبية في Firestore</span>
+                    </button>
+
+                    <button
+                      onClick={handleClearDemoData}
+                      disabled={isDemoWorking}
+                      className="inline-flex items-center gap-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-4 py-2 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      <span>مسح كافة البيانات التجريبية</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Backup Card */}
+              <div className="p-5 rounded-2xl border border-stone-200 bg-stone-50/50 space-y-3">
+                <div className="flex items-center gap-2 text-stone-900 font-black text-sm">
+                  <Download className="h-4 w-4 text-[#1a4d2e]" />
+                  <span>تصدير نسخة احتياطية كاملة (JSON)</span>
+                </div>
+                <p className="text-xs text-stone-600 leading-relaxed">
+                  تنزيل ملف يحتوي على كافة المحلات، طلبات الإضافة، الحملات التسويقية، والشواغر الوظيفية لحفظها بأمان على جهازك.
+                </p>
+                <button
+                  onClick={handleExportBackup}
+                  className="inline-flex items-center gap-2 bg-[#1a4d2e] hover:bg-[#133b22] text-white px-5 py-2.5 rounded-xl text-xs font-black transition-colors shadow-xs cursor-pointer"
+                >
+                  <Download className="h-4 w-4" />
+                  <span>تنزيل ملف النسخة الاحتياطية</span>
+                </button>
+              </div>
+
+              {/* System Diagnostics */}
+              <div className="p-5 rounded-2xl border border-stone-200 bg-stone-50/50 space-y-3">
+                <div className="flex items-center gap-2 text-stone-900 font-black text-sm">
+                  <Sparkles className="h-4 w-4 text-[#ff9f1c]" />
+                  <span>حالة المنظومة والبيئة</span>
+                </div>
+                <div className="space-y-1.5 text-xs text-stone-600 font-mono">
+                  <div>قاعدة البيانات: <span className="text-emerald-700 font-bold font-sans">Firebase Firestore (متصل)</span></div>
+                  <div>إجمالي السجلات: <span className="text-stone-900 font-bold">{businesses.length + requests.length + marketingRequests.length + jobs.length}</span></div>
+                  <div>المنطقة الجغرافية: <span className="font-sans font-bold">محافظة إربد، الأردن 🇯🇴</span></div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODALS */}
+      
+      {/* 1. Edit Business Modal */}
+      <BusinessEditModal
+        isOpen={isEditBusinessOpen}
+        onClose={() => {
+          setIsEditBusinessOpen(false);
+          setSelectedBusinessForEdit(null);
+        }}
+        business={selectedBusinessForEdit}
+        onSave={handleSaveBusiness}
+      />
+
+      {/* 2. Add Business Modal */}
+      <BusinessAddModal
+        isOpen={isAddBusinessOpen}
+        onClose={() => setIsAddBusinessOpen(false)}
+        onAdd={handleAddBusiness}
+      />
+
+      {/* 3. Broadcast Notification Modal */}
+      <BroadcastNotificationModal
+        isOpen={isBroadcastModalOpen}
+        onClose={() => setIsBroadcastModalOpen(false)}
+        onSend={handleSendBroadcast}
+      />
+
+      {/* 4. Marketing Details Modal */}
+      <MarketingDetailsModal
+        isOpen={isMarketingDetailsOpen}
+        onClose={() => {
+          setIsMarketingDetailsOpen(false);
+          setSelectedMarketingRequest(null);
+        }}
+        request={selectedMarketingRequest}
+        business={businesses.find(b => b.id === selectedMarketingRequest?.businessId)}
+        onStatusChange={handleMarketingStatusUpdate}
+        onDelete={handleDeleteMarketingRequest}
+      />
+
+      {/* 5. VIP Upgrade & Scheduling Modal */}
+      <VipUpgradeModal
+        isOpen={isVipUpgradeModalOpen}
+        onClose={() => {
+          setIsVipUpgradeModalOpen(false);
+          setSelectedBusinessForVip(null);
+        }}
+        business={selectedBusinessForVip}
+        onSave={async (updatedBusiness) => {
+          await handleSaveBusiness(updatedBusiness);
+          setIsVipUpgradeModalOpen(false);
+          setSelectedBusinessForVip(null);
+        }}
+      />
+
+    </div>
+  );
+}

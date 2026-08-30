@@ -111,9 +111,19 @@ export interface Business {
   featuredExpiryDate?: number;
   views?: number;
   
+  // Map and VIP details
+  isVip?: boolean;
+  packageId?: string;
+  latitude?: string;
+  longitude?: string;
+  coverImage?: string;
+  image?: string;
+  region?: string;
+  
   // Package & Verification
   packagePlan?: 'basic' | 'golden' | 'vip' | 'pay_per_use';
   isVerified?: boolean;
+  isVipTrial?: boolean;
   vipSubscriptionStartsAt?: number; // timestamp in ms
   vipSubscriptionExpiresAt?: number; // timestamp in ms
   isVipScheduled?: boolean;
@@ -127,6 +137,10 @@ export interface Business {
   // Live Working Hours (For all packages)
   workingHours?: WorkingHours;
 
+  // Multi-Branching Properties
+  parentBusinessId?: string;
+  isBranch?: boolean;
+
   // Social Links
   socialLinks?: SocialLinks;
 
@@ -138,6 +152,7 @@ export interface Business {
   menuCategories?: string[];
   reels?: VipReel[];
   gallery?: (string | VipGalleryItem)[];
+  staffEmails?: string[];
 }
 
 export interface VipGalleryItem {
@@ -466,11 +481,13 @@ export interface VipPlanConfig {
   name: string;
   badge: string;
   price: number;
+  yearlyPrice?: number;
   period: string;
   badgeColor: string;
   features: string[];
   popular?: boolean;
   active?: boolean;
+  internalNote?: string;
 }
 
 export interface GlobalSiteSettings {
@@ -548,3 +565,18 @@ export interface HomepageBanner {
 }
 
 
+
+export interface UpgradeRequest {
+  id?: string;
+  businessId: string;
+  businessName: string;
+  ownerId: string;
+  ownerEmail?: string;
+  ownerPhone?: string;
+  planId: string;
+  cycle: 'monthly' | 'yearly';
+  price: number;
+  status: 'pending' | 'approved' | 'rejected';
+  createdAt: string;
+  updatedAt: string;
+}

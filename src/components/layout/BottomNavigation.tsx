@@ -19,15 +19,6 @@ export function BottomNavigation({
   isMenuOpen 
 }: BottomNavigationProps) {
   const location = useLocation();
-  const [showAddBusiness, setShowAddBusiness] = React.useState(false);
-
-  // Automatically toggle the button every 4 seconds for maximum visibility and engagement
-  React.useEffect(() => {
-    const interval = setInterval(() => {
-      setShowAddBusiness((prev) => !prev);
-    }, 4000);
-    return () => clearInterval(interval);
-  }, []);
 
   // Hide the global bottom navigation on business details page because it has its own dedicated sticky action bar
   if (location.pathname.startsWith('/business/')) {
@@ -41,28 +32,23 @@ export function BottomNavigation({
       icon: Store,
       type: 'link',
     },
-    showAddBusiness ? {
-      label: 'أضف محلك',
-      path: '/contact',
-      icon: PlusCircle,
-      type: 'link',
-      isSpecial: true,
-      specialColorClass: "bg-emerald-100 text-emerald-800 animate-pulse",
-      iconColorClass: "text-emerald-600"
-    } : {
+    {
       label: 'العروض',
       path: '/offers',
       icon: Flame,
       type: 'link',
       isSpecial: true,
-      specialColorClass: "bg-amber-100 text-amber-700 animate-pulse",
+      specialColorClass: "bg-amber-50 text-amber-700",
       iconColorClass: "text-red-500"
     },
     {
-      label: 'بحث',
-      type: 'button',
-      onClick: onOpenSearch,
-      icon: Search,
+      label: 'أضف محلك',
+      path: '/contact',
+      icon: PlusCircle,
+      type: 'link',
+      isSpecial: true,
+      specialColorClass: "bg-emerald-50 text-emerald-800",
+      iconColorClass: "text-emerald-600"
     },
     {
       label: 'الرسائل',
@@ -125,7 +111,7 @@ export function BottomNavigation({
               <div key={index} className="flex flex-col items-center justify-center overflow-hidden h-[54px] w-[64px] relative">
                 <AnimatePresence mode="wait">
                   <motion.div
-                    key={showAddBusiness ? 'add' : 'offers'}
+                    key={item.label}
                     initial={{ y: 24, opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
                     exit={{ y: -24, opacity: 0 }}

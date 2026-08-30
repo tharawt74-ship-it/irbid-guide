@@ -13,6 +13,7 @@ export interface VipStatusResult {
   badgeColor: string;
   daysRemaining?: number;
   isExpiringSoon?: boolean;
+  isTrial?: boolean;
 }
 
 /**
@@ -31,10 +32,12 @@ export function getBusinessVipStatus(business?: Business | null): VipStatusResul
       isScheduled: false,
       statusLabel: 'باقة أساسية',
       badgeColor: 'bg-stone-100 text-stone-600',
+      isTrial: false,
     };
   }
 
   const now = Date.now();
+  const isTrial = !!business.isVipTrial;
   
   // Explicitly check package plan. If explicitly set to 'basic' or 'pay_per_use', it is NOT golden.
   let plan: 'golden' | 'basic' | 'pay_per_use' = 'basic';
@@ -60,6 +63,7 @@ export function getBusinessVipStatus(business?: Business | null): VipStatusResul
       isScheduled: false,
       statusLabel: plan === 'pay_per_use' ? 'الدفع حسب الاستخدام' : 'باقة أساسية',
       badgeColor: 'bg-stone-100 text-stone-600',
+      isTrial: false,
     };
   }
 
@@ -82,6 +86,7 @@ export function getBusinessVipStatus(business?: Business | null): VipStatusResul
       daysRemaining: daysUntilStart,
       statusLabel: `ترقية مجدولة تبدأ بعد ${daysUntilStart} يوم`,
       badgeColor: 'bg-blue-50 text-blue-700 border-blue-200',
+      isTrial,
     };
   }
 
@@ -91,13 +96,14 @@ export function getBusinessVipStatus(business?: Business | null): VipStatusResul
       isVip: false,
       packagePlan: 'basic',
       tier: 'free',
-      badgeLabel: 'انتهت الباقة الذهبية',
+      badgeLabel: isTrial ? 'انتهت تجربة VIP المجانية' : 'انتهت الباقة الذهبية',
       isVerified: false,
       isScheduled: true,
       startsAt,
       expiresAt,
-      statusLabel: 'انتهت فترة الترقية الذهبية',
+      statusLabel: isTrial ? 'انتهت فترة التجربة المجانية (14 يوم)' : 'انتهت فترة الترقية الذهبية',
       badgeColor: 'bg-rose-50 text-rose-700 border-rose-200',
+      isTrial,
     };
   }
 
@@ -109,19 +115,28 @@ export function getBusinessVipStatus(business?: Business | null): VipStatusResul
     isExpiringSoon = daysRemaining <= 7;
   }
 
+  const badgeLabel = isTrial
+    ? `تجربة مجانية VIP (${daysRemaining ?? 14} يوم)`
+    : 'الباقة الذهبية VIP';
+
+  const statusLabel = isTrial
+    ? `تجربة مجانية 14 يوم (متبقي ${daysRemaining ?? 14} يوم)`
+    : (expiresAt ? `ذهبي VIP (متبقي ${daysRemaining} يوم)` : 'ذهبي VIP (دائم)');
+
   return {
     isVip: true,
     packagePlan: 'golden',
     tier: 'gold',
-    badgeLabel: 'الباقة الذهبية VIP',
+    badgeLabel,
     isVerified: true,
     isScheduled,
     startsAt,
     expiresAt,
     daysRemaining,
     isExpiringSoon,
-    statusLabel: expiresAt ? `ذهبي VIP (متبقي ${daysRemaining} يوم)` : 'ذهبي VIP (دائم)',
-    badgeColor: 'bg-amber-100 text-amber-900 border-amber-300',
+    statusLabel,
+    badgeColor: isTrial ? 'bg-[#ff9f1c]/15 text-[#b26b00] border-[#ff9f1c]/30 font-black' : 'bg-amber-100 text-amber-900 border-amber-300',
+    isTrial,
   };
 }
 

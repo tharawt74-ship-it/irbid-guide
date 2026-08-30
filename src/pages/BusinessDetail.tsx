@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useParams, Link, useLocation } from 'react-router';
+import { useParams, Link, useLocation, useNavigate } from 'react-router';
 import { doc, getDoc, collection, query, where, getDocs, addDoc, updateDoc, limit } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Business, Review, WorkingHours, JobOffer } from '../types';
@@ -11,7 +11,7 @@ import {
   Clock, ShieldCheck, Tag, Info, Sparkles,
   ExternalLink, EyeOff, Settings, Edit3, X, CheckCircle,
   Crown, BarChart3, UtensilsCrossed, Lock as LockIcon, Globe, Facebook, Instagram, Twitter, Youtube, Smartphone, Send,
-  Video, Play, Trash2, Plus, Camera, Image as ImageIcon, ArrowLeft, ChevronLeft, ChevronRight, AtSign,
+  Video, Play, Trash2, Plus, Camera, Image as ImageIcon, ArrowLeft, ChevronLeft, ChevronRight, ChevronDown, AtSign,
   Briefcase, Building2, Flame, DollarSign, Award, Users
 } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -136,6 +136,7 @@ export function BusinessDetail() {
   const { id } = useParams<{ id: string }>();
   const { currentUser, isAdmin } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   
   const [business, setBusiness] = useState<Business | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -239,6 +240,8 @@ export function BusinessDetail() {
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
   const [copiedHandle, setCopiedHandle] = useState(false);
   const [hpValue, setHpValue] = useState('');
+  const [familyBranches, setFamilyBranches] = useState<Business[]>([]);
+  const [isBranchDropdownOpen, setIsBranchDropdownOpen] = useState(false);
 
   useEffect(() => {
     async function fetchData() {
@@ -375,6 +378,69 @@ export function BusinessDetail() {
     fetchData();
   }, [id, currentUser, isAdmin]);
 
+  // Fetch all branches connected to this business (root parent + child branches)
+  useEffect(() => {
+    async function fetchFamilyBranches() {
+      if (!db || !business) {
+        setFamilyBranches([]);
+        return;
+      }
+
+      const rootId = business.parentBusinessId || business.id;
+      try {
+        const familyMap = new Map<string, Business>();
+
+        // 1. Root Business Document
+        if (business.id === rootId) {
+          familyMap.set(business.id, business);
+        } else {
+          try {
+            const rootSnap = await getDoc(doc(db, 'businesses', rootId));
+            if (rootSnap.exists()) {
+              const rootData = { id: rootSnap.id, ...rootSnap.data() } as Business;
+              if (!rootData.isHidden) {
+                familyMap.set(rootSnap.id, rootData);
+              }
+            }
+          } catch (rErr) {
+            console.warn("Could not fetch root business doc:", rErr);
+          }
+        }
+
+        // 2. Child Branches where parentBusinessId == rootId
+        try {
+          const qBranches = query(
+            collection(db, 'businesses'),
+            where('parentBusinessId', '==', rootId)
+          );
+          const snap = await getDocs(qBranches);
+          snap.forEach(docSnap => {
+            const bData = { id: docSnap.id, ...docSnap.data() } as Business;
+            if (!bData.isHidden) {
+              familyMap.set(docSnap.id, bData);
+            }
+          });
+        } catch (bErr) {
+          console.warn("Could not fetch child branches:", bErr);
+        }
+
+        const allBranches = Array.from(familyMap.values());
+        // Sort: Root business first, then child branches
+        allBranches.sort((a, b) => {
+          if (a.id === rootId) return -1;
+          if (b.id === rootId) return 1;
+          return (a.district || a.address || a.name).localeCompare(b.district || b.address || b.name, 'ar');
+        });
+
+        setFamilyBranches(allBranches);
+      } catch (err) {
+        console.error("Error fetching family branches:", err);
+      }
+    }
+
+    fetchFamilyBranches();
+  }, [business?.id, business?.parentBusinessId]);
+
   // Fetch 3 random similar businesses belonging to the same category
   useEffect(() => {
     async function fetchSimilar() {
@@ -452,6 +518,14 @@ export function BusinessDetail() {
 
     fetchSimilar();
   }, [business?.id, business?.category, business?.name]);
+
+  const vipInfo = getBusinessVipStatus(business);
+
+  useEffect(() => {
+    if (business && !vipInfo.isVip && ['menu', 'products', 'offers', 'reels', 'gallery', 'analytics'].includes(activeTab)) {
+      setActiveTab('about');
+    }
+  }, [business?.id, vipInfo.isVip, activeTab]);
 
   const isOwner = Boolean(
     currentUser && business && (
@@ -1042,8 +1116,6 @@ export function BusinessDetail() {
     calculatedRating = business.rating.toFixed(1);
   }
 
-  const vipInfo = getBusinessVipStatus(business);
-
   const renderSocialMediaButtons = (links?: Business['socialLinks']) => {
     if (!links) return null;
     const entries = Object.entries(links).filter(([_, l]) => l && typeof l === 'string' && l.trim() !== '');
@@ -1479,6 +1551,143 @@ export function BusinessDetail() {
                     )}
                   </div>
                 </div>
+
+                {/* Multi-Branch Dropdown Selector for Visitors */}
+                {familyBranches.length > 1 && (
+                  <div className="mt-4 pt-3 border-t border-stone-100">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-l from-[#1a4d2e]/5 via-stone-50 to-amber-500/5 border border-[#1a4d2e]/20 rounded-2xl p-3.5 sm:p-4">
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-2 bg-[#1a4d2e]/10 text-[#1a4d2e] rounded-xl shrink-0">
+                          <Building2 className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 text-stone-900 font-black text-xs sm:text-sm">
+                            <span>أفرع المحل ({familyBranches.length} أفرع متاحة)</span>
+                          </div>
+                          <p className="text-[11px] text-stone-500 font-bold">
+                            اختر الفرع للانتقال واستعراض صفحته الخاصة
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Dropdown Menu Button */}
+                      <button
+                        type="button"
+                        onClick={() => setIsBranchDropdownOpen(true)}
+                        className="w-full sm:w-auto px-4 py-2.5 bg-white border border-[#1a4d2e]/30 hover:border-[#1a4d2e] rounded-xl shadow-xs text-stone-900 font-black text-xs sm:text-sm flex items-center justify-between gap-3 transition-all cursor-pointer hover:bg-emerald-50/50"
+                      >
+                        <div className="flex items-center gap-2 truncate">
+                          <MapPin className="h-4 w-4 text-[#ff9f1c] shrink-0" />
+                          <span className="truncate">{business.name}</span>
+                          {business.district && (
+                            <span className="text-[10px] bg-stone-100 text-stone-600 px-2 py-0.5 rounded-md font-bold shrink-0">
+                              {business.district}
+                            </span>
+                          )}
+                          {vipInfo.isVip && (
+                            <Crown className="h-3.5 w-3.5 text-amber-500 fill-amber-500 shrink-0" />
+                          )}
+                        </div>
+                        <ChevronDown className="h-4 w-4 text-stone-500 shrink-0" />
+                      </button>
+
+                      {/* Portal Dropdown / Sheet */}
+                      {isBranchDropdownOpen && createPortal(
+                        <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-stone-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+                          {/* Backdrop click to close */}
+                          <div 
+                            className="absolute inset-0" 
+                            onClick={() => setIsBranchDropdownOpen(false)} 
+                          />
+
+                          {/* Branch Selector Card */}
+                          <div className="relative w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl border border-stone-200 overflow-hidden z-10 animate-in slide-in-from-bottom-5 duration-200 max-h-[85vh] flex flex-col">
+                            {/* Header */}
+                            <div className="p-4 sm:p-5 bg-gradient-to-l from-[#1a4d2e] to-emerald-800 text-white flex items-center justify-between shrink-0">
+                              <div className="flex items-center gap-2.5">
+                                <div className="p-2 bg-white/10 rounded-xl">
+                                  <Building2 className="h-5 w-5 text-amber-300" />
+                                </div>
+                                <div>
+                                  <h3 className="font-black text-sm sm:text-base">اختر فرع المحل</h3>
+                                  <p className="text-xs text-emerald-100 font-medium">
+                                    يتوفر {familyBranches.length} أفرع لهذا المحل
+                                  </p>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setIsBranchDropdownOpen(false)}
+                                className="p-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+                              >
+                                <X className="h-5 w-5" />
+                              </button>
+                            </div>
+
+                            {/* Branches List */}
+                            <div className="p-3 sm:p-4 overflow-y-auto space-y-2">
+                              {familyBranches.map(b => {
+                                const isCurrent = b.id === business.id;
+                                const bVip = getBusinessVipStatus(b);
+
+                                return (
+                                  <button
+                                    key={b.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setIsBranchDropdownOpen(false);
+                                      if (!isCurrent) {
+                                        navigate(`/business/${b.id}`);
+                                      }
+                                    }}
+                                    className={`w-full text-right p-3 sm:p-3.5 rounded-2xl text-xs sm:text-sm font-bold transition-all flex items-center justify-between gap-3 border cursor-pointer ${
+                                      isCurrent
+                                        ? 'bg-[#1a4d2e] text-white border-[#1a4d2e] shadow-md'
+                                        : 'bg-stone-50 hover:bg-emerald-50 text-stone-900 border-stone-200 hover:border-emerald-300'
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                      <div className={`p-2 rounded-xl shrink-0 ${isCurrent ? 'bg-white/15 text-amber-300' : 'bg-white text-[#ff9f1c] shadow-2xs border border-stone-100'}`}>
+                                        <MapPin className="h-4 w-4" />
+                                      </div>
+                                      <div className="min-w-0">
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                          <span className="font-black truncate">{b.name}</span>
+                                          {bVip.isVip && (
+                                            <Crown className={`h-3.5 w-3.5 shrink-0 ${isCurrent ? 'text-amber-300 fill-amber-300' : 'text-amber-500 fill-amber-500'}`} />
+                                          )}
+                                        </div>
+                                        {(b.district || b.address) && (
+                                          <p className={`text-[11px] truncate mt-0.5 font-medium ${isCurrent ? 'text-emerald-100' : 'text-stone-500'}`}>
+                                            {b.district} {b.address ? `- ${b.address}` : ''}
+                                          </p>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    <div className="shrink-0 flex items-center gap-2">
+                                      {isCurrent ? (
+                                        <span className="bg-amber-400 text-stone-950 text-[10px] sm:text-[11px] px-2.5 py-1 rounded-lg font-black shadow-2xs">
+                                          الفرع الحالي
+                                        </span>
+                                      ) : (
+                                        <span className="text-stone-400 flex items-center gap-0.5 text-xs font-bold group-hover:text-emerald-700">
+                                          زيارة
+                                          <ChevronLeft className="h-4 w-4" />
+                                        </span>
+                                      )}
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>,
+                        document.body
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1496,22 +1705,24 @@ export function BusinessDetail() {
                 عن المحل
               </button>
 
-              <button 
-                onClick={() => setActiveTab('menu')}
-                className={`py-3.5 sm:py-4 font-bold text-sm sm:text-base border-b-2 whitespace-nowrap transition-colors flex items-center gap-1.5 ${
-                  activeTab === 'menu' || activeTab === 'products'
-                    ? 'border-[#1a4d2e] text-[#1a4d2e]' 
-                    : 'border-transparent text-stone-500 hover:text-[#2d2a26]'
-                }`}
-              >
-                <UtensilsCrossed className="h-4 w-4 text-[#1a4d2e]" />
-                <span>المنيو والكتالوج الرقمي</span>
-                {business.menuItems && business.menuItems.length > 0 && (
-                  <span className="bg-[#1a4d2e]/10 text-[#1a4d2e] text-xs px-2 py-0.5 rounded-full font-bold">
-                    {business.menuItems.length}
-                  </span>
-                )}
-              </button>
+              {vipInfo.isVip && (
+                <button 
+                  onClick={() => setActiveTab('menu')}
+                  className={`py-3.5 sm:py-4 font-bold text-sm sm:text-base border-b-2 whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+                    activeTab === 'menu' || activeTab === 'products'
+                      ? 'border-[#1a4d2e] text-[#1a4d2e]' 
+                      : 'border-transparent text-stone-500 hover:text-[#2d2a26]'
+                  }`}
+                >
+                  <UtensilsCrossed className="h-4 w-4 text-[#1a4d2e]" />
+                  <span>المنيو والكتالوج الرقمي</span>
+                  {business.menuItems && business.menuItems.length > 0 && (
+                    <span className="bg-[#1a4d2e]/10 text-[#1a4d2e] text-xs px-2 py-0.5 rounded-full font-bold">
+                      {business.menuItems.length}
+                    </span>
+                  )}
+                </button>
+              )}
 
               {((business.category || "").includes('سكنات') || (business.category || "").includes('شقق') || (business.category || "").includes('عقارات')) && (
                 <button 
@@ -1527,17 +1738,19 @@ export function BusinessDetail() {
                 </button>
               )}
 
-              <button 
-                onClick={() => setActiveTab('offers')}
-                className={`py-3.5 sm:py-4 font-bold text-sm sm:text-base border-b-2 whitespace-nowrap transition-colors flex items-center gap-1.5 ${
-                  activeTab === 'offers' 
-                    ? 'border-red-500 text-red-600' 
-                    : 'border-transparent text-stone-500 hover:text-red-600'
-                }`}
-              >
-                <Tag className="h-4 w-4 text-red-500" />
-                العروض والخصومات
-              </button>
+              {vipInfo.isVip && (
+                <button 
+                  onClick={() => setActiveTab('offers')}
+                  className={`py-3.5 sm:py-4 font-bold text-sm sm:text-base border-b-2 whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+                    activeTab === 'offers' 
+                      ? 'border-red-500 text-red-600' 
+                      : 'border-transparent text-stone-500 hover:text-red-600'
+                  }`}
+                >
+                  <Tag className="h-4 w-4 text-red-500" />
+                  العروض والخصومات
+                </button>
+              )}
 
               <button 
                 onClick={() => setActiveTab('jobs')}
@@ -1556,39 +1769,43 @@ export function BusinessDetail() {
                 )}
               </button>
 
-              <button 
-                onClick={() => setActiveTab('reels')}
-                className={`py-3.5 sm:py-4 font-bold text-sm sm:text-base border-b-2 whitespace-nowrap transition-colors flex items-center gap-1.5 ${
-                  activeTab === 'reels' 
-                    ? 'border-purple-600 text-purple-700 font-black' 
-                    : 'border-transparent text-stone-500 hover:text-purple-600'
-                }`}
-              >
-                <Video className="h-4 w-4 text-purple-500" />
-                <span>ريلزات المحل</span>
-                {business.reels && business.reels.length > 0 && (
-                  <span className="bg-purple-100 text-purple-700 text-xs px-2 py-0.5 rounded-full font-bold">
-                    {business.reels.length}
-                  </span>
-                )}
-              </button>
+              {vipInfo.isVip && (
+                <button 
+                  onClick={() => setActiveTab('reels')}
+                  className={`py-3.5 sm:py-4 font-bold text-sm sm:text-base border-b-2 whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+                    activeTab === 'reels' 
+                      ? 'border-purple-600 text-purple-700 font-black' 
+                      : 'border-transparent text-stone-500 hover:text-purple-600'
+                  }`}
+                >
+                  <Video className="h-4 w-4 text-purple-500" />
+                  <span>ريلزات المحل</span>
+                  {business.reels && business.reels.length > 0 && (
+                    <span className="bg-purple-100 text-purple-700 text-xs px-2 py-0.5 rounded-full font-bold">
+                      {business.reels.length}
+                    </span>
+                  )}
+                </button>
+              )}
 
-              <button 
-                onClick={() => setActiveTab('gallery')}
-                className={`py-3.5 sm:py-4 font-bold text-sm sm:text-base border-b-2 whitespace-nowrap transition-colors flex items-center gap-1.5 ${
-                  activeTab === 'gallery' 
-                    ? 'border-emerald-600 text-emerald-700 font-black' 
-                    : 'border-transparent text-stone-500 hover:text-emerald-600'
-                }`}
-              >
-                <Camera className="h-4 w-4 text-emerald-500" />
-                <span>صور وجو المحل</span>
-                {business.gallery && business.gallery.length > 0 && (
-                  <span className="bg-emerald-100 text-emerald-700 text-xs px-2 py-0.5 rounded-full font-bold">
-                    {business.gallery.length}
-                  </span>
-                )}
-              </button>
+              {vipInfo.isVip && (
+                <button 
+                  onClick={() => setActiveTab('gallery')}
+                  className={`py-3.5 sm:py-4 font-bold text-sm sm:text-base border-b-2 whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+                    activeTab === 'gallery' 
+                      ? 'border-emerald-600 text-emerald-700 font-black' 
+                      : 'border-transparent text-stone-500 hover:text-emerald-600'
+                  }`}
+                >
+                  <Camera className="h-4 w-4 text-emerald-500" />
+                  <span>صور وجو المحل</span>
+                  {business.gallery && business.gallery.length > 0 && (
+                    <span className="bg-emerald-100 text-emerald-700 text-xs px-2 py-0.5 rounded-full font-bold">
+                      {business.gallery.length}
+                    </span>
+                  )}
+                </button>
+              )}
 
               {isOwner && (
                 vipInfo.isVip ? (

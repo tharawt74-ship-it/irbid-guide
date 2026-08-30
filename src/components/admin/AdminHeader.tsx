@@ -66,31 +66,75 @@ export function AdminHeader({
   onExportData,
   isRefreshing
 }: AdminHeaderProps) {
-  const tabs = [
-    { id: 'overview', label: 'لوحة التحليلات', icon: Layers, count: null },
-    { id: 'requests', label: 'طلبات الإضافة', icon: Store, count: pendingRequestsCount, isAlert: pendingRequestsCount > 0 },
-    { id: 'categories', label: 'إدارة التصنيفات', icon: FolderTree, count: null },
-    { id: 'vipPlans', label: 'أسعار باقات VIP', icon: DollarSign, count: null },
-    { id: 'globalSettings', label: 'هوية وإعدادات المنصة', icon: Globe, count: null },
-    { id: 'neighborhoods', label: 'أحياء ومناطق إربد', icon: MapPin, count: null },
-    { id: 'staticPages', label: 'الخصوصية والسياسات', icon: FileText, count: null },
-    { id: 'editSuggestions', label: 'اقتراحات التعديل', icon: Edit3, count: pendingSuggestionsCount, isAlert: pendingSuggestionsCount > 0 },
-    { id: 'ownershipClaims', label: 'إثبات ملكية المحلات', icon: ShieldCheck, count: null },
-    { id: 'reviewReports', label: 'بلاغات التقييمات', icon: ShieldAlert, count: pendingReportsCount, isAlert: pendingReportsCount > 0 },
-    { id: 'businesses', label: 'دليل المحلات', icon: Store, count: businessesCount },
-    { id: 'marketing', label: 'الحملات التسويقية', icon: Megaphone, count: pendingMarketingCount, isAlert: pendingMarketingCount > 0 },
-    { id: 'banners', label: 'إدارة البانرات الإعلانية 🎨', icon: ImageIcon, count: null },
-    { id: 'subscriptions', label: 'أرباح الباقات', icon: Crown, count: null },
-    { id: 'jobs', label: 'إدارة الوظائف', icon: Briefcase, count: jobsCount },
-    { id: 'news', label: 'إدارة الأخبار', icon: Newspaper, count: null },
-    { id: 'housing', label: 'إدارة العقارات', icon: HomeIcon, count: pendingHousingCount, isAlert: (pendingHousingCount || 0) > 0 },
-    { id: 'tourism', label: 'السياحة والمعالم', icon: Compass, count: null },
-    { id: 'audit', label: 'سجل الأنشطة', icon: History, count: null },
-    { id: 'broadcast', label: 'مركز الإشعارات', icon: Bell, count: null },
-    { id: 'supervisors', label: 'إدارة المشرفين', icon: ShieldCheck, count: null },
-    { id: 'accounts', label: 'جميع الحسابات', icon: Users, count: null },
-    { id: 'settings', label: 'الإعدادات والنسخ', icon: Settings, count: null },
+  const groups = [
+    {
+      id: 'general',
+      label: 'الرئيسية والتحليلات',
+      icon: Layers,
+      tabs: [
+        { id: 'overview', label: 'لوحة التحليلات', icon: Layers, count: null },
+        { id: 'audit', label: 'سجل الأنشطة', icon: History, count: null },
+      ]
+    },
+    {
+      id: 'businesses_main',
+      label: 'المحلات والمعاملات',
+      icon: Store,
+      tabs: [
+        { id: 'businesses', label: 'إدارة المحلات', icon: Store, count: businessesCount, isAlert: pendingRequestsCount > 0 },
+        { id: 'editSuggestions', label: 'اقتراحات التعديل', icon: Edit3, count: pendingSuggestionsCount, isAlert: pendingSuggestionsCount > 0 },
+        { id: 'ownershipClaims', label: 'إثبات ملكية المحلات', icon: ShieldCheck, count: null },
+        { id: 'reviewReports', label: 'بلاغات التقييمات', icon: ShieldAlert, count: pendingReportsCount, isAlert: pendingReportsCount > 0 },
+      ]
+    },
+    {
+      id: 'marketing_main',
+      label: 'التسويق والإعلانات',
+      icon: Megaphone,
+      tabs: [
+        { id: 'marketing', label: 'الحملات التسويقية', icon: Megaphone, count: pendingMarketingCount, isAlert: pendingMarketingCount > 0 },
+        { id: 'banners', label: 'البانرات الإعلانية 🎨', icon: ImageIcon, count: null },
+        { id: 'broadcast', label: 'مركز الإشعارات', icon: Bell, count: null },
+        { id: 'subscriptions', label: 'أرباح الباقات', icon: Crown, count: null },
+      ]
+    },
+    {
+      id: 'content_main',
+      label: 'الخدمات والقطاعات',
+      icon: Compass,
+      tabs: [
+        { id: 'jobs', label: 'إدارة الوظائف', icon: Briefcase, count: jobsCount },
+        { id: 'housing', label: 'إدارة العقارات', icon: HomeIcon, count: pendingHousingCount, isAlert: (pendingHousingCount || 0) > 0 },
+        { id: 'news', label: 'إدارة الأخبار', icon: Newspaper, count: null },
+        { id: 'tourism', label: 'السياحة والمعالم', icon: Compass, count: null },
+      ]
+    },
+    {
+      id: 'settings_main',
+      label: 'هيكل المنصة وضبطها',
+      icon: Settings,
+      tabs: [
+        { id: 'categories', label: 'إدارة التصنيفات', icon: FolderTree, count: null },
+        { id: 'neighborhoods', label: 'أحياء ومناطق إربد', icon: MapPin, count: null },
+        { id: 'vipPlans', label: 'أسعار باقات VIP', icon: DollarSign, count: null },
+        { id: 'globalSettings', label: 'هوية وإعدادات المنصة', icon: Globe, count: null },
+        { id: 'staticPages', label: 'الخصوصية والسياسات', icon: FileText, count: null },
+      ]
+    },
+    {
+      id: 'users_main',
+      label: 'المستخدمين والصلاحيات',
+      icon: Users,
+      tabs: [
+        { id: 'accounts', label: 'جميع الحسابات', icon: Users, count: null },
+        { id: 'supervisors', label: 'إدارة المشرفين', icon: ShieldCheck, count: null },
+        { id: 'settings', label: 'الإعدادات والنسخ', icon: Settings, count: null },
+      ]
+    }
   ];
+
+  // Derive active group
+  const activeGroup = groups.find(g => g.tabs.some(t => t.id === activeTab)) || groups[0];
 
   return (
     <div className="space-y-6">
@@ -176,39 +220,95 @@ export function AdminHeader({
         </div>
       </div>
 
-      {/* Navigation Tabs Bar */}
-      <div className="bg-white p-2 rounded-2xl border border-[#e5e1da] shadow-xs flex items-center gap-1.5 overflow-x-auto scrollbar-none">
-        {tabs.map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm whitespace-nowrap transition-all cursor-pointer ${
-                isActive
-                  ? 'bg-[#1a4d2e] text-white shadow-xs'
-                  : 'text-stone-600 hover:bg-stone-100 hover:text-stone-900'
-              }`}
-            >
-              <Icon className={`h-4 w-4 ${isActive ? 'text-[#ff9f1c]' : 'text-stone-400'}`} />
-              <span>{tab.label}</span>
-              {tab.count !== null && (
-                <span
-                  className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
-                    tab.isAlert
-                      ? 'bg-red-500 text-white animate-pulse'
-                      : isActive
-                      ? 'bg-white/20 text-white'
-                      : 'bg-stone-100 text-stone-600'
+      {/* Structured Navigation Tab Groups & Sub-Tabs */}
+      <div className="space-y-4" dir="rtl">
+        <div>
+          <span className="text-xs font-black text-stone-400 block mb-2 mr-1">الأقسام الرئيسية للوحة الإدارة</span>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 w-full">
+            {groups.map((group) => {
+              const GroupIcon = group.icon;
+              const isGroupActive = activeGroup.id === group.id;
+              
+              // Calculate counts and alerts inside this group
+              let totalCount = 0;
+              let hasAlert = false;
+              group.tabs.forEach(t => {
+                if (t.count) totalCount += t.count;
+                if (t.isAlert) hasAlert = true;
+              });
+
+              return (
+                <button
+                  key={group.id}
+                  onClick={() => {
+                    const isTabInGroup = group.tabs.some(t => t.id === activeTab);
+                    if (!isTabInGroup && group.tabs.length > 0) {
+                      setActiveTab(group.tabs[0].id);
+                    }
+                  }}
+                  className={`relative flex flex-col items-center justify-center p-3.5 rounded-2xl border text-center transition-all duration-200 cursor-pointer ${
+                    isGroupActive
+                      ? 'bg-gradient-to-b from-[#1a4d2e] to-[#143e25] text-white border-[#1a4d2e] shadow-xs scale-102 font-black'
+                      : 'bg-white text-stone-600 border-[#e5e1da] hover:bg-stone-50 hover:text-stone-900 shadow-3xs'
                   }`}
                 >
-                  {tab.count}
-                </span>
-              )}
-            </button>
-          );
-        })}
+                  <GroupIcon className={`h-5 w-5 mb-1.5 ${isGroupActive ? 'text-[#ff9f1c]' : 'text-stone-400'}`} />
+                  <span className="text-xs sm:text-sm font-black tracking-tight leading-tight">{group.label}</span>
+                  
+                  {/* Alert Pulse or Count */}
+                  {totalCount > 0 && (
+                    <span className={`absolute top-2 left-2 text-[9px] px-1.5 py-0.5 rounded-full font-black ${
+                      hasAlert ? 'bg-red-500 text-white animate-pulse' : isGroupActive ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-600'
+                    }`}>
+                      {totalCount}
+                    </span>
+                  )}
+                  {totalCount === 0 && hasAlert && (
+                    <span className="absolute top-2 left-2 w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Sub-Tabs Ribbon for the Active Group */}
+        <div className="bg-stone-50 p-2.5 rounded-2xl border border-stone-200/60 shadow-inner flex flex-wrap items-center gap-1.5">
+          <span className="text-[11px] font-black text-stone-400 px-2 select-none border-l border-stone-200 ml-1">التبويبات الفرعية:</span>
+          {activeGroup.tabs.map((tab) => {
+            const TabIcon = tab.icon;
+            const isTabActive = activeTab === tab.id;
+
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl font-bold text-xs sm:text-sm whitespace-nowrap transition-all cursor-pointer ${
+                  isTabActive
+                    ? 'bg-[#1a4d2e] text-white shadow-xs'
+                    : 'text-stone-600 hover:bg-stone-200 hover:text-stone-900 bg-white border border-stone-200/50'
+                }`}
+              >
+                <TabIcon className={`h-3.5 w-3.5 ${isTabActive ? 'text-[#ff9f1c]' : 'text-stone-400'}`} />
+                <span>{tab.label}</span>
+                
+                {tab.count !== null && (
+                  <span
+                    className={`text-[9px] px-1.5 py-0.5 rounded-full font-black ${
+                      tab.isAlert
+                        ? 'bg-red-500 text-white animate-pulse'
+                        : isTabActive
+                        ? 'bg-white/20 text-white'
+                        : 'bg-stone-100 text-stone-600'
+                    }`}
+                  >
+                    {tab.count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

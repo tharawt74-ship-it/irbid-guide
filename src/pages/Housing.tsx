@@ -6,7 +6,7 @@ import {
   Grid, List, Sparkles, Send, Award, GraduationCap, Building2, Eye, Trash2,
   Clock, CheckCircle2, AlertCircle, Edit3, User, ArrowLeft
 } from 'lucide-react';
-import { collection, getDocs, deleteDoc, doc } from 'firebase/firestore';
+import { collection, getDocs, deleteDoc, doc, addDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { ShareButton } from '../components/ShareButton';
@@ -14,6 +14,7 @@ import { getWhatsAppUrl } from '../lib/contactHelper';
 import { SEO } from '../components/common/SEO';
 import { HousingItem } from '../types';
 import { HousingFormModal } from '../components/housing/HousingFormModal';
+import { Calendar, Users } from 'lucide-react';
 
 export function Housing() {
   const { currentUser, isAdmin } = useAuth();
@@ -23,6 +24,32 @@ export function Housing() {
   const [selectedType, setSelectedType] = useState<string>('الكل');
   const [selectedUniv, setSelectedUniv] = useState<string>('الكل');
   
+  // Roommate matching and booking states
+  const [activeSection, setActiveSection] = useState<'housing' | 'roommates'>('housing');
+  const [roommates, setRoommates] = useState<any[]>([]);
+  const [loadingRoommates, setLoadingRoommates] = useState(false);
+  const [isRoommateFormOpen, setIsRoommateFormOpen] = useState(false);
+  const [selectedHousingForBooking, setSelectedHousingForBooking] = useState<HousingItem | null>(null);
+  const [isBookingFormOpen, setIsBookingFormOpen] = useState(false);
+  
+  const [bookingForm, setBookingForm] = useState({
+    studentName: '',
+    studentPhone: '',
+    visitDate: '',
+    visitTime: '',
+    notes: '',
+    gender: 'طالب' as 'طالب' | 'طالبة'
+  });
+
+  const [roommateForm, setRoommateForm] = useState({
+    name: '',
+    gender: 'طالب' as 'طالب' | 'طالبة',
+    university: 'اليرموك',
+    budget: '',
+    description: '',
+    contactPhone: ''
+  });
+
   // Modals state
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingHousing, setEditingHousing] = useState<HousingItem | null>(null);
@@ -32,6 +59,130 @@ export function Housing() {
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  const loadRoommates = async () => {
+    if (!db) return;
+    setLoadingRoommates(true);
+    try {
+      const ref = collection(db, 'roommates');
+      const snap = await getDocs(ref);
+      const items: any[] = [];
+      snap.forEach(d => {
+        items.push({ id: d.id, ...d.data() });
+      });
+      
+      if (items.length === 0) {
+        const demoRoommates = [
+          {
+            id: 'rm1',
+            name: 'أحمد التميمي',
+            gender: 'طالب',
+            university: 'جامعة العلوم والتكنولوجيا',
+            budget: '60 - 80 دينار شهرياً',
+            description: 'طالب هندسة حاسوب في السنة الثالثة، هادئ وغير مدخن ومحافظ على الصلاة. أبحث عن رفيق سكن لمشاركتي شقة مفروشة غرفتين وصالة قريبة من البوابة الرئيسية للجامعة للتوفير في التكاليف والنقل.',
+            contactPhone: '0787766554',
+            createdAt: Date.now() - 3600000 * 24
+          },
+          {
+            id: 'rm2',
+            name: 'سارة عبيدات',
+            gender: 'طالبة',
+            university: 'جامعة اليرموك',
+            budget: '50 - 70 دينار شهرياً',
+            description: 'طالبة صيدلة في السنة الثانية، أبحث عن رفيقة سكن ملتزمة وهادئة للمشاركة في شقة قريبة من كلية الصيدلة (البوابة الشمالية). الشقة مؤمنة بالكامل وتحتاج فقط لتقاسم الإيجار السنوي.',
+            contactPhone: '0798877665',
+            createdAt: Date.now() - 3600000 * 48
+          },
+          {
+            id: 'rm3',
+            name: 'محمد بني هاني',
+            gender: 'طالب',
+            university: 'جامعة اليرموك',
+            budget: '45 - 60 دينار شهرياً',
+            description: 'طالب تكنولوجيا معلومات، أبحث عن رفيق سكن لمشاركة استوديو مجهز بالكامل بجانب دوار القبة. الإيجار الإجمالي 100 دينار (50 دينار لكل منا). هادئ وملتزم بدراستي.',
+            contactPhone: '0779988776',
+            createdAt: Date.now() - 3600000 * 72
+          }
+        ];
+        setRoommates(demoRoommates);
+      } else {
+        setRoommates(items.sort((a, b) => b.createdAt - a.createdAt));
+      }
+    } catch (err) {
+      console.error("Error loading roommates:", err);
+    } finally {
+      setLoadingRoommates(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeSection === 'roommates') {
+      loadRoommates();
+    }
+  }, [activeSection]);
+
+  const handleCreateBooking = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedHousingForBooking || !db) return;
+    
+    if (!bookingForm.studentName.trim() || !bookingForm.studentPhone.trim() || !bookingForm.visitDate) {
+      showToast('يرجى تعبئة الحقول الأساسية: الاسم، الهاتف، والتاريخ');
+      return;
+    }
+
+    try {
+      const ref = collection(db, 'housing_bookings');
+      await addDoc(ref, {
+        housingId: selectedHousingForBooking.id,
+        housingTitle: selectedHousingForBooking.title,
+        ownerPhone: selectedHousingForBooking.contactPhone,
+        ownerName: selectedHousingForBooking.ownerName,
+        studentName: bookingForm.studentName,
+        studentPhone: bookingForm.studentPhone,
+        visitDate: bookingForm.visitDate,
+        visitTime: bookingForm.visitTime,
+        gender: bookingForm.gender,
+        notes: bookingForm.notes,
+        userId: currentUser?.uid || 'guest',
+        userEmail: currentUser?.email || 'guest',
+        createdAt: Date.now()
+      });
+
+      showToast('🎉 تم تسجيل طلب المعاينة والحجز بنجاح! سيتم التواصل معك لتأكيد الموعد.');
+      setIsBookingFormOpen(false);
+      setBookingForm({ studentName: '', studentPhone: '', visitDate: '', visitTime: '', notes: '', gender: 'طالب' });
+    } catch (err) {
+      console.error(err);
+      showToast('عذراً، حدث خطأ أثناء إرسال طلب الحجز');
+    }
+  };
+
+  const handleCreateRoommate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!db) return;
+
+    if (!roommateForm.name.trim() || !roommateForm.contactPhone.trim() || !roommateForm.description.trim()) {
+      showToast('يرجى تعبئة كافة الحقول المطلوبة');
+      return;
+    }
+
+    try {
+      const ref = collection(db, 'roommates');
+      const docData = {
+        ...roommateForm,
+        userId: currentUser?.uid || 'guest',
+        createdAt: Date.now()
+      };
+      await addDoc(ref, docData);
+      showToast('🚀 تم نشر طلب رفيق السكن بنجاح في دليل إربد!');
+      setIsRoommateFormOpen(false);
+      setRoommateForm({ name: '', gender: 'طالب', university: 'اليرموك', budget: '', description: '', contactPhone: '' });
+      loadRoommates();
+    } catch (err) {
+      console.error(err);
+      showToast('حدث خطأ أثناء نشر الطلب');
+    }
   };
 
   const loadHousings = async () => {
@@ -48,10 +199,6 @@ export function Housing() {
       
       snap.forEach(d => {
         const data = d.data();
-        if (data.isDemo || ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(d.id)) {
-          deleteDoc(doc(db, 'housings', d.id)).catch(() => {});
-          return;
-        }
         items.push({ id: d.id, ...data } as HousingItem);
       });
 
@@ -212,8 +359,34 @@ export function Housing() {
         </div>
       </div>
 
-      {/* Double Filter Selection */}
-      <div className="space-y-4">
+      {/* Section Tab Switcher */}
+      <div className="flex bg-stone-100 p-1 rounded-2xl max-w-md mx-auto justify-center gap-1 border border-stone-200">
+        <button
+          onClick={() => setActiveSection('housing')}
+          className={`flex-1 py-2.5 text-xs font-black rounded-xl transition-all cursor-pointer ${
+            activeSection === 'housing'
+              ? 'bg-[#1a4d2e] text-white shadow-xs'
+              : 'text-stone-600 hover:text-[#1a4d2e]'
+          }`}
+        >
+          🏠 شقق وسكنات الطلاب
+        </button>
+        <button
+          onClick={() => setActiveSection('roommates')}
+          className={`flex-1 py-2.5 text-xs font-black rounded-xl transition-all cursor-pointer ${
+            activeSection === 'roommates'
+              ? 'bg-[#1a4d2e] text-white shadow-xs'
+              : 'text-stone-600 hover:text-[#1a4d2e]'
+          }`}
+        >
+          🤝 رفقاء السكن (Roommates)
+        </button>
+      </div>
+
+      {activeSection === 'housing' ? (
+        <>
+          {/* Double Filter Selection */}
+          <div className="space-y-4">
         {/* Filter Row 1: Accommodation Type */}
         <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
           <span className="text-xs font-black text-stone-400 shrink-0 ml-1">نوع السكن:</span>
@@ -448,6 +621,86 @@ export function Housing() {
           ))}
         </div>
       )}
+        </>
+      ) : (
+        <div className="space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-emerald-50/50 p-6 rounded-3xl border border-emerald-100/70">
+            <div>
+              <h3 className="text-lg font-black text-emerald-950">🤝 ملتقى رفقاء السكن في إربد</h3>
+              <p className="text-xs text-emerald-800/80 mt-1 font-bold">هل تبحث عن طالب أو طالبة لمشاركتك إيجار شقة؟ تصفح الإعلانات أو انشر طلبك مجاناً لتجد الرفيق المناسب.</p>
+            </div>
+            <button
+              onClick={() => setIsRoommateFormOpen(true)}
+              className="inline-flex items-center gap-2 bg-[#1a4d2e] hover:bg-[#11331e] text-white px-4 py-2.5 rounded-xl text-xs font-black transition-all shadow-md cursor-pointer shrink-0"
+            >
+              <Plus className="h-4 w-4" />
+              <span>نشر طلب رفيق سكن</span>
+            </button>
+          </div>
+
+          {loadingRoommates ? (
+            <div className="text-center py-12">
+              <div className="w-8 h-8 border-4 border-[#1a4d2e] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+              <p className="text-xs text-stone-500">جاري تحميل طلبات رفقاء السكن...</p>
+            </div>
+          ) : roommates.length === 0 ? (
+            <div className="text-center py-16 bg-white rounded-3xl border border-[#e5e1da]">
+              <Users className="h-10 w-10 text-stone-300 mx-auto mb-3" />
+              <p className="text-sm font-bold text-stone-700">لا توجد إعلانات نشطة حالياً</p>
+              <p className="text-xs text-stone-400 mt-1">كن أول من ينشر طلباً للبحث عن شريك سكن!</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {roommates.map((rm) => (
+                <div key={rm.id} className="bg-white border border-[#e5e1da] rounded-3xl p-6 shadow-xs hover:shadow-md transition-shadow relative flex flex-col justify-between space-y-4">
+                  <div>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black ${rm.gender === 'طالب' ? 'bg-blue-50 text-blue-800 border border-blue-100' : 'bg-pink-50 text-pink-800 border border-pink-100'}`}>
+                          {rm.gender}
+                        </span>
+                        <span className="bg-emerald-50 text-emerald-800 border border-emerald-100 px-2.5 py-1 rounded-lg text-[10px] font-black">
+                          {rm.university}
+                        </span>
+                      </div>
+                      <span className="text-xs font-black text-amber-600 bg-amber-50 px-2.5 py-1 rounded-lg shrink-0">
+                        ميزانية: {rm.budget || 'غير محدد'}
+                      </span>
+                    </div>
+
+                    <h4 className="text-base font-black text-stone-900 mt-3">{rm.name}</h4>
+                    <p className="text-stone-600 text-xs sm:text-sm mt-2 leading-relaxed whitespace-pre-line">{rm.description}</p>
+                  </div>
+
+                  <div className="pt-4 border-t border-stone-100 flex items-center justify-between gap-4">
+                    <span className="text-[10px] text-stone-400 font-bold">
+                      تاريخ النشر: {new Date(rm.createdAt).toLocaleDateString('ar-JO')}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <a
+                        href={`tel:${rm.contactPhone}`}
+                        className="p-2 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-xl transition-colors"
+                        title="اتصال هاتفي مباشر"
+                      >
+                        <Phone className="h-4 w-4" />
+                      </a>
+                      <a
+                        href={getWhatsAppUrl(rm.contactPhone, `مرحباً ${rm.name}، أتواصل معك بخصوص إعلانك للبحث عن رفيق سكن على منصة شو في بإربد؟.`)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition-colors"
+                      >
+                        <MessageSquare className="h-3.5 w-3.5" />
+                        <span>واتساب</span>
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Comprehensive Housing Details Modal */}
       {selectedDetail && (
@@ -543,20 +796,31 @@ export function Housing() {
                 <span className="block font-black text-stone-800 text-sm mt-0.5" dir="ltr">{selectedDetail.contactPhone}</span>
               </div>
 
-              <div className="flex items-center gap-2.5 w-full sm:w-auto">
+              <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
+                <button
+                  onClick={() => {
+                    setSelectedHousingForBooking(selectedDetail);
+                    setIsBookingFormOpen(true);
+                  }}
+                  className="flex-1 sm:flex-initial inline-flex justify-center items-center gap-2 px-5 py-3.5 bg-[#ff9f1c] hover:bg-[#e58f19] text-[#2d2a26] font-black text-xs sm:text-sm rounded-xl transition-all shadow-md cursor-pointer"
+                >
+                  <Calendar className="h-4.5 w-4.5 shrink-0" />
+                  <span>حجز موعد معاينة مباشر</span>
+                </button>
+
                 <a
                   href={getWhatsAppUrl(selectedDetail.contactWhatsapp || selectedDetail.contactPhone, `مرحباً، أود الاستفسار بخصوص السكن/العقار المعلن عنه: (${selectedDetail.title}) على منصة شو في بإربد؟.`)}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex-1 sm:flex-initial inline-flex justify-center items-center gap-2 px-6 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm rounded-xl transition-all shadow-md cursor-pointer"
+                  className="flex-1 sm:flex-initial inline-flex justify-center items-center gap-2 px-5 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs sm:text-sm rounded-xl transition-all shadow-md cursor-pointer"
                 >
                   <MessageSquare className="h-4.5 w-4.5" />
-                  <span>تواصل عبر الواتساب</span>
+                  <span>واتساب</span>
                 </a>
 
                 <a
                   href={`tel:${selectedDetail.contactPhone}`}
-                  className="inline-flex justify-center items-center gap-2 px-4 py-3.5 bg-stone-100 hover:bg-stone-200 text-stone-800 font-bold text-sm rounded-xl transition-colors cursor-pointer"
+                  className="inline-flex justify-center items-center gap-2 px-4 py-3.5 bg-stone-100 hover:bg-stone-200 text-stone-800 font-bold text-xs sm:text-sm rounded-xl transition-colors cursor-pointer"
                 >
                   <Phone className="h-4.5 w-4.5" />
                   <span>اتصال هاتفي</span>
@@ -580,6 +844,226 @@ export function Housing() {
         currentUser={currentUser}
         isAdmin={isAdmin}
       />
+
+      {/* Roommate Posting Modal */}
+      {isRoommateFormOpen && (
+        <div className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto" dir="rtl">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-stone-200 relative my-auto space-y-6">
+            <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+              <h3 className="text-lg font-black text-stone-900">🤝 انشر طلب رفيق سكن جديد</h3>
+              <button onClick={() => setIsRoommateFormOpen(false)} className="text-stone-400 hover:text-stone-600 p-1">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateRoommate} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-black text-stone-600">اسم الطالب / الطالبة كامل *</label>
+                <input
+                  type="text"
+                  required
+                  value={roommateForm.name}
+                  onChange={(e) => setRoommateForm({...roommateForm, name: e.target.value})}
+                  placeholder="مثال: يزن البطاينة"
+                  className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:border-[#1a4d2e]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-black text-stone-600">الجنس *</label>
+                  <select
+                    value={roommateForm.gender}
+                    onChange={(e) => setRoommateForm({...roommateForm, gender: e.target.value as any})}
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:border-[#1a4d2e]"
+                  >
+                    <option value="طالب">طالب (شباب)</option>
+                    <option value="طالبة">طالبة (بنات)</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-black text-stone-600">الجامعة الملتصق بها *</label>
+                  <select
+                    value={roommateForm.university}
+                    onChange={(e) => setRoommateForm({...roommateForm, university: e.target.value})}
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:border-[#1a4d2e]"
+                  >
+                    <option value="جامعة اليرموك">جامعة اليرموك</option>
+                    <option value="جامعة العلوم والتكنولوجيا">جامعة العلوم والتكنولوجيا (JUST)</option>
+                    <option value="جامعة إربد الأهلية">جامعة إربد الأهلية</option>
+                    <option value="جامعة جدارا">جامعة جدارا</option>
+                    <option value="أخرى / غير ملتحق">أخرى / غير ملتحق</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-black text-stone-600">الميزانية الشهرية المقدرة للإيجار *</label>
+                <input
+                  type="text"
+                  required
+                  value={roommateForm.budget}
+                  onChange={(e) => setRoommateForm({...roommateForm, budget: e.target.value})}
+                  placeholder="مثال: 50 - 70 دينار شهرياً"
+                  className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:border-[#1a4d2e]"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-black text-stone-600">رقم الهاتف للتواصل المباشر *</label>
+                <input
+                  type="tel"
+                  required
+                  value={roommateForm.contactPhone}
+                  onChange={(e) => setRoommateForm({...roommateForm, contactPhone: e.target.value})}
+                  placeholder="مثال: 078XXXXXXX"
+                  className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2.5 text-xs text-left focus:outline-none focus:border-[#1a4d2e]"
+                  dir="ltr"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-black text-stone-600">تفاصيل الطلب وشروط شريك السكن *</label>
+                <textarea
+                  required
+                  rows={4}
+                  value={roommateForm.description}
+                  onChange={(e) => setRoommateForm({...roommateForm, description: e.target.value})}
+                  placeholder="اكتب نبذة عن دراستك وعن شروطك لشريك السكن (مثال: غير مدخن، هادئ، دراسة صباحية، إلخ) ومواصفات الشقة التي تفضلها..."
+                  className="w-full bg-stone-50 border border-stone-200 rounded-xl p-4 text-xs focus:outline-none focus:border-[#1a4d2e] leading-relaxed"
+                ></textarea>
+              </div>
+
+              <div className="pt-3 flex gap-2">
+                <button
+                  type="submit"
+                  className="flex-1 py-3 bg-[#1a4d2e] hover:bg-[#123620] text-white font-black text-xs rounded-xl transition-all shadow-md cursor-pointer text-center"
+                >
+                  🚀 نشر الطلب مجاناً
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsRoommateFormOpen(false)}
+                  className="px-5 py-3 bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Booking / Appointment Modal */}
+      {isBookingFormOpen && selectedHousingForBooking && (
+        <div className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto" dir="rtl">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-stone-200 relative my-auto space-y-6">
+            <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+              <div className="space-y-0.5">
+                <h3 className="text-sm font-black text-stone-400 uppercase tracking-widest">🗓️ حجز موعد معاينة مباشر</h3>
+                <h4 className="text-base font-black text-[#1a4d2e] line-clamp-1">{selectedHousingForBooking.title}</h4>
+              </div>
+              <button onClick={() => setIsBookingFormOpen(false)} className="text-stone-400 hover:text-stone-600 p-1">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateBooking} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-black text-stone-600">اسمك بالكامل *</label>
+                <input
+                  type="text"
+                  required
+                  value={bookingForm.studentName}
+                  onChange={(e) => setBookingForm({...bookingForm, studentName: e.target.value})}
+                  placeholder="مثال: رامي القضاة"
+                  className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:border-[#1a4d2e]"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-black text-stone-600">رقم الهاتف للتواصل والتأكيد *</label>
+                <input
+                  type="tel"
+                  required
+                  value={bookingForm.studentPhone}
+                  onChange={(e) => setBookingForm({...bookingForm, studentPhone: e.target.value})}
+                  placeholder="مثال: 07XXXXXXXX"
+                  className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2.5 text-xs text-left focus:outline-none focus:border-[#1a4d2e]"
+                  dir="ltr"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-black text-stone-600">تاريخ المعاينة المفضل *</label>
+                  <input
+                    type="date"
+                    required
+                    value={bookingForm.visitDate}
+                    onChange={(e) => setBookingForm({...bookingForm, visitDate: e.target.value})}
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:border-[#1a4d2e]"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-black text-stone-600">الساعة المفضلة (اختياري)</label>
+                  <input
+                    type="time"
+                    value={bookingForm.visitTime}
+                    onChange={(e) => setBookingForm({...bookingForm, visitTime: e.target.value})}
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:border-[#1a4d2e]"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-black text-stone-600">الجنس</label>
+                <select
+                  value={bookingForm.gender}
+                  onChange={(e) => setBookingForm({...bookingForm, gender: e.target.value as any})}
+                  className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:border-[#1a4d2e]"
+                >
+                  <option value="طالب">طالب (شباب)</option>
+                  <option value="طالبة">طالبة (بنات)</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-black text-stone-600">ملاحظات أو أسئلة إضافية للمالك</label>
+                <textarea
+                  rows={3}
+                  value={bookingForm.notes}
+                  onChange={(e) => setBookingForm({...bookingForm, notes: e.target.value})}
+                  placeholder="اكتب أي استفسارات أو تفاصيل إضافية تود إبلاغ المالك بها..."
+                  className="w-full bg-stone-50 border border-stone-200 rounded-xl p-4 text-xs focus:outline-none focus:border-[#1a4d2e]"
+                ></textarea>
+              </div>
+
+              <div className="bg-amber-50 border border-amber-100 p-3 rounded-xl text-[10px] text-amber-800 leading-relaxed font-bold">
+                ⚠️ ملاحظة: طلب المعاينة مجاني تماماً وسيصل إلى مالك العقار مباشرة، وسيتواصل معك عبر الهاتف أو الواتساب خلال ساعات لتأكيد الموعد النهائي ومرافقتك لزيارة السكن.
+              </div>
+
+              <div className="pt-2 flex gap-2">
+                <button
+                  type="submit"
+                  className="flex-1 py-3 bg-[#1a4d2e] hover:bg-[#123620] text-white font-black text-xs rounded-xl transition-all shadow-md cursor-pointer text-center"
+                >
+                  📅 إرسال طلب الحجز
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsBookingFormOpen(false)}
+                  className="px-5 py-3 bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   );

@@ -20,7 +20,6 @@ import { SEO } from '../components/common/SEO';
 
 const CATEGORIES = ['الكل', 'مطاعم ومقاهي', 'تسويق وتكنولوجيا', 'مبيعات وتجزئة', 'تعليم وتدريب', 'صحة وخدمات', 'محاسبة وإدارة', 'صناعة وحرف', 'زراعة ومزارع'];
 const JOB_TYPES = ['الكل', 'دوام كامل', 'دوام جزئي', 'مناسب للطلاب', 'عمل عن بعد'];
-const LOCAL_STORAGE_KEY = 'irbid_jobs_listings_v1';
 
 export function Jobs() {
   const { currentUser, isAdmin } = useAuth();
@@ -94,7 +93,6 @@ export function Jobs() {
     if (editingJob) {
       const updatedList = jobs.map(j => j.id === savedJob.id ? savedJob : j);
       setJobs(updatedList);
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updatedList));
       if (selectedDetailJob?.id === savedJob.id) {
         setSelectedDetailJob(savedJob);
       }
@@ -102,7 +100,6 @@ export function Jobs() {
     } else {
       const updatedList = [savedJob, ...jobs];
       setJobs(updatedList);
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updatedList));
       showToast('تم نشر فرصة العمل بنجاح في دليل إربد!');
     }
   };
@@ -120,7 +117,6 @@ export function Jobs() {
 
       const updatedList = jobs.filter(j => j.id !== id);
       setJobs(updatedList);
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updatedList));
       setDeleteConfirmId(null);
       if (selectedDetailJob?.id === id) {
         setSelectedDetailJob(null);

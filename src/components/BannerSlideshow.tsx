@@ -78,39 +78,39 @@ export function BannerSlideshow({ banners }: BannerSlideshowProps) {
               className="w-full h-full object-cover"
               referrerPolicy="no-referrer"
             />
-            <div className="absolute inset-0 p-3 sm:p-6 md:p-10 flex flex-col justify-end z-20 text-right" dir="rtl">
-              <div className="flex items-center gap-1.5 md:gap-3 mb-1 md:mb-3">
+            <div className="absolute inset-0 p-2.5 sm:p-6 md:p-10 flex flex-col justify-end z-20 text-right" dir="rtl">
+              <div className="flex flex-wrap items-center gap-1 sm:gap-1.5 md:gap-3 mb-1 sm:mb-2 md:mb-3">
                 {banner.category && (
-                  <span className="bg-[#ff9f1c] text-white text-[9px] md:text-xs font-black px-2.5 py-0.5 md:px-3 md:py-1 rounded-full uppercase tracking-wider">
+                  <span className="bg-[#ff9f1c] text-white text-[8px] sm:text-[10px] md:text-xs font-black px-1.5 py-0.5 sm:px-2.5 sm:py-0.5 md:px-3 md:py-1 rounded-full uppercase tracking-wider">
                     {banner.category}
                   </span>
                 )}
-                <span className="bg-emerald-600 text-white text-[9px] md:text-xs font-black px-2.5 py-0.5 md:px-3 md:py-1 rounded-full uppercase tracking-wider">
+                <span className="bg-emerald-600 text-white text-[8px] sm:text-[10px] md:text-xs font-black px-1.5 py-0.5 sm:px-2.5 sm:py-0.5 md:px-3 md:py-1 rounded-full uppercase tracking-wider">
                   صفحة محل 🔗
                 </span>
               </div>
               
-              <h2 className="text-sm sm:text-2xl md:text-5xl font-black text-white mb-0.5 md:mb-2 tracking-tight">
+              <h2 className="text-xs sm:text-2xl md:text-5xl font-black text-white mb-0.5 md:mb-2 tracking-tight">
                 {banner.title}
               </h2>
               
               {banner.subtitle && (
-                <p className="text-white/80 line-clamp-1 sm:line-clamp-2 max-w-2xl mb-1.5 md:mb-4 text-[10px] sm:text-sm md:text-base leading-snug md:leading-relaxed font-bold">
+                <p className="text-white/80 line-clamp-1 sm:line-clamp-2 max-w-2xl mb-1 sm:mb-1.5 md:mb-4 text-[9px] sm:text-sm md:text-base leading-snug md:leading-relaxed font-bold hidden xs:block">
                   {banner.subtitle}
                 </p>
               )}
 
-              <div className="flex items-center gap-3 md:gap-4 text-white/90 text-[10px] md:text-sm font-bold">
+              <div className="flex items-center gap-2 sm:gap-3 md:gap-4 text-white/90 text-[8px] sm:text-[10px] md:text-sm font-bold">
                 {banner.rating !== undefined && (
-                  <div className="flex items-center gap-1">
-                    <Star className="h-3 w-3 md:h-4 md:w-4 fill-yellow-400 text-yellow-400" />
+                  <div className="flex items-center gap-0.5 sm:gap-1">
+                    <Star className="h-2.5 w-2.5 sm:h-3.5 sm:w-3.5 md:h-4 md:w-4 fill-yellow-400 text-yellow-400" />
                     <span>{banner.rating.toFixed(1)}</span>
                   </div>
                 )}
                 {banner.address && (
-                  <div className="flex items-center gap-1">
-                    <MapPin className="h-3 w-3 md:h-4 md:w-4 text-emerald-400" />
-                    <span className="truncate max-w-[120px] sm:max-w-[200px] md:max-w-xs">{banner.address}</span>
+                  <div className="flex items-center gap-0.5 sm:gap-1">
+                    <MapPin className="h-2.5 w-2.5 sm:h-3.5 sm:w-3.5 md:h-4 md:w-4 text-emerald-400" />
+                    <span className="truncate max-w-[100px] sm:max-w-[200px] md:max-w-xs">{banner.address}</span>
                   </div>
                 )}
               </div>
@@ -165,19 +165,19 @@ export function BannerSlideshow({ banners }: BannerSlideshowProps) {
               referrerPolicy="no-referrer"
             />
             {/* Animated GIF badge overlay */}
-            <div className="absolute top-4 right-4 z-20 flex items-center gap-2">
-              <span className="bg-purple-600/90 backdrop-blur-md text-white text-[9px] md:text-xs font-black px-2.5 py-1 rounded-full uppercase tracking-wider animate-pulse border border-purple-400/30">
+            <div className="absolute top-2 right-2 sm:top-4 sm:right-4 z-20 flex items-center gap-1 sm:gap-2">
+              <span className="bg-purple-600/90 backdrop-blur-md text-white text-[8px] sm:text-[10px] md:text-xs font-black px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full uppercase tracking-wider animate-pulse border border-purple-400/30">
                 إعلان مميز متحرك 🎞️
               </span>
             </div>
 
             {(banner.title || banner.subtitle) && (
-              <div className="absolute inset-0 p-3 sm:p-6 md:p-10 flex flex-col justify-end z-20 text-right" dir="rtl">
-                <h2 className="text-sm sm:text-2xl md:text-5xl font-black text-white mb-0.5 md:mb-2 tracking-tight">
+              <div className="absolute inset-0 p-2.5 sm:p-6 md:p-10 flex flex-col justify-end z-20 text-right" dir="rtl">
+                <h2 className="text-xs sm:text-2xl md:text-5xl font-black text-white mb-0.5 md:mb-2 tracking-tight">
                   {banner.title}
                 </h2>
                 {banner.subtitle && (
-                  <p className="text-white/90 line-clamp-1 sm:line-clamp-2 max-w-2xl text-[10px] sm:text-sm md:text-base font-bold">
+                  <p className="text-white/90 line-clamp-1 sm:line-clamp-2 max-w-2xl text-[9px] sm:text-sm md:text-base font-bold hidden xs:block">
                     {banner.subtitle}
                   </p>
                 )}
@@ -196,24 +196,24 @@ export function BannerSlideshow({ banners }: BannerSlideshowProps) {
               className="w-full h-full object-cover"
               referrerPolicy="no-referrer"
             />
-            <div className="absolute inset-0 p-3 sm:p-6 md:p-10 flex flex-col justify-end z-20 text-right" dir="rtl">
-              <div className="flex items-center gap-1.5 md:gap-3 mb-1 md:mb-3">
+            <div className="absolute inset-0 p-2.5 sm:p-6 md:p-10 flex flex-col justify-end z-20 text-right" dir="rtl">
+              <div className="flex flex-wrap items-center gap-1 sm:gap-1.5 md:gap-3 mb-1 sm:mb-2 md:mb-3">
                 {banner.badgeText && (
-                  <span className="bg-[#ff9f1c] text-white text-[9px] md:text-xs font-black px-2.5 py-0.5 md:px-3 md:py-1 rounded-full uppercase tracking-wider">
+                  <span className="bg-[#ff9f1c] text-white text-[8px] sm:text-[10px] md:text-xs font-black px-1.5 py-0.5 sm:px-2.5 sm:py-0.5 md:px-3 md:py-1 rounded-full uppercase tracking-wider">
                     {banner.badgeText}
                   </span>
                 )}
-                <span className="bg-blue-600 text-white text-[9px] md:text-xs font-black px-2.5 py-0.5 md:px-3 md:py-1 rounded-full uppercase tracking-wider">
+                <span className="bg-blue-600 text-white text-[8px] sm:text-[10px] md:text-xs font-black px-1.5 py-0.5 sm:px-2.5 sm:py-0.5 md:px-3 md:py-1 rounded-full uppercase tracking-wider">
                   عرض خاص 🎁
                 </span>
               </div>
               
-              <h2 className="text-sm sm:text-2xl md:text-5xl font-black text-white mb-0.5 md:mb-2 tracking-tight">
+              <h2 className="text-xs sm:text-2xl md:text-5xl font-black text-white mb-0.5 md:mb-2 tracking-tight">
                 {banner.title}
               </h2>
               
               {banner.subtitle && (
-                <p className="text-white/95 line-clamp-1 sm:line-clamp-2 max-w-2xl mb-2 md:mb-5 text-[10px] sm:text-sm md:text-base leading-snug md:leading-relaxed font-bold">
+                <p className="text-white/95 line-clamp-1 sm:line-clamp-2 max-w-2xl mb-1.5 sm:mb-2 md:mb-5 text-[9px] sm:text-sm md:text-base leading-snug md:leading-relaxed font-bold hidden xs:block">
                   {banner.subtitle}
                 </p>
               )}
@@ -223,11 +223,11 @@ export function BannerSlideshow({ banners }: BannerSlideshowProps) {
                   href={banner.buttonLink}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="bg-[#ff9f1c] hover:bg-[#f39209] text-white px-4 py-1.5 md:px-6 md:py-2.5 rounded-xl font-black transition-all text-[10px] sm:text-xs md:text-sm shadow-md flex items-center gap-1.5 md:gap-2 cursor-pointer hover:scale-105 active:scale-95 w-fit"
+                  className="bg-[#ff9f1c] hover:bg-[#f39209] text-white px-3 py-1 md:px-6 md:py-2.5 rounded-lg sm:rounded-xl font-black transition-all text-[8px] sm:text-xs md:text-sm shadow-md flex items-center gap-1 sm:gap-1.5 md:gap-2 cursor-pointer hover:scale-105 active:scale-95 w-fit"
                   id={`banner-action-btn-${banner.id}`}
                 >
                   <span>{banner.buttonText}</span>
-                  <ExternalLink className="h-3 w-3 md:h-4 md:w-4" />
+                  <ExternalLink className="h-2.5 w-2.5 sm:h-3.5 sm:w-3.5 md:h-4 md:w-4" />
                 </a>
               )}
             </div>
@@ -243,7 +243,7 @@ export function BannerSlideshow({ banners }: BannerSlideshowProps) {
     <div 
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
-      className="relative w-full aspect-[21/9] rounded-2xl md:rounded-[32px] overflow-hidden group mb-8 shadow-lg shadow-black/5 select-none touch-pan-y"
+      className="relative w-full aspect-[16/8] sm:aspect-[21/9] rounded-2xl md:rounded-[32px] overflow-hidden group mb-8 shadow-lg shadow-black/5 select-none touch-pan-y"
     >
       {/* Top Banner Booking Button */}
       <button
@@ -251,7 +251,7 @@ export function BannerSlideshow({ banners }: BannerSlideshowProps) {
         className="absolute top-2 left-2 md:top-4 md:left-4 z-10 bg-black/60 hover:bg-black/80 text-white backdrop-blur-md px-2.5 py-1 md:px-3.5 md:py-1.5 rounded-full text-[10px] md:text-xs font-bold transition-all flex items-center gap-1 md:gap-1.5 border border-white/20 shadow-sm cursor-pointer hover:scale-105 active:scale-95"
       >
         <Megaphone className="h-3 w-3 md:h-3.5 md:w-3.5 text-amber-400 animate-pulse" />
-        <span>احجز إعلانك هنا 📢</span>
+        <span>احجز إعلانك</span>
       </button>
 
       <BannerBookingModal

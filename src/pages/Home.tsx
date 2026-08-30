@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { collection, query, orderBy, getDocs } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { useAuth } from '../contexts/AuthContext';
 import { Business, HomepageBanner } from '../types';
 import { Link, useSearchParams } from 'react-router';
 import { getAppConfig } from '../lib/demoDataHelper';
@@ -12,6 +13,8 @@ import { RegionDropdownFilter } from '../components/RegionDropdownFilter';
 import { getLiveWorkingStatus } from '../lib/businessHoursHelper';
 import { DynamicSmartSuggestions } from '../components/DynamicSmartSuggestions';
 import { SEO } from '../components/common/SEO';
+import { CategoriesModal } from '../components/CategoriesModal';
+import { IrbidInteractiveMap } from '../components/IrbidInteractiveMap';
 import { 
   MapPin, Star, Search, Store, Filter,
   LayoutGrid, UtensilsCrossed, Coffee, CakeSlice, 
@@ -22,7 +25,7 @@ import {
 } from 'lucide-react';
 
 
-function getCategoryMeta(cat: string) {
+export function getCategoryMeta(cat: string) {
   const c = (cat || '').toLowerCase().trim();
   if (!cat || c === 'الكل') {
     return { icon: LayoutGrid, bg: 'bg-emerald-50 text-[#1a4d2e]' };
@@ -135,6 +138,7 @@ export const SYNONYM_MAP: { [key: string]: string[] } = {
 
 export function Home() {
   const [searchParams] = useSearchParams();
+  const { userFavorites } = useAuth();
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [banners, setBanners] = useState<HomepageBanner[]>([]);
   const [loading, setLoading] = useState(true);
@@ -146,8 +150,8 @@ export function Home() {
   const [error, setError] = useState('');
   const [openNowFilter, setOpenNowFilter] = useState(false);
   const [favoritesOnly, setFavoritesOnly] = useState(false);
-  const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
-  const [activeTab, setActiveTab] = useState<'all' | 'featured' | 'popular' | 'recent'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'featured' | 'popular' | 'recent' | 'map'>('all');
+  const [isCategoriesModalOpen, setIsCategoriesModalOpen] = useState(false);
 
   useEffect(() => {
     const qParam = searchParams.get('search');
@@ -155,22 +159,6 @@ export function Home() {
       setSearchTerm(qParam);
     }
   }, [searchParams]);
-
-  useEffect(() => {
-    const loadFavs = () => {
-      try {
-        const favs = JSON.parse(localStorage.getItem('favorites_businesses') || '[]');
-        setFavoriteIds(favs);
-      } catch (e) {
-        console.error(e);
-      }
-    };
-    loadFavs();
-    window.addEventListener('favoritesChanged', loadFavs);
-    return () => {
-      window.removeEventListener('favoritesChanged', loadFavs);
-    };
-  }, []);
 
   useEffect(() => {
     async function fetchBusinesses() {
@@ -338,7 +326,7 @@ export function Home() {
 
     let matchesFavorites = true;
     if (favoritesOnly) {
-      matchesFavorites = favoriteIds.includes(b.id);
+      matchesFavorites = userFavorites.includes(b.id);
     }
 
     return matchesSearch && matchesCategory && matchesRegion && matchesRating && matchesOpenNow && matchesFavorites;
@@ -469,7 +457,7 @@ export function Home() {
               }`}
             >
               <span className={`w-1.5 h-1.5 rounded-full ${openNowFilter ? 'bg-white animate-pulse' : 'bg-emerald-500'}`}></span>
-              <span>مفتوح الآن 🟢</span>
+              <span>مفتوح الآن</span>
             </button>
 
             <button
@@ -481,7 +469,7 @@ export function Home() {
               }`}
             >
               <Heart className={`h-3.5 w-3.5 md:h-3 md:w-3 ${favoritesOnly ? 'fill-white text-white' : 'text-red-500 fill-red-500'}`} />
-              <span>المفضلة ❤️ ({favoriteIds.length})</span>
+              <span>المفضلة ({userFavorites.length})</span>
             </button>
           </div>
         </div>
@@ -502,17 +490,26 @@ export function Home() {
                 </span>
               )}
             </div>
-            {categoryFilter && (
-              <button 
-                onClick={() => {
-                  setCategoryFilter('');
-                  setSubCategoryFilter('');
-                }}
-                className="text-xs font-bold text-[#1a4d2e] hover:underline"
+            <div className="flex items-center gap-2">
+              {categoryFilter && (
+                <button 
+                  onClick={() => {
+                    setCategoryFilter('');
+                    setSubCategoryFilter('');
+                  }}
+                  className="text-xs font-bold text-stone-500 hover:text-[#1a4d2e] hover:underline"
+                >
+                  إعادة تعيين
+                </button>
+              )}
+              <button
+                onClick={() => setIsCategoriesModalOpen(true)}
+                className="text-xs sm:text-sm font-black text-[#1a4d2e] hover:text-[#133b22] flex items-center gap-1 bg-[#1a4d2e]/5 hover:bg-[#1a4d2e]/10 px-3 py-1.5 rounded-full transition-colors cursor-pointer"
               >
-                عرض كل الأقسام
+                <span>عرض الكل</span>
+                <span className="text-[10px] sm:text-xs">←</span>
               </button>
-            )}
+            </div>
           </div>
 
           <div className="relative">
@@ -626,6 +623,63 @@ export function Home() {
         </div>
       ) : (
         <div className="space-y-6">
+          {isFiltering && (
+            <div className="bg-[#fcfbfa] border border-[#e5e1da] rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-black text-[#2d2a26] bg-stone-100 px-2.5 py-1 rounded-lg">التصفية النشطة حالياً:</span>
+                {searchTerm && (
+                  <span className="text-xs font-bold bg-[#1a4d2e]/10 text-[#1a4d2e] border border-[#1a4d2e]/10 px-2.5 py-1 rounded-full flex items-center gap-1.5">
+                    <span>بحث: "{searchTerm}"</span>
+                    <button onClick={() => setSearchTerm('')} className="text-stone-400 hover:text-red-500 font-bold cursor-pointer">✕</button>
+                  </span>
+                )}
+                {categoryFilter && (
+                  <span className="text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200 px-2.5 py-1 rounded-full flex items-center gap-1.5">
+                    <span>القسم: {categoryFilter.replace(/^.*?\s/, '')}</span>
+                    <button onClick={() => { setCategoryFilter(''); setSubCategoryFilter(''); }} className="text-stone-400 hover:text-red-500 font-bold cursor-pointer">✕</button>
+                  </span>
+                )}
+                {subCategoryFilter && (
+                  <span className="text-xs font-bold bg-pink-50 text-pink-800 border border-pink-200 px-2.5 py-1 rounded-full flex items-center gap-1.5">
+                    <span>الفرعي: {subCategoryFilter}</span>
+                    <button onClick={() => setSubCategoryFilter('')} className="text-stone-400 hover:text-red-500 font-bold cursor-pointer">✕</button>
+                  </span>
+                )}
+                {regionFilter && regionFilter !== 'الكل' && (
+                  <span className="text-xs font-bold bg-blue-50 text-blue-800 border border-blue-200 px-2.5 py-1 rounded-full flex items-center gap-1.5">
+                    <span>المنطقة: {regionFilter}</span>
+                    <button onClick={() => setRegionFilter('')} className="text-stone-400 hover:text-red-500 font-bold cursor-pointer">✕</button>
+                  </span>
+                )}
+                {openNowFilter && (
+                  <span className="text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 px-2.5 py-1 rounded-full flex items-center gap-1.5">
+                    <span>مفتوح الآن 🟢</span>
+                    <button onClick={() => setOpenNowFilter(false)} className="text-[#1a4d2e]/50 hover:text-red-500 font-bold cursor-pointer">✕</button>
+                  </span>
+                )}
+                {favoritesOnly && (
+                  <span className="text-xs font-bold bg-red-50 text-red-800 border border-red-200 px-2.5 py-1 rounded-full flex items-center gap-1.5">
+                    <span>المفضلة فقط ❤️</span>
+                    <button onClick={() => setFavoritesOnly(false)} className="text-red-400 hover:text-red-500 font-bold cursor-pointer">✕</button>
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={() => {
+                  setSearchTerm('');
+                  setCategoryFilter('');
+                  setSubCategoryFilter('');
+                  setRegionFilter('');
+                  setOpenNowFilter(false);
+                  setFavoritesOnly(false);
+                  setActiveTab('all');
+                }}
+                className="text-xs font-black text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100/80 border border-red-200 px-3.5 py-2 rounded-xl transition-all shrink-0 cursor-pointer text-center"
+              >
+                إعادة تعيين الفلاتر
+              </button>
+            </div>
+          )}
           
           {/* Elite Tabs Filter & Header */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-4 border-b border-[#e5e1da] pb-3 md:pb-4">
@@ -648,7 +702,7 @@ export function Home() {
                     : 'bg-white sm:bg-transparent border-[#e5e1da] text-stone-600 hover:text-[#1a4d2e]'
                 }`}
               >
-                <Compass className="h-3.5 w-3.5 md:h-3.5 md:w-3.5" />
+                <Compass className={`h-3.5 w-3.5 md:h-3.5 md:w-3.5 ${activeTab === 'all' ? 'text-white' : 'text-emerald-600'}`} />
                 <span>الكل</span>
               </button>
               
@@ -661,8 +715,8 @@ export function Home() {
                     : 'bg-white sm:bg-transparent border-[#e5e1da] text-stone-600 hover:text-amber-600'
                 }`}
               >
-                <Crown className="h-3.5 w-3.5 fill-current md:h-3.5 md:w-3.5" />
-                <span>المميزة ⭐</span>
+                <Crown className={`h-3.5 w-3.5 md:h-3.5 md:w-3.5 ${activeTab === 'featured' ? 'text-white fill-white' : 'text-amber-500 fill-amber-400'}`} />
+                <span>المميزة</span>
               </button>
 
               <button
@@ -674,8 +728,8 @@ export function Home() {
                     : 'bg-white sm:bg-transparent border-[#e5e1da] text-stone-600 hover:text-amber-600'
                 }`}
               >
-                <TrendingUp className="h-3.5 w-3.5 md:h-3.5 md:w-3.5" />
-                <span>الأكثر شعبية 🔥</span>
+                <TrendingUp className={`h-3.5 w-3.5 md:h-3.5 md:w-3.5 ${activeTab === 'popular' ? 'text-white' : 'text-orange-500'}`} />
+                <span>الأكثر شعبية</span>
               </button>
 
               <button
@@ -687,14 +741,32 @@ export function Home() {
                     : 'bg-white sm:bg-transparent border-[#e5e1da] text-stone-600 hover:text-emerald-600'
                 }`}
               >
-                <Clock className="h-3.5 w-3.5 md:h-3.5 md:w-3.5" />
-                <span>المضافة حديثاً 🆕</span>
+                <Clock className={`h-3.5 w-3.5 md:h-3.5 md:w-3.5 ${activeTab === 'recent' ? 'text-white' : 'text-blue-500'}`} />
+                <span>المضافة حديثاً</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('map')}
+                className={`snap-start shrink-0 flex items-center gap-1.5 px-5 py-2.5 sm:px-4 sm:py-2 rounded-xl sm:rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap border sm:border-transparent ${
+                  activeTab === 'map'
+                    ? 'bg-sky-600 text-white border-sky-600 sm:shadow-xs'
+                    : 'bg-white sm:bg-transparent border-[#e5e1da] text-stone-600 hover:text-sky-600'
+                }`}
+              >
+                <span className="text-sm">🗺️</span>
+                <span>خريطة إربد التفاعلية (VIP)</span>
               </button>
             </div>
           </div>
 
           {/* Unified Business Grid */}
-          {displayedBusinesses.length > 0 ? (
+          {activeTab === 'map' ? (
+            <IrbidInteractiveMap 
+              businesses={businesses} 
+              onClose={() => setActiveTab('all')} 
+            />
+          ) : displayedBusinesses.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {displayedBusinesses.map((business) => (
                 <BusinessCard key={business.id} business={business} />
@@ -713,6 +785,17 @@ export function Home() {
           )}
         </div>
       )}
+
+      <CategoriesModal
+        isOpen={isCategoriesModalOpen}
+        onClose={() => setIsCategoriesModalOpen(false)}
+        categories={categories}
+        selectedCategory={categoryFilter}
+        onSelectCategory={(catName) => {
+          setCategoryFilter(catName);
+          setSubCategoryFilter('');
+        }}
+      />
     </div>
   );
 }

@@ -254,9 +254,13 @@ export function AdminSubscriptionsOverview({
 
                     <td className="p-3">
                       {plan === 'golden' || vip.isVip ? (
-                        <span className="inline-flex items-center gap-1 font-black px-2.5 py-1 rounded-full border text-[11px] bg-amber-100 text-amber-800 border-amber-300">
+                        <span className={`inline-flex items-center gap-1 font-black px-2.5 py-1 rounded-full border text-[11px] ${
+                          vip.isTrial
+                            ? 'bg-amber-50 text-amber-900 border-amber-300'
+                            : 'bg-amber-100 text-amber-800 border-amber-300'
+                        }`}>
                           <Crown className="h-3 w-3 text-amber-600" />
-                          <span>الباقة الذهبية</span>
+                          <span>{vip.isTrial ? `تجربة VIP مجانية (${vip.daysRemaining ?? 14}d)` : 'الباقة الذهبية'}</span>
                         </span>
                       ) : plan === 'pay_per_use' ? (
                         <span className="inline-flex items-center gap-1 font-black px-2.5 py-1 rounded-full border text-[11px] bg-blue-50 text-blue-700 border-blue-200">

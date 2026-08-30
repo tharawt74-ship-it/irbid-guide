@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Store, Search, Tag, MessageSquare, Plus, Minus, Trash2,
   Sparkles, Check, Flame, ExternalLink, UtensilsCrossed,
@@ -11,6 +11,7 @@ import { trackBusinessInteraction } from '../../lib/analyticsTracker';
 import { cn } from '../../lib/utils';
 import { getCategoryTheme } from './DigitalMenuManagerModal';
 import { useCart } from '../../contexts/CartContext';
+import { Link } from 'react-router';
 
 interface DigitalMenuViewProps {
   business: Business;
@@ -32,6 +33,31 @@ export function DigitalMenuView({
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [activeSmartFilter, setActiveSmartFilter] = useState<'all' | 'popular' | 'offers'>('all');
+  
+  // Ref for search input and desktop keyboard shortcut focusing
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Check if user is on PC (lg viewport >= 1024px)
+      if (window.innerWidth < 1024) return;
+      
+      const isInputFocused = document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA';
+      if (isInputFocused && document.activeElement !== searchInputRef.current) return;
+
+      // Ctrl+K/⌘+K or '/' key
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      } else if (e.key === '/' && !isInputFocused) {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
   
   // Global Cart Context
   const { 
@@ -223,17 +249,30 @@ export function DigitalMenuView({
       {/* Search & Layout/Filters Bar */}
       {menuItems.length > 0 && (
         <div className="space-y-4 bg-stone-50 p-4 rounded-2xl border border-stone-200">
-          <div className="flex flex-col lg:flex-row gap-3">
+          <div className="flex flex-col gap-3.5 w-full">
             {/* Search Box */}
-            <div className="relative flex-1">
+            <div className="relative w-full group">
               <input
+                ref={searchInputRef}
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="ابحث عن أي صنف، خدمة، أو منتج..."
-                className="w-full pl-4 pr-11 py-2.5 bg-white border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]/20 focus:border-[#1a4d2e] transition-all"
+                className="w-full pl-10 lg:pl-12 pr-11 py-2.5 bg-white border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]/20 focus:border-[#1a4d2e] lg:hover:border-stone-300 lg:hover:shadow-2xs lg:focus:ring-4 lg:focus:ring-[#1a4d2e]/10 lg:focus:border-[#1a4d2e] lg:focus:shadow-sm transition-all duration-300 text-right"
               />
-              <Search className="h-4 w-4 text-stone-400 absolute right-4 top-1/2 -translate-y-1/2" />
+              <Search className="h-4 w-4 text-stone-400 absolute right-4 top-1/2 -translate-y-1/2 transition-colors duration-200 group-focus-within:text-[#1a4d2e]" />
+              
+              {/* Clear button when searchQuery exists */}
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 p-1 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-lg transition-all cursor-pointer z-10"
+                  title="مسح البحث"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
 
             {/* Layout and Smart Filter Switchers */}
@@ -381,7 +420,7 @@ export function DigitalMenuView({
                   layout
                   key={item.id}
                   className={cn(
-                    "bg-white border border-stone-200/80 transition-all relative flex flex-col justify-between group overflow-hidden rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.03)] hover:shadow-md hover:border-amber-500/30 text-right min-w-0",
+                    "bg-white border border-stone-100 shadow-[0_4px_12px_rgba(0,0,0,0.04)] rounded-2xl relative flex flex-col justify-between overflow-hidden text-right transition-all lg:border-stone-200/80 lg:shadow-[0_2px_10px_rgba(0,0,0,0.03)] lg:hover:shadow-md lg:hover:border-amber-500/30 group min-w-0",
                     (item.isPopular || item.badge === 'popular') && "border-amber-200 bg-amber-50/10"
                   )}
                 >
@@ -429,15 +468,15 @@ export function DigitalMenuView({
                   </div>
 
                   {/* Card Body */}
-                  <div className="p-2.5 sm:p-4 flex-1 flex flex-col justify-between space-y-2 min-w-0">
+                  <div className="p-3 sm:p-4 flex-1 flex flex-col justify-between space-y-2 min-w-0">
                     <div className="space-y-1">
-                      <h3 className="text-xs sm:text-base font-bold text-stone-900 line-clamp-1 leading-snug group-hover:text-amber-950">
+                      <h3 className="text-sm sm:text-base font-extrabold text-stone-900 lg:font-bold line-clamp-1 leading-snug group-hover:text-amber-950">
                         {item.name}
                       </h3>
 
                       <div className="flex flex-wrap items-center gap-1">
                         {item.category && (
-                          <span className="inline-block text-[9px] sm:text-[10px] font-medium text-stone-500 bg-stone-100 px-1.5 py-0.5 rounded truncate max-w-full">
+                          <span className="inline-block text-[9px] sm:text-[10px] font-bold text-stone-500 bg-stone-100 px-1.5 py-0.5 rounded truncate max-w-full">
                             {item.category}
                           </span>
                         )}
@@ -449,7 +488,7 @@ export function DigitalMenuView({
                       </div>
 
                       {item.description && (
-                        <p className="text-[10px] sm:text-xs text-stone-500 line-clamp-2 leading-relaxed pt-0.5">
+                        <p className="text-[11px] sm:text-xs text-stone-500/90 line-clamp-2 leading-relaxed pt-0.5">
                           {item.description}
                         </p>
                       )}
@@ -466,19 +505,19 @@ export function DigitalMenuView({
                     </div>
 
                     {/* Footer Actions */}
-                    <div className="flex items-center justify-between gap-1 pt-2 border-t border-dashed border-stone-100 mt-auto">
-                      <div className="text-xs sm:text-sm font-black text-amber-950 whitespace-nowrap bg-amber-50/80 px-1.5 py-0.5 sm:px-2.5 sm:py-1 rounded-lg border border-amber-200/50">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-1 pt-2 border-t border-dashed border-stone-100 mt-auto">
+                      <div className="text-[11px] sm:text-sm font-black text-amber-950 whitespace-nowrap bg-amber-50/90 px-2 py-1 sm:px-2.5 sm:py-1 rounded-lg border border-amber-200/40 shadow-3xs text-center w-full sm:w-auto">
                         {item.price} <span className="text-[9px] font-normal">د.أ</span>
                       </div>
 
                       {item.isAvailable !== false ? (
-                        <div className="flex items-center">
+                        <div className="flex items-center w-full sm:w-auto justify-center">
                           {cartQty > 0 ? (
-                            <div className="flex items-center bg-[#1a4d2e] text-white rounded-lg p-0.5 shadow-2xs border border-[#1a4d2e]">
+                            <div className="flex items-center justify-between w-full sm:w-auto bg-[#1a4d2e] text-white rounded-lg p-1 sm:p-0.5 shadow-2xs border border-[#1a4d2e]">
                               <button
                                 type="button"
                                 onClick={() => removeFromCart(item)}
-                                className="w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center hover:bg-[#133b22] rounded transition-colors cursor-pointer active:scale-90"
+                                className="w-5.5 h-5.5 sm:w-6 sm:h-6 flex items-center justify-center hover:bg-[#133b22] rounded transition-colors cursor-pointer active:scale-90"
                               >
                                 <Minus className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
                               </button>
@@ -486,7 +525,7 @@ export function DigitalMenuView({
                               <button
                                 type="button"
                                 onClick={() => addToCart(item)}
-                                className="w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center hover:bg-[#133b22] rounded transition-colors cursor-pointer active:scale-90"
+                                className="w-5.5 h-5.5 sm:w-6 sm:h-6 flex items-center justify-center hover:bg-[#133b22] rounded transition-colors cursor-pointer active:scale-90"
                               >
                                 <Plus className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
                               </button>
@@ -495,7 +534,7 @@ export function DigitalMenuView({
                             <button
                               type="button"
                               onClick={() => addToCart(item)}
-                              className="inline-flex items-center gap-1 bg-[#1a4d2e] hover:bg-[#133b22] text-white px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg text-[10px] sm:text-xs font-black transition-all shadow-2xs active:scale-95 cursor-pointer whitespace-nowrap"
+                              className="inline-flex items-center justify-center gap-1 bg-[#1a4d2e] lg:hover:bg-[#133b22] text-white px-2.5 py-1.5 sm:px-3 sm:py-1.5 rounded-lg text-[10px] sm:text-xs font-black transition-all shadow-2xs active:scale-95 cursor-pointer whitespace-nowrap w-full sm:w-auto"
                             >
                               <ShoppingBag className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
                               <span>{theme.buttonAddShort}</span>
@@ -503,7 +542,7 @@ export function DigitalMenuView({
                           )}
                         </div>
                       ) : (
-                        <span className="text-[9px] sm:text-xs font-bold text-stone-400 bg-stone-100 px-1.5 py-0.5 rounded-lg">
+                        <span className="text-[9px] sm:text-xs font-bold text-stone-400 bg-stone-100 px-1.5 py-0.5 rounded-lg text-center w-full sm:w-auto">
                           غير متوفر
                         </span>
                       )}
@@ -519,7 +558,7 @@ export function DigitalMenuView({
                 layout
                 key={item.id}
                 className={cn(
-                  "bg-white border border-stone-200/80 transition-all relative flex flex-row items-center gap-2.5 sm:gap-4 p-2.5 sm:p-4 rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.03)] hover:shadow-md hover:border-amber-500/30 text-right min-w-0 group",
+                  "bg-white border border-stone-100 shadow-[0_4px_12px_rgba(0,0,0,0.03)] rounded-2xl relative flex flex-row items-center gap-3 p-3 text-right min-w-0 transition-all lg:border-stone-200/80 lg:shadow-[0_2px_10px_rgba(0,0,0,0.03)] lg:hover:shadow-md lg:hover:border-amber-500/30 lg:gap-4 lg:p-4 group",
                   (item.isPopular || item.badge === 'popular') && "border-amber-200 bg-amber-50/10"
                 )}
               >
@@ -570,18 +609,18 @@ export function DigitalMenuView({
                 <div className="flex-1 min-w-0 flex flex-col justify-between self-stretch py-0.5 space-y-1">
                   <div>
                     <div className="flex items-center justify-between gap-2">
-                      <h3 className="text-xs sm:text-base font-bold text-stone-900 line-clamp-1 group-hover:text-amber-950">
+                      <h3 className="text-sm sm:text-base font-extrabold text-stone-900 lg:font-bold line-clamp-1 group-hover:text-amber-950">
                         {item.name}
                       </h3>
                       {item.category && (
-                        <span className="inline-block text-[9px] sm:text-[10px] font-medium text-stone-500 bg-stone-100 px-1.5 py-0.5 rounded shrink-0">
+                        <span className="inline-block text-[9px] sm:text-[10px] font-bold text-stone-500 bg-stone-100 px-1.5 py-0.5 rounded shrink-0">
                           {item.category}
                         </span>
                       )}
                     </div>
 
                     {item.description && (
-                      <p className="text-[10px] sm:text-xs text-stone-500 line-clamp-2 leading-relaxed pt-0.5">
+                      <p className="text-[11px] sm:text-xs text-stone-500/90 line-clamp-2 leading-relaxed pt-0.5">
                         {item.description}
                       </p>
                     )}
@@ -598,9 +637,9 @@ export function DigitalMenuView({
                   </div>
 
                   {/* Footer Row */}
-                  <div className="flex items-center justify-between gap-2 pt-1 border-t border-dashed border-stone-100/80 mt-auto">
-                    <div className="flex items-center gap-1.5">
-                      <div className="text-xs sm:text-sm font-black text-amber-950 whitespace-nowrap bg-amber-50/80 px-2 py-0.5 rounded-lg border border-amber-200/50">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1.5 border-t border-dashed border-stone-100/80 mt-auto">
+                    <div className="flex items-center gap-1.5 justify-center sm:justify-start w-full sm:w-auto">
+                      <div className="text-[11px] sm:text-sm font-black text-amber-950 whitespace-nowrap bg-amber-50/80 px-2 py-1 rounded-lg border border-amber-200/50 shadow-3xs text-center">
                         {item.price} <span className="text-[9px] font-normal">د.أ</span>
                       </div>
                       {discount && (
@@ -611,13 +650,13 @@ export function DigitalMenuView({
                     </div>
 
                     {item.isAvailable !== false ? (
-                      <div>
+                      <div className="flex items-center w-full sm:w-auto justify-center">
                         {cartQty > 0 ? (
-                          <div className="flex items-center bg-[#1a4d2e] text-white rounded-lg p-0.5 shadow-2xs border border-[#1a4d2e]">
+                          <div className="flex items-center justify-between w-full sm:w-auto bg-[#1a4d2e] text-white rounded-lg p-1 sm:p-0.5 shadow-2xs border border-[#1a4d2e]">
                             <button
                               type="button"
                               onClick={() => removeFromCart(item)}
-                              className="w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center hover:bg-[#133b22] rounded transition-colors cursor-pointer active:scale-90"
+                              className="w-5.5 h-5.5 sm:w-6 sm:h-6 flex items-center justify-center hover:bg-[#133b22] rounded transition-colors cursor-pointer active:scale-90"
                             >
                               <Minus className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
                             </button>
@@ -625,7 +664,7 @@ export function DigitalMenuView({
                             <button
                               type="button"
                               onClick={() => addToCart(item)}
-                              className="w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center hover:bg-[#133b22] rounded transition-colors cursor-pointer active:scale-90"
+                              className="w-5.5 h-5.5 sm:w-6 sm:h-6 flex items-center justify-center hover:bg-[#133b22] rounded transition-colors cursor-pointer active:scale-90"
                             >
                               <Plus className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
                             </button>
@@ -634,7 +673,7 @@ export function DigitalMenuView({
                           <button
                             type="button"
                             onClick={() => addToCart(item)}
-                            className="inline-flex items-center gap-1 bg-[#1a4d2e] hover:bg-[#133b22] text-white px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg text-[10px] sm:text-xs font-black transition-all shadow-2xs active:scale-95 cursor-pointer whitespace-nowrap"
+                            className="inline-flex items-center justify-center gap-1 bg-[#1a4d2e] lg:hover:bg-[#133b22] text-white px-2.5 py-1.5 sm:px-3 sm:py-1.5 rounded-lg text-[10px] sm:text-xs font-black transition-all shadow-2xs active:scale-95 cursor-pointer whitespace-nowrap w-full sm:w-auto"
                           >
                             <ShoppingBag className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
                             <span>{theme.buttonAddShort}</span>
@@ -642,7 +681,7 @@ export function DigitalMenuView({
                         )}
                       </div>
                     ) : (
-                      <span className="text-[9px] sm:text-xs font-bold text-stone-400 bg-stone-100 px-1.5 py-0.5 rounded-lg">
+                      <span className="text-[9px] sm:text-xs font-bold text-stone-400 bg-stone-100 px-1.5 py-0.5 rounded-lg text-center w-full sm:w-auto">
                         غير متوفر
                       </span>
                     )}
@@ -760,6 +799,59 @@ export function DigitalMenuView({
                 </div>
               </div>
             </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Floating Active Cart Drawer */}
+      <AnimatePresence>
+        {totalCount > 0 && (
+          <motion.div
+            initial={{ y: 100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 100, opacity: 0 }}
+            className="fixed bottom-16 left-0 right-0 z-50 px-4 pb-4 md:bottom-6 max-w-4xl mx-auto"
+            dir="rtl"
+          >
+            <div className="bg-[#1c1917] text-white rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-stone-800 shadow-2xl">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-[#ff9f1c] rounded-xl flex items-center justify-center text-[#2d2a26] shrink-0 font-black animate-pulse">
+                  <ShoppingBag className="h-6 w-6" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-black">سلة الطلبات الرقمية النشطة ({totalCount} أصناف)</h4>
+                  <p className="text-xs text-stone-300 font-bold mt-0.5">القيمة الإجمالية: <span className="text-[#ff9f1c] font-black text-sm">{totalPrice.toFixed(2)} د.أ</span></p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleOrderCartWhatsapp}
+                  className="flex-1 sm:flex-initial inline-flex justify-center items-center gap-1.5 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl transition-all cursor-pointer shadow-md"
+                >
+                  <MessageSquare className="h-4 w-4" />
+                  <span>أرسل الطلب عبر الواتساب</span>
+                </button>
+
+                <Link
+                  to="/cart"
+                  className="inline-flex justify-center items-center gap-1.5 px-4 py-2.5 bg-white hover:bg-stone-100 text-[#2d2a26] font-black text-xs rounded-xl transition-colors cursor-pointer"
+                >
+                  <span>استعراض السلة الكاملة</span>
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </Link>
+
+                <button
+                  type="button"
+                  onClick={clearCart}
+                  className="p-2.5 bg-stone-800 hover:bg-stone-700 text-stone-400 hover:text-red-500 rounded-xl transition-colors cursor-pointer"
+                  title="تفريغ السلة"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

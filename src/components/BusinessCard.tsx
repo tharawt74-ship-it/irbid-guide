@@ -1,11 +1,11 @@
 import { Link } from 'react-router';
-import { useState, useEffect } from 'react';
 import { Business } from '../types';
-import { Star, MapPin, Store, Clock, Heart } from 'lucide-react';
+import { Star, MapPin, Store, Clock, Heart, Crown } from 'lucide-react';
 import { VerifiedBadge } from './vip/VerifiedBadge';
 import { ShareButton } from './ShareButton';
 import { getLiveWorkingStatus } from '../lib/businessHoursHelper';
 import { getBusinessVipStatus } from '../lib/vipHelper';
+import { useAuth } from '../contexts/AuthContext';
 
 interface BusinessCardProps {
   business: Business;
@@ -16,37 +16,14 @@ interface BusinessCardProps {
 export function BusinessCard({ business, featured = false, searchReasons }: BusinessCardProps) {
   const isVip = getBusinessVipStatus(business).isVip;
   const liveStatus = getLiveWorkingStatus(business.workingHours);
-  const [isFavorited, setIsFavorited] = useState(false);
+  const { isFavorite, toggleFavorite } = useAuth();
+  const isFavorited = isFavorite(business.id);
   const isCurrentlyFeatured = business.isFeatured && (!business.featuredStartDate || business.featuredStartDate <= Date.now()) && (!business.featuredExpiryDate || business.featuredExpiryDate > Date.now());
 
-  useEffect(() => {
-    try {
-      const favs = JSON.parse(localStorage.getItem('favorites_businesses') || '[]');
-      setIsFavorited(favs.includes(business.id));
-    } catch (e) {
-      console.error(e);
-    }
-  }, [business.id]);
-
-  const toggleFavorite = (e: React.MouseEvent) => {
+  const handleToggleFavorite = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    try {
-      const favs = JSON.parse(localStorage.getItem('favorites_businesses') || '[]');
-      let updatedFavs = [];
-      if (favs.includes(business.id)) {
-        updatedFavs = favs.filter((id: string) => id !== business.id);
-        setIsFavorited(false);
-      } else {
-        updatedFavs = [...favs, business.id];
-        setIsFavorited(true);
-      }
-      localStorage.setItem('favorites_businesses', JSON.stringify(updatedFavs));
-      // Dispatch custom event to notify other components (like Home page filters)
-      window.dispatchEvent(new Event('favoritesChanged'));
-    } catch (err) {
-      console.error(err);
-    }
+    toggleFavorite(business.id);
   };
 
   if (featured) {
@@ -71,8 +48,9 @@ export function BusinessCard({ business, featured = false, searchReasons }: Busi
           <div className="mb-auto flex flex-wrap items-center justify-between gap-2 w-full">
             <div className="flex items-center gap-1.5 flex-wrap">
               {isCurrentlyFeatured && (
-                <span className='bg-yellow-400 text-yellow-950 text-[10px] sm:text-xs font-black px-3 py-1 rounded-full uppercase tracking-widest shadow-sm'>
-                  مميز ⭐
+                <span className='bg-yellow-400 text-yellow-950 text-[10px] sm:text-xs font-black px-3 py-1 rounded-full uppercase tracking-widest shadow-sm flex items-center gap-1 w-fit'>
+                  <Crown className="h-3 w-3 sm:h-3.5 sm:w-3.5 fill-current shrink-0 text-amber-950" />
+                  <span>مميز</span>
                 </span>
               )}
               {business.district && (
@@ -84,7 +62,7 @@ export function BusinessCard({ business, featured = false, searchReasons }: Busi
 
             <div className="flex items-center gap-1.5 ml-auto">
               <button
-                onClick={toggleFavorite}
+                onClick={handleToggleFavorite}
                 className="w-8 h-8 rounded-full bg-black/40 backdrop-blur-md hover:bg-black/60 flex items-center justify-center transition-all border border-white/10"
                 title={isFavorited ? "إزالة من المفضلة" : "إضافة للمفضلة"}
               >
@@ -160,8 +138,9 @@ export function BusinessCard({ business, featured = false, searchReasons }: Busi
             {business.category}
           </div>
           {isCurrentlyFeatured && (
-            <div className="bg-yellow-400/90 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold text-yellow-900 shadow-sm">
-              مميز ⭐
+            <div className="bg-yellow-400/90 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold text-yellow-900 shadow-sm flex items-center gap-1 w-fit">
+              <Crown className="h-3 w-3 sm:h-3.5 sm:w-3.5 fill-current shrink-0 text-amber-950" />
+              <span>مميز</span>
             </div>
           )}
         </div>
@@ -169,7 +148,7 @@ export function BusinessCard({ business, featured = false, searchReasons }: Busi
         {/* Share Button Top Left */}
         <div className="absolute top-4 left-4 flex items-center gap-1.5 z-20">
           <button
-            onClick={toggleFavorite}
+            onClick={handleToggleFavorite}
             className="w-8 h-8 rounded-full bg-white/90 backdrop-blur-md hover:bg-white flex items-center justify-center transition-all shadow-sm border border-[#e5e1da]"
             title={isFavorited ? "إزالة من المفضلة" : "إضافة للمفضلة"}
           >

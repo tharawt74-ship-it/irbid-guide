@@ -137,7 +137,7 @@ export function Profile() {
 
   // Active business management state
   const [selectedBusiness, setSelectedBusiness] = useState<Business | null>(null);
-  const [activeSectionTab, setActiveSectionTab] = useState<'overview' | 'edit_info' | 'offers' | 'jobs' | 'marketing' | 'reviews' | 'homepage_banner'>('overview');
+  const [activeSectionTab, setActiveSectionTab] = useState<'overview' | 'edit_info' | 'offers' | 'jobs' | 'marketing' | 'reviews' | 'homepage_banner' | 'shared_accounts'>('overview');
 
   // Custom Banner request state
   const [currentBannerRequest, setCurrentBannerRequest] = useState<any | null>(null);
@@ -700,6 +700,17 @@ export function Profile() {
         snapshot.forEach(doc => {
           userBusinesses.push({ id: doc.id, ...doc.data() } as Business);
         });
+
+        // Or where they are added as a delegated staff member in staffEmails array
+        if (currentUser.email) {
+          const qStaff = query(collection(db, 'businesses'), where('staffEmails', 'array-contains', currentUser.email.trim().toLowerCase()));
+          const snapStaff = await getDocs(qStaff);
+          snapStaff.forEach(doc => {
+            if (!userBusinesses.some(b => b.id === doc.id)) {
+              userBusinesses.push({ id: doc.id, ...doc.data() } as Business);
+            }
+          });
+        }
         
         setBusinesses(userBusinesses);
         if (userBusinesses.length > 0) {
@@ -1164,35 +1175,121 @@ export function Profile() {
           </div>
         ) : (
           <div className="space-y-6">
-            {/* Business Selector (Horizontal Tabs if multiple) */}
-            {businesses.length > 1 && (
-              <div className="bg-stone-50 p-1.5 rounded-2xl border border-stone-200/60 flex flex-wrap gap-1">
-                {businesses.map((biz) => {
-                  const isActive = selectedBusiness?.id === biz.id;
-                  const isVip = getBusinessVipStatus(biz).isVip;
-                  return (
-                    <button
-                      key={biz.id}
-                      onClick={() => {
-                        setSelectedBusiness(biz);
-                        setActiveSectionTab('overview');
-                        setIsAddingOffer(false);
-                      }}
-                      className={`flex-1 min-w-[140px] text-right p-3 rounded-xl transition-all cursor-pointer ${
-                        isActive 
-                          ? 'bg-white shadow-sm border border-stone-200 font-black text-[#1a4d2e]' 
-                          : 'hover:bg-stone-100/70 text-stone-600 font-bold'
-                      }`}
-                    >
-                      <div className="flex items-center gap-1.5">
-                        <span className="truncate text-xs">{biz.name}</span>
-                        {isVip && <Crown className="h-3 w-3 text-amber-500 fill-amber-500 shrink-0" />}
+            {/* Hierarchical Business & Branch Selector */}
+            {businesses.length > 0 && (() => {
+              // Helper to extract base shop name
+              const getBaseName = (name: string) => name ? name.split(' - ')[0].trim() : '';
+              
+              // Find primary businesses (root businesses that have no parentBusinessId in user list)
+              const primaryBusinesses = businesses.filter(b => !b.parentBusinessId || !businesses.some(p => p.id === b.parentBusinessId));
+              
+              // Active primary business (either the selected business if it's primary, or its parent)
+              const activePrimary = selectedBusiness
+                ? (businesses.find(p => p.id === (selectedBusiness.parentBusinessId || selectedBusiness.id)) || selectedBusiness)
+                : primaryBusinesses[0];
+
+              // All branches belonging to activePrimary (primary shop + sub-branches)
+              const activeBranches = activePrimary
+                ? businesses.filter(b => b.id === activePrimary.id || b.parentBusinessId === activePrimary.id)
+                : [];
+
+              return (
+                <div className="space-y-3" dir="rtl">
+                  {/* Primary Business Selector (if multiple main shops) */}
+                  {primaryBusinesses.length > 1 && (
+                    <div className="bg-stone-100/80 p-1.5 rounded-2xl border border-stone-200/80 flex flex-wrap gap-1.5">
+                      {primaryBusinesses.map((pBiz) => {
+                        const isMainActive = activePrimary?.id === pBiz.id;
+                        const branchCount = businesses.filter(b => b.id === pBiz.id || b.parentBusinessId === pBiz.id).length;
+                        return (
+                          <button
+                            key={pBiz.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedBusiness(pBiz);
+                              setActiveSectionTab('overview');
+                              setIsAddingOffer(false);
+                            }}
+                            className={`px-4 py-2.5 rounded-xl font-black text-xs transition-all cursor-pointer flex items-center gap-2 ${
+                              isMainActive
+                                ? 'bg-[#1a4d2e] text-white shadow-xs'
+                                : 'bg-white text-stone-700 hover:bg-stone-200/70 border border-stone-200/60'
+                            }`}
+                          >
+                            <Building2 className={`h-4 w-4 ${isMainActive ? 'text-amber-400' : 'text-stone-400'}`} />
+                            <span>{getBaseName(pBiz.name)}</span>
+                            {branchCount > 1 && (
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                                isMainActive ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-600'
+                              }`}>
+                                {branchCount} فروع
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Branch Sub-Tabs Ribbon */}
+                  {activePrimary && (
+                    <div className="bg-gradient-to-r from-stone-50 via-amber-50/20 to-stone-50 p-2 rounded-2xl border border-amber-200/60 shadow-3xs flex flex-wrap items-center gap-2">
+                      <div className="flex items-center gap-1.5 px-2 select-none text-stone-500 font-black text-xs border-l border-stone-200 ml-1">
+                        <Store className="h-4 w-4 text-[#1a4d2e]" />
+                        <span>فروع محل ({getBaseName(activePrimary.name)}):</span>
                       </div>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+
+                      <div className="flex flex-wrap items-center gap-1.5 flex-1">
+                        {activeBranches.map((branch, idx) => {
+                          const isSelectedBranch = selectedBusiness?.id === branch.id;
+                          const isVipBranch = getBusinessVipStatus(branch).isVip;
+                          const branchLocationName = branch.name.includes(' - ') 
+                            ? branch.name.split(' - ')[1] 
+                            : (branch.district || (idx === 0 ? 'الفرع الرئيسي' : `فرع ${idx + 1}`));
+
+                          return (
+                            <button
+                              key={branch.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedBusiness(branch);
+                                setActiveSectionTab('overview');
+                                setIsAddingOffer(false);
+                              }}
+                              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                                isSelectedBranch
+                                  ? 'bg-[#1a4d2e] text-white shadow-sm font-black ring-2 ring-[#1a4d2e]/30'
+                                  : 'bg-white text-stone-700 hover:bg-stone-100 border border-stone-200'
+                              }`}
+                            >
+                              <MapPin className={`h-3.5 w-3.5 ${isSelectedBranch ? 'text-amber-400' : 'text-stone-400'}`} />
+                              <span>{branchLocationName}</span>
+                              {isVipBranch ? (
+                                <Crown className="h-3 w-3 text-amber-500 fill-amber-500 shrink-0" />
+                              ) : (
+                                <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${isSelectedBranch ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-500'}`}>
+                                  أساسي
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+
+                        {/* Add New Branch Action Button */}
+                        <button
+                          type="button"
+                          onClick={() => setIsMultiBranchOpen(true)}
+                          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-black bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white shadow-2xs transition-all cursor-pointer mr-auto"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          <span>إضافة فرع جديد (خصم 60% VIP)</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Currently Selected Store WorkSpace */}
             {selectedBusiness && (() => {
@@ -1299,6 +1396,17 @@ export function Profile() {
                       }`}
                     >
                       📢 بانر الصفحة الرئيسية
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setActiveSectionTab('shared_accounts'); setIsAddingOffer(false); }}
+                      className={`flex-1 min-w-[120px] py-3 text-center text-xs font-bold border-b-2 transition-all cursor-pointer ${
+                        activeSectionTab === 'shared_accounts' 
+                          ? 'border-[#1a4d2e] text-[#1a4d2e] bg-white font-black' 
+                          : 'border-transparent text-stone-500 hover:text-stone-800'
+                      }`}
+                    >
+                      👥 الحسابات المشتركة
                     </button>
                   </div>
 
@@ -2253,6 +2361,159 @@ export function Profile() {
                               </button>
                             </div>
                           </form>
+                        )}
+                      </div>
+                    )}
+
+                    {/* 6. SHARED ACCOUNTS PANEL */}
+                    {activeSectionTab === 'shared_accounts' && (
+                      <div className="space-y-6 text-right">
+                        <div className="flex justify-between items-center pb-4 border-b border-stone-100">
+                          <div>
+                            <h3 className="text-base font-black text-[#2d2a26] flex items-center gap-2 justify-start">
+                              <Users className="h-5 w-5 text-[#1a4d2e]" />
+                              إدارة الحسابات المشتركة والصلاحيات (Staff)
+                            </h3>
+                            <p className="text-xs text-stone-500 mt-0.5">
+                              أضف حسابات موظفيك ومدراء فروعك لإدارة كتالوج المنيو، العروض، والرد على التقييمات بكل سهولة.
+                            </p>
+                          </div>
+                        </div>
+
+                        {!vipInfo.isVip ? (
+                          /* Locked VIP Screen */
+                          <div className="bg-gradient-to-r from-stone-50 via-amber-50/20 to-amber-50/50 border border-amber-200/80 p-6 sm:p-8 rounded-2xl text-center space-y-4">
+                            <div className="w-14 h-14 rounded-full bg-amber-100 flex items-center justify-center mx-auto text-amber-600 shadow-xs">
+                              <Crown className="h-7 w-7 fill-amber-500 text-amber-500 animate-pulse" />
+                            </div>
+                            <div className="space-y-1.5">
+                              <h4 className="text-base font-black text-amber-950">ميزة الحسابات المشتركة حصرية للباقة الذهبية VIP 👑</h4>
+                              <p className="text-xs text-stone-600 max-w-md mx-auto leading-relaxed">
+                                هل لديك موظفون وتريدهم مساعدتك في تحديث المنيو والأسعار أو الرد على الزبائن؟ تمنحك باقة VIP إمكانية تفويض الموظفين بإيميلاتهم الخاصة دون مشاركة حسابك الرئيسي أو معلومات الدفع الخاصة بك.
+                              </p>
+                            </div>
+                            <div className="pt-2">
+                              <button
+                                type="button"
+                                onClick={() => { setSelectedBusinessForUpgrade(selectedBusiness); setIsUpgradeModalOpen(true); }}
+                                className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs font-black px-6 py-3 rounded-xl shadow-md transition-all inline-flex items-center gap-2 cursor-pointer"
+                              >
+                                <Sparkles className="h-4 w-4" />
+                                <span>اكتشف باقة VIP الذهبية وترقّى الآن</span>
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          /* VIP Active Panel */
+                          <div className="space-y-5">
+                            {/* Staff Accounts Rules Info */}
+                            <div className="bg-stone-50 p-4 rounded-xl border border-stone-200 text-stone-600 text-xs leading-relaxed space-y-1.5">
+                              <span className="font-black text-[#1a4d2e] block">💡 كيف تعمل الحسابات المشتركة؟</span>
+                              <p>
+                                ١. قم بإدخال البريد الإلكتروني للموظف (يجب أن يكون مسجلاً في المنصة).
+                              </p>
+                              <p>
+                                ٢. سيتمكن الموظف فوراً من رؤية هذا المحل في لوحة التحكم لديه وتعديله بالكامل.
+                              </p>
+                              <p>
+                                ٣. لا يملك الموظف صلاحية ترقية/تخفيض الباقات، أو تفويض موظفين آخرين، أو حذف المحل نهائياً.
+                              </p>
+                            </div>
+
+                            {/* Add Staff Form */}
+                            <form 
+                              onSubmit={async (e) => {
+                                e.preventDefault();
+                                const emailInput = (e.currentTarget.elements.namedItem('staffEmail') as HTMLInputElement).value.trim().toLowerCase();
+                                if (!emailInput) return;
+                                
+                                const currentStaff = selectedBusiness.staffEmails || [];
+                                if (currentStaff.includes(emailInput)) {
+                                  alert('هذا الحساب مضاف مسبقاً بالفعل كحساب مشترك للمحل!');
+                                  return;
+                                }
+
+                                const updatedStaff = [...currentStaff, emailInput];
+                                if (db) {
+                                  try {
+                                    await updateDoc(doc(db, 'businesses', selectedBusiness.id), { staffEmails: updatedStaff });
+                                    const updatedBiz = { ...selectedBusiness, staffEmails: updatedStaff };
+                                    setBusinesses(prev => prev.map(b => b.id === selectedBusiness.id ? updatedBiz : b));
+                                    setSelectedBusiness(updatedBiz);
+                                    (e.target as HTMLFormElement).reset();
+                                  } catch (err) {
+                                    console.error('Error adding staff email:', err);
+                                  }
+                                }
+                              }}
+                              className="bg-white border border-stone-200 p-4 rounded-xl space-y-3.5"
+                            >
+                              <div className="space-y-1">
+                                <label className="text-xs font-black text-stone-800 block">إضافة موظف/مسؤول جديد:</label>
+                                <p className="text-[10px] text-stone-500">أدخل البريد الإلكتروني للموظف لتفويضه بالوصول</p>
+                              </div>
+                              <div className="flex gap-2">
+                                <input
+                                  type="email"
+                                  name="staffEmail"
+                                  required
+                                  placeholder="employee@example.com"
+                                  className="flex-1 bg-stone-50 border border-stone-200 rounded-xl px-3.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]/20 text-left"
+                                  dir="ltr"
+                                />
+                                <button
+                                  type="submit"
+                                  className="bg-[#1a4d2e] hover:bg-[#133b22] text-white px-5 py-2 rounded-xl text-xs font-black transition-colors shrink-0 cursor-pointer"
+                                >
+                                  إضافة وتفويض 👥
+                                </button>
+                              </div>
+                            </form>
+
+                            {/* Staff Accounts List */}
+                            <div className="space-y-2.5">
+                              <h4 className="text-xs font-black text-stone-800">الحسابات والموظفين المفوضين حالياً ({(selectedBusiness.staffEmails || []).length}):</h4>
+                              
+                              {(!selectedBusiness.staffEmails || selectedBusiness.staffEmails.length === 0) ? (
+                                <div className="text-center py-6 text-stone-400 text-xs border border-dashed border-stone-200 rounded-xl">
+                                  لم يتم إضافة أي موظفين مشتركين لهذا المحل بعد.
+                                </div>
+                              ) : (
+                                <div className="grid grid-cols-1 gap-2">
+                                  {selectedBusiness.staffEmails.map((email) => (
+                                    <div key={email} className="flex items-center justify-between p-3 bg-stone-50 border border-stone-200 rounded-xl">
+                                      <div className="flex items-center gap-2">
+                                        <div className="w-8 h-8 rounded-full bg-[#1a4d2e]/10 text-[#1a4d2e] flex items-center justify-center font-bold text-xs">
+                                          {email.charAt(0).toUpperCase()}
+                                        </div>
+                                        <span className="text-xs font-bold text-stone-800" dir="ltr">{email}</span>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={async () => {
+                                          if (!confirm(`هل أنت متأكد من إلغاء تفويض الحساب (${email})؟ لن يتمكن من إدارة المحل بعد الآن.`)) return;
+                                          const updatedStaff = (selectedBusiness.staffEmails || []).filter(e => e !== email);
+                                          if (db) {
+                                            try {
+                                              await updateDoc(doc(db, 'businesses', selectedBusiness.id), { staffEmails: updatedStaff });
+                                              const updatedBiz = { ...selectedBusiness, staffEmails: updatedStaff };
+                                              setBusinesses(prev => prev.map(b => b.id === selectedBusiness.id ? updatedBiz : b));
+                                              setSelectedBusiness(updatedBiz);
+                                            } catch (err) {
+                                              console.error('Error revoking staff email:', err);
+                                            }
+                                          }
+                                        }}
+                                        className="text-red-600 hover:text-red-800 hover:bg-red-50 px-2.5 py-1.5 rounded-lg text-[10px] font-black transition-all cursor-pointer"
+                                      >
+                                        إلغاء التفويض ❌
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         )}
                       </div>
                     )}

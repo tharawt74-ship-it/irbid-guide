@@ -15,6 +15,7 @@ import { DynamicSmartSuggestions } from '../components/DynamicSmartSuggestions';
 import { SEO } from '../components/common/SEO';
 import { CategoriesModal } from '../components/CategoriesModal';
 import { IrbidInteractiveMap } from '../components/IrbidInteractiveMap';
+import { getCachedBusinesses, setCachedBusinesses, getCachedBanners, setCachedBanners } from '../lib/dataCache';
 import { 
   MapPin, Star, Search, Store, Filter,
   LayoutGrid, UtensilsCrossed, Coffee, CakeSlice, 
@@ -139,9 +140,9 @@ export const SYNONYM_MAP: { [key: string]: string[] } = {
 export function Home() {
   const [searchParams] = useSearchParams();
   const { userFavorites } = useAuth();
-  const [businesses, setBusinesses] = useState<Business[]>([]);
-  const [banners, setBanners] = useState<HomepageBanner[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [businesses, setBusinesses] = useState<Business[]>(() => getCachedBusinesses() || []);
+  const [banners, setBanners] = useState<HomepageBanner[]>(() => getCachedBanners() || []);
+  const [loading, setLoading] = useState(() => !getCachedBusinesses());
   const [searchTerm, setSearchTerm] = useState(() => searchParams.get('search') || '');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [subCategoryFilter, setSubCategoryFilter] = useState('');
@@ -167,6 +168,15 @@ export function Home() {
         setLoading(false);
         return;
       }
+
+      // If we already have fresh cached data, don't block the UI with a spinner
+      const cached = getCachedBusinesses();
+      if (cached && cached.length > 0) {
+        setBusinesses(cached);
+        const cachedB = getCachedBanners();
+        if (cachedB) setBanners(cachedB);
+        setLoading(false);
+      }
       
       try {
         const appConfig = await getAppConfig();
@@ -184,6 +194,7 @@ export function Home() {
           fetchedBusinesses.push({ id: docSnap.id, ...data } as Business);
         });
         setBusinesses(fetchedBusinesses);
+        setCachedBusinesses(fetchedBusinesses);
 
         // Create set of valid active business IDs for banner filtering
         const validBusinessIds = new Set(fetchedBusinesses.map(b => b.id));
@@ -253,6 +264,7 @@ export function Home() {
           activeBanners.sort((a, b) => b.createdAt - a.createdAt);
 
           setBanners(activeBanners);
+          setCachedBanners(activeBanners);
         } catch (bannersErr) {
           console.error("Error fetching homepage banners:", bannersErr);
           setBanners([]);

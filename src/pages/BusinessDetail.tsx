@@ -28,6 +28,7 @@ import { VerifiedBadge } from '../components/vip/VerifiedBadge';
 import { getBusinessVipStatus } from '../lib/vipHelper';
 import { getWhatsAppUrl, formatBusinessWhatsAppMessage } from '../lib/contactHelper';
 import { ShareButton } from '../components/ShareButton';
+import { getCachedBusinessDetail, setCachedBusinessDetail } from '../lib/dataCache';
 import { BusinessCard } from '../components/BusinessCard';
 import { DEMO_SEED_DATA } from '../lib/demoDataHelper';
 import { trackBusinessInteraction } from '../lib/analyticsTracker';
@@ -250,6 +251,13 @@ export function BusinessDetail() {
         setLoading(false);
         return;
       }
+
+      // Check instant cache for immediate render
+      const cached = getCachedBusinessDetail(id);
+      if (cached) {
+        setBusiness(cached);
+        setLoading(false);
+      }
       
       try {
         let docSnap: any = null;
@@ -289,74 +297,64 @@ export function BusinessDetail() {
             return;
           }
 
-          setBusiness({ id: docSnap.id, ...bizData } as Business);
+          const fullBiz = { id: docSnap.id, ...bizData } as Business;
+          setBusiness(fullBiz);
+          setCachedBusinessDetail(id, fullBiz);
+          setLoading(false);
           
           // Track view interaction in database
           trackBusinessInteraction(actualId, 'view');
           
-          const q = query(
-            collection(db, 'reviews'), 
-            where('businessId', '==', actualId)
-          );
-          
-          const querySnapshot = await getDocs(q);
+          // Fetch reviews, offers, and jobs in parallel for maximum speed
+          const [reviewsSnap, offersSnap1, offersSnap2, jobsSnap1, jobsSnap2] = await Promise.all([
+            getDocs(query(collection(db, 'reviews'), where('businessId', '==', actualId))),
+            getDocs(query(collection(db, 'offers'), where('businessName', '==', bizData.name))),
+            getDocs(query(collection(db, 'offers'), where('businessId', '==', actualId))),
+            getDocs(query(collection(db, 'jobs'), where('businessId', '==', actualId))).catch(() => ({ forEach: () => {} } as any)),
+            getDocs(query(collection(db, 'jobs'), where('company', '==', bizData.name))).catch(() => ({ forEach: () => {} } as any))
+          ]);
+
           const fetchedReviews: Review[] = [];
-          querySnapshot.forEach((docSnapItem) => {
+          reviewsSnap.forEach((docSnapItem) => {
             fetchedReviews.push({ id: docSnapItem.id, ...docSnapItem.data() } as Review);
           });
-          
-          // Sort client-side to avoid requiring a composite index
           fetchedReviews.sort((a, b) => b.createdAt - a.createdAt);
-          
           setReviews(fetchedReviews);
 
-          // Fetch associated offers from 'offers' collection
-          const offersSnap1 = await getDocs(query(collection(db, 'offers'), where('businessName', '==', bizData.name)));
           const loadedOffers: any[] = [];
-          offersSnap1.forEach(oDoc => {
-            loadedOffers.push({ id: oDoc.id, ...oDoc.data() });
-          });
-          
-          const seenIds = new Set(loadedOffers.map(o => o.id));
-          const offersSnap2 = await getDocs(query(collection(db, 'offers'), where('businessId', '==', actualId)));
+          offersSnap1.forEach(oDoc => loadedOffers.push({ id: oDoc.id, ...oDoc.data() }));
+          const seenOfferIds = new Set(loadedOffers.map(o => o.id));
           offersSnap2.forEach(oDoc => {
-            if (!seenIds.has(oDoc.id)) {
+            if (!seenOfferIds.has(oDoc.id)) {
               loadedOffers.push({ id: oDoc.id, ...oDoc.data() });
             }
           });
           setActiveOffers(loadedOffers);
 
-          // Fetch associated jobs from 'jobs' collection
-          try {
-            const jobsSnap1 = await getDocs(query(collection(db, 'jobs'), where('businessId', '==', actualId)));
-            const loadedJobs: JobOffer[] = [];
-            jobsSnap1.forEach(jDoc => {
+          const loadedJobs: JobOffer[] = [];
+          jobsSnap1.forEach((jDoc: any) => loadedJobs.push({ id: jDoc.id, ...jDoc.data() } as JobOffer));
+          const seenJobIds = new Set(loadedJobs.map(j => j.id));
+          jobsSnap2.forEach((jDoc: any) => {
+            if (!seenJobIds.has(jDoc.id)) {
               loadedJobs.push({ id: jDoc.id, ...jDoc.data() } as JobOffer);
-            });
-            const seenJobIds = new Set(loadedJobs.map(j => j.id));
-            const jobsSnap2 = await getDocs(query(collection(db, 'jobs'), where('company', '==', bizData.name)));
-            jobsSnap2.forEach(jDoc => {
-              if (!seenJobIds.has(jDoc.id)) {
-                loadedJobs.push({ id: jDoc.id, ...jDoc.data() } as JobOffer);
-              }
-            });
-            // Sort by createdAt desc
-            loadedJobs.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-            setActiveJobs(loadedJobs);
-          } catch (jobErr) {
-            console.warn("Error fetching business jobs:", jobErr);
-          }
+            }
+          });
+          loadedJobs.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+          setActiveJobs(loadedJobs);
+
         } else {
           // Demo seed fallback if id is a demo business
           const demoFound = (DEMO_SEED_DATA.businesses || []).find((b, idx) => `demo-${idx}` === id || `demo-sim-${idx}` === id || b.name === id || (b as any).id === id || (b as any).username === cleanParam);
           if (demoFound) {
-            setBusiness({
+            const demoBiz = {
               id,
               ...demoFound,
               reviewCount: (demoFound as any).reviewCount ?? (demoFound as any).reviewsCount ?? 0,
               createdAt: demoFound.createdAt || Date.now(),
               userId: 'demo'
-            } as unknown as Business);
+            } as unknown as Business;
+            setBusiness(demoBiz);
+            setCachedBusinessDetail(id, demoBiz);
 
             // Populate demo jobs matching this business
             const demoJobs = (DEMO_SEED_DATA.jobs || [])

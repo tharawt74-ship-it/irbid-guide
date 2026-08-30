@@ -7,6 +7,7 @@ import {
   Eye, EyeOff, Save, CheckCircle2, Building2, 
   PlayCircle, Megaphone, FileText, X, Star, MapPin
 } from 'lucide-react';
+import { ImageUploader } from '../ui/ImageUploader';
 
 interface BannersManagerProps {
   showToast: (msg: string, type?: 'success' | 'info' | 'error') => void;
@@ -519,35 +520,21 @@ export function BannersManager({ showToast }: BannersManagerProps) {
                 </div>
               )}
 
-              {/* Image URL Input */}
+              {/* Image Uploader */}
               <div>
-                <label className="block text-xs font-bold text-stone-700 mb-1">رابط صورة الإعلان (بأبعاد سينمائية عريضة 21:9 للحصول على جودة مبهرة)</label>
-                <div className="flex gap-2">
-                  <input
-                    type="url"
-                    required
-                    value={imageUrl}
-                    onChange={e => setImageUrl(e.target.value)}
-                    placeholder="https://example.com/ad-image.jpg"
-                    className="flex-1 bg-stone-50 border border-stone-200 rounded-xl px-4 py-2 text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
-                  />
-                </div>
+                <ImageUploader
+                  label="صورة الإعلان (رفع ملف من الجهاز)"
+                  folder="banners"
+                  value={imageUrl}
+                  onChange={(url) => setImageUrl(url)}
+                  aspectRatio="banner"
+                  placeholder="اختر ملف صورة البانر من جهازك أو اسحب التصميم هنا"
+                />
                 {type === 'animated_image' && (
                   <p className="text-[10px] text-purple-600 font-bold mt-1.5 flex items-center gap-1 bg-purple-50 p-2 rounded-lg">
                     <PlayCircle className="h-3.5 w-3.5" />
-                    <span>نصيحة: استخدم روابط صور بصيغة GIF أو APNG متحركة للحصول على تفاعل بصري مذهل لدى المستخدمين.</span>
+                    <span>نصيحة: يمكنك أيضاً رفع صور بصيغة GIF أو APNG متحركة للحصول على تفاعل بصري مذهل لدى المستخدمين.</span>
                   </p>
-                )}
-                {imageUrl && (
-                  <div className="mt-2 text-center">
-                    <p className="text-[10px] text-stone-400 mb-1">معاينة الصورة المرفقة:</p>
-                    <img 
-                      src={imageUrl} 
-                      alt="معاينة" 
-                      className="h-24 mx-auto rounded-lg border object-cover aspect-[21/9]" 
-                      onError={() => showToast("رابط الصورة غير صالح أو محمي ضد التضمين الخارجى", "error")}
-                    />
-                  </div>
                 )}
               </div>
 

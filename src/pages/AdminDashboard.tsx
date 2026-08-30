@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { 
   collection, 
   query, 
+  where,
   getDocs, 
   updateDoc, 
   doc, 
@@ -1037,8 +1038,20 @@ export function AdminDashboard() {
     if (!db) return;
     try {
       await deleteDoc(doc(db, 'businesses', id));
+
+      // Also clean up any homepage banners linked to this deleted business
+      try {
+        await deleteDoc(doc(db, 'banners', `business_banner_${id}`)).catch(() => {});
+        const bannersSnap = await getDocs(query(collection(db, 'banners'), where('businessId', '==', id)));
+        bannersSnap.forEach((bannerDoc) => {
+          deleteDoc(doc(db, 'banners', bannerDoc.id)).catch(() => {});
+        });
+      } catch (bannerErr) {
+        console.error("Error cleaning up business banners:", bannerErr);
+      }
+
       setBusinesses(prev => prev.filter(b => b.id !== id));
-      showToast(`تم حذف محل (${name}) من الدليل`, 'info');
+      showToast(`تم حذف محل (${name}) من الدليل وإزالة إعلاناته تلقائياً`, 'info');
     } catch (err) {
       console.error("Error deleting business:", err);
       showToast('تعذر حذف المحل', 'error');
@@ -1481,7 +1494,7 @@ export function AdminDashboard() {
 
             <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
               <p className="text-xs text-stone-600 max-w-xl leading-relaxed">
-                تستند المنصة إلى قاعدة بيانات Firestore. يمكنك إضافة نموذج بيانات تجريبية لقاعدة البيانات لاستعراض شكل الواجهات، أو مسحها نهائياً بضغطة زر.
+                تستند المنصة إلى قاعدة بيانات Firestore. يمكنك زرع بيانات تجريبية (20 محل + 20 عقار وسكن + 20 فرصة عمل) لاستعراض جميع واجهات المنصة، أو مسحها نهائياً بضغطة زر.
               </p>
 
               <div className="flex flex-wrap items-center gap-2.5">
@@ -1491,7 +1504,7 @@ export function AdminDashboard() {
                   className="inline-flex items-center gap-2 bg-stone-900 hover:bg-black text-white px-4 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer shadow-xs"
                 >
                   <Plus className="h-4 w-4 text-amber-400" />
-                  <span>زرع بيانات تجريبية في Firestore</span>
+                  <span>زرع بيانات تجريبية (20 محل + 20 عقار + 20 وظيفة)</span>
                 </button>
 
                 <button
@@ -3767,7 +3780,7 @@ export function AdminDashboard() {
 
                 <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
                   <p className="text-xs text-stone-600 max-w-xl leading-relaxed">
-                    تستند المنصة بالكامل إلى قاعدة بيانات Firestore. لا توجد أي بيانات وهمية كودياً. يمكنك إضافة نموذج بيانات تجريبية لقاعدة البيانات لاستعراض شكل الواجهات، أو إزالتها نهائياً بضغطة زر.
+                    تستند المنصة بالكامل إلى قاعدة بيانات Firestore. يمكنك إضافة نموذج بيانات تجريبية (20 محل + 20 عقار + 20 وظيفة) لقاعدة البيانات لاستعراض شكل الواجهات، أو إزالتها نهائياً بضغطة زر.
                   </p>
 
                   <div className="flex flex-wrap items-center gap-2">
@@ -3776,8 +3789,8 @@ export function AdminDashboard() {
                       disabled={isDemoWorking}
                       className="inline-flex items-center gap-2 bg-stone-900 hover:bg-black text-white px-4 py-2 rounded-xl text-xs font-bold transition-colors cursor-pointer"
                     >
-                      <Plus className="h-3.5 w-3.5" />
-                      <span>زرع بيانات تجريبية في Firestore</span>
+                      <Plus className="h-3.5 w-3.5 text-amber-400" />
+                      <span>زرع بيانات تجريبية (20 محل + 20 عقار + 20 وظيفة)</span>
                     </button>
 
                     <button

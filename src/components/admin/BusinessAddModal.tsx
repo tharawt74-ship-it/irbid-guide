@@ -41,6 +41,7 @@ export function BusinessAddModal({
     district: 'شارع الجامعة',
     phone: '',
     imageUrl: '',
+    logoUrl: '',
     googlePlaceUrl: '',
     ownerName: '',
     rating: 4.8,
@@ -91,6 +92,7 @@ export function BusinessAddModal({
         district: formData.district || 'شارع الجامعة',
         phone: formData.phone.trim(),
         imageUrl: formData.imageUrl.trim() || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&q=80',
+        logoUrl: formData.logoUrl.trim(),
         googlePlaceUrl: formData.googlePlaceUrl.trim(),
         ownerName: formData.ownerName.trim() || 'إدارة شو في بإربد',
         rating: Number(formData.rating) || 4.8,
@@ -131,6 +133,7 @@ export function BusinessAddModal({
         district: 'شارع الجامعة',
         phone: '',
         imageUrl: '',
+        logoUrl: '',
         googlePlaceUrl: '',
         ownerName: '',
         rating: 4.8,
@@ -270,29 +273,41 @@ export function BusinessAddModal({
             </div>
           </div>
 
-          {/* Image Upload & Google Place URL */}
+          {/* Image Uploads (Logo & Cover) & Google Place URL */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
             <div>
               <ImageUploader
-                label="صورة المحل الرئيسية (رفع مباشر مع ضغط تلقائي)"
-                folder="businesses"
-                value={formData.imageUrl}
-                onChange={url => setFormData({ ...formData, imageUrl: url })}
-                aspectRatio="cover"
+                label="شعار المحل / اللوجو / الصورة الشخصية"
+                folder="logos"
+                value={formData.logoUrl || ''}
+                onChange={url => setFormData({ ...formData, logoUrl: url })}
+                aspectRatio="square"
+                placeholder="اختر اللوجو أو الصورة الشخصية من جهازك"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-black text-stone-700 mb-1.5">رابط خرائط Google Maps</label>
-              <input
-                type="url"
-                dir="ltr"
-                value={formData.googlePlaceUrl}
-                onChange={e => setFormData({ ...formData, googlePlaceUrl: e.target.value })}
-                placeholder="https://maps.google.com/..."
-                className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1a4d2e] focus:bg-white transition-all text-left text-stone-800"
+              <ImageUploader
+                label="صورة غلاف المحل الرئيسية"
+                folder="businesses"
+                value={formData.imageUrl || ''}
+                onChange={url => setFormData({ ...formData, imageUrl: url })}
+                aspectRatio="cover"
+                placeholder="اختر صورة الغلاف من جهازك"
               />
             </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-black text-stone-700 mb-1.5">رابط خرائط Google Maps</label>
+            <input
+              type="url"
+              dir="ltr"
+              value={formData.googlePlaceUrl || ''}
+              onChange={e => setFormData({ ...formData, googlePlaceUrl: e.target.value })}
+              placeholder="https://maps.google.com/..."
+              className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1a4d2e] focus:bg-white transition-all text-left text-stone-800"
+            />
           </div>
 
           {/* Live Working Hours Section & Socials */}

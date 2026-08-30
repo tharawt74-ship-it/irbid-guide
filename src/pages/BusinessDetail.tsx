@@ -23,6 +23,7 @@ import { DigitalMenuManagerModal } from '../components/vip/DigitalMenuManagerMod
 import { VipAnalyticsDashboard } from '../components/vip/VipAnalyticsDashboard';
 import { VipAnalyticsModal } from '../components/vip/VipAnalyticsModal';
 import { VipUpgradeRequestModal } from '../components/vip/VipUpgradeRequestModal';
+import { ImageUploader } from '../components/ui/ImageUploader';
 import { VerifiedBadge } from '../components/vip/VerifiedBadge';
 import { getBusinessVipStatus } from '../lib/vipHelper';
 import { getWhatsAppUrl, formatBusinessWhatsAppMessage } from '../lib/contactHelper';
@@ -2334,16 +2335,14 @@ export function BusinessDetail() {
                             <span>إضافة صورة جديدة للمعرض والجو العام</span>
                           </h4>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="space-y-1">
-                              <label className="block text-xs font-bold text-stone-700">رابط الصورة المباشر (URL)</label>
-                              <input 
-                                type="url"
-                                required
+                            <div className="space-y-1 md:col-span-2">
+                              <ImageUploader
+                                label="صورة المعرض (رفع ملف من الجهاز أو اختيار رابط)"
+                                folder="gallery"
                                 value={newGalleryUrl}
-                                onChange={(e) => setNewGalleryUrl(e.target.value)}
-                                placeholder="https://example.com/image.jpg"
-                                className="w-full text-xs px-3.5 py-2 rounded-xl border border-stone-200 bg-white focus:outline-none focus:border-emerald-600 text-left"
-                                style={{ direction: 'ltr' }}
+                                onChange={(url) => setNewGalleryUrl(url)}
+                                aspectRatio="cover"
+                                placeholder="اختر صورة للمعرض من جهازك"
                               />
                             </div>
                             <div className="space-y-1">
@@ -3400,24 +3399,24 @@ export function BusinessDetail() {
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-xs font-bold text-stone-700 mb-1.5">رابط صورة غلاف المحل (العريضة)</label>
-                          <input
-                            type="url"
+                          <ImageUploader
+                            label="صورة غلاف المحل (رفع ملف من الجهاز)"
+                            folder="businesses"
                             value={editForm.imageUrl || ''}
-                            onChange={(e) => setEditForm({ ...editForm, imageUrl: e.target.value })}
-                            className="w-full px-4 py-2.5 rounded-xl border border-[#e5e1da] focus:ring-2 focus:ring-[#1a4d2e]/20 focus:border-[#1a4d2e] outline-none text-sm font-medium"
-                            placeholder="https://images.unsplash.com/..."
+                            onChange={(url) => setEditForm({ ...editForm, imageUrl: url })}
+                            aspectRatio="cover"
+                            placeholder="اختر صورة الغلاف من جهازك"
                           />
                         </div>
 
                         <div>
-                          <label className="block text-xs font-bold text-stone-700 mb-1.5">رابط الصورة الشخصية / الشعار (الدائرية)</label>
-                          <input
-                            type="url"
+                          <ImageUploader
+                            label="شعار / لوجو المحل (رفع ملف من الجهاز)"
+                            folder="logos"
                             value={editForm.logoUrl || ''}
-                            onChange={(e) => setEditForm({ ...editForm, logoUrl: e.target.value })}
-                            className="w-full px-4 py-2.5 rounded-xl border border-[#e5e1da] focus:ring-2 focus:ring-[#1a4d2e]/20 focus:border-[#1a4d2e] outline-none text-sm font-medium"
-                            placeholder="https://images.unsplash.com/..."
+                            onChange={(url) => setEditForm({ ...editForm, logoUrl: url })}
+                            aspectRatio="square"
+                            placeholder="اختر اللوجو من جهازك"
                           />
                         </div>
                       </div>

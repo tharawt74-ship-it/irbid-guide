@@ -82,8 +82,8 @@ export function ImageUploader({
     }
   };
 
-  const handleCustomUrlSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleCustomUrlSubmit = (e?: React.FormEvent | React.MouseEvent | React.KeyboardEvent) => {
+    if (e) e.preventDefault();
     if (customUrl.trim()) {
       onChange(customUrl.trim());
       setShowUrlInput(false);
@@ -104,37 +104,44 @@ export function ImageUploader({
 
   return (
     <div className={`space-y-2 ${className}`}>
-      {label && (
-        <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
+        {label ? (
           <label className="block text-xs font-bold text-stone-700">{label}</label>
-          <button
-            type="button"
-            onClick={() => setShowUrlInput(!showUrlInput)}
-            className="text-[11px] font-bold text-[#1a4d2e] hover:underline flex items-center gap-1"
-          >
-            <LinkIcon className="h-3 w-3" />
-            <span>{showUrlInput ? 'رفع صورة من الجهاز' : 'إدخال رابط صورة خارجي'}</span>
-          </button>
-        </div>
-      )}
+        ) : <span />}
+        <button
+          type="button"
+          onClick={() => setShowUrlInput(!showUrlInput)}
+          className="text-[11px] font-bold text-[#1a4d2e] hover:underline flex items-center gap-1 shrink-0"
+        >
+          <LinkIcon className="h-3 w-3" />
+          <span>{showUrlInput ? '📁 رفع ملف صورة من الجهاز' : '🔗 أو إدخال رابط صورة'}</span>
+        </button>
+      </div>
 
       {/* Alternative URL Input Tab */}
       {showUrlInput ? (
-        <form onSubmit={handleCustomUrlSubmit} className="flex gap-2">
+        <div className="flex gap-2">
           <input
             type="url"
             value={customUrl}
             onChange={(e) => setCustomUrl(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                handleCustomUrlSubmit(e);
+              }
+            }}
             placeholder="انسخ رابط الصورة المباشر هنا (https://...)"
             className="flex-1 bg-white border border-stone-300 rounded-xl px-3 py-2 text-xs font-medium focus:ring-2 focus:ring-[#1a4d2e]"
           />
           <button
-            type="submit"
+            type="button"
+            onClick={handleCustomUrlSubmit}
             className="bg-[#1a4d2e] text-white px-3 py-2 rounded-xl text-xs font-bold hover:bg-[#143d24]"
           >
             تطبيق
           </button>
-        </form>
+        </div>
       ) : (
         /* Drag and Drop Box or Image Preview */
         <div>

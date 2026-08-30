@@ -71,6 +71,12 @@ export interface HousingItem {
   expiryDate?: number;
   featuredExpiryDate?: number;
   approvedAt?: number;
+  isOccupied?: boolean;
+  isAvailable?: boolean;
+  viewsCount?: number;
+  whatsappClicks?: number;
+  phoneClicks?: number;
+  isVip?: boolean;
 }
 
 export interface BusinessAnalytics {
@@ -494,6 +500,8 @@ export interface GlobalSiteSettings {
   siteName: string;
   siteSubtitle: string;
   logoUrl: string;
+  useFullLogo?: boolean;
+  logoHeight?: number;
   contactPhone: string;
   whatsappNumber: string;
   contactEmail: string;

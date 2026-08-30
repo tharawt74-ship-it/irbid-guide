@@ -11,7 +11,7 @@ import {
   Megaphone, Rocket, Check, Briefcase, Plus, Flame, MapPin, DollarSign, 
   Trash2, ExternalLink, Clock, Users, Award, Crown, BarChart3, UtensilsCrossed,
   Lock, Tag, Info, Sparkles, ChevronLeft, ChevronRight, Phone, MessageCircle, Star,
-  Home
+  Home, Copy, ShieldCheck, Key, Heart, MessageSquareText, Building2, Shield, Printer, QrCode, Calendar
 } from 'lucide-react';
 import { JobFormModal } from '../components/jobs/JobFormModal';
 import { VipAnalyticsModal } from '../components/vip/VipAnalyticsModal';
@@ -23,13 +23,13 @@ import { ensureBusinessAnalyticsSaved } from '../lib/analyticsTracker';
 import { BUSINESS_CATEGORIES, MainCategory, IRBID_REGIONS_CATEGORIZED } from '../lib/categories';
 import { SearchableSelect } from '../components/ui/SearchableSelect';
 import { WorkingHoursEditor } from '../components/ui/WorkingHoursEditor';
+import { ImageUploader } from '../components/ui/ImageUploader';
 import { SocialLinksEditor } from '../components/ui/SocialLinksEditor';
 import { StoreEditForm } from '../components/profile/StoreEditForm';
 import { SocialLinks, WorkingHours } from '../types';
 import { VisitorFavoritesTab } from '../components/profile/VisitorFavoritesTab';
 import { VisitorReviewsTab } from '../components/profile/VisitorReviewsTab';
 import { VisitorHousingsTab } from '../components/profile/VisitorHousingsTab';
-import { ShieldCheck, Heart, MessageSquareText, Building2, Shield, Printer, QrCode, Calendar, Copy } from 'lucide-react';
 import { RoiCampaignTracker } from '../components/profile/RoiCampaignTracker';
 import { PrintableQrPosterModal } from '../components/profile/PrintableQrPosterModal';
 import { MultiBranchModal } from '../components/profile/MultiBranchModal';
@@ -137,7 +137,8 @@ export function Profile() {
 
   // Active business management state
   const [selectedBusiness, setSelectedBusiness] = useState<Business | null>(null);
-  const [activeSectionTab, setActiveSectionTab] = useState<'overview' | 'edit_info' | 'offers' | 'jobs' | 'marketing' | 'reviews' | 'homepage_banner' | 'shared_accounts'>('overview');
+  const [merchantSubTab, setMerchantSubTab] = useState<'businesses' | 'housings' | 'jobs'>('businesses');
+  const [activeSectionTab, setActiveSectionTab] = useState<'overview' | 'edit_info' | 'offers' | 'jobs' | 'marketing' | 'reviews' | 'homepage_banner' | 'shared_accounts' | 'housings'>('overview');
 
   // Custom Banner request state
   const [currentBannerRequest, setCurrentBannerRequest] = useState<any | null>(null);
@@ -800,6 +801,18 @@ export function Profile() {
 
     try {
       await deleteDoc(doc(db, 'businesses', businessId));
+
+      // Also clean up any homepage banners linked to this deleted business
+      try {
+        await deleteDoc(doc(db, 'banners', `business_banner_${businessId}`)).catch(() => {});
+        const bannersSnap = await getDocs(query(collection(db, 'banners'), where('businessId', '==', businessId)));
+        bannersSnap.forEach((bannerDoc) => {
+          deleteDoc(doc(db, 'banners', bannerDoc.id)).catch(() => {});
+        });
+      } catch (bannerErr) {
+        console.error("Error cleaning up business banners:", bannerErr);
+      }
+
       setBusinesses(prev => prev.filter(b => b.id !== businessId));
       if (selectedBusiness?.id === businessId) {
         const remaining = businesses.filter(b => b.id !== businessId);
@@ -826,6 +839,7 @@ export function Profile() {
     address: string;
     phone?: string;
     imageUrl?: string;
+    logoUrl?: string;
     googlePlaceUrl?: string;
     workingHours?: WorkingHours;
     socialLinks?: SocialLinks;
@@ -855,6 +869,7 @@ export function Profile() {
         district: updatedData.district || 'شارع الجامعة',
         phone: updatedData.phone || '',
         imageUrl: updatedData.imageUrl || '',
+        logoUrl: updatedData.logoUrl || '',
         googlePlaceUrl: updatedData.googlePlaceUrl || '',
         hideSiteReviews: !!updatedData.hideSiteReviews,
         hideGoogleReviews: !!updatedData.hideGoogleReviews,
@@ -902,6 +917,7 @@ export function Profile() {
       address: editForm.address || targetBusiness.address,
       phone: editForm.phone || targetBusiness.phone || '',
       imageUrl: editForm.imageUrl || targetBusiness.imageUrl || '',
+      logoUrl: editForm.logoUrl || targetBusiness.logoUrl || '',
       googlePlaceUrl: editForm.googlePlaceUrl || targetBusiness.googlePlaceUrl || '',
       workingHours: workingHours,
       socialLinks: socialLinks,
@@ -1155,16 +1171,102 @@ export function Profile() {
           <div>
             <h2 className="text-xl sm:text-2xl font-black text-[#2d2a26] flex items-center gap-2">
               <Store className="h-5 w-5 sm:h-6 sm:w-6 text-[#1a4d2e] shrink-0" />
-              <span>لوحة تحكم المنشآت والشركاء</span>
+              <span>لوحة تحكم المنشآت والشركاء والعقارات</span>
             </h2>
-            <p className="text-xs text-stone-500 mt-1">أهلاً بك في مركز التحكم بمحلاتك وعروضك والوظائف الشاغرة</p>
+            <p className="text-xs text-stone-500 mt-1">أهلاً بك في مركز التحكم المحترف بمحلاتك، عقاراتك، عروضك والوظائف الشاغرة</p>
           </div>
-          <Link to="/contact" className="inline-flex items-center justify-center gap-1 bg-[#1a4d2e]/10 text-[#1a4d2e] px-4 py-2.5 rounded-xl text-xs font-bold hover:bg-[#1a4d2e]/15 transition-all self-start sm:self-auto">
-            <Plus className="h-4 w-4 shrink-0" />
-            <span>تسجيل محل جديد</span>
-          </Link>
+          <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+            <Link to="/contact" className="inline-flex items-center justify-center gap-1 bg-[#1a4d2e] text-white px-4 py-2.5 rounded-xl text-xs font-bold hover:bg-[#133b22] transition-all shadow-xs">
+              <Plus className="h-4 w-4 shrink-0 text-[#ff9f1c]" />
+              <span>تسجيل محل جديد</span>
+            </Link>
+          </div>
         </div>
 
+        {/* Executive Merchant KPI Summary Bar */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <button 
+            type="button"
+            onClick={() => setMerchantSubTab('businesses')}
+            className={`p-3.5 rounded-2xl border text-right transition-all cursor-pointer flex items-center justify-between gap-2 ${
+              merchantSubTab === 'businesses'
+                ? 'bg-[#1a4d2e] text-white border-[#1a4d2e] shadow-xs'
+                : 'bg-white text-stone-800 border-stone-200/80 hover:border-[#1a4d2e]/40'
+            }`}
+          >
+            <div>
+              <span className={`text-[10px] font-bold block ${merchantSubTab === 'businesses' ? 'text-emerald-100' : 'text-stone-500'}`}>محلات وأفرع</span>
+              <span className={`text-lg font-black ${merchantSubTab === 'businesses' ? 'text-white' : 'text-[#1a4d2e]'}`}>{businesses.length}</span>
+            </div>
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${merchantSubTab === 'businesses' ? 'bg-white/20 text-white' : 'bg-[#1a4d2e]/10 text-[#1a4d2e]'}`}>
+              <Store className="h-5 w-5" />
+            </div>
+          </button>
+
+          <button 
+            type="button"
+            onClick={() => setMerchantSubTab('housings')}
+            className={`p-3.5 rounded-2xl border text-right transition-all cursor-pointer flex items-center justify-between gap-2 ${
+              merchantSubTab === 'housings'
+                ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs'
+                : 'bg-white text-stone-800 border-stone-200/80 hover:border-emerald-500/50'
+            }`}
+          >
+            <div>
+              <span className={`text-[10px] font-bold block ${merchantSubTab === 'housings' ? 'text-emerald-100' : 'text-stone-500'}`}>سكنات وعقارات</span>
+              <span className={`text-lg font-black ${merchantSubTab === 'housings' ? 'text-white' : 'text-emerald-700'}`}>{userHousings.length}</span>
+            </div>
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${merchantSubTab === 'housings' ? 'bg-white/20 text-white' : 'bg-emerald-50 text-emerald-700'}`}>
+              <Home className="h-5 w-5" />
+            </div>
+          </button>
+
+          <button 
+            type="button"
+            onClick={() => setMerchantSubTab('businesses')}
+            className="p-3.5 rounded-2xl border border-stone-200/80 bg-white text-stone-800 text-right transition-all cursor-pointer flex items-center justify-between gap-2 hover:border-amber-400/60"
+          >
+            <div>
+              <span className="text-[10px] font-bold text-stone-500 block">عروض وتنزيلات</span>
+              <span className="text-lg font-black text-amber-600">{offers.length}</span>
+            </div>
+            <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+              <Tag className="h-5 w-5" />
+            </div>
+          </button>
+
+          <button 
+            type="button"
+            onClick={() => setMerchantSubTab('jobs')}
+            className={`p-3.5 rounded-2xl border text-right transition-all cursor-pointer flex items-center justify-between gap-2 ${
+              merchantSubTab === 'jobs'
+                ? 'bg-indigo-700 text-white border-indigo-700 shadow-xs'
+                : 'bg-white text-stone-800 border-stone-200/80 hover:border-indigo-400/60'
+            }`}
+          >
+            <div>
+              <span className={`text-[10px] font-bold block ${merchantSubTab === 'jobs' ? 'text-indigo-100' : 'text-stone-500'}`}>فرص التوظيف</span>
+              <span className={`text-lg font-black ${merchantSubTab === 'jobs' ? 'text-white' : 'text-indigo-600'}`}>{userJobs.length}</span>
+            </div>
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${merchantSubTab === 'jobs' ? 'bg-white/20 text-white' : 'bg-indigo-50 text-indigo-600'}`}>
+              <Briefcase className="h-5 w-5" />
+            </div>
+          </button>
+        </div>
+
+        {/* SUB-TAB 2: HOUSINGS DIRECT MANAGEMENT */}
+        {merchantSubTab === 'housings' && (
+          <div className="pt-2">
+            <VisitorHousingsTab 
+              housings={userHousings} 
+              onRefresh={fetchUserHousings} 
+            />
+          </div>
+        )}
+
+        {/* SUB-TAB 1: BUSINESSES MANAGEMENT */}
+        {merchantSubTab === 'businesses' && (
+          <>
         {businesses.length === 0 ? (
           <div className="text-center py-12 bg-stone-50 rounded-2xl border border-dashed border-[#e5e1da]">
             <Store className="h-12 w-12 text-[#1a4d2e]/30 mx-auto mb-3" />
@@ -1438,44 +1540,26 @@ export function Profile() {
                           </div>
                         </div>
 
-                        {/* NEW Merchant Tools Row: QR Poster, Scheduled Push, Multi-Branch */}
-                        <div className="p-4 bg-gradient-to-r from-emerald-900 via-[#1a4d2e] to-[#123821] rounded-2xl text-white space-y-3 shadow-md">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <Sparkles className="h-4 w-4 text-[#ff9f1c]" />
-                              <span className="text-xs font-black text-white">أدوات إدارية سريعة لصاحب المحل</span>
+                        {/* Quick Merchant Tools Row: Clean QR Poster Print */}
+                        <div className="p-4 bg-gradient-to-r from-emerald-950 via-[#1a4d2e] to-[#0f331e] rounded-2xl text-white shadow-sm border border-emerald-800/40">
+                          <div className="flex items-center justify-between flex-wrap gap-3">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-8 h-8 rounded-xl bg-amber-400/20 text-amber-300 flex items-center justify-center font-bold">
+                                <Sparkles className="h-4 w-4" />
+                              </div>
+                              <div>
+                                <span className="text-xs font-black text-white block">أدوات الطباعة والملصقات الذكية</span>
+                                <span className="text-[10px] font-medium text-emerald-200">طباعة باركودات وطاولات المنيو والتقييمات مجاناً</span>
+                              </div>
                             </div>
-                            <span className="text-[10px] font-bold bg-white/15 px-2.5 py-0.5 rounded-full text-emerald-200">
-                              ميزات متقدمة
-                            </span>
-                          </div>
 
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                             <button
                               type="button"
                               onClick={() => setIsQrPosterOpen(true)}
-                              className="inline-flex items-center justify-center gap-2 bg-white text-stone-900 hover:bg-stone-100 px-3.5 py-2.5 rounded-xl text-xs font-black transition-all shadow-xs cursor-pointer"
+                              className="inline-flex items-center justify-center gap-2 bg-white hover:bg-emerald-50 text-[#1a4d2e] px-4 py-2.5 rounded-xl text-xs font-black transition-all shadow-sm cursor-pointer min-h-[40px]"
                             >
                               <Printer className="h-4 w-4 text-[#1a4d2e]" />
-                              <span>🖨️ طباعة ملصق وطاولات QR</span>
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => setIsScheduledNotifOpen(true)}
-                              className="inline-flex items-center justify-center gap-2 bg-[#ff9f1c] hover:bg-[#e0890f] text-stone-950 px-3.5 py-2.5 rounded-xl text-xs font-black transition-all shadow-xs cursor-pointer"
-                            >
-                              <Calendar className="h-4 w-4 text-stone-950" />
-                              <span>📅 حجز موعد إشعار ترويجي</span>
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => setIsMultiBranchOpen(true)}
-                              className="inline-flex items-center justify-center gap-2 bg-emerald-800/90 hover:bg-emerald-700 text-white px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all border border-emerald-500/30 cursor-pointer"
-                            >
-                              <Building2 className="h-4 w-4 text-emerald-300" />
-                              <span>🏢 إضافة وتكرار فرع جديد</span>
+                              <span>🖨️ طباعة ملصق وطاولات QR المخصصة</span>
                             </button>
                           </div>
                         </div>
@@ -1870,14 +1954,42 @@ export function Profile() {
                                         {offer.code && <span className="text-[10px] bg-stone-100 text-stone-600 px-1.5 py-0.5 rounded font-mono">كود: {offer.code}</span>}
                                       </div>
 
-                                      <button 
-                                        type="button"
-                                        onClick={() => handleDeleteOffer(offer.id)}
-                                        className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-lg transition-colors cursor-pointer"
-                                        title="حذف العرض"
-                                      >
-                                        <Trash2 className="h-4 w-4" />
-                                      </button>
+                                      <div className="flex items-center gap-1.5">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setNewOfferForm({
+                                              title: `نسخة من: ${offer.title}`,
+                                              description: offer.description || '',
+                                              discountPercentage: offer.discountPercentage || '',
+                                              oldPrice: offer.oldPrice || '',
+                                              newPrice: offer.newPrice || '',
+                                              code: offer.code || '',
+                                              expiresIn: offer.expiresIn || '',
+                                              phone: offer.phone || '',
+                                              whatsapp: offer.whatsapp || '',
+                                              image: offer.image || '',
+                                              isHot: !!offer.isHot,
+                                              isStudent: !!offer.isStudent
+                                            });
+                                            setIsAddingOffer(true);
+                                          }}
+                                          className="text-amber-700 bg-amber-50 hover:bg-amber-100 px-2 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-colors cursor-pointer min-h-[36px]"
+                                          title="استنساخ / تكرار العرض"
+                                        >
+                                          <Copy className="h-3 w-3" />
+                                          <span>تكرار</span>
+                                        </button>
+
+                                        <button 
+                                          type="button"
+                                          onClick={() => handleDeleteOffer(offer.id)}
+                                          className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-lg transition-colors cursor-pointer min-h-[36px]"
+                                          title="حذف العرض"
+                                        >
+                                          <Trash2 className="h-4 w-4" />
+                                        </button>
+                                      </div>
                                     </div>
                                   </div>
                                 ))}
@@ -2517,15 +2629,29 @@ export function Profile() {
                         )}
                       </div>
                     )}
+
+                    {/* 7. HOUSINGS PANEL */}
+                    {activeSectionTab === 'housings' && (
+                      <div className="space-y-4">
+                        <VisitorHousingsTab 
+                          housings={userHousings} 
+                          onRefresh={fetchUserHousings} 
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
               );
             })()}
           </div>
         )}
-      </div>
+        </>
+        )}
 
-      {/* Dedicated Section: User's Jobs Management */}
+        {/* SUB-TAB 3: JOBS MANAGEMENT */}
+        {merchantSubTab === 'jobs' && (
+          <div className="pt-2">
+            {/* Dedicated Section: User's Jobs Management */}
       <div className="bg-white p-6 sm:p-8 rounded-[32px] border border-[#e5e1da] shadow-sm space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
@@ -2656,267 +2782,387 @@ export function Profile() {
           </div>
         )}
       </div>
+          </div>
+        )}
 
       {/* Marketing Services Section */}
       {businesses.length > 0 && (
-        <div className="bg-white p-8 rounded-[32px] border border-[#e5e1da] shadow-sm">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="bg-[#ff9f1c]/10 p-2 rounded-xl">
-              <Rocket className="h-6 w-6 text-[#ff9f1c]" />
+        <div className="bg-white p-6 sm:p-8 rounded-[32px] border border-stone-200/80 shadow-xs space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-stone-100">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#ff9f1c]/20 to-amber-500/10 text-[#ff9f1c] flex items-center justify-center font-bold shadow-xs">
+                <Rocket className="h-6 w-6 text-[#ff9f1c]" />
+              </div>
+              <div>
+                <h2 className="text-xl sm:text-2xl font-black text-stone-900">
+                  خدمات التسويق وتطوير الأعمال 🚀
+                </h2>
+                <p className="text-xs text-stone-500 mt-1 leading-relaxed">
+                  ضاعف وصولك لآلاف الزوار الجدد في إربد عبر طلب خدمات الإشعار والترويج المباشرة.
+                </p>
+              </div>
             </div>
-            <h2 className="text-2xl font-bold text-[#2d2a26]">
-              خدمات التسويق وتطوير الأعمال
-            </h2>
-          </div>
-          <p className="text-stone-500 mb-8 max-w-2xl text-sm leading-relaxed">
-            ارفع مبيعاتك وضاعف وصولك للزبائن في إربد من خلال طلب إحدى خدماتنا الإعلانية. تدفع مرة واحدة لكل خدمة تختارها.
-          </p>
 
-          {businesses.length > 1 && (
-            <div className="mb-6 bg-stone-50 p-4 rounded-xl border border-stone-200">
-              <label className="block text-sm font-bold text-stone-700 mb-2">اختر المحل الذي تريد التسويق له:</label>
-              <select
-                value={selectedBusinessIdForService}
-                onChange={(e) => setSelectedBusinessIdForService(e.target.value)}
-                className="w-full md:w-1/2 p-2.5 rounded-lg border border-stone-300 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e] focus:border-transparent text-sm"
-              >
-                {businesses.map(b => (
-                  <option key={b.id} value={b.id}>{b.name}</option>
-                ))}
-              </select>
-            </div>
-          )}
+            {businesses.length > 1 && (
+              <div className="bg-stone-50 p-2 rounded-2xl border border-stone-200/80 flex items-center gap-2 self-start sm:self-center">
+                <Store className="h-4 w-4 text-[#1a4d2e] shrink-0" />
+                <select
+                  value={selectedBusinessIdForService}
+                  onChange={(e) => setSelectedBusinessIdForService(e.target.value)}
+                  className="bg-transparent text-xs font-black text-stone-800 focus:outline-none cursor-pointer py-1.5 px-1"
+                >
+                  {businesses.map(b => (
+                    <option key={b.id} value={b.id}>المحل: {b.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
 
           {serviceRequestSuccess && (
-            <div className="mb-6 p-4 bg-green-50 text-green-800 rounded-2xl border border-green-200 flex items-center gap-2">
-              <CheckCircle className="h-5 w-5" />
-              <span className="font-bold">{serviceRequestSuccess}</span>
+            <div className="p-4 bg-emerald-50 text-emerald-900 rounded-2xl border border-emerald-200/80 flex items-center gap-2.5 text-xs font-black animate-in fade-in">
+              <CheckCircle className="h-5 w-5 text-emerald-600 shrink-0" />
+              <span>{serviceRequestSuccess}</span>
             </div>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {/* 1. Sponsored Listing */}
-            <div className="border border-[#e5e1da] rounded-2xl p-5 hover:border-[#ff9f1c]/30 transition-all flex flex-col group relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-[#ff9f1c] opacity-5 rounded-bl-full -z-10 group-hover:scale-110 transition-transform duration-500"></div>
-              <div className="flex items-center justify-between mb-4">
-                <div className="bg-stone-50 p-2.5 rounded-xl">
-                  <TrendingUp className="h-6 w-6 text-[#1a4d2e]" />
-                </div>
-                <span className="text-xs font-bold bg-[#ff9f1c] text-white px-2.5 py-1 rounded-full shadow-sm">الأكثر طلباً</span>
-              </div>
-              <h3 className="font-black text-lg text-[#2d2a26] mb-1">صدارة البحث (Sponsored)</h3>
-              <p className="text-stone-500 text-xs mb-4 flex-1">ظهور محلك في أولى نتائج البحث لضمان وصول أكبر عدد من الزبائن الجدد لك.</p>
-              
-              <div className="space-y-1 mb-5">
-                <div className="flex items-center gap-1.5 text-xs font-bold text-stone-600"><Check className="h-3.5 w-3.5 text-[#1a4d2e]"/> ظهور أعلى المنافسين</div>
-                <div className="flex items-center gap-1.5 text-xs font-bold text-stone-600"><Check className="h-3.5 w-3.5 text-[#1a4d2e]"/> شارة "ممول" مخصصة</div>
+            <div className="bg-gradient-to-b from-emerald-50/40 via-white to-white border border-emerald-200/80 rounded-[24px] p-6 hover:shadow-lg hover:border-emerald-400 transition-all flex flex-col justify-between relative overflow-hidden group">
+              <div className="absolute top-3 left-3 bg-gradient-to-r from-amber-500 to-[#ff9f1c] text-stone-950 text-[10px] font-black px-3 py-1 rounded-full shadow-xs flex items-center gap-1">
+                <Flame className="h-3 w-3 fill-stone-950" />
+                <span>الأكثر طلباً 🔥</span>
               </div>
 
-              <div className="flex items-center justify-between mt-auto">
-                <div className="text-sm font-black text-[#1a4d2e]">15 دينار <span className="text-[10px] text-stone-400 font-normal">/ أسبوع</span></div>
+              <div>
+                <div className="w-12 h-12 rounded-2xl bg-emerald-100/80 text-[#1a4d2e] flex items-center justify-center mb-4">
+                  <TrendingUp className="h-6 w-6" />
+                </div>
+
+                <h3 className="font-black text-lg text-stone-900 mb-1">صدارة البحث (Sponsored)</h3>
+                <p className="text-stone-500 text-xs mb-5 leading-relaxed">
+                  ظهور محلك أول النتائج بكلمات مفتاحية مخصصة للوصول لأول زبون يبحث عن خدمتك.
+                </p>
+
+                <div className="space-y-2 mb-6">
+                  <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
+                    <div className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                      <Check className="h-3 w-3 stroke-[3]" />
+                    </div>
+                    <span>ظهور أعلى المنافسين في نتائج البحث</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
+                    <div className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                      <Check className="h-3 w-3 stroke-[3]" />
+                    </div>
+                    <span>شارة "ممول / Sponsored" بارزة</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-stone-100 space-y-3 mt-auto">
+                <div className="flex items-baseline justify-between">
+                  <span className="text-xs font-bold text-stone-400">التكلفة الإجمالية:</span>
+                  <div className="text-base font-black text-[#1a4d2e]">
+                    15 دينار <span className="text-[10px] text-stone-400 font-normal">/ أسبوع</span>
+                  </div>
+                </div>
+
                 <button 
                   onClick={() => handleOpenMarketingModal('sponsored', 'صدارة البحث (Sponsored)', 'تم استلام طلبك لخدمة "صدارة البحث". سيتواصل معك فريقنا قريباً لإتمام الدفع وتفعيل الخدمة.')}
-                  className="bg-stone-100 hover:bg-[#1a4d2e] hover:text-white text-stone-700 px-4 py-2 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                  className="w-full bg-[#1a4d2e] hover:bg-[#133b22] text-white py-3 rounded-xl text-xs font-black shadow-xs hover:shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 min-h-[44px]"
                 >
-                  اطلب الآن
+                  <Sparkles className="h-4 w-4 text-[#ff9f1c]" />
+                  <span>اطلب صدارة البحث الآن</span>
                 </button>
               </div>
             </div>
 
             {/* 2. Push Notifications */}
-            <div className="border border-[#e5e1da] rounded-2xl p-5 hover:border-[#1a4d2e]/30 transition-all flex flex-col group relative overflow-hidden">
-              <div className="flex items-center justify-between mb-4">
-                <div className="bg-stone-50 p-2.5 rounded-xl">
-                  <Bell className="h-6 w-6 text-sky-600" />
-                </div>
-              </div>
-              <h3 className="font-black text-lg text-[#2d2a26] mb-1">إشعارات جماعية</h3>
-              <p className="text-stone-500 text-xs mb-4 flex-1">أرسل إشعاراً مباشراً (Push Notification) لجميع مستخدمي التطبيق للإعلان عن عرضك الجديد.</p>
-              
-              <div className="space-y-1 mb-5">
-                <div className="flex items-center gap-1.5 text-xs font-bold text-stone-600"><Check className="h-3.5 w-3.5 text-sky-600"/> رسالة نصية مخصصة</div>
-                <div className="flex items-center gap-1.5 text-xs font-bold text-stone-600"><Check className="h-3.5 w-3.5 text-sky-600"/> توجيه مباشر لصفحة محلك</div>
+            <div className="bg-gradient-to-b from-sky-50/40 via-white to-white border border-sky-200/80 rounded-[24px] p-6 hover:shadow-lg hover:border-sky-400 transition-all flex flex-col justify-between relative overflow-hidden group">
+              <div className="absolute top-3 left-3 bg-sky-100 text-sky-800 text-[10px] font-black px-3 py-1 rounded-full border border-sky-200">
+                <span>وصول فوري ⚡</span>
               </div>
 
-              <div className="flex items-center justify-between mt-auto">
-                <div className="text-sm font-black text-sky-700">10 دنانير <span className="text-[10px] text-stone-400 font-normal">/ للإشعار</span></div>
+              <div>
+                <div className="w-12 h-12 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center mb-4">
+                  <Bell className="h-6 w-6" />
+                </div>
+
+                <h3 className="font-black text-lg text-stone-900 mb-1">إشعارات جماعية لكافة المستخدمين</h3>
+                <p className="text-stone-500 text-xs mb-5 leading-relaxed">
+                  إرسال إشعار فوري لجميع هواتف الآلاف من مستخدمي المنصة للترويج لعروضك الجديدة.
+                </p>
+
+                <div className="space-y-2 mb-6">
+                  <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
+                    <div className="w-4 h-4 rounded-full bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
+                      <Check className="h-3 w-3 stroke-[3]" />
+                    </div>
+                    <span>رسالة مخصصة تصل لشاشات الأجهزة</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
+                    <div className="w-4 h-4 rounded-full bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
+                      <Check className="h-3 w-3 stroke-[3]" />
+                    </div>
+                    <span>تحويل مباشر لصفحة منشأتك عند النقر</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-stone-100 space-y-3 mt-auto">
+                <div className="flex items-baseline justify-between">
+                  <span className="text-xs font-bold text-stone-400">التكلفة الإجمالية:</span>
+                  <div className="text-base font-black text-sky-800">
+                    10 دنانير <span className="text-[10px] text-stone-400 font-normal">/ إشعار</span>
+                  </div>
+                </div>
+
                 <button 
                   onClick={() => handleOpenMarketingModal('push_notifications', 'إشعارات جماعية', 'تم استلام طلبك لخدمة "إشعارات جماعية". سيتواصل معك فريقنا قريباً.')}
-                  className="bg-stone-100 hover:bg-sky-600 hover:text-white text-stone-700 px-4 py-2 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                  className="w-full bg-sky-700 hover:bg-sky-800 text-white py-3 rounded-xl text-xs font-black shadow-xs hover:shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 min-h-[44px]"
                 >
-                  اطلب الآن
+                  <Bell className="h-4 w-4" />
+                  <span>اطلب الإشعار الجماعي</span>
                 </button>
               </div>
             </div>
 
             {/* 3. Homepage Banner */}
-            <div className="border border-[#e5e1da] rounded-2xl p-5 hover:border-purple-300 transition-all flex flex-col group relative overflow-hidden">
-              <div className="flex items-center justify-between mb-4">
-                <div className="bg-stone-50 p-2.5 rounded-xl">
-                  <ImageIcon className="h-6 w-6 text-purple-600" />
-                </div>
-              </div>
-              <h3 className="font-black text-lg text-[#2d2a26] mb-1">بانر إعلاني مميز</h3>
-              <p className="text-stone-500 text-xs mb-4 flex-1">احجز مساحة إعلانية كبيرة في الصفحة الرئيسية للفت انتباه كل من يدخل الموقع.</p>
-              
-              <div className="space-y-1 mb-5">
-                <div className="flex items-center gap-1.5 text-xs font-bold text-stone-600"><Check className="h-3.5 w-3.5 text-purple-600"/> تصميم احترافي مجاني</div>
-                <div className="flex items-center gap-1.5 text-xs font-bold text-stone-600"><Check className="h-3.5 w-3.5 text-purple-600"/> رابط خارجي أو داخلي</div>
+            <div className="bg-gradient-to-b from-purple-50/40 via-white to-white border border-purple-200/80 rounded-[24px] p-6 hover:shadow-lg hover:border-purple-400 transition-all flex flex-col justify-between relative overflow-hidden group">
+              <div className="absolute top-3 left-3 bg-purple-100 text-purple-800 text-[10px] font-black px-3 py-1 rounded-full border border-purple-200">
+                <span>واجهة الموقع 🖼️</span>
               </div>
 
-              <div className="flex items-center justify-between mt-auto">
-                <div className="text-sm font-black text-purple-700">25 دينار <span className="text-[10px] text-stone-400 font-normal">/ أسبوع</span></div>
+              <div>
+                <div className="w-12 h-12 rounded-2xl bg-purple-100 text-purple-700 flex items-center justify-center mb-4">
+                  <ImageIcon className="h-6 w-6" />
+                </div>
+
+                <h3 className="font-black text-lg text-stone-900 mb-1">بانر إعلاني مميز في الأعلى</h3>
+                <p className="text-stone-500 text-xs mb-5 leading-relaxed">
+                  احجز البانر الرئيسي في أعلى الصفحة الأولى لموقع "شو في بإربد" بانتشار واجهة كاملة.
+                </p>
+
+                <div className="space-y-2 mb-6">
+                  <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
+                    <div className="w-4 h-4 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
+                      <Check className="h-3 w-3 stroke-[3]" />
+                    </div>
+                    <span>تصميم احترافي مجاني مرفق من الفريق</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
+                    <div className="w-4 h-4 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
+                      <Check className="h-3 w-3 stroke-[3]" />
+                    </div>
+                    <span>رابط توجيه داخلي أو خارجي مخصص</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-stone-100 space-y-3 mt-auto">
+                <div className="flex items-baseline justify-between">
+                  <span className="text-xs font-bold text-stone-400">التكلفة الإجمالية:</span>
+                  <div className="text-base font-black text-purple-800">
+                    25 دينار <span className="text-[10px] text-stone-400 font-normal">/ أسبوع</span>
+                  </div>
+                </div>
+
                 <button 
                   onClick={() => handleOpenMarketingModal('homepage_banner', 'بانر إعلاني مميز', 'تم استلام طلبك لخدمة "بانر إعلاني مميز". سيتواصل معك فريقنا قريباً.')}
-                  className="bg-stone-100 hover:bg-purple-600 hover:text-white text-stone-700 px-4 py-2 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                  className="w-full bg-purple-700 hover:bg-purple-800 text-white py-3 rounded-xl text-xs font-black shadow-xs hover:shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 min-h-[44px]"
                 >
-                  اطلب الآن
+                  <Megaphone className="h-4 w-4" />
+                  <span>حجز البانر الإعلاني</span>
                 </button>
               </div>
             </div>
 
             {/* 4. NFC Stands */}
-            <div className="border border-[#e5e1da] rounded-2xl p-5 hover:border-stone-400 transition-all flex flex-col group relative overflow-hidden">
-              <div className="flex items-center justify-between mb-4">
-                <div className="bg-stone-50 p-2.5 rounded-xl">
-                  <Smartphone className="h-6 w-6 text-stone-700" />
-                </div>
-              </div>
-              <h3 className="font-black text-lg text-[#2d2a26] mb-1">ستاندات وبطاقات NFC</h3>
-              <p className="text-stone-500 text-xs mb-4 flex-1">سهّل على زبائنك الوصول للمنيو أو صفحتك بمجرد ملامسة هواتفهم للستاند الذكي.</p>
-              
-              <div className="space-y-1 mb-5">
-                <div className="flex items-center gap-1.5 text-xs font-bold text-stone-600"><Check className="h-3.5 w-3.5 text-stone-700"/> ستاند أكريليك أنيق</div>
-                <div className="flex items-center gap-1.5 text-xs font-bold text-stone-600"><Check className="h-3.5 w-3.5 text-stone-700"/> برمجة وتجهيز مجاني</div>
+            <div className="bg-gradient-to-b from-stone-100/50 via-white to-white border border-stone-200/90 rounded-[24px] p-6 hover:shadow-lg hover:border-stone-400 transition-all flex flex-col justify-between relative overflow-hidden group">
+              <div className="absolute top-3 left-3 bg-stone-200 text-stone-800 text-[10px] font-black px-3 py-1 rounded-full">
+                <span>تقنية ذكية 📱</span>
               </div>
 
-              <div className="flex items-center justify-between mt-auto">
-                <div className="text-sm font-black text-stone-700">8 دنانير <span className="text-[10px] text-stone-400 font-normal">/ للستاند</span></div>
+              <div>
+                <div className="w-12 h-12 rounded-2xl bg-stone-100 text-stone-800 flex items-center justify-center mb-4">
+                  <Smartphone className="h-6 w-6" />
+                </div>
+
+                <h3 className="font-black text-lg text-stone-900 mb-1">ستاندات وبطاقات NFC</h3>
+                <p className="text-stone-500 text-xs mb-5 leading-relaxed">
+                  سهّل على زبائنك فتح المنيو أو التقييمات بلمسة واحدة من هواتفهم على الطاولة.
+                </p>
+
+                <div className="space-y-2 mb-6">
+                  <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
+                    <div className="w-4 h-4 rounded-full bg-stone-200 text-stone-800 flex items-center justify-center shrink-0">
+                      <Check className="h-3 w-3 stroke-[3]" />
+                    </div>
+                    <span>ستاند أكريليك مقاوم وشفاف بطباعة عالية</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
+                    <div className="w-4 h-4 rounded-full bg-stone-200 text-stone-800 flex items-center justify-center shrink-0">
+                      <Check className="h-3 w-3 stroke-[3]" />
+                    </div>
+                    <span>برمجة وشحن مجاني جاهز للاستخدام مباشرة</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-stone-100 space-y-3 mt-auto">
+                <div className="flex items-baseline justify-between">
+                  <span className="text-xs font-bold text-stone-400">التكلفة الإجمالية:</span>
+                  <div className="text-base font-black text-stone-900">
+                    8 دنانير <span className="text-[10px] text-stone-400 font-normal">/ للستاند</span>
+                  </div>
+                </div>
+
                 <button 
                   onClick={() => handleOpenMarketingModal('nfc_stands', 'ستاندات وبطاقات NFC', 'تم استلام طلبك لخدمة "ستاندات NFC". سيتواصل معك فريقنا قريباً.')}
-                  className="bg-stone-100 hover:bg-stone-700 hover:text-white text-stone-700 px-4 py-2 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                  className="w-full bg-stone-900 hover:bg-black text-white py-3 rounded-xl text-xs font-black shadow-xs hover:shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 min-h-[44px]"
                 >
-                  اطلب الآن
+                  <QrCode className="h-4 w-4" />
+                  <span>طلب ستاندات NFC</span>
                 </button>
               </div>
             </div>
 
-            {/* Premium Messaging Add-on Card */}
-            <div className="border-2 border-amber-400 bg-amber-50/20 rounded-2xl p-5 hover:border-[#1a4d2e]/40 transition-all flex flex-col group relative overflow-hidden">
-              <div className="absolute top-0 left-0 bg-amber-400 text-amber-950 text-[10px] font-black px-3 py-1 rounded-br-xl flex items-center gap-1 shadow-xs">
+            {/* 5. Premium Messaging Add-on Card */}
+            <div className="bg-gradient-to-b from-amber-50/60 via-white to-white border-2 border-amber-300 rounded-[24px] p-6 hover:shadow-lg hover:border-amber-500 transition-all flex flex-col justify-between relative overflow-hidden group">
+              <div className="absolute top-0 right-0 bg-amber-400 text-amber-950 text-[10px] font-black px-3 py-1 rounded-bl-xl flex items-center gap-1 shadow-2xs">
                 <Crown className="h-3 w-3 fill-amber-950" />
                 <span>باقة رسائل مطورة 💬</span>
               </div>
-              
-              <div className="flex items-center justify-between mb-4 mt-2">
-                <div className="bg-amber-100 p-2.5 rounded-xl">
-                  <MessageSquare className="h-6 w-6 text-amber-700" />
+
+              <div>
+                <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center mb-4 mt-2">
+                  <MessageSquare className="h-6 w-6" />
+                </div>
+
+                <h3 className="font-black text-lg text-stone-900 mb-1">ترقية نظام الرسائل والوسائط</h3>
+                <p className="text-stone-500 text-xs mb-4 leading-relaxed">
+                  تمكين استقبال صور المنتجات والمستندات من الزبائن وزيادة حفظ أرشيف المراسلة.
+                </p>
+
+                {/* Selected Business Status */}
+                {selectedBusinessIdForService && (() => {
+                  const b = businesses.find(x => x.id === selectedBusinessIdForService);
+                  if (!b) return null;
+                  const isUpgraded = b.premiumMessagingEnabled;
+                  return (
+                    <div className="mb-4 bg-amber-50/80 p-2.5 rounded-xl border border-amber-200 text-[11px] font-bold text-stone-700">
+                      <div className="flex items-center justify-between">
+                        <span>حالة المحل الحالي:</span>
+                        {isUpgraded ? (
+                          <span className="text-emerald-700 font-black bg-emerald-100 px-2 py-0.5 rounded-md">مفعلة ✓ ({b.premiumMessagingPlan === '1_month' ? 'شهر' : b.premiumMessagingPlan === '3_months' ? '3 أشهر' : b.premiumMessagingPlan === '6_months' ? '6 أشهر' : 'سنة'})</span>
+                        ) : (
+                          <span className="text-amber-800 font-bold bg-amber-100 px-2 py-0.5 rounded-md">باقة أساسية (7 أيام)</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                <div className="space-y-2 mb-4">
+                  <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
+                    <div className="w-4 h-4 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+                      <Check className="h-3 w-3 stroke-[3]" />
+                    </div>
+                    <span>استقبال صور وطلبات الزبائن مباشرة 📷</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
+                    <div className="w-4 h-4 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+                      <Check className="h-3 w-3 stroke-[3]" />
+                    </div>
+                    <span>الاحتفاظ بأرشيف المحادثات لفترة أطول</span>
+                  </div>
+                </div>
+
+                <div className="mb-4">
+                  <label className="block text-[10px] font-bold text-stone-500 mb-1">اختر باقة الترقية:</label>
+                  <select
+                    id="messaging-plan-select"
+                    className="w-full p-2.5 rounded-xl border border-amber-200 bg-white text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    defaultValue="1_month"
+                  >
+                    <option value="1_month">شهري: 5 دنانير (وسائط ✓ | الاحتفاظ 1 شهر)</option>
+                    <option value="3_months">3 أشهر: 12 دينار (وفر 20% | الاحتفاظ 3 أشهر)</option>
+                    <option value="6_months">6 أشهر: 20 دينار (وفر 33% | الاحتفاظ 6 أشهر)</option>
+                    <option value="1_year">سنوي: 35 دينار (وفر 40% | الاحتفاظ 1 سنة)</option>
+                  </select>
                 </div>
               </div>
-              
-              <h3 className="font-black text-lg text-[#2d2a26] mb-1">ترقية الرسائل والوسائط</h3>
-              <p className="text-stone-500 text-xs mb-4 flex-1">
-                طور نظام المراسلة واستقبل الصور من زبائنك لطلب المنتجات مباشرة، وزد من مدة بقاء رسائلك لأكثر من أسبوع!
-              </p>
-              
-              {/* Selected Business Status */}
-              {selectedBusinessIdForService && (() => {
-                const b = businesses.find(x => x.id === selectedBusinessIdForService);
-                if (!b) return null;
-                const isUpgraded = b.premiumMessagingEnabled;
-                return (
-                  <div className="mb-4 bg-white/80 p-2.5 rounded-xl border border-amber-200 text-[11px] font-bold text-stone-700 space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span>حالة المحل الحالي:</span>
-                      {isUpgraded ? (
-                        <span className="text-emerald-700 font-black bg-emerald-50 px-2 py-0.5 rounded">مفعلة ✓ ({b.premiumMessagingPlan === '1_month' ? 'شهر' : b.premiumMessagingPlan === '3_months' ? '3 أشهر' : b.premiumMessagingPlan === '6_months' ? '6 أشهر' : 'سنة'})</span>
-                      ) : (
-                        <span className="text-stone-400 font-bold bg-stone-100 px-2 py-0.5 rounded">باقة مجانية (7 أيام)</span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })()}
 
-              <div className="space-y-1 mb-5">
-                <div className="flex items-center gap-1.5 text-xs font-bold text-stone-600"><Check className="h-3.5 w-3.5 text-amber-600"/> استقبال الصور والمستندات 📷</div>
-                <div className="flex items-center gap-1.5 text-xs font-bold text-stone-600"><Check className="h-3.5 w-3.5 text-amber-600"/> الاحتفاظ بالرسائل لفترة أطول (شهر+)</div>
-              </div>
-
-              {/* Plan Choice dropdown */}
-              <div className="mb-4">
-                <label className="block text-[10px] font-bold text-stone-500 mb-1">اختر باقة الاشتراك الخاصة بك:</label>
-                <select
-                  id="messaging-plan-select"
-                  className="w-full p-2 rounded-lg border border-stone-200 bg-white text-xs font-bold text-stone-700 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                  defaultValue="1_month"
-                >
-                  <option value="1_month">اشتراك شهري: 5 دنانير (وسائط ✓ | الاحتفاظ 1 شهر)</option>
-                  <option value="3_months">اشتراك 3 أشهر: 12 دينار (وفر 20% | الاحتفاظ 3 أشهر)</option>
-                  <option value="6_months">اشتراك 6 أشهر: 20 دينار (وفر 33% | الاحتفاظ 6 أشهر)</option>
-                  <option value="1_year">اشتراك سنوي: 35 دينار (وفر 40% | الاحتفاظ 1 سنة)</option>
-                </select>
-              </div>
-
-              <div className="flex items-center justify-between mt-auto">
-                <div className="text-xs font-black text-amber-800">تفعيل وتطوير فوري</div>
+              <div className="pt-3 border-t border-amber-100 space-y-2 mt-auto">
                 <button 
                   onClick={() => {
                     const selectEl = document.getElementById('messaging-plan-select') as HTMLSelectElement;
                     const plan = (selectEl?.value || '1_month') as '1_month' | '3_months' | '6_months' | '1_year';
                     handlePremiumMessagingUpgrade(plan);
                   }}
-                  className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-xl text-xs font-black transition-colors cursor-pointer"
+                  className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white py-3 rounded-xl text-xs font-black shadow-xs hover:shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 min-h-[44px]"
                 >
-                  ترقية الآن
+                  <Crown className="h-4 w-4 fill-white" />
+                  <span>تفعيل وترقية نظام الرسائل</span>
                 </button>
               </div>
             </div>
 
-            {/* 5. Social Media Shoutout */}
-            <div className="border border-[#e5e1da] rounded-2xl p-5 hover:border-pink-300 transition-all flex flex-col group relative overflow-hidden lg:col-span-2">
-              <div className="flex items-start justify-between mb-2">
-                <div className="flex items-center gap-3">
-                  <div className="bg-stone-50 p-2.5 rounded-xl">
-                    <Megaphone className="h-6 w-6 text-pink-600" />
-                  </div>
-                  <div>
-                    <h3 className="font-black text-lg text-[#2d2a26] mb-0.5">تغطية سوشيال ميديا شاملة</h3>
-                    <p className="text-stone-500 text-xs">حملة إعلانية ضخمة على قنواتنا في تيك توك وإنستغرام (أكثر من 100 ألف متابع).</p>
-                  </div>
-                </div>
+            {/* 6. Social Media Coverage */}
+            <div className="bg-gradient-to-br from-pink-50/50 via-white to-rose-50/40 border border-pink-200/80 rounded-[24px] p-6 hover:shadow-lg hover:border-pink-400 transition-all flex flex-col justify-between relative overflow-hidden group md:col-span-2 lg:col-span-1">
+              <div className="absolute top-3 left-3 bg-pink-100 text-pink-800 text-[10px] font-black px-3 py-1 rounded-full border border-pink-200">
+                <span>تغطية فيديو 🎬</span>
               </div>
-              
-              <div className="grid grid-cols-2 gap-4 mt-4 mb-4 flex-1">
-                <div className="bg-stone-50 p-3 rounded-xl border border-stone-100">
-                  <span className="block text-[10px] text-stone-400 font-bold mb-1">المنصات</span>
-                  <div className="text-xs font-black text-stone-700">TikTok, Instagram Reels, Facebook</div>
+
+              <div>
+                <div className="w-12 h-12 rounded-2xl bg-pink-100 text-pink-700 flex items-center justify-center mb-4">
+                  <Megaphone className="h-6 w-6" />
                 </div>
-                <div className="bg-stone-50 p-3 rounded-xl border border-stone-100">
-                  <span className="block text-[10px] text-stone-400 font-bold mb-1">تشمل</span>
-                  <div className="text-xs font-black text-stone-700">تصوير احترافي + مونتاج + تقديم</div>
+
+                <h3 className="font-black text-lg text-stone-900 mb-1">تغطية سوشيال ميديا ميدانية</h3>
+                <p className="text-stone-500 text-xs mb-4 leading-relaxed">
+                  تصوير احترافي وإعداد Reels وTikTok ونشرها عبر قنوات المنصة لأكثر من 100,000 متابع في إربد.
+                </p>
+
+                <div className="grid grid-cols-2 gap-2 mb-6">
+                  <div className="bg-white/90 p-2.5 rounded-xl border border-pink-100 text-right">
+                    <span className="block text-[10px] text-stone-400 font-bold mb-0.5">المنصات</span>
+                    <span className="text-[11px] font-black text-stone-800">TikTok & IG Reels</span>
+                  </div>
+                  <div className="bg-white/90 p-2.5 rounded-xl border border-pink-100 text-right">
+                    <span className="block text-[10px] text-stone-400 font-bold mb-0.5">الإنتاج</span>
+                    <span className="text-[11px] font-black text-stone-800">تصوير + مونتاج</span>
+                  </div>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between mt-auto pt-2 border-t border-stone-100">
-                <div className="text-sm font-black text-pink-700">50 دينار <span className="text-[10px] text-stone-400 font-normal">/ للتغطية</span></div>
+              <div className="pt-4 border-t border-stone-100 space-y-3 mt-auto">
+                <div className="flex items-baseline justify-between">
+                  <span className="text-xs font-bold text-stone-400">التكلفة الإجمالية:</span>
+                  <div className="text-base font-black text-pink-700">
+                    50 دينار <span className="text-[10px] text-stone-400 font-normal">/ للتغطية</span>
+                  </div>
+                </div>
+
                 <button 
                   onClick={() => handleOpenMarketingModal('social_media', 'تغطية سوشيال ميديا شاملة', 'تم استلام طلبك لخدمة "تغطية سوشيال ميديا". سيتواصل معك فريقنا لتحديد موعد التصوير.')}
-                  className="bg-stone-100 hover:bg-pink-600 hover:text-white text-stone-700 px-5 py-2 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                  className="w-full bg-pink-600 hover:bg-pink-700 text-white py-3 rounded-xl text-xs font-black shadow-xs hover:shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 min-h-[44px]"
                 >
-                  احجز موعد التغطية
+                  <Rocket className="h-4 w-4 text-white" />
+                  <span>حجز موعد التغطية الميدانية</span>
                 </button>
               </div>
             </div>
-
           </div>
 
           {/* ROI Campaign Tracker Component */}
-          <div className="mt-8">
+          <div className="mt-8 pt-6 border-t border-stone-100">
             <RoiCampaignTracker businessId={selectedBusiness.id} isVip={getBusinessVipStatus(selectedBusiness).isVip} />
           </div>
         </div>
       )}
+        </div>
         </div>
       )}
 
@@ -3349,13 +3595,13 @@ export function Profile() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-stone-700 mb-1.5 font-black">رابط الصورة الإعلانية المصممة:</label>
-                    <input
-                      type="url"
+                    <ImageUploader
+                      label="صورة الإعلان المصممة (رفع ملف من الجهاز):"
+                      folder="banners"
                       value={marketingForm.bannerImageUrl}
-                      onChange={e => setMarketingForm(prev => ({ ...prev, bannerImageUrl: e.target.value }))}
-                      placeholder="أدخل رابط صورة الإعلان (بأبعاد 21:9 للحفاظ على الأناقة)"
-                      className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e] ltr"
+                      onChange={(url) => setMarketingForm(prev => ({ ...prev, bannerImageUrl: url }))}
+                      aspectRatio="banner"
+                      placeholder="اختر ملف صورة الإعلان من جهازك أو اسحب التصميم هنا"
                     />
                     <p className="text-[10px] text-stone-400 mt-1">تنبيه: يمكنك تزويدنا بالتصميم أيضاً لاحقاً عبر الواتساب في حال لم يكن الرابط جاهزاً.</p>
                   </div>

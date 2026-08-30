@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useSystemSettings } from '../../contexts/SystemSettingsContext';
-import { Globe, Save, Phone, Mail, MessageSquare, Facebook, Instagram, Share2 } from 'lucide-react';
+import { Globe, Save, Phone, Mail, MessageSquare, Facebook, Instagram, Share2, Image as ImageIcon, LayoutGrid, CheckCircle2 } from 'lucide-react';
+import { ImageUploader } from '../ui/ImageUploader';
 
 interface GlobalSettingsManagerProps {
   showToast: (msg: string, type?: 'success' | 'info' | 'error') => void;
@@ -64,14 +65,113 @@ export function GlobalSettingsManager({ showToast }: GlobalSettingsManagerProps)
             />
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-stone-700 mb-1">رابط الشعار (Logo Image URL)</label>
-            <input
-              type="text"
-              value={formData.logoUrl}
-              onChange={e => setFormData({ ...formData, logoUrl: e.target.value })}
-              className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2 text-xs font-bold text-stone-800"
+          {/* Logo / Icon Upload via ImageUploader */}
+          <div className="space-y-3 pt-2">
+            <ImageUploader
+              label="شعار أو أيقونة المنصة (رفع مباشر من الجهاز)"
+              folder="site_brand"
+              value={formData.logoUrl || ''}
+              onChange={(url) => setFormData(prev => ({ ...prev, logoUrl: url }))}
+              aspectRatio="cover"
+              placeholder="اختر ملف صورة الشعار أو الأيقونة من جهازك"
             />
+
+            {/* Logo Display Mode Selector */}
+            <div className="bg-white p-3.5 rounded-xl border border-stone-200/90 space-y-2">
+              <label className="block text-xs font-black text-stone-800 flex items-center gap-1.5">
+                <LayoutGrid className="h-3.5 w-3.5 text-[#1a4d2e]" />
+                <span>نمط عرض الشعار في شريط التنقل (الهيدر):</span>
+              </label>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, useFullLogo: false })}
+                  className={`flex flex-col items-start text-right p-3 rounded-xl border text-xs transition-all cursor-pointer ${
+                    !formData.useFullLogo
+                      ? 'border-[#1a4d2e] bg-[#1a4d2e]/5 text-[#1a4d2e] font-black shadow-2xs'
+                      : 'border-stone-200 bg-stone-50/50 text-stone-600 hover:bg-stone-100 font-medium'
+                  }`}
+                >
+                  <div className="flex items-center justify-between w-full mb-1">
+                    <span className="font-bold">أيقونة + اسم المنصة</span>
+                    {!formData.useFullLogo && <CheckCircle2 className="h-4 w-4 text-[#1a4d2e]" />}
+                  </div>
+                  <span className="text-[10px] text-stone-500 font-normal">
+                    تظهر صورة اللوجو كأيقونة بجانب الاسم والنص الفرعي
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, useFullLogo: true })}
+                  className={`flex flex-col items-start text-right p-3 rounded-xl border text-xs transition-all cursor-pointer ${
+                    formData.useFullLogo
+                      ? 'border-[#1a4d2e] bg-[#1a4d2e]/5 text-[#1a4d2e] font-black shadow-2xs'
+                      : 'border-stone-200 bg-stone-50/50 text-stone-600 hover:bg-stone-100 font-medium'
+                  }`}
+                >
+                  <div className="flex items-center justify-between w-full mb-1">
+                    <span className="font-bold">لوجو كامل مخصص</span>
+                    {formData.useFullLogo && <CheckCircle2 className="h-4 w-4 text-[#1a4d2e]" />}
+                  </div>
+                  <span className="text-[10px] text-stone-500 font-normal">
+                    يتم عرض صورة اللوجو الكامل وتختفي النصوص والأيقونة الافتراضية
+                  </span>
+                </button>
+              </div>
+
+              {/* Logo Height / Size Adjustment Slider */}
+              <div className="pt-3 border-t border-stone-100 mt-2 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-stone-700">حجم وارتفاع اللوجو في الشريط العلوي:</span>
+                  <span className="text-xs font-black text-[#1a4d2e] bg-[#1a4d2e]/10 px-2 py-0.5 rounded-md" dir="ltr">
+                    {formData.logoHeight || 55} px
+                  </span>
+                </div>
+                
+                <input
+                  type="range"
+                  min="32"
+                  max="110"
+                  step="2"
+                  value={formData.logoHeight || 55}
+                  onChange={(e) => setFormData({ ...formData, logoHeight: Number(e.target.value) })}
+                  className="w-full accent-[#1a4d2e] cursor-pointer"
+                />
+
+                <div className="flex items-center justify-between text-[10px] font-bold text-stone-500 pt-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, logoHeight: 38 })}
+                    className="hover:text-[#1a4d2e] underline cursor-pointer"
+                  >
+                    صغير (38px)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, logoHeight: 55 })}
+                    className="hover:text-[#1a4d2e] underline cursor-pointer"
+                  >
+                    متوسط (55px)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, logoHeight: 75 })}
+                    className="hover:text-[#1a4d2e] underline cursor-pointer"
+                  >
+                    كبير (75px)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, logoHeight: 95 })}
+                    className="hover:text-[#1a4d2e] underline cursor-pointer"
+                  >
+                    جامبو (95px)
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div>

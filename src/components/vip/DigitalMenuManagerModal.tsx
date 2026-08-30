@@ -12,6 +12,7 @@ import { db } from '../../lib/firebase';
 import { getBusinessVipStatus } from '../../lib/vipHelper';
 import { VipUpgradeRequestModal } from './VipUpgradeRequestModal';
 import { useAuth } from '../../contexts/AuthContext';
+import { ImageUploader } from '../ui/ImageUploader';
 
 interface DigitalMenuManagerModalProps {
   isOpen: boolean;
@@ -710,16 +711,15 @@ export function DigitalMenuManagerModal({
                   />
                 </div>
 
-                {/* Image Picker library */}
+                {/* Image Picker & Upload */}
                 <div className="space-y-2">
-                  <label className="block text-xs font-bold text-stone-700">رابط صورة المنتج أو الوحدة (أو اختر صورة جاهزة بالأسفل)</label>
-                  <input
-                    type="url"
+                  <ImageUploader
+                    label="صورة المنتج أو الصنف (رفع ملف من الجهاز)"
+                    folder="menus"
                     value={imageUrl}
-                    onChange={(e) => setImageUrl(e.target.value)}
-                    placeholder="https://images.unsplash.com/..."
-                    className="w-full p-2.5 bg-white border border-stone-200 rounded-xl text-sm text-left focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]/20"
-                    dir="ltr"
+                    onChange={(url) => setImageUrl(url)}
+                    aspectRatio="square"
+                    placeholder="اختر ملف صورة الصنف من جهازك"
                   />
                   
                   {/* Preset Quick Images Selector */}

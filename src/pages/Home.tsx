@@ -185,6 +185,9 @@ export function Home() {
         });
         setBusinesses(fetchedBusinesses);
 
+        // Create set of valid active business IDs for banner filtering
+        const validBusinessIds = new Set(fetchedBusinesses.map(b => b.id));
+
         // Fetch custom banners from Firestore
         try {
           const bannersQuery = query(collection(db, 'banners'));
@@ -197,6 +200,24 @@ export function Home() {
               const now = Date.now();
               const startsOk = !data.bannerStartDate || data.bannerStartDate <= now;
               const endsOk = !data.bannerExpiryDate || data.bannerExpiryDate > now;
+              
+              // Skip banner if its associated business has been deleted or hidden
+              if (data.businessId && !validBusinessIds.has(data.businessId)) {
+                return;
+              }
+              if (data.type === 'business' && data.businessId && !validBusinessIds.has(data.businessId)) {
+                return;
+              }
+              if (data.buttonLink && data.buttonLink.includes('/business/')) {
+                const parts = data.buttonLink.split('/business/');
+                if (parts[1]) {
+                  const targetBizId = parts[1].split('?')[0].split('#')[0];
+                  if (targetBizId && !validBusinessIds.has(targetBizId)) {
+                    return;
+                  }
+                }
+              }
+
               if (startsOk && endsOk) {
                 activeBanners.push({ id: docSnap.id, ...data } as HomepageBanner);
               }

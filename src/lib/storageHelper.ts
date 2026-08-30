@@ -37,38 +37,61 @@ export async function uploadAndCompressImage(
   // Step 1: Compress image client-side
   if (onProgress) onProgress(10);
   const compressed = await compressImage(file, maxWidth, maxHeight, quality);
-  if (onProgress) onProgress(30);
+  if (onProgress) onProgress(35);
 
-  // Step 2: Try Firebase Storage upload if initialized
+  const fallbackToBase64 = async (): Promise<UploadResult> => {
+    if (onProgress) onProgress(70);
+    const base64Url = await convertFileToBase64(compressed.file);
+    if (onProgress) onProgress(100);
+    return {
+      url: base64Url,
+      originalSize: compressed.originalSize,
+      compressedSize: compressed.compressedSize,
+      savedPercentage: compressed.ratio,
+      storageMethod: 'base64_fallback'
+    };
+  };
+
+  // Step 2: Try Firebase Storage upload with safety timeout (5 seconds)
   if (storage) {
     try {
       const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}_${compressed.file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
       const storageRef = ref(storage, `${folder}/${fileName}`);
 
-      return new Promise<UploadResult>((resolve, reject) => {
+      return await new Promise<UploadResult>((resolve, reject) => {
         const uploadTask = uploadBytesResumable(storageRef, compressed.file);
+        let isDone = false;
+
+        // Safety timeout: If Firebase Storage upload stalls for more than 4 seconds, cancel and use Base64
+        const timeoutId = setTimeout(() => {
+          if (!isDone) {
+            isDone = true;
+            try { uploadTask.cancel(); } catch (_) {}
+            console.warn("Firebase Storage upload timed out, falling back to Base64 instantly.");
+            fallbackToBase64().then(resolve).catch(reject);
+          }
+        }, 4000);
 
         uploadTask.on(
           'state_changed',
           (snapshot) => {
-            const pct = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 60) + 30; // 30% -> 90%
-            if (onProgress) onProgress(pct);
+            if (isDone) return;
+            const pct = snapshot.totalBytes > 0 
+              ? Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 60) + 35 
+              : 35;
+            if (onProgress) onProgress(Math.min(95, pct));
           },
           (error) => {
+            if (isDone) return;
+            isDone = true;
+            clearTimeout(timeoutId);
             console.warn("Firebase Storage upload failed, switching to Base64 fallback:", error);
-            // Fallback to Base64 Data URL if storage rules block or storage fails
-            convertFileToBase64(compressed.file).then((base64Url) => {
-              if (onProgress) onProgress(100);
-              resolve({
-                url: base64Url,
-                originalSize: compressed.originalSize,
-                compressedSize: compressed.compressedSize,
-                savedPercentage: compressed.ratio,
-                storageMethod: 'base64_fallback'
-              });
-            }).catch(reject);
+            fallbackToBase64().then(resolve).catch(reject);
           },
           async () => {
+            if (isDone) return;
+            isDone = true;
+            clearTimeout(timeoutId);
             try {
               const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
               if (onProgress) onProgress(100);
@@ -81,34 +104,19 @@ export async function uploadAndCompressImage(
               });
             } catch (err) {
               console.warn("Failed to get download URL, using Base64 fallback:", err);
-              const base64Url = await convertFileToBase64(compressed.file);
-              if (onProgress) onProgress(100);
-              resolve({
-                url: base64Url,
-                originalSize: compressed.originalSize,
-                compressedSize: compressed.compressedSize,
-                savedPercentage: compressed.ratio,
-                storageMethod: 'base64_fallback'
-              });
+              fallbackToBase64().then(resolve).catch(reject);
             }
           }
         );
       });
     } catch (e) {
       console.warn("Storage exception, using Base64 fallback:", e);
+      return await fallbackToBase64();
     }
   }
 
   // Fallback if Firebase Storage instance is null
-  const base64Url = await convertFileToBase64(compressed.file);
-  if (onProgress) onProgress(100);
-  return {
-    url: base64Url,
-    originalSize: compressed.originalSize,
-    compressedSize: compressed.compressedSize,
-    savedPercentage: compressed.ratio,
-    storageMethod: 'base64_fallback'
-  };
+  return await fallbackToBase64();
 }
 
 function convertFileToBase64(file: File): Promise<string> {

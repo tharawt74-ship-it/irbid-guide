@@ -9,6 +9,7 @@ import { BUSINESS_CATEGORIES, IRBID_REGIONS_CATEGORIZED, MainCategory } from '..
 import { SearchableSelect } from '../ui/SearchableSelect';
 import { WorkingHoursEditor } from '../ui/WorkingHoursEditor';
 import { SocialLinksEditor } from '../ui/SocialLinksEditor';
+import { ImageUploader } from '../ui/ImageUploader';
 import { cn } from '../../lib/utils';
 
 interface StoreEditFormProps {
@@ -24,6 +25,7 @@ interface StoreEditFormProps {
     address: string;
     phone?: string;
     imageUrl?: string;
+    logoUrl?: string;
     googlePlaceUrl?: string;
     workingHours?: WorkingHours;
     socialLinks?: SocialLinks;
@@ -53,6 +55,7 @@ export function StoreEditForm({
   const [district, setDistrict] = useState(business.district || 'شارع الجامعة');
   const [phone, setPhone] = useState(business.phone || '');
   const [imageUrl, setImageUrl] = useState(business.imageUrl || '');
+  const [logoUrl, setLogoUrl] = useState(business.logoUrl || '');
   const [googlePlaceUrl, setGooglePlaceUrl] = useState(business.googlePlaceUrl || '');
   const [hideSiteReviews, setHideSiteReviews] = useState(!!business.hideSiteReviews);
   const [hideGoogleReviews, setHideGoogleReviews] = useState(!!business.hideGoogleReviews);
@@ -92,6 +95,7 @@ export function StoreEditForm({
     setDistrict(business.district || 'شارع الجامعة');
     setPhone(business.phone || '');
     setImageUrl(business.imageUrl || '');
+    setLogoUrl(business.logoUrl || '');
     setGooglePlaceUrl(business.googlePlaceUrl || '');
     setHideSiteReviews(!!business.hideSiteReviews);
     setHideGoogleReviews(!!business.hideGoogleReviews);
@@ -164,6 +168,7 @@ export function StoreEditForm({
       address: address.trim(),
       phone: phone.trim(),
       imageUrl: imageUrl.trim(),
+      logoUrl: logoUrl.trim(),
       googlePlaceUrl: googlePlaceUrl.trim(),
       workingHours,
       socialLinks,
@@ -426,41 +431,39 @@ export function StoreEditForm({
         <div className="bg-white p-5 sm:p-6 rounded-2xl border border-stone-200/80 shadow-2xs space-y-4">
           <div className="flex items-center gap-2 pb-3 border-b border-stone-100">
             <ImageIcon className="h-5 w-5 text-[#1a4d2e]" />
-            <h4 className="text-sm font-black text-stone-800">هوية المحل، الصورة والوصف</h4>
+            <h4 className="text-sm font-black text-stone-800">هوية المحل والشعار والصور</h4>
           </div>
 
-          <div>
-            <label className="block text-xs font-black text-stone-700 mb-1.5">
-              رابط صورة الغلاف أو الشعار <span className="text-stone-400 font-normal">(اختياري)</span>
-            </label>
-            <div className="relative">
-              <input
-                type="url"
-                dir="ltr"
-                value={imageUrl}
-                onChange={e => setImageUrl(e.target.value)}
-                placeholder="https://example.com/photo.jpg"
-                className="w-full bg-[#fdfcfb] border border-stone-200 rounded-xl px-3.5 py-2.5 pl-9 text-xs text-left text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]/20 focus:border-[#1a4d2e] transition-colors"
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-start">
+            {/* Store Logo / Owner Profile Picture */}
+            <div className="space-y-1">
+              <ImageUploader
+                label="شعار المحل / اللوجو / الصورة الشخصية (رفع مباشر)"
+                folder="logos"
+                value={logoUrl}
+                onChange={(url) => setLogoUrl(url)}
+                aspectRatio="square"
+                placeholder="اختر ملف اللوجو أو الصورة الشخصية من جهازك"
               />
-              <ImageIcon className="h-4 w-4 text-stone-400 absolute top-3 left-3 pointer-events-none" />
+              <p className="text-[11px] text-stone-500 font-medium">
+                الصورة الدائرية الممثلة للمحل أو صاحب المنشأة والتي تظهر بجانب الاسم في نتاجات البحث والتقييمات وبطاقة المحل.
+              </p>
             </div>
 
-            {/* Live Preview If image exists */}
-            {imageUrl && !imageError && (
-              <div className="mt-3 p-3 bg-stone-50 rounded-xl border border-stone-200/80 flex items-center gap-3">
-                <img
-                  src={imageUrl}
-                  alt="معاينة الشعار"
-                  onError={() => setImageError(true)}
-                  className="w-16 h-16 rounded-lg object-cover border border-stone-200 shadow-2xs"
-                  referrerPolicy="no-referrer"
-                />
-                <div>
-                  <p className="text-xs font-bold text-stone-700">معاينة الصورة الحالية</p>
-                  <p className="text-[11px] text-stone-500">ستظهر هذه الصورة كغلاف أساسي لمحلك في نتائج البحث وصفحة التفاصيل.</p>
-                </div>
-              </div>
-            )}
+            {/* Store Main Cover Image */}
+            <div className="space-y-1">
+              <ImageUploader
+                label="صورة غلاف المحل الرئيسية (رفع مباشر)"
+                folder="businesses"
+                value={imageUrl}
+                onChange={(url) => setImageUrl(url)}
+                aspectRatio="cover"
+                placeholder="اختر صورة الواجهة أو غلاف المحل من جهازك"
+              />
+              <p className="text-[11px] text-stone-500 font-medium">
+                الصورة العريضة الرئيسية التي تعكس واجهة المحل أو الديكور الداخلي وتظهر كغلاف لصفحة المحل.
+              </p>
+            </div>
           </div>
 
           <div>

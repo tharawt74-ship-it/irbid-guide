@@ -194,8 +194,6 @@ export function Layout() {
   ];
 
   const moreItems = [
-    { path: '/housing', label: 'سكنات وعقارات إربد', icon: Building },
-    { path: '/packages', label: 'باقات الترويج والإعلانات', icon: Sparkles },
     { path: '/transportation', label: 'دليل المواصلات والمجمعات', icon: Bus },
     { path: '/news', label: 'أخبار إربد', icon: Newspaper },
     { path: '/tourism', label: 'أماكن سياحية وترفيهية', icon: Compass },
@@ -217,15 +215,36 @@ export function Layout() {
               className="flex items-center gap-1.5 md:gap-2 group shrink-0 focus:outline-none" 
               onClick={closeMenu}
             >
-              <div className="w-8 h-8 md:w-9 md:h-9 rounded-xl bg-gradient-to-br from-[#1a4d2e] to-[#133b22] text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-all duration-300 shrink-0">
-                <Store className="h-4 w-4 md:h-4.5 md:w-4.5" />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-sm md:text-base xl:text-lg font-black tracking-tight text-[#1a4d2e] leading-none whitespace-nowrap">
-                  {globalSettings.siteName}
-                </span>
-                <span className="text-[8px] md:text-[9px] font-bold text-stone-400 mt-0.5 hidden sm:block whitespace-nowrap">{globalSettings.siteSubtitle}</span>
-              </div>
+              {globalSettings.logoUrl && globalSettings.useFullLogo ? (
+                <img 
+                  src={globalSettings.logoUrl} 
+                  alt={globalSettings.siteName} 
+                  style={{ height: `${globalSettings.logoHeight || 55}px` }}
+                  className="max-h-[58px] md:max-h-[64px] max-w-[240px] md:max-w-[320px] object-contain group-hover:scale-102 transition-all duration-200" 
+                />
+              ) : (
+                <>
+                  <div 
+                    style={{
+                      width: `${Math.min(52, Math.max(36, (globalSettings.logoHeight || 40)))}px`,
+                      height: `${Math.min(52, Math.max(36, (globalSettings.logoHeight || 40)))}px`
+                    }}
+                    className="rounded-xl bg-gradient-to-br from-[#1a4d2e] to-[#133b22] text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-all duration-300 shrink-0 overflow-hidden"
+                  >
+                    {globalSettings.logoUrl ? (
+                      <img src={globalSettings.logoUrl} alt={globalSettings.siteName} className="w-full h-full object-cover" />
+                    ) : (
+                      <Store className="h-4 w-4 md:h-5 md:w-5" />
+                    )}
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-sm md:text-base xl:text-lg font-black tracking-tight text-[#1a4d2e] leading-none whitespace-nowrap">
+                      {globalSettings.siteName}
+                    </span>
+                    <span className="text-[8px] md:text-[9px] font-bold text-stone-400 mt-0.5 hidden sm:block whitespace-nowrap">{globalSettings.siteSubtitle}</span>
+                  </div>
+                </>
+              )}
             </Link>
             
             {/* Desktop Navigation Links */}
@@ -295,7 +314,7 @@ export function Layout() {
                   }}
                   className={cn(
                     "flex items-center gap-1 px-2 xl:px-2.5 py-1.5 rounded-xl transition-all font-bold cursor-pointer shrink-0 border whitespace-nowrap",
-                    (location.pathname === '/transportation' || location.pathname === '/news' || location.pathname === '/tourism' || location.pathname === '/prayer-times' || location.pathname === '/housing' || location.pathname === '/packages' || location.pathname === '/pricing')
+                    (location.pathname === '/transportation' || location.pathname === '/news' || location.pathname === '/tourism' || location.pathname === '/prayer-times')
                       ? "bg-[#1a4d2e] text-white border-[#1a4d2e]"
                       : "bg-stone-100 text-stone-700 border-stone-200 hover:bg-stone-200"
                   )}
@@ -318,7 +337,7 @@ export function Layout() {
                         </button>
                       </div>
                       <p className="text-[11px] text-stone-600 font-medium leading-relaxed">
-                        اضغط هنا لاستعراض <span className="font-bold text-[#1a4d2e]">دليل المواصلات</span>، <span className="font-bold text-blue-600">سكنات إربد</span>، <span className="font-bold text-emerald-700">مواقيت الصلاة</span> و<span className="font-bold text-amber-700">أخبار المدينة</span>!
+                        اضغط هنا لاستعراض <span className="font-bold text-[#1a4d2e]">دليل المواصلات</span>، <span className="font-bold text-teal-600">أماكن سياحية</span>، <span className="font-bold text-emerald-700">مواقيت الصلاة</span> و<span className="font-bold text-amber-700">أخبار المدينة</span>!
                       </p>
                       <div className="flex justify-end pt-1">
                         <button onClick={() => { setMoreMenuOpen(true); handleDismissDesktopTooltip(); }} className="text-[10px] font-bold text-white bg-[#1a4d2e] hover:bg-[#133b22] px-2.5 py-1 rounded-lg shadow-3xs transition-all duration-200 cursor-pointer">
@@ -516,15 +535,30 @@ export function Layout() {
               className="flex items-center gap-1.5 group shrink-0 focus:outline-none" 
               onClick={closeMenu}
             >
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#1a4d2e] to-[#133b22] text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-all duration-300 shrink-0">
-                <Store className="h-4 w-4" />
-              </div>
-              <div className="flex flex-col text-right">
-                <span className="text-sm font-black tracking-tight text-[#1a4d2e] leading-none whitespace-nowrap">
-                  {globalSettings.siteName}
-                </span>
-                <span className="text-[8px] font-bold text-stone-400 mt-0.5 whitespace-nowrap">{globalSettings.siteSubtitle}</span>
-              </div>
+              {globalSettings.logoUrl && globalSettings.useFullLogo ? (
+                <img 
+                  src={globalSettings.logoUrl} 
+                  alt={globalSettings.siteName} 
+                  style={{ height: `${Math.min(50, Math.max(28, (globalSettings.logoHeight || 42)))}px` }}
+                  className="max-h-[48px] max-w-[180px] object-contain group-hover:scale-102 transition-transform" 
+                />
+              ) : (
+                <>
+                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#1a4d2e] to-[#133b22] text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-all duration-300 shrink-0 overflow-hidden">
+                    {globalSettings.logoUrl ? (
+                      <img src={globalSettings.logoUrl} alt={globalSettings.siteName} className="w-full h-full object-cover" />
+                    ) : (
+                      <Store className="h-4 w-4" />
+                    )}
+                  </div>
+                  <div className="flex flex-col text-right">
+                    <span className="text-sm font-black tracking-tight text-[#1a4d2e] leading-none whitespace-nowrap">
+                      {globalSettings.siteName}
+                    </span>
+                    <span className="text-[8px] font-bold text-stone-400 mt-0.5 whitespace-nowrap">{globalSettings.siteSubtitle}</span>
+                  </div>
+                </>
+              )}
             </Link>
           </div>
 
@@ -582,10 +616,20 @@ export function Layout() {
               {/* Drawer Header */}
               <div className="flex items-center justify-between pb-3 border-b border-stone-200/80">
                 <Link to="/" onClick={closeMenu} className="flex items-center gap-2.5 font-black text-lg text-[#2d2a26]">
-                  <div className="w-8 h-8 rounded-xl bg-[#1a4d2e] flex items-center justify-center text-white shadow-xs">
-                    <Store className="h-4 w-4 text-[#ff9f1c]" />
-                  </div>
-                  <span>{globalSettings.siteName}</span>
+                  {globalSettings.logoUrl && globalSettings.useFullLogo ? (
+                    <img src={globalSettings.logoUrl} alt={globalSettings.siteName} className="h-8 max-w-[160px] object-contain" />
+                  ) : (
+                    <>
+                      <div className="w-8 h-8 rounded-xl bg-[#1a4d2e] flex items-center justify-center text-white shadow-xs overflow-hidden shrink-0">
+                        {globalSettings.logoUrl ? (
+                          <img src={globalSettings.logoUrl} alt={globalSettings.siteName} className="w-full h-full object-cover" />
+                        ) : (
+                          <Store className="h-4 w-4 text-[#ff9f1c]" />
+                        )}
+                      </div>
+                      <span>{globalSettings.siteName}</span>
+                    </>
+                  )}
                 </Link>
 
                 <button
@@ -898,8 +942,20 @@ export function Layout() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
             <div className="md:col-span-2">
               <Link to="/" className="text-2xl font-black tracking-tighter text-[#1a4d2e] flex items-center gap-2 mb-4">
-                <Store className="h-6 w-6 text-[#ff9f1c]" />
-                <span>{globalSettings.siteName}</span>
+                {globalSettings.logoUrl && globalSettings.useFullLogo ? (
+                  <img src={globalSettings.logoUrl} alt={globalSettings.siteName} className="h-10 max-w-[220px] object-contain" />
+                ) : (
+                  <>
+                    <div className="w-8 h-8 rounded-xl bg-[#1a4d2e] flex items-center justify-center text-white shadow-xs overflow-hidden shrink-0">
+                      {globalSettings.logoUrl ? (
+                        <img src={globalSettings.logoUrl} alt={globalSettings.siteName} className="w-full h-full object-cover" />
+                      ) : (
+                        <Store className="h-6 w-6 text-[#ff9f1c]" />
+                      )}
+                    </div>
+                    <span>{globalSettings.siteName}</span>
+                  </>
+                )}
               </Link>
               <p className="text-stone-500 text-sm leading-relaxed max-w-sm mb-4">
                 {globalSettings.footerDescription || "المنصة الأولى لاكتشاف أفضل المطاعم والمقاهي والمحلات التجارية في عروس الشمال. دليلك الشامل لكل ما تحتاجه في إربد."}

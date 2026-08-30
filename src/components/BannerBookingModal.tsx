@@ -4,6 +4,7 @@ import { db } from '../lib/firebase';
 import { collection, addDoc } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
 import { isBotSubmission, checkSubmissionRateLimit, recordSubmissionTime, sanitizeInput } from '../lib/security';
+import { ImageUploader } from './ui/ImageUploader';
 
 interface BannerBookingModalProps {
   isOpen: boolean;
@@ -233,19 +234,14 @@ export function BannerBookingModal({ isOpen, onClose }: BannerBookingModalProps)
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-stone-700 mb-1">رابط صورة البانر الإعلاني (Image URL) *</label>
-              <div className="relative">
-                <input
-                  type="url"
-                  required
-                  dir="ltr"
-                  value={formData.imageUrl}
-                  onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
-                  placeholder="https://images.unsplash.com/photo-..."
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none pl-9 text-left"
-                />
-                <ImageIcon className="h-4 w-4 text-stone-400 absolute left-3 top-3" />
-              </div>
+              <ImageUploader
+                label="صورة البانر الإعلاني المصممة (رفع من الجهاز) *"
+                folder="banners"
+                value={formData.imageUrl}
+                onChange={(url) => setFormData({ ...formData, imageUrl: url })}
+                aspectRatio="banner"
+                placeholder="اختر ملف صورة البانر من جهازك أو اسحب التصميم هنا"
+              />
               <p className="text-[10px] text-stone-500 mt-1">مقاس ينصح به: 1200x400 بكسل بحجم أفقي واضح.</p>
             </div>
 

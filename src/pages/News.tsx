@@ -11,6 +11,7 @@ import { NewsArticle } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { getAppConfig } from '../lib/demoDataHelper';
 import { SEO } from '../components/common/SEO';
+import { ImageUploader } from '../components/ui/ImageUploader';
 
 const CATEGORIES = ['الكل', 'أخبار المدينة', 'تعليم وجامعات', 'فعاليات وثقافة', 'سياحة وبيئة', 'تجارة ومحلات', 'طقس وخدمات'];
 
@@ -685,24 +686,20 @@ export function News() {
                 </div>
               </div>
 
-              {/* Image URL & Presets */}
+              {/* Image Uploader & Presets */}
               <div className="space-y-2">
-                <label className="block text-sm font-bold text-stone-700">
-                  رابط صورة الخبر
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="url"
-                    value={formImageUrl}
-                    onChange={(e) => setFormImageUrl(e.target.value)}
-                    placeholder="https://example.com/image.jpg"
-                    className="w-full p-3 bg-stone-50 border border-[#e5e1da] rounded-xl text-[#2d2a26] text-sm focus:bg-white focus:border-[#1a4d2e] outline-none"
-                  />
-                </div>
+                <ImageUploader
+                  label="صورة الخبر الرئيسية (رفع ملف من الجهاز)"
+                  folder="news"
+                  value={formImageUrl}
+                  onChange={(url) => setFormImageUrl(url)}
+                  aspectRatio="cover"
+                  placeholder="اختر ملف صورة الخبر من جهازك أو اسحبها هنا"
+                />
 
                 {/* Quick Presets */}
                 <div className="pt-1">
-                  <span className="text-xs font-semibold text-stone-500 block mb-1.5">أو اختر صورة سريعة تناسب الخبر:</span>
+                  <span className="text-xs font-semibold text-stone-500 block mb-1.5">أو اختر صورة جاهزة تناسب الخبر:</span>
                   <div className="flex flex-wrap gap-2">
                     {PRESET_IMAGES.map((img) => (
                       <button
@@ -720,14 +717,6 @@ export function News() {
                     ))}
                   </div>
                 </div>
-
-                {/* Preview Image */}
-                {formImageUrl && (
-                  <div className="mt-2 h-32 rounded-xl overflow-hidden border border-[#e5e1da] bg-stone-100 relative">
-                    <img src={formImageUrl} alt="Preview" className="w-full h-full object-cover" />
-                    <span className="absolute bottom-2 right-2 bg-black/70 text-white text-[10px] px-2 py-0.5 rounded">معاينة الصورة</span>
-                  </div>
-                )}
               </div>
 
               {/* Is Hot / Breaking Toggle */}

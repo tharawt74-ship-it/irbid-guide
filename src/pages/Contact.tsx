@@ -10,6 +10,7 @@ import { WorkingHoursEditor } from '../components/ui/WorkingHoursEditor';
 import { SocialLinksEditor } from '../components/ui/SocialLinksEditor';
 import { SocialLinks, WorkingHours } from '../types';
 import { SEO } from '../components/common/SEO';
+import { ImageUploader } from '../components/ui/ImageUploader';
 import { isBotSubmission, checkSubmissionRateLimit, recordSubmissionTime, sanitizeInput, executeReCaptcha } from '../lib/security';
 
 const PACKAGES_INFO = {
@@ -367,18 +368,13 @@ export function Contact() {
           </div>
 
           <div>
-            <label htmlFor="imageUrl" className="block text-sm font-bold text-stone-700 mb-1.5">
-              رابط صورة أو شعار المحل (اختياري)
-            </label>
-            <input
-              type="url"
-              id="imageUrl"
-              name="imageUrl"
-              dir="ltr"
-              className="block w-full px-4 py-3.5 border border-[#e5e1da] rounded-2xl focus:ring-2 focus:ring-[#1a4d2e]/20 focus:border-[#1a4d2e] outline-none text-sm transition-colors"
-              placeholder="https://example.com/logo.png"
+            <ImageUploader
+              label="صورة أو شعار المحل (رفع ملف من الجهاز)"
+              folder="businesses"
               value={formData.imageUrl}
-              onChange={handleChange}
+              onChange={(url) => setFormData(prev => ({ ...prev, imageUrl: url }))}
+              aspectRatio="cover"
+              placeholder="اختر ملف صورة المحل أو الشعار من جهازك"
             />
           </div>
 

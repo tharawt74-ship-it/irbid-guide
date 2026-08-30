@@ -9,6 +9,7 @@ import { db } from '../../lib/firebase';
 import { HousingItem } from '../../types';
 import { sanitizeInput, checkSubmissionRateLimit, recordSubmissionTime, executeReCaptcha } from '../../lib/security';
 import { getWhatsAppUrl } from '../../lib/contactHelper';
+import { ImageUploader } from '../ui/ImageUploader';
 
 interface HousingFormModalProps {
   isOpen: boolean;
@@ -418,14 +419,13 @@ export function HousingFormModal({
             </div>
 
             <div className="space-y-1">
-              <label className="block text-stone-600 font-bold">رابط صورة العقار (اختياري)</label>
-              <input
-                type="url"
+              <ImageUploader
+                label="صورة العقار أو السكن الرئيسية (رفع من الجهاز)"
+                folder="housings"
                 value={formData.image}
-                onChange={(e) => setFormData({ ...formData, image: e.target.value })}
-                placeholder="https://images.unsplash.com/..."
-                className="w-full bg-white border border-stone-200 rounded-xl px-3.5 py-2 text-stone-800 font-bold focus:outline-none focus:ring-1 focus:ring-[#1a4d2e]"
-                dir="ltr"
+                onChange={(url) => setFormData({ ...formData, image: url })}
+                aspectRatio="cover"
+                placeholder="اضغط لاختيار صورة العقار من جهازك أو اسحبها هنا"
               />
             </div>
           </div>

@@ -23,7 +23,7 @@ const DEFAULT_GLOBAL_SETTINGS: GlobalSiteSettings = {
   siteSubtitle: 'دليل عروس الشمال والمحلات والخدمات الشامل',
   logoUrl: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=120&q=80',
   useFullLogo: false,
-  logoHeight: 52,
+  logoHeight: 68,
   contactPhone: '0790000000',
   whatsappNumber: '962790000000',
   contactEmail: 'info@shoof-irbid.com',

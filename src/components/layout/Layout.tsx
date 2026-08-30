@@ -227,45 +227,48 @@ export function Layout() {
   return (
     <div className="min-h-screen bg-[#fdfcfb] flex flex-col font-sans text-[#2d2a26] overflow-x-clip" dir="rtl">
       {/* Top Navigation Bar - Sticky at all scroll depths */}
-      <header className="h-[64px] md:h-[72px] px-2.5 sm:px-4 lg:px-6 2xl:px-8 border-b border-stone-200/90 bg-white/95 backdrop-blur-md sticky top-0 z-50 transition-all duration-200 shadow-2xs w-full max-w-full">
+      <header className="h-[62px] sm:h-[68px] md:h-[72px] px-2.5 sm:px-4 lg:px-6 2xl:px-8 border-b border-stone-200/90 bg-white/95 backdrop-blur-md sticky top-0 z-50 transition-all duration-200 shadow-2xs w-full max-w-full flex items-center">
         {/* Desktop Header Layout */}
-        <div className="hidden lg:flex w-full max-w-7xl mx-auto h-full items-center justify-between gap-1.5 sm:gap-2 lg:gap-3 flex-nowrap min-w-0">
+        <div className="hidden lg:flex w-full max-w-7xl mx-auto h-full items-center justify-between gap-1.5 sm:gap-2 lg:gap-3 flex-nowrap min-w-0 py-1">
           
           {/* Right Area (RTL): Brand Logo & Navigation */}
           <div className="flex items-center gap-1.5 sm:gap-2 lg:gap-2.5 xl:gap-3.5 flex-nowrap shrink-0 min-w-0">
             {/* Brand Logo */}
             <Link 
               to="/" 
-              className="flex items-center gap-1.5 md:gap-2 group shrink-0 focus:outline-none" 
+              className="flex items-center gap-2 group shrink-0 focus:outline-none py-0.5" 
               onClick={closeMenu}
             >
               {globalSettings.logoUrl && globalSettings.useFullLogo ? (
                 <img 
                   src={globalSettings.logoUrl} 
                   alt={globalSettings.siteName} 
-                  style={{ height: `${globalSettings.logoHeight || 55}px` }}
-                  className="max-h-[58px] md:max-h-[64px] max-w-[240px] md:max-w-[320px] object-contain group-hover:scale-102 transition-all duration-200" 
+                  style={{ height: `${Math.min(64, Math.max(28, globalSettings.logoHeight || 52))}px` }}
+                  className="max-h-[64px] max-w-[280px] md:max-w-[380px] object-contain group-hover:scale-102 transition-all duration-200" 
                 />
               ) : (
                 <>
                   <div 
                     style={{
-                      width: `${Math.min(52, Math.max(36, (globalSettings.logoHeight || 40)))}px`,
-                      height: `${Math.min(52, Math.max(36, (globalSettings.logoHeight || 40)))}px`
+                      width: `${Math.min(54, Math.max(34, Math.round((globalSettings.logoHeight || 52) * 0.8)))}px`,
+                      height: `${Math.min(54, Math.max(34, Math.round((globalSettings.logoHeight || 52) * 0.8)))}px`
                     }}
-                    className="rounded-xl bg-gradient-to-br from-[#1a4d2e] to-[#133b22] text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-all duration-300 shrink-0 overflow-hidden"
+                    className="rounded-2xl bg-gradient-to-br from-[#1a4d2e] to-[#133b22] text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-all duration-300 shrink-0 overflow-hidden"
                   >
                     {globalSettings.logoUrl ? (
                       <img src={globalSettings.logoUrl} alt={globalSettings.siteName} className="w-full h-full object-cover" />
                     ) : (
-                      <Store className="h-4 w-4 md:h-5 md:w-5" />
+                      <Store className="h-5 w-5 md:h-6 md:w-6 text-[#ff9f1c]" />
                     )}
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-sm md:text-base xl:text-lg font-black tracking-tight text-[#1a4d2e] leading-none whitespace-nowrap">
+                    <span 
+                      style={{ fontSize: `${Math.min(22, Math.max(14, Math.round((globalSettings.logoHeight || 52) * 0.34)))}px` }}
+                      className="font-black tracking-tight text-[#1a4d2e] leading-none whitespace-nowrap"
+                    >
                       {globalSettings.siteName}
                     </span>
-                    <span className="text-[8px] md:text-[9px] font-bold text-stone-400 mt-0.5 hidden sm:block whitespace-nowrap">{globalSettings.siteSubtitle}</span>
+                    <span className="text-[9px] md:text-[10px] font-bold text-stone-400 mt-1 hidden sm:block whitespace-nowrap">{globalSettings.siteSubtitle}</span>
                   </div>
                 </>
               )}
@@ -553,33 +556,42 @@ export function Layout() {
           </div>
 
           {/* Centered Logo absolutely aligned to the middle */}
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-auto">
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-auto max-w-[62%] h-full">
             <Link 
               to="/" 
-              className="flex items-center gap-1.5 group shrink-0 focus:outline-none" 
+              className="flex items-center gap-1.5 group shrink-0 focus:outline-none py-1 h-full max-h-full" 
               onClick={closeMenu}
             >
               {globalSettings.logoUrl && globalSettings.useFullLogo ? (
                 <img 
                   src={globalSettings.logoUrl} 
                   alt={globalSettings.siteName} 
-                  style={{ height: `${Math.min(50, Math.max(28, (globalSettings.logoHeight || 42)))}px` }}
-                  className="max-h-[48px] max-w-[180px] object-contain group-hover:scale-102 transition-transform" 
+                  style={{ height: `${Math.min(54, Math.max(26, globalSettings.logoHeight || 44))}px` }}
+                  className="max-h-[54px] max-w-[260px] object-contain group-hover:scale-102 transition-transform" 
                 />
               ) : (
                 <>
-                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#1a4d2e] to-[#133b22] text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-all duration-300 shrink-0 overflow-hidden">
+                  <div 
+                    style={{
+                      width: `${Math.min(48, Math.max(30, Math.round((globalSettings.logoHeight || 52) * 0.75)))}px`,
+                      height: `${Math.min(48, Math.max(30, Math.round((globalSettings.logoHeight || 52) * 0.75)))}px`
+                    }}
+                    className="rounded-xl bg-gradient-to-br from-[#1a4d2e] to-[#133b22] text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-all duration-300 shrink-0 overflow-hidden"
+                  >
                     {globalSettings.logoUrl ? (
                       <img src={globalSettings.logoUrl} alt={globalSettings.siteName} className="w-full h-full object-cover" />
                     ) : (
-                      <Store className="h-4 w-4" />
+                      <Store className="h-5 w-5 text-[#ff9f1c]" />
                     )}
                   </div>
                   <div className="flex flex-col text-right">
-                    <span className="text-sm font-black tracking-tight text-[#1a4d2e] leading-none whitespace-nowrap">
+                    <span 
+                      style={{ fontSize: `${Math.min(18, Math.max(12, Math.round((globalSettings.logoHeight || 52) * 0.3)))}px` }}
+                      className="font-black tracking-tight text-[#1a4d2e] leading-none whitespace-nowrap"
+                    >
                       {globalSettings.siteName}
                     </span>
-                    <span className="text-[8px] font-bold text-stone-400 mt-0.5 whitespace-nowrap">{globalSettings.siteSubtitle}</span>
+                    <span className="text-[8px] sm:text-[9px] font-bold text-stone-400 mt-0.5 whitespace-nowrap">{globalSettings.siteSubtitle}</span>
                   </div>
                 </>
               )}
@@ -610,13 +622,13 @@ export function Layout() {
       <AnimatePresence>
         {mobileMenuOpen && (
           <motion.div 
-            initial={{ opacity: 0, y: 15 }}
+            initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 15 }}
-            transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+            exit={{ opacity: 0, y: 10 }}
+            transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
             onTouchStart={handleTouchStart}
             onTouchEnd={handleTouchEnd}
-            className="lg:hidden fixed top-[64px] md:top-[72px] inset-x-0 bottom-0 z-40 bg-[#faf9f6] flex flex-col overflow-hidden" 
+            className="lg:hidden fixed top-[62px] sm:top-[68px] md:top-[72px] inset-x-0 bottom-0 z-40 bg-[#faf9f6] flex flex-col overflow-hidden border-t border-stone-200/60" 
             dir="rtl"
           >
             {/* Scrollable Content Wrapper */}
@@ -915,12 +927,17 @@ export function Layout() {
         <div className="max-w-[1200px] mx-auto px-4 py-12 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
             <div className="md:col-span-2">
-              <Link to="/" className="text-2xl font-black tracking-tighter text-[#1a4d2e] flex items-center gap-2 mb-4">
+              <Link to="/" className="text-2xl sm:text-3xl font-black tracking-tighter text-[#1a4d2e] flex items-center gap-2.5 mb-4 group">
                 {globalSettings.logoUrl && globalSettings.useFullLogo ? (
-                  <img src={globalSettings.logoUrl} alt={globalSettings.siteName} className="h-10 max-w-[220px] object-contain" />
+                  <img 
+                    src={globalSettings.logoUrl} 
+                    alt={globalSettings.siteName} 
+                    style={{ height: `${Math.min(65, Math.max(44, globalSettings.logoHeight || 55))}px` }}
+                    className="max-h-[65px] max-w-[280px] object-contain group-hover:scale-102 transition-transform" 
+                  />
                 ) : (
                   <>
-                    <div className="w-8 h-8 rounded-xl bg-[#1a4d2e] flex items-center justify-center text-white shadow-xs overflow-hidden shrink-0">
+                    <div className="w-10 h-10 rounded-2xl bg-[#1a4d2e] flex items-center justify-center text-white shadow-xs overflow-hidden shrink-0 group-hover:scale-105 transition-transform">
                       {globalSettings.logoUrl ? (
                         <img src={globalSettings.logoUrl} alt={globalSettings.siteName} className="w-full h-full object-cover" />
                       ) : (

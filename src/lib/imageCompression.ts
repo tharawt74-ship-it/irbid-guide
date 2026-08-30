@@ -60,11 +60,15 @@ export async function compressImage(
           return reject(new Error("فشل تجهيز مساحة الرسام لتصغير الصورة"));
         }
 
-        // Draw image onto canvas
+        // Check if file is PNG or WebP to preserve alpha transparency
+        const isPng = file.type === 'image/png' || file.name.toLowerCase().endsWith('.png');
+        const outputType = isPng ? 'image/png' : 'image/jpeg';
+        
+        // Draw image onto canvas (clear canvas first to guarantee true transparency)
+        ctx.clearRect(0, 0, width, height);
         ctx.drawImage(img, 0, 0, width, height);
 
-        // Convert to WebP or JPEG blob
-        const outputType = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+        // Convert to PNG or JPEG blob
         canvas.toBlob(
           (blob) => {
             if (!blob) {
@@ -73,7 +77,7 @@ export async function compressImage(
 
             const compressedFile = new File(
               [blob],
-              file.name.replace(/\.[^/.]+$/, "") + (outputType === 'image/png' ? '.png' : '.jpg'),
+              file.name.replace(/\.[^/.]+$/, "") + (isPng ? '.png' : '.jpg'),
               { type: outputType, lastModified: Date.now() }
             );
 
@@ -90,7 +94,7 @@ export async function compressImage(
             });
           },
           outputType,
-          quality
+          isPng ? undefined : quality
         );
       };
 

@@ -1,10 +1,11 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useRef, ReactNode } from 'react';
 import { collection, query, getDocs, orderBy, doc, updateDoc, setDoc, deleteDoc, onSnapshot, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from './AuthContext';
 import { AppNotification } from '../types';
 import { getAppConfig } from '../lib/demoDataHelper';
 import { showNativeNotification } from '../lib/pushNotifications';
+import { sanitizeFirestorePayload } from '../lib/firestoreHelper';
 
 interface NotificationsContextType {
   notifications: AppNotification[];
@@ -18,12 +19,20 @@ interface NotificationsContextType {
 }
 
 const LOCAL_STORAGE_READ_KEY = 'irbid_read_notifications_ids';
+const LOCAL_STORAGE_CACHE_KEY = 'irbid_notifications_cached_list';
 
 const NotificationsContext = createContext<NotificationsContextType | undefined>(undefined);
 
 export function NotificationsProvider({ children }: { children: ReactNode }) {
   const { currentUser } = useAuth();
-  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>(() => {
+    try {
+      const cached = localStorage.getItem(LOCAL_STORAGE_CACHE_KEY);
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
   const [readIds, setReadIds] = useState<Set<string>>(() => {
     try {
       const stored = localStorage.getItem(LOCAL_STORAGE_READ_KEY);
@@ -33,6 +42,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     }
   });
   const [loading, setLoading] = useState(true);
+  const isInitialLoadedRef = useRef(false);
 
   // Sync readIds to localStorage
   const saveReadIds = (newSet: Set<string>) => {
@@ -44,6 +54,15 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Sync notifications cache to localStorage
+  const saveCache = (list: AppNotification[]) => {
+    try {
+      localStorage.setItem(LOCAL_STORAGE_CACHE_KEY, JSON.stringify(list.slice(0, 100)));
+    } catch (e) {
+      console.warn("Could not cache notifications:", e);
+    }
+  };
+
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
 
@@ -52,48 +71,93 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       try {
         if (db) {
           const appConfig = await getAppConfig();
-          // Listen to notifications collection in Firestore
-          const notifQuery = query(collection(db, 'notifications'), orderBy('createdAt', 'desc'));
-          unsubscribe = onSnapshot(notifQuery, (snapshot) => {
+          const notifCollection = collection(db, 'notifications');
+          
+          // Use onSnapshot to receive real-time broadcast and personal notifications
+          unsubscribe = onSnapshot(notifCollection, (snapshot) => {
             const firestoreItems: AppNotification[] = [];
+            const now = Date.now();
+
             snapshot.forEach((d) => {
               const data = d.data();
               if (!appConfig.showDemoData && data.isDemo) {
                 return;
               }
-              // Check if notification is for all or for this user
-              if (!data.userId || data.userId === 'all' || (currentUser && data.userId === currentUser.uid)) {
-                // Only show notifications that have reached their scheduled start/publish date
-                if (data.createdAt && data.createdAt > Date.now()) {
+
+              // Check audience: broadcast to 'all' or specifically to this user
+              const isTargetAudience = !data.userId || data.userId === 'all' || (currentUser && data.userId === currentUser.uid);
+              if (isTargetAudience) {
+                // Parse timestamp correctly
+                let createdAtNum = now;
+                if (typeof data.createdAt === 'number') {
+                  createdAtNum = data.createdAt;
+                } else if (data.createdAt?.toMillis) {
+                  createdAtNum = data.createdAt.toMillis();
+                } else if (data.createdAt?.seconds) {
+                  createdAtNum = data.createdAt.seconds * 1000;
+                }
+
+                // If scheduled for future, skip unless it has arrived
+                if (createdAtNum > now + 60000) {
                   return;
                 }
+
                 firestoreItems.push({
                   id: d.id,
                   title: data.title || '',
                   message: data.message || '',
                   type: data.type || 'system',
                   link: data.link || '',
-                  createdAt: data.createdAt || Date.now(),
-                  userId: data.userId,
-                  badge: data.badge,
+                  createdAt: createdAtNum,
+                  userId: data.userId || 'all',
+                  badge: data.badge || undefined,
+                  targetArea: data.targetArea || undefined,
+                  targetCategory: data.targetCategory || undefined,
+                  targetSubCategory: data.targetSubCategory || undefined,
+                  businessId: data.businessId || undefined,
+                  businessName: data.businessName || undefined,
+                  businessLogoUrl: data.businessLogoUrl || undefined,
                 });
               }
             });
 
+            // Sort newest first
+            firestoreItems.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+            // Trigger system native notification for active visitors when a new broadcast arrives in real-time
+            if (isInitialLoadedRef.current) {
+              snapshot.docChanges().forEach((change) => {
+                if (change.type === 'added') {
+                  const itemData = change.doc.data();
+                  const isForVisitor = !itemData.userId || itemData.userId === 'all' || (currentUser && itemData.userId === currentUser.uid);
+                  if (isForVisitor) {
+                    const itemTime = typeof itemData.createdAt === 'number' ? itemData.createdAt : now;
+                    // If arrived in last 5 minutes
+                    if (now - itemTime < 5 * 60 * 1000) {
+                      showNativeNotification(
+                        itemData.title || 'إشعار جديد 📢',
+                        itemData.message || 'وصلك إشعار وتحديث جديد في شو في بإربد',
+                        itemData.link || '/notifications'
+                      );
+                    }
+                  }
+                }
+              });
+            }
+
             setNotifications(firestoreItems);
+            saveCache(firestoreItems);
             setLoading(false);
+            isInitialLoadedRef.current = true;
           }, (err) => {
-            console.warn("Firestore notifications snapshot warning:", err);
-            setNotifications([]);
+            console.warn("Firestore notifications listener error:", err);
             setLoading(false);
           });
         } else {
-          setNotifications([]);
           setLoading(false);
         }
       } catch (err) {
-        console.error("Error loading notifications:", err);
-        setNotifications([]);
+        console.error("Error setting up notifications:", err);
         setLoading(false);
       }
     }
@@ -145,18 +209,24 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   };
 
   const deleteNotification = async (id: string) => {
-    setNotifications(prev => prev.filter(n => n.id !== id));
+    setNotifications(prev => {
+      const filtered = prev.filter(n => n.id !== id);
+      saveCache(filtered);
+      return filtered;
+    });
+
     if (db && !id.startsWith('init-')) {
       try {
         await deleteDoc(doc(db, 'notifications', id));
       } catch (e) {
-        console.error(e);
+        console.error("Error deleting notification from firestore:", e);
       }
     }
   };
 
   const clearAll = async () => {
     setNotifications([]);
+    saveCache([]);
     const next = new Set<string>();
     saveReadIds(next);
   };
@@ -169,18 +239,25 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       isRead: false,
     };
 
+    // Update local state immediately
+    setNotifications(prev => {
+      const updated = [newNotif, ...prev.filter(n => n.id !== newNotif.id)];
+      saveCache(updated);
+      return updated;
+    });
+
+    // Save to Firestore with clean payload without undefined fields
     if (db) {
       try {
-        await setDoc(doc(db, 'notifications', newNotif.id), newNotif);
+        const sanitized = sanitizeFirestorePayload(newNotif, false);
+        await setDoc(doc(db, 'notifications', newNotif.id), sanitized);
       } catch (err) {
-        console.warn("Could not save notification to Firestore:", err);
+        console.error("Error saving notification to Firestore:", err);
       }
     }
 
-    // Trigger device native push notification
-    showNativeNotification(notifData.title, notifData.message, notifData.link);
-
-    setNotifications(prev => [newNotif, ...prev]);
+    // Trigger local push notification popup
+    showNativeNotification(notifData.title, notifData.message, notifData.link || '/notifications');
   };
 
   return (
@@ -208,3 +285,4 @@ export function useNotifications() {
   }
   return context;
 }
+

@@ -121,54 +121,93 @@ export function GlobalSettingsManager({ showToast }: GlobalSettingsManagerProps)
                 </button>
               </div>
 
-              {/* Logo Height / Size Adjustment Slider */}
-              <div className="pt-3 border-t border-stone-100 mt-2 space-y-2">
+              {/* Logo Height / Size Adjustment Slider & Presets */}
+              <div className="pt-3 border-t border-stone-100 mt-2 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-stone-700">حجم وارتفاع اللوجو في الشريط العلوي:</span>
-                  <span className="text-xs font-black text-[#1a4d2e] bg-[#1a4d2e]/10 px-2 py-0.5 rounded-md" dir="ltr">
-                    {formData.logoHeight || 55} px
+                  <span className="text-xs font-bold text-stone-700">حجم الشعار داخل الشريط العلوي:</span>
+                  <span className="text-xs font-black text-[#1a4d2e] bg-[#1a4d2e]/10 px-2.5 py-1 rounded-lg border border-[#1a4d2e]/20" dir="ltr">
+                    {formData.logoHeight || 52} px
                   </span>
                 </div>
                 
                 <input
                   type="range"
-                  min="32"
-                  max="110"
+                  min="28"
+                  max="80"
                   step="2"
-                  value={formData.logoHeight || 55}
+                  value={formData.logoHeight || 52}
                   onChange={(e) => setFormData({ ...formData, logoHeight: Number(e.target.value) })}
                   className="w-full accent-[#1a4d2e] cursor-pointer"
                 />
 
-                <div className="flex items-center justify-between text-[10px] font-bold text-stone-500 pt-0.5">
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, logoHeight: 38 })}
-                    className="hover:text-[#1a4d2e] underline cursor-pointer"
-                  >
-                    صغير (38px)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, logoHeight: 55 })}
-                    className="hover:text-[#1a4d2e] underline cursor-pointer"
-                  >
-                    متوسط (55px)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, logoHeight: 75 })}
-                    className="hover:text-[#1a4d2e] underline cursor-pointer"
-                  >
-                    كبير (75px)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, logoHeight: 95 })}
-                    className="hover:text-[#1a4d2e] underline cursor-pointer"
-                  >
-                    جامبو (95px)
-                  </button>
+                {/* Preset Size Buttons */}
+                <div className="grid grid-cols-5 gap-1.5 pt-1">
+                  {[
+                    { label: 'صغير', size: 36 },
+                    { label: 'متوسط', size: 48 },
+                    { label: 'كبير', size: 58 },
+                    { label: 'كبير جداً', size: 68 },
+                    { label: 'أقصى حجم', size: 78 }
+                  ].map((preset) => {
+                    const isSelected = (formData.logoHeight || 52) === preset.size;
+                    return (
+                      <button
+                        key={preset.size}
+                        type="button"
+                        onClick={() => setFormData({ ...formData, logoHeight: preset.size })}
+                        className={`flex flex-col items-center justify-center py-2 px-1 rounded-xl text-[11px] font-black transition-all cursor-pointer border ${
+                          isSelected
+                            ? 'bg-[#1a4d2e] text-white border-[#1a4d2e] shadow-xs scale-102'
+                            : 'bg-stone-50 text-stone-600 border-stone-200 hover:bg-stone-100 hover:text-stone-900'
+                        }`}
+                      >
+                        <span>{preset.label}</span>
+                        <span className={`text-[9px] font-bold mt-0.5 ${isSelected ? 'text-emerald-200' : 'text-stone-400'}`}>
+                          {preset.size}px
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Live Logo Preview Container */}
+                <div className="mt-3 p-3 bg-stone-100/80 rounded-2xl border border-stone-200 space-y-1.5">
+                  <span className="text-[10px] font-bold text-stone-500 block">معاينة فورية لحجم الشعار:</span>
+                  <div className="bg-white rounded-xl p-3 border border-stone-200/90 flex items-center justify-center min-h-[64px] overflow-hidden">
+                    {formData.useFullLogo && formData.logoUrl ? (
+                      <img 
+                        src={formData.logoUrl} 
+                        alt="معاينة اللوجو" 
+                        style={{ height: `${formData.logoHeight || 52}px` }}
+                        className="max-h-[64px] max-w-full object-contain"
+                      />
+                    ) : (
+                      <div className="flex items-center gap-3">
+                        <div 
+                          style={{
+                            width: `${Math.min(54, Math.max(34, Math.round((formData.logoHeight || 52) * 0.8)))}px`,
+                            height: `${Math.min(54, Math.max(34, Math.round((formData.logoHeight || 52) * 0.8)))}px`
+                          }}
+                          className="rounded-2xl bg-gradient-to-br from-[#1a4d2e] to-[#133b22] text-white flex items-center justify-center shadow-xs overflow-hidden shrink-0"
+                        >
+                          {formData.logoUrl ? (
+                            <img src={formData.logoUrl} alt="معاينة" className="w-full h-full object-cover" />
+                          ) : (
+                            <ImageIcon className="h-6 w-6 text-[#ff9f1c]" />
+                          )}
+                        </div>
+                        <div className="flex flex-col">
+                          <span 
+                            style={{ fontSize: `${Math.min(22, Math.max(14, Math.round((formData.logoHeight || 52) * 0.34)))}px` }}
+                            className="font-black text-[#1a4d2e] leading-none"
+                          >
+                            {formData.siteName || 'اسم الموقع'}
+                          </span>
+                          <span className="text-[10px] font-bold text-stone-400 mt-1">{formData.siteSubtitle || 'العنوان الفرعي'}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

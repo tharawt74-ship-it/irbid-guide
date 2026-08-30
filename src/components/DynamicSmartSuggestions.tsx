@@ -28,7 +28,6 @@ export const SUGGESTION_GROUPS: SuggestionGroup[] = [
       { text: 'برغر وسناكات 🍔', query: 'برجر' },
       { text: 'مشاوي وفطور بلدي 🧆', query: 'مشاوي' },
       { text: 'بيتزا ومعجنات 🍕', query: 'بيتزا' },
-      { text: 'وجبات عائلية 🍗', query: 'وجبات' },
     ]
   },
   {
@@ -41,7 +40,6 @@ export const SUGGESTION_GROUPS: SuggestionGroup[] = [
       { text: 'مقاهي شبابية وعائلية 🌿', query: 'كافيه' },
       { text: 'مكتبات وتصوير أبحاث 📚', query: 'مكتبه' },
       { text: 'شاي ومشروبات ساخنة 🫖', query: 'شاي' },
-      { text: 'لاتيه وسبيشالتي كوفي ☕', query: 'قهوه' },
     ]
   },
   {
@@ -54,7 +52,6 @@ export const SUGGESTION_GROUPS: SuggestionGroup[] = [
       { text: 'عيادات أسنان 🦷', query: 'اسنان' },
       { text: 'أطباء واستشارات 🩺', query: 'طبيب' },
       { text: 'مختبرات وبصريات 🔬', query: 'مختبر' },
-      { text: 'مراكز علاج طبيعي 🩹', query: 'صحه' },
     ]
   },
   {
@@ -65,9 +62,8 @@ export const SUGGESTION_GROUPS: SuggestionGroup[] = [
     suggestions: [
       { text: 'كنافة وحلويات شرقية 🍯', query: 'حلويات', highlight: true },
       { text: 'آيس كريم وعصائر منعشة 🍦', query: 'عصائر' },
-      { text: 'كيك وتورتات مناسبات 🎂', query: 'كيك' },
-      { text: 'وافل وكريب 🥞', query: 'وافل' },
-      { text: 'مخبوزات ساخنة 🥐', query: 'مخبز' },
+      { text: 'كيك ومناسبات 🎂', query: 'كيك' },
+      { text: 'وافل ومعجنات 🥐', query: 'وافل' },
     ]
   },
   {
@@ -79,7 +75,7 @@ export const SUGGESTION_GROUPS: SuggestionGroup[] = [
       { text: 'سكن طالبات وطلاب 🎓', query: 'سكن', highlight: true },
       { text: 'شقق مفروشة للإيجار 🏢', query: 'شقه' },
       { text: 'قرطاسية وأدوات جامعية 📖', query: 'كتب' },
-      { text: 'استوديوهات قريبة من اليرموك 🏫', query: 'سكن' },
+      { text: 'خدمات طلابية وطباعة 📑', query: 'دراسه' },
     ]
   },
   {
@@ -88,11 +84,10 @@ export const SUGGESTION_GROUPS: SuggestionGroup[] = [
     categoryIcon: '✨',
     badgeBg: 'bg-purple-500/20 text-purple-300 border-purple-400/30',
     suggestions: [
-      { text: 'أزياء وملابس وموضة 👗', query: 'ملابس', highlight: true },
+      { text: 'أزياء وموضة 👗', query: 'ملابس', highlight: true },
       { text: 'صالونات ومراكز تجميل ✂️', query: 'صالون' },
       { text: 'عطور وهدايا فاخرة 🎁', query: 'عطور' },
       { text: 'نوادي رياضية وجيم 🏋️', query: 'رياضه' },
-      { text: 'ذهب ومجوهرات 💍', query: 'ذهب' },
     ]
   },
   {
@@ -114,20 +109,45 @@ export const SUGGESTION_GROUPS: SuggestionGroup[] = [
     badgeBg: 'bg-orange-500/20 text-orange-300 border-orange-400/30',
     suggestions: [
       { text: 'محلات نجارة ومطابخ 🪚', query: 'نجار', highlight: true },
-      { text: 'محلات حدادة وتشكيل معادن 🔨', query: 'حداد' },
-      { text: 'محاجر ومصانع حجر وسيراميك 🧱', query: 'حجر' },
+      { text: 'محلات حدادة ومعادن 🔨', query: 'حداد' },
+      { text: 'محاجر ومصانع حجر 🧱', query: 'حجر' },
       { text: 'مواد بناء ودهانات 🎨', query: 'بناء' },
     ]
   },
   {
     id: 'food_supplies',
-    categoryName: 'ملاحم ودواجن ومياه شرب',
+    categoryName: 'ملاحم ومخابز ومياه شرب',
     categoryIcon: '💧',
     badgeBg: 'bg-cyan-500/20 text-cyan-300 border-cyan-400/30',
     suggestions: [
-      { text: 'محطات تنقية مياه شرب وفلاتر 💧', query: 'مياه', highlight: true },
-      { text: 'ملاحم وقصابين لحوم طازجة 🥩', query: 'لحم' },
-      { text: 'محلات دواجن ونتفات 🐔', query: 'دجاج' },
+      { text: 'محطات تنقية مياه وفلاتر 💧', query: 'مياه', highlight: true },
+      { text: 'ملاحم وقصابين طازج 🥩', query: 'لحم' },
+      { text: 'محلات دواجن طازجة 🐔', query: 'دجاج' },
+      { text: 'مخابز ومعجنات طازجة 🥖', query: 'مخبز' },
+    ]
+  },
+  {
+    id: 'factories',
+    categoryName: 'مصانع وإنتاج وشركات',
+    categoryIcon: '🏭',
+    badgeBg: 'bg-amber-600/20 text-amber-300 border-amber-500/30',
+    suggestions: [
+      { text: 'مصانع ومحامص قهوة وتعبئة ☕', query: 'قهوة', highlight: true },
+      { text: 'مصانع أغذية وألبان ومعلبات 🥫', query: 'مصنع' },
+      { text: 'مصانع مدينة الحسن الصناعية 🏭', query: 'صناعية' },
+      { text: 'مصانع بلاستيك ومنظفات وكرتون 📦', query: 'تغليف' },
+    ]
+  },
+  {
+    id: 'tech_innovation',
+    categoryName: 'تقنية وبرمجيات وابتكار',
+    categoryIcon: '💻',
+    badgeBg: 'bg-sky-500/20 text-sky-300 border-sky-400/30',
+    suggestions: [
+      { text: 'شركات برمجيات وتطبيقات 💻', query: 'برمجة', highlight: true },
+      { text: 'مراكز خدمة عملاء وتعهيد 🎧', query: 'عملاء' },
+      { text: 'مختبرات طباعة 3D ونمذجة 🖨️', query: 'طباعة' },
+      { text: 'حلول ذكاء اصطناعي وأمن 🤖', query: 'تقنية' },
     ]
   }
 ];
@@ -168,13 +188,13 @@ export function DynamicSmartSuggestions({ onSelectSuggestion }: DynamicSmartSugg
 
   return (
     <div 
-      className="mt-3 md:mt-5 w-full select-none" 
+      className="mt-3 md:mt-5 w-full max-w-2xl mx-auto select-none" 
       dir="rtl"
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
     >
       {/* Header bar with animated category indicator and change action */}
-      <div className="flex items-center justify-between gap-1 mb-2 px-1 md:px-2 max-w-xl mx-auto">
+      <div className="flex items-center justify-between gap-1 mb-2 px-1 md:px-2 max-w-xl mx-auto h-6">
         <div className="flex items-center gap-1 text-[10px] md:text-xs text-white/80 font-bold">
           <motion.div
             animate={{ rotate: [0, 15, -15, 0] }}
@@ -234,34 +254,34 @@ export function DynamicSmartSuggestions({ onSelectSuggestion }: DynamicSmartSugg
         </div>
       </div>
  
-      {/* Animated Suggestion Pills Box */}
-      <div className="relative min-h-[38px] md:min-h-[50px] flex items-center justify-center overflow-hidden">
+      {/* Animated Suggestion Pills Box with Stable Proportional Footprint */}
+      <div className="relative w-full min-h-[70px] sm:min-h-[42px] flex items-center justify-center">
         <AnimatePresence mode="wait">
           <motion.div
             key={currentGroup.id}
-            initial={{ opacity: 0, y: 8, scale: 0.97 }}
+            initial={{ opacity: 0, y: 5, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -8, scale: 0.97 }}
-            transition={{ duration: 0.3, ease: 'easeOut' }}
-            className="flex flex-wrap items-center justify-center gap-1.5 md:gap-2"
+            exit={{ opacity: 0, y: -5, scale: 0.98 }}
+            transition={{ duration: 0.22, ease: 'easeOut' }}
+            className="w-full flex flex-wrap items-center justify-center gap-1.5 md:gap-2 px-1"
           >
             {currentGroup.suggestions.map((sug, idx) => (
               <motion.button
                 key={`${currentGroup.id}-${sug.query}-${idx}`}
                 type="button"
-                initial={{ opacity: 0, scale: 0.88 }}
+                initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.22, delay: idx * 0.03 }}
-                whileHover={{ scale: 1.05, y: -1 }}
-                whileTap={{ scale: 0.95 }}
+                transition={{ duration: 0.18, delay: idx * 0.02 }}
+                whileHover={{ scale: 1.04, y: -1 }}
+                whileTap={{ scale: 0.96 }}
                 onClick={() => onSelectSuggestion(sug.query)}
-                className={`group relative overflow-hidden px-2 py-1 md:px-3.5 md:py-1.5 rounded-full font-bold text-[10px] md:text-xs transition-all shadow-xs cursor-pointer backdrop-blur-md border ${
+                className={`group relative overflow-hidden px-2.5 py-1.5 md:px-3.5 md:py-1.5 rounded-full font-bold text-[11px] md:text-xs transition-all shadow-xs cursor-pointer backdrop-blur-md border ${
                   sug.highlight
                     ? 'bg-gradient-to-r from-amber-500/30 to-amber-600/30 hover:from-amber-500/40 hover:to-amber-600/40 text-amber-200 border-amber-400/40 ring-1 ring-amber-400/20'
                     : 'bg-white/15 hover:bg-white/25 text-white border-white/20 hover:border-white/40'
                 }`}
               >
-                <span className="relative z-10 flex items-center gap-1 md:gap-1.5">
+                <span className="relative z-10 flex items-center gap-1 whitespace-nowrap">
                   <span>{sug.text}</span>
                 </span>
                 
@@ -274,7 +294,7 @@ export function DynamicSmartSuggestions({ onSelectSuggestion }: DynamicSmartSugg
       </div>
  
       {/* Progress Dots Indicator */}
-      <div className="flex items-center justify-center gap-1 mt-2 md:mt-3">
+      <div className="flex items-center justify-center gap-1 mt-2 h-3">
         {SUGGESTION_GROUPS.map((group, idx) => (
           <button
             key={group.id}

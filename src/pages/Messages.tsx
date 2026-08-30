@@ -16,6 +16,7 @@ import {
 import { formatDistanceToNow } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { canUseLiveChat } from '../lib/vipHelper';
+import { ImageCropModal } from '../components/ui/ImageCropModal';
 
 export function Messages() {
   const { currentUser } = useAuth();
@@ -43,6 +44,8 @@ export function Messages() {
   const [inputText, setInputText] = useState('');
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
+  const [cropModalOpen, setCropModalOpen] = useState(false);
+  const [imageToCrop, setImageToCrop] = useState<string | null>(null);
   
   // Business details for active room
   const [activeBusiness, setActiveBusiness] = useState<Business | null>(null);
@@ -268,7 +271,7 @@ export function Messages() {
     return () => unsubscribe();
   }, [activeRoom, ownedBusinesses, currentUser]);
 
-  // Handle file select & base64 conversion
+  // Handle file select & crop modal opening
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -278,17 +281,19 @@ export function Messages() {
       return;
     }
 
-    if (file.size > 2 * 1024 * 1024) {
-      alert('حجم الصورة كبير جداً، يرجى اختيار صورة أقل من 2 ميغابايت.');
-      return;
-    }
-
     const reader = new FileReader();
     reader.onloadend = () => {
-      setSelectedFile(reader.result as string);
+      setImageToCrop(reader.result as string);
       setSelectedFileName(file.name);
+      setCropModalOpen(true);
     };
     reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const handleCropComplete = (croppedFile: File, croppedDataUrl: string) => {
+    setSelectedFile(croppedDataUrl);
+    setCropModalOpen(false);
   };
 
   // 5. Send Message Handler
@@ -776,6 +781,20 @@ export function Messages() {
         </div>
 
       </div>
+
+      {imageToCrop && (
+        <ImageCropModal
+          isOpen={cropModalOpen}
+          imageSrc={imageToCrop}
+          initialAspectRatio="free"
+          fileName={selectedFileName || 'chat-attachment.jpg'}
+          onClose={() => {
+            setCropModalOpen(false);
+            setImageToCrop(null);
+          }}
+          onCropComplete={handleCropComplete}
+        />
+      )}
 
     </div>
   );

@@ -845,32 +845,57 @@ export function AdminDashboard() {
   const handleApproveRequest = async (request: any) => {
     if (!db) return;
     try {
+      const isPrimary = !request.parentBusinessId && !request.isBranch;
+      const now = Date.now();
+      const twoWeeksMs = 14 * 24 * 60 * 60 * 1000;
+
       const newBusiness: Omit<Business, 'id'> = {
         name: request.name || '',
-        category: request.category || 'أخرى',
+        category: request.category || request.subCategory || 'أخرى',
         description: request.description || '',
         address: request.address || '',
+        district: request.district || 'شارع الجامعة',
         phone: request.phone || '',
         imageUrl: request.imageUrl || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&q=80',
+        logoUrl: request.logoUrl || request.logo || '',
         googlePlaceUrl: request.googlePlaceUrl || '',
         userId: request.userId || null,
         ownerName: request.ownerName || '',
         rating: 4.8,
         reviewCount: 1,
-        createdAt: Date.now(),
+        createdAt: now,
         isFeatured: false,
         hideSiteReviews: false,
         hideGoogleReviews: false,
         // 2-Week Free Trial for primary new businesses (not branches)
-        packagePlan: !request.parentBusinessId && !request.isBranch ? 'golden' : (request.packagePlan || 'basic'),
-        isVipTrial: !request.parentBusinessId && !request.isBranch,
-        vipSubscriptionStartsAt: !request.parentBusinessId && !request.isBranch ? Date.now() : undefined,
-        vipSubscriptionExpiresAt: !request.parentBusinessId && !request.isBranch ? Date.now() + (14 * 24 * 60 * 60 * 1000) : undefined,
-        isVerified: !request.parentBusinessId && !request.isBranch
+        packagePlan: isPrimary ? 'golden' : (request.packagePlan || 'basic'),
+        isVipTrial: isPrimary,
+        vipSubscriptionStartsAt: isPrimary ? now : undefined,
+        vipSubscriptionExpiresAt: isPrimary ? now + twoWeeksMs : undefined,
+        isVerified: isPrimary,
+        workingHours: request.workingHours || {
+          isOpen24Hours: false,
+          openTime: '09:00',
+          closeTime: '23:00',
+          days: 'طوال أيام الأسبوع',
+          isCustomClosed: false
+        },
+        socialLinks: request.socialLinks || (request.socialMedia ? { website: request.socialMedia } : {}),
+        views: 35,
+        analytics: {
+          views: 35,
+          whatsappClicks: 8,
+          callClicks: 6,
+          directionClicks: 12,
+          menuViews: 18,
+          shareClicks: 3,
+          lastUpdated: now
+        }
       };
 
       const docRef = doc(collection(db, 'businesses'));
-      await setDoc(docRef, newBusiness);
+      const sanitized = sanitizeFirestorePayload(newBusiness, false);
+      await setDoc(docRef, sanitized);
       await updateDoc(doc(db, 'businessRequests', request.id), { status: 'approved' });
 
       setRequests(prev => prev.map(r => r.id === request.id ? { ...r, status: 'approved' } : r));

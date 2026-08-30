@@ -1,7 +1,8 @@
 import React, { useState, useRef } from 'react';
-import { Upload, Image as ImageIcon, Trash2, CheckCircle2, Sparkles, Link as LinkIcon, RefreshCw, AlertCircle } from 'lucide-react';
+import { Upload, Image as ImageIcon, Trash2, CheckCircle2, Sparkles, Link as LinkIcon, RefreshCw, AlertCircle, Crop as CropIcon } from 'lucide-react';
 import { uploadAndCompressImage } from '../../lib/storageHelper';
 import { formatFileSize } from '../../lib/imageCompression';
+import { ImageCropModal, CropAspectRatio } from './ImageCropModal';
 
 interface ImageUploaderProps {
   value?: string;
@@ -11,6 +12,7 @@ interface ImageUploaderProps {
   aspectRatio?: 'square' | 'cover' | 'banner';
   placeholder?: string;
   className?: string;
+  enableCrop?: boolean;
 }
 
 export function ImageUploader({
@@ -20,7 +22,8 @@ export function ImageUploader({
   label,
   aspectRatio = 'square',
   placeholder = 'اختر صورة من جهازك أو اسحبها هنا',
-  className = ''
+  className = '',
+  enableCrop = true
 }: ImageUploaderProps) {
   const [isUploading, setIsUploading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -28,14 +31,13 @@ export function ImageUploader({
   const [uploadStats, setUploadStats] = useState<{ original: number; compressed: number; ratio: number } | null>(null);
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [customUrl, setCustomUrl] = useState('');
+  const [cropModalOpen, setCropModalOpen] = useState(false);
+  const [imageToCrop, setImageToCrop] = useState<string | null>(null);
+  const [pendingFileName, setPendingFileName] = useState('image.jpg');
+  const [pendingFileType, setPendingFileType] = useState('image/jpeg');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileSelect = async (file: File) => {
-    if (!file.type.startsWith('image/')) {
-      alert("يرجى اختيار ملف صورة صالح (JPG, PNG, WebP)!");
-      return;
-    }
-
+  const startUploadProcess = async (file: File) => {
     setIsUploading(true);
     setProgress(5);
     setUploadStats(null);
@@ -60,6 +62,41 @@ export function ImageUploader({
       alert("حدث خطأ أثناء تحميل الصورة. يرجى المحاولة مرة أخرى.");
     } finally {
       setIsUploading(false);
+    }
+  };
+
+  const handleFileSelect = (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      alert("يرجى اختيار ملف صورة صالح (JPG, PNG, WebP)!");
+      return;
+    }
+
+    if (enableCrop) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setImageToCrop(reader.result as string);
+        setPendingFileName(file.name);
+        setPendingFileType(file.type || (file.name.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg'));
+        setCropModalOpen(true);
+      };
+      reader.readAsDataURL(file);
+    } else {
+      startUploadProcess(file);
+    }
+  };
+
+  const handleCropComplete = (croppedFile: File) => {
+    setCropModalOpen(false);
+    startUploadProcess(croppedFile);
+  };
+
+  const handleOpenCropForCurrent = () => {
+    if (value) {
+      setImageToCrop(value);
+      const isPng = value.toLowerCase().includes('.png') || value.startsWith('data:image/png');
+      setPendingFileName(isPng ? 'recropped.png' : 'recropped.jpg');
+      setPendingFileType(isPng ? 'image/png' : 'image/jpeg');
+      setCropModalOpen(true);
     }
   };
 
@@ -153,7 +190,18 @@ export function ImageUploader({
                 alt="Preview"
                 className="w-full h-full object-cover transition-transform group-hover:scale-105"
               />
-              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 p-2 flex-wrap">
+                {enableCrop && (
+                  <button
+                    type="button"
+                    onClick={handleOpenCropForCurrent}
+                    className="p-2 bg-emerald-600/90 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold flex items-center gap-1 shadow-md transition-all hover:scale-105"
+                    title="قص وتعديل المقاس"
+                  >
+                    <CropIcon className="h-3.5 w-3.5" />
+                    <span>قص</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
@@ -198,7 +246,12 @@ export function ImageUploader({
                 ref={fileInputRef}
                 type="file"
                 accept="image/*"
-                onChange={(e) => e.target.files?.[0] && handleFileSelect(e.target.files[0])}
+                onChange={(e) => {
+                  if (e.target.files?.[0]) {
+                    handleFileSelect(e.target.files[0]);
+                    e.target.value = ''; // Reset input to allow selecting same file if needed
+                  }
+                }}
                 className="hidden"
               />
 
@@ -206,7 +259,7 @@ export function ImageUploader({
                 <div className="py-4 space-y-2 w-full max-w-xs mx-auto">
                   <div className="flex items-center justify-center gap-2 text-xs font-bold text-[#1a4d2e]">
                     <Sparkles className="h-4 w-4 animate-spin" />
-                    <span>جاري ضغط الصورة ونقلها إلى Firebase Storage...</span>
+                    <span>جاري ضغط الصورة ونقلها إلى التخزين...</span>
                   </div>
                   <div className="w-full bg-stone-200 rounded-full h-2 overflow-hidden">
                     <div
@@ -224,7 +277,7 @@ export function ImageUploader({
                   <div className="space-y-0.5">
                     <p className="text-xs font-bold text-stone-800">{placeholder}</p>
                     <p className="text-[10px] text-stone-500 font-medium">
-                      يتم تصغير وضغط الصور تلقائياً لنقاء عالٍ وسرعة فائقة
+                      يتيح لك قص وتدوير وتكبير وتحديد المقاس قبل الرفع التلقائي
                     </p>
                   </div>
                 </>
@@ -242,6 +295,22 @@ export function ImageUploader({
             الحجم الأصلي: {formatFileSize(uploadStats.original)} ← المضغوط: {formatFileSize(uploadStats.compressed)} (وفرت {uploadStats.ratio}%)
           </span>
         </div>
+      )}
+
+      {/* Interactive Crop Modal */}
+      {imageToCrop && (
+        <ImageCropModal
+          isOpen={cropModalOpen}
+          imageSrc={imageToCrop}
+          initialAspectRatio={aspectRatio}
+          fileName={pendingFileName}
+          fileType={pendingFileType}
+          onClose={() => {
+            setCropModalOpen(false);
+            setImageToCrop(null);
+          }}
+          onCropComplete={handleCropComplete}
+        />
       )}
     </div>
   );

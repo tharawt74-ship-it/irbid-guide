@@ -33,7 +33,7 @@ export function FloatingCartWidget() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 50, scale: 0.95 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-            className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-6 sm:w-[380px] z-40"
+            className="fixed bottom-22 left-3 right-3 md:bottom-6 md:left-auto md:right-6 md:w-[380px] z-50"
             dir="rtl"
           >
             <div className="bg-white/98 backdrop-blur-md rounded-3xl shadow-[0_12px_40px_rgba(0,0,0,0.18)] border-2 border-amber-400/80 p-4 space-y-3.5 relative overflow-hidden">
@@ -144,7 +144,7 @@ export function FloatingCartWidget() {
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0, opacity: 0 }}
-            className="fixed bottom-6 right-6 z-40"
+            className="fixed bottom-22 right-4 md:bottom-6 md:right-6 z-50"
             dir="rtl"
           >
             <button

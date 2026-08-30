@@ -803,59 +803,7 @@ export function DigitalMenuView({
         )}
       </AnimatePresence>
 
-      {/* Floating Active Cart Drawer */}
-      <AnimatePresence>
-        {totalCount > 0 && (
-          <motion.div
-            initial={{ y: 100, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 100, opacity: 0 }}
-            className="fixed bottom-16 left-0 right-0 z-50 px-4 pb-4 md:bottom-6 max-w-4xl mx-auto"
-            dir="rtl"
-          >
-            <div className="bg-[#1c1917] text-white rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-stone-800 shadow-2xl">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-[#ff9f1c] rounded-xl flex items-center justify-center text-[#2d2a26] shrink-0 font-black animate-pulse">
-                  <ShoppingBag className="h-6 w-6" />
-                </div>
-                <div>
-                  <h4 className="text-sm font-black">سلة الطلبات الرقمية النشطة ({totalCount} أصناف)</h4>
-                  <p className="text-xs text-stone-300 font-bold mt-0.5">القيمة الإجمالية: <span className="text-[#ff9f1c] font-black text-sm">{totalPrice.toFixed(2)} د.أ</span></p>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleOrderCartWhatsapp}
-                  className="flex-1 sm:flex-initial inline-flex justify-center items-center gap-1.5 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl transition-all cursor-pointer shadow-md"
-                >
-                  <MessageSquare className="h-4 w-4" />
-                  <span>أرسل الطلب عبر الواتساب</span>
-                </button>
-
-                <Link
-                  to="/cart"
-                  className="inline-flex justify-center items-center gap-1.5 px-4 py-2.5 bg-white hover:bg-stone-100 text-[#2d2a26] font-black text-xs rounded-xl transition-colors cursor-pointer"
-                >
-                  <span>استعراض السلة الكاملة</span>
-                  <ExternalLink className="h-3.5 w-3.5" />
-                </Link>
-
-                <button
-                  type="button"
-                  onClick={clearCart}
-                  className="p-2.5 bg-stone-800 hover:bg-stone-700 text-stone-400 hover:text-red-500 rounded-xl transition-colors cursor-pointer"
-                  title="تفريغ السلة"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
+      {/* Cart is handled globally by FloatingCartWidget */}
     </div>
   );
 }

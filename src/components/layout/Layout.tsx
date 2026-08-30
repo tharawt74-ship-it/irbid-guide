@@ -172,6 +172,7 @@ export function Layout() {
     if (path !== '/login' && path !== '/register') {
       sessionStorage.setItem('lastNonAuthPath', path + location.search);
     }
+    closeMenu();
   }, [location]);
 
   useEffect(() => {
@@ -1034,6 +1035,7 @@ export function Layout() {
         onOpenSearch={() => setIsSearchModalOpen(true)} 
         hasUnreadMessages={hasUnreadMessages} 
         onToggleMenu={() => setMobileMenuOpen(!mobileMenuOpen)}
+        onCloseMenu={closeMenu}
         isMenuOpen={mobileMenuOpen}
       />
     </div>

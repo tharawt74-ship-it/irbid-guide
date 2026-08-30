@@ -8,12 +8,14 @@ interface BottomNavigationProps {
   onOpenSearch: () => void;
   hasUnreadMessages?: boolean;
   onToggleMenu?: () => void;
+  onCloseMenu?: () => void;
   isMenuOpen?: boolean;
 }
 
 export function BottomNavigation({ 
   hasUnreadMessages, 
   onToggleMenu, 
+  onCloseMenu,
   isMenuOpen 
 }: BottomNavigationProps) {
   const location = useLocation();
@@ -135,6 +137,7 @@ export function BottomNavigation({
             <Link
               key={index}
               to={item.path!}
+              onClick={onCloseMenu}
               className="flex-1 flex flex-col items-center justify-center py-1 px-0.5 rounded-2xl transition-all relative cursor-pointer active:scale-95 group focus:outline-none min-w-0"
             >
               {innerContent}

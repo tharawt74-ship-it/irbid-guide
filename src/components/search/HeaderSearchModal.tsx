@@ -141,7 +141,12 @@ export function HeaderSearchModal({ isOpen, onClose }: HeaderSearchModalProps) {
 
   const handleSelectBusiness = (id: string) => {
     onClose();
-    navigate(`/business/${id}`);
+    const found = businesses.find((b) => b.id === id);
+    if (found && found.username && found.username.trim()) {
+      navigate(`/@${found.username.trim()}`);
+    } else {
+      navigate(`/business/${id}`);
+    }
   };
 
   const handleSearchOnHomePage = (q: string) => {

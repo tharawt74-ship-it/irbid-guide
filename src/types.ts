@@ -558,6 +558,7 @@ export interface HomepageBanner {
   // For 'business' type:
   businessId?: string;
   businessName?: string;
+  businessUsername?: string;
   category?: string; // Optional category badge
   rating?: number;
   address?: string;

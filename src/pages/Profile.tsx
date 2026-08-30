@@ -1272,7 +1272,7 @@ export function Profile() {
             <Store className="h-12 w-12 text-[#1a4d2e]/30 mx-auto mb-3" />
             <p className="text-stone-500 font-bold mb-4">لم تقم بإضافة أي محلات مسجلة في إربد بعد.</p>
             <Link to="/contact" className="inline-flex px-6 py-3 bg-[#1a4d2e] text-white rounded-xl font-bold hover:bg-[#133b22] transition-colors">
-              سجّل محلك الأول الآن مجاناً
+              ابدأ قصة نجاح محلك الآن
             </Link>
           </div>
         ) : (

@@ -1,0 +1,140 @@
+            <div className="border-b border-[#e5e1da] px-4 sm:px-8 flex overflow-x-auto gap-4 sm:gap-8 scrollbar-hide bg-stone-50/50" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+              <button 
+                onClick={() => setActiveTab('about')}
+                className={`py-3.5 sm:py-4 font-bold text-sm sm:text-base border-b-2 whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+                  activeTab === 'about' 
+                    ? 'border-[#1a4d2e] text-[#1a4d2e]' 
+                    : 'border-transparent text-stone-500 hover:text-[#2d2a26]'
+                }`}
+              >
+                <Info className="h-4 w-4" />
+                عن المحل
+              </button>
+
+              {vipInfo.isVip && (
+                <button 
+                  onClick={() => setActiveTab('menu')}
+                  className={`py-3.5 sm:py-4 font-bold text-sm sm:text-base border-b-2 whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+                    activeTab === 'menu' || activeTab === 'products'
+                      ? 'border-[#1a4d2e] text-[#1a4d2e]' 
+                      : 'border-transparent text-stone-500 hover:text-[#2d2a26]'
+                  }`}
+                >
+                  <UtensilsCrossed className="h-4 w-4 text-[#1a4d2e]" />
+                  <span>المنيو والكتالوج الرقمي</span>
+                  {business.menuItems && business.menuItems.length > 0 && (
+                    <span className="bg-[#1a4d2e]/10 text-[#1a4d2e] text-xs px-2 py-0.5 rounded-full font-bold">
+                      {business.menuItems.length}
+                    </span>
+                  )}
+                </button>
+              )}
+
+              {((business.category || "").includes('سكنات') || (business.category || "").includes('شقق') || (business.category || "").includes('عقارات')) && (
+                <button 
+                  onClick={() => setActiveTab('specs')}
+                  className={`py-3.5 sm:py-4 font-bold text-sm sm:text-base border-b-2 whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+                    activeTab === 'specs' 
+                      ? 'border-[#1a4d2e] text-[#1a4d2e]' 
+                      : 'border-transparent text-stone-500 hover:text-[#2d2a26]'
+                  }`}
+                >
+                  <Sparkles className="h-4 w-4" />
+                  مواصفات السكن
+                </button>
+              )}
+
+              {vipInfo.isVip && (
+                <button 
+                  onClick={() => setActiveTab('offers')}
+                  className={`py-3.5 sm:py-4 font-bold text-sm sm:text-base border-b-2 whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+                    activeTab === 'offers' 
+                      ? 'border-red-500 text-red-600' 
+                      : 'border-transparent text-stone-500 hover:text-red-600'
+                  }`}
+                >
+                  <Tag className="h-4 w-4 text-red-500" />
+                  العروض والخصومات
+                </button>
+              )}
+
+              <button 
+                onClick={() => setActiveTab('jobs')}
+                className={`py-3.5 sm:py-4 font-bold text-sm sm:text-base border-b-2 whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+                  activeTab === 'jobs' 
+                    ? 'border-[#1a4d2e] text-[#1a4d2e]' 
+                    : 'border-transparent text-stone-500 hover:text-[#2d2a26]'
+                }`}
+              >
+                <Briefcase className="h-4 w-4 text-[#1a4d2e]" />
+                <span>وظائف شاغرة</span>
+                {activeJobs.length > 0 && (
+                  <span className="bg-[#1a4d2e]/10 text-[#1a4d2e] text-xs px-2 py-0.5 rounded-full font-bold">
+                    {activeJobs.length}
+                  </span>
+                )}
+              </button>
+
+              {vipInfo.isVip && (
+                <button 
+                  onClick={() => setActiveTab('reels')}
+                  className={`py-3.5 sm:py-4 font-bold text-sm sm:text-base border-b-2 whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+                    activeTab === 'reels' 
+                      ? 'border-purple-600 text-purple-700 font-black' 
+                      : 'border-transparent text-stone-500 hover:text-purple-600'
+                  }`}
+                >
+                  <Video className="h-4 w-4 text-purple-500" />
+                  <span>ريلزات المحل</span>
+                  {business.reels && business.reels.length > 0 && (
+                    <span className="bg-purple-100 text-purple-700 text-xs px-2 py-0.5 rounded-full font-bold">
+                      {business.reels.length}
+                    </span>
+                  )}
+                </button>
+              )}
+
+              {vipInfo.isVip && (
+                <button 
+                  onClick={() => setActiveTab('gallery')}
+                  className={`py-3.5 sm:py-4 font-bold text-sm sm:text-base border-b-2 whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+                    activeTab === 'gallery' 
+                      ? 'border-emerald-600 text-emerald-700 font-black' 
+                      : 'border-transparent text-stone-500 hover:text-emerald-600'
+                  }`}
+                >
+                  <Camera className="h-4 w-4 text-emerald-500" />
+                  <span>صور وجو المحل</span>
+                  {business.gallery && business.gallery.length > 0 && (
+                    <span className="bg-emerald-100 text-emerald-700 text-xs px-2 py-0.5 rounded-full font-bold">
+                      {business.gallery.length}
+                    </span>
+                  )}
+                </button>
+              )}
+
+              {isOwner && (
+                vipInfo.isVip ? (
+                  <button 
+                    onClick={() => setActiveTab('analytics')}
+                    className={`py-3.5 sm:py-4 font-bold text-sm sm:text-base border-b-2 whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+                      activeTab === 'analytics' 
+                        ? 'border-amber-500 text-amber-700 font-black' 
+                        : 'border-transparent text-amber-600 hover:text-amber-800 font-bold'
+                    }`}
+                  >
+                    <BarChart3 className="h-4 w-4 text-amber-600" />
+                    لوحة التحليلات VIP
+                  </button>
+                ) : (
+                  <button 
+                    onClick={() => setIsUpgradeModalOpen(true)}
+                    className="py-3.5 sm:py-4 font-black text-sm sm:text-base text-amber-700 hover:text-amber-800 transition-colors flex items-center gap-1.5 border-b-2 border-transparent cursor-pointer"
+                  >
+                    <Crown className="h-4 w-4 fill-amber-500 text-amber-600" />
+                    <span>ترقية المحل لـ VIP</span>
+                  </button>
+                )
+              )}
+            </div>
+          </div>

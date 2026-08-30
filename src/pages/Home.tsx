@@ -187,6 +187,12 @@ export function Home() {
 
         // Create set of valid active business IDs for banner filtering
         const validBusinessIds = new Set(fetchedBusinesses.map(b => b.id));
+        const businessUsernamesMap = new Map<string, string>();
+        fetchedBusinesses.forEach(b => {
+          if (b.username && b.username.trim()) {
+            businessUsernamesMap.set(b.id, b.username.trim());
+          }
+        });
 
         // Fetch custom banners from Firestore
         try {
@@ -219,7 +225,26 @@ export function Home() {
               }
 
               if (startsOk && endsOk) {
-                activeBanners.push({ id: docSnap.id, ...data } as HomepageBanner);
+                const bannerObj = { id: docSnap.id, ...data } as HomepageBanner;
+                
+                // Attach businessUsername if the banner points to a business with a username
+                if (bannerObj.businessId && businessUsernamesMap.has(bannerObj.businessId)) {
+                  bannerObj.businessUsername = businessUsernamesMap.get(bannerObj.businessId);
+                }
+                
+                // Rewrite buttonLink if it points to /business/ID and that business has a username
+                if (bannerObj.buttonLink && bannerObj.buttonLink.includes('/business/')) {
+                  const parts = bannerObj.buttonLink.split('/business/');
+                  if (parts[1]) {
+                    const targetBizId = parts[1].split('?')[0].split('#')[0];
+                    if (targetBizId && businessUsernamesMap.has(targetBizId)) {
+                      const username = businessUsernamesMap.get(targetBizId);
+                      bannerObj.buttonLink = bannerObj.buttonLink.replace(`/business/${targetBizId}`, `/@${username}`);
+                    }
+                  }
+                }
+                
+                activeBanners.push(bannerObj);
               }
             }
           });
@@ -399,30 +424,64 @@ export function Home() {
       
       
 
-      {/* Hero Section */}
-      <div className="bg-[#1a4d2e] rounded-2xl md:rounded-[32px] py-7 px-4 sm:p-6 md:p-16 text-white flex flex-col items-center text-center relative overflow-hidden shadow-xl shadow-[#1a4d2e]/10">
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iMiIgY3k9IjIiIHI9IjIiIGZpbGw9IiNmZmZmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSIvPjwvc3ZnPg==')] opacity-50"></div>
-        <div className="absolute top-0 right-0 w-32 h-32 md:w-64 md:h-64 bg-[#ff9f1c] rounded-full blur-[50px] md:blur-[100px] opacity-20 -translate-y-1/2 translate-x-1/3"></div>
-        <div className="absolute bottom-0 left-0 w-32 h-32 md:w-64 md:h-64 bg-[#ffffff] rounded-full blur-[60px] md:blur-[120px] opacity-10 translate-y-1/2 -translate-x-1/3"></div>
+      {/* Hero Section - Premium Level */}
+      <div className="bg-[#0f3820] rounded-2xl md:rounded-[32px] py-10 md:py-20 px-4 sm:p-6 md:p-16 text-white flex flex-col items-center text-center relative overflow-hidden shadow-2xl shadow-[#1a4d2e]/20 min-h-[350px] md:min-h-[500px] justify-center">
         
-        <div className="relative z-10 w-full max-w-3xl mx-auto space-y-2 md:space-y-6">
-          <span className="inline-block py-0.5 px-2 md:py-1.5 md:px-4 rounded-full bg-white/10 border border-white/20 text-white/90 text-[10px] md:text-sm font-bold backdrop-blur-sm mb-0 md:mb-2">
-            اكتشف أفضل ما في إربد ✨
+        {/* Animated Mesh Gradient Background */}
+        <div className="absolute inset-0 bg-gradient-to-br from-[#1a4d2e] via-[#0f3820] to-[#0a2414] z-0"></div>
+        
+        {/* Modern Fading Grid (SVG Mask) */}
+        <div 
+          className="absolute inset-0 z-0 opacity-20 pointer-events-none"
+          style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0h40v40H0V0zm1 1h38v38H1V1z' fill='%23ffffff' fill-opacity='0.4' fill-rule='evenodd'/%3E%3C/svg%3E")`,
+            maskImage: 'radial-gradient(ellipse at center, black 0%, transparent 70%)',
+            WebkitMaskImage: 'radial-gradient(ellipse at center, black 0%, transparent 70%)'
+          }}
+        ></div>
+
+        {/* Ambient Glow Orbs */}
+        <div className="absolute top-0 right-1/4 w-64 h-64 md:w-96 md:h-96 bg-[#ff9f1c] rounded-full blur-[80px] md:blur-[120px] opacity-20 animate-pulse mix-blend-screen pointer-events-none"></div>
+        <div className="absolute bottom-0 left-1/4 w-64 h-64 md:w-96 md:h-96 bg-emerald-400 rounded-full blur-[80px] md:blur-[120px] opacity-10 mix-blend-screen pointer-events-none"></div>
+
+        {/* Floating Micro-elements (Hidden on very small screens to avoid clutter) */}
+        <div className="absolute top-10 right-10 md:top-20 md:right-32 opacity-20 animate-[bounce_5s_infinite] hidden sm:block pointer-events-none">
+          <MapPin className="h-8 w-8 text-white rotate-12" />
+        </div>
+        <div className="absolute bottom-20 left-10 md:bottom-32 md:left-24 opacity-20 animate-[bounce_6s_infinite_reverse] hidden sm:block pointer-events-none">
+          <UtensilsCrossed className="h-10 w-10 text-white -rotate-12" />
+        </div>
+        <div className="absolute top-32 left-12 md:top-40 md:left-40 opacity-20 animate-[pulse_4s_infinite] hidden lg:block pointer-events-none">
+          <Coffee className="h-12 w-12 text-[#ff9f1c] rotate-45" />
+        </div>
+        <div className="absolute bottom-16 right-12 md:bottom-24 md:right-48 opacity-20 animate-[pulse_5s_infinite] hidden lg:block pointer-events-none">
+          <ShoppingCart className="h-10 w-10 text-emerald-300 -rotate-12" />
+        </div>
+        
+        <div className="relative z-10 w-full max-w-3xl mx-auto space-y-4 md:space-y-6">
+          {/* Eyebrow Badge */}
+          <span className="inline-flex items-center gap-1.5 py-1 px-3 md:py-1.5 md:px-5 rounded-full bg-white/10 border border-white/20 text-white/90 text-[10px] md:text-sm font-bold backdrop-blur-md mb-2 shadow-lg">
+            <Sparkles className="h-3 w-3 md:h-4 md:w-4 text-[#ff9f1c]" />
+            اكتشف أفضل ما في إربد
           </span>
-          <h1 className="text-2xl sm:text-4xl md:text-6xl font-black text-white tracking-tight leading-tight">
-            شو في بإربد<span className="text-[#ff9f1c]">؟</span>
+          
+          {/* Gradient Typography Heading */}
+          <h1 className="text-3xl sm:text-5xl md:text-7xl font-black text-white tracking-tight leading-tight drop-shadow-lg">
+            شو في بـ <span className="text-transparent bg-clip-text bg-gradient-to-l from-[#ff9f1c] to-amber-300">إربد؟</span>
           </h1>
-          <p className="text-xs sm:text-sm md:text-xl text-white/80 max-w-2xl mx-auto leading-snug md:leading-relaxed px-2">
-            ابحث عن المطاعم، المقاهي، المحلات التجارية، والخدمات المميزة في مدينتك بكل سهولة.
+          
+          <p className="text-sm sm:text-base md:text-xl text-emerald-50/80 max-w-2xl mx-auto leading-relaxed px-4 font-medium">
+            ابحث عن المطاعم، المقاهي، المحلات التجارية، والخدمات المميزة في مدينتك بكل سهولة وبحث ذكي.
           </p>
 
-          <div className="mt-3 md:mt-10 w-full max-w-2xl mx-auto relative group">
-            <div className="absolute inset-y-0 right-0 pr-3 md:pr-5 flex items-center pointer-events-none text-stone-400 group-focus-within:text-[#ff9f1c] transition-colors">
-              <Search className="h-4 w-4 md:h-6 md:w-6" />
+          {/* Glassmorphism Search Bar */}
+          <div className="mt-6 md:mt-10 w-full max-w-2xl mx-auto relative group">
+            <div className="absolute inset-y-0 right-0 pr-4 md:pr-6 flex items-center pointer-events-none text-white/60 group-focus-within:text-amber-300 transition-colors z-20">
+              <Search className="h-5 w-5 md:h-7 md:w-7 drop-shadow-md" />
             </div>
             <input
               type="text"
-              className="block w-full pr-9 pl-8 py-2.5 md:pr-14 md:pl-6 md:py-5 border-none rounded-xl md:rounded-[24px] leading-5 bg-white/95 backdrop-blur-md text-[#2d2a26] placeholder-stone-400 focus:outline-none focus:ring-4 focus:ring-[#ff9f1c]/40 shadow-xl font-bold text-sm md:text-lg transition-all"
+              className="block w-full pr-12 pl-10 py-3.5 md:pr-16 md:pl-6 md:py-5 border border-white/20 rounded-2xl md:rounded-[28px] leading-5 bg-white/10 backdrop-blur-xl text-white placeholder-white/70 focus:outline-none focus:ring-4 focus:ring-amber-500/30 focus:border-amber-400/50 focus:bg-white/15 shadow-[0_8px_32px_rgba(0,0,0,0.2)] font-bold text-sm md:text-lg transition-all duration-300"
               placeholder="عن ماذا تبحث؟ (مثال: شاورما، ملابس)..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -430,7 +489,7 @@ export function Home() {
             {searchTerm && (
               <button 
                 onClick={() => setSearchTerm('')}
-                className="absolute left-2 top-1/2 -translate-y-1/2 bg-stone-100 hover:bg-stone-200 text-stone-500 rounded-full p-1 md:p-1.5 transition-colors cursor-pointer text-xs md:text-sm"
+                className="absolute left-3 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/30 text-white rounded-full p-1.5 md:p-2 transition-colors cursor-pointer text-xs md:text-sm z-20"
               >
                 ✕
               </button>
@@ -442,8 +501,8 @@ export function Home() {
 
           {/* Intelligent Search Feedback Badge */}
           {searchTerm && (
-            <div className="mt-2 inline-flex items-center gap-1.5 text-white/95 text-[10px] md:text-xs font-black bg-emerald-950/45 backdrop-blur-md py-1 px-2.5 md:py-2 md:px-4 rounded-lg md:rounded-xl border border-emerald-500/35 text-right">
-              <Sparkles className="h-3 w-3 md:h-3.5 md:w-3.5 text-yellow-400 animate-pulse shrink-0" />
+            <div className="mt-3 inline-flex items-center gap-1.5 text-amber-50 text-[10px] md:text-xs font-black bg-black/30 backdrop-blur-md py-1.5 px-3 md:py-2 md:px-4 rounded-xl border border-amber-500/30 text-right shadow-xl">
+              <Sparkles className="h-3 w-3 md:h-4 md:w-4 text-amber-400 animate-pulse shrink-0" />
               <span>محركنا الذكي يبحث الآن في المرادفات والتصنيفات بدقة ✨</span>
             </div>
           )}
@@ -451,7 +510,7 @@ export function Home() {
       </div>
 
       {error && (
-        <div className="bg-red-50 text-red-700 p-4 rounded-2xl border border-red-100 text-center text-sm md:text-base font-medium">
+        <div className="bg-red-50 text-red-700 p-4 rounded-2xl border border-red-100 text-center text-sm md:text-base font-medium mb-4">
           {error}
         </div>
       )}

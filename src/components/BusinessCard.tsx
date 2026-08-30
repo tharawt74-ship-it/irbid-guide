@@ -6,6 +6,7 @@ import { ShareButton } from './ShareButton';
 import { getLiveWorkingStatus } from '../lib/businessHoursHelper';
 import { getBusinessVipStatus } from '../lib/vipHelper';
 import { useAuth } from '../contexts/AuthContext';
+import { getBusinessLink } from '../lib/utils';
 
 interface BusinessCardProps {
   business: Business;
@@ -19,6 +20,7 @@ export function BusinessCard({ business, featured = false, searchReasons }: Busi
   const { isFavorite, toggleFavorite } = useAuth();
   const isFavorited = isFavorite(business.id);
   const isCurrentlyFeatured = business.isFeatured && (!business.featuredStartDate || business.featuredStartDate <= Date.now()) && (!business.featuredExpiryDate || business.featuredExpiryDate > Date.now());
+  const businessLink = getBusinessLink(business);
 
   const handleToggleFavorite = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -29,7 +31,7 @@ export function BusinessCard({ business, featured = false, searchReasons }: Busi
   if (featured) {
     return (
       <Link
-        to={`/business/${business.id}`}
+        to={businessLink}
         className="bg-white border border-[#e5e1da] rounded-[24px] md:rounded-[32px] overflow-hidden hover:shadow-xl hover:border-[#1a4d2e]/30 transition-all duration-300 flex flex-col group relative min-h-[260px] md:min-h-[290px]"
       >
         <div className='absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent z-10'></div>
@@ -68,7 +70,7 @@ export function BusinessCard({ business, featured = false, searchReasons }: Busi
               >
                 <Heart className={`h-4.5 w-4.5 transition-transform duration-300 active:scale-125 ${isFavorited ? 'fill-red-500 text-red-500' : 'text-white'}`} />
               </button>
-              <ShareButton title={business.name} url={`/business/${business.id}`} size="sm" variant="pill" />
+              <ShareButton title={business.name} url={businessLink} size="sm" variant="pill" />
               <span className='bg-[#ff9f1c] text-white text-[10px] sm:text-xs font-bold px-3 py-1 rounded-full uppercase tracking-widest shadow-sm'>
                 {business.category}
               </span>
@@ -116,15 +118,15 @@ export function BusinessCard({ business, featured = false, searchReasons }: Busi
 
   return (
     <Link
-      to={`/business/${business.id}`}
-      className="bg-white border border-[#e5e1da] rounded-[24px] md:rounded-[32px] overflow-hidden hover:shadow-xl hover:border-[#1a4d2e]/30 transition-all duration-300 flex flex-col group relative"
+      to={businessLink}
+      className="bg-white border border-[#e5e1da] rounded-[24px] md:rounded-[32px] overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.03)] hover:shadow-[0_20px_40px_rgba(26,77,46,0.12)] hover:-translate-y-1 transition-all duration-500 flex flex-col group relative"
     >
       <div className="h-48 md:h-52 bg-stone-100 relative overflow-hidden">
         {business.imageUrl ? (
           <img
             src={business.imageUrl}
             alt={business.name}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 ease-out"
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-stone-300">
@@ -134,11 +136,11 @@ export function BusinessCard({ business, featured = false, searchReasons }: Busi
 
         {/* Top Badges */}
         <div className="absolute top-4 right-4 flex flex-wrap gap-1.5">
-          <div className="bg-white/90 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold text-[#1a4d2e] shadow-sm">
+          <div className="bg-white/70 backdrop-blur-xl border border-white/40 px-3 py-1 rounded-full text-[11px] font-black text-[#1a4d2e] shadow-[0_4px_12px_rgba(0,0,0,0.08)]">
             {business.category}
           </div>
           {isCurrentlyFeatured && (
-            <div className="bg-yellow-400/90 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold text-yellow-900 shadow-sm flex items-center gap-1 w-fit">
+            <div className="bg-gradient-to-r from-amber-400/90 to-yellow-500/90 backdrop-blur-xl border border-white/30 px-3 py-1 rounded-full text-[11px] font-black text-yellow-950 shadow-[0_4px_12px_rgba(0,0,0,0.08)] flex items-center gap-1 w-fit">
               <Crown className="h-3 w-3 sm:h-3.5 sm:w-3.5 fill-current shrink-0 text-amber-950" />
               <span>مميز</span>
             </div>
@@ -149,22 +151,22 @@ export function BusinessCard({ business, featured = false, searchReasons }: Busi
         <div className="absolute top-4 left-4 flex items-center gap-1.5 z-20">
           <button
             onClick={handleToggleFavorite}
-            className="w-8 h-8 rounded-full bg-white/90 backdrop-blur-md hover:bg-white flex items-center justify-center transition-all shadow-sm border border-[#e5e1da]"
+            className="w-8 h-8 rounded-full bg-white/70 backdrop-blur-xl hover:bg-white flex items-center justify-center transition-all shadow-[0_4px_12px_rgba(0,0,0,0.08)] border border-white/40"
             title={isFavorited ? "إزالة من المفضلة" : "إضافة للمفضلة"}
           >
             <Heart className={`h-4 w-4 transition-transform duration-300 active:scale-125 ${isFavorited ? 'fill-red-500 text-red-500' : 'text-stone-600'}`} />
           </button>
-          <ShareButton title={business.name} url={`/business/${business.id}`} size="sm" variant="pill" />
+          <ShareButton title={business.name} url={businessLink} size="sm" variant="pill" />
         </div>
 
         {/* Live Working Status Bottom Right of Image */}
         <div className="absolute bottom-3 right-3 flex items-center gap-1.5">
           {business.district && (
-            <span className="bg-black/60 text-white font-bold text-[10px] px-2.5 py-1 rounded-full backdrop-blur-md">
+            <span className="bg-black/40 backdrop-blur-xl border border-white/20 text-white font-bold text-[10px] px-2.5 py-1 rounded-full shadow-[0_4px_12px_rgba(0,0,0,0.1)]">
               📍 {business.district}
             </span>
           )}
-          <div className={`px-2.5 py-1 rounded-full text-[11px] font-bold backdrop-blur-md flex items-center gap-1.5 shadow-sm border ${liveStatus.badgeBg}`}>
+          <div className={`px-2.5 py-1 rounded-full text-[10px] font-black backdrop-blur-xl flex items-center gap-1.5 shadow-[0_4px_12px_rgba(0,0,0,0.1)] border border-white/20 ${liveStatus.badgeBg.replace("bg-", "bg-opacity-80 bg-")}`}>
             <span className={`w-2 h-2 rounded-full ${liveStatus.dotColor}`}></span>
             <span>{liveStatus.statusText}</span>
           </div>

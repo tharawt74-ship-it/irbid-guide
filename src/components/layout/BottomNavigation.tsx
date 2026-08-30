@@ -1,8 +1,7 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router';
-import { Store, Flame, Search, MessageSquare, Menu, X, PlusCircle } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
-import { useAuth } from '../../contexts/AuthContext';
+import { Store, Flame, MessageSquare, Menu, X, PlusCircle } from 'lucide-react';
+import { motion } from 'motion/react';
 import { cn } from '../../lib/utils';
 
 interface BottomNavigationProps {
@@ -13,7 +12,6 @@ interface BottomNavigationProps {
 }
 
 export function BottomNavigation({ 
-  onOpenSearch, 
   hasUnreadMessages, 
   onToggleMenu, 
   isMenuOpen 
@@ -21,7 +19,7 @@ export function BottomNavigation({
   const location = useLocation();
 
   // Hide the global bottom navigation on business details page because it has its own dedicated sticky action bar
-  if (location.pathname.startsWith('/business/')) {
+  if (location.pathname.startsWith('/business/') || location.pathname.startsWith('/b/') || location.pathname.includes('/@')) {
     return null;
   }
 
@@ -38,8 +36,8 @@ export function BottomNavigation({
       icon: Flame,
       type: 'link',
       isSpecial: true,
-      specialColorClass: "bg-amber-50 text-amber-700",
-      iconColorClass: "text-red-500"
+      specialBgClass: "bg-amber-50",
+      specialIconClass: "text-amber-600"
     },
     {
       label: 'أضف محلك',
@@ -47,8 +45,8 @@ export function BottomNavigation({
       icon: PlusCircle,
       type: 'link',
       isSpecial: true,
-      specialColorClass: "bg-emerald-50 text-emerald-800",
-      iconColorClass: "text-emerald-600"
+      specialBgClass: "bg-emerald-50",
+      specialIconClass: "text-emerald-700"
     },
     {
       label: 'الرسائل',
@@ -66,92 +64,70 @@ export function BottomNavigation({
   ];
 
   return (
-    <div className="md:hidden fixed bottom-5 left-4 right-4 z-40 bg-white/95 backdrop-blur-lg border border-stone-200/80 shadow-[0_8px_32px_rgba(0,0,0,0.12)] rounded-3xl px-2 py-2 max-w-md mx-auto">
-      <div className="flex items-center justify-around w-full" dir="rtl">
+    <nav 
+      aria-label="التنقل السفلي"
+      className="md:hidden fixed bottom-4 left-3 right-3 sm:left-6 sm:right-6 z-40 bg-white/92 backdrop-blur-2xl border border-stone-200/90 shadow-[0_12px_36px_rgba(0,0,0,0.14),0_2px_8px_rgba(0,0,0,0.06)] rounded-full px-2 py-1.5 max-w-[400px] mx-auto"
+    >
+      <div className="flex items-center justify-between w-full gap-0.5" dir="rtl">
         {navItems.map((item, index) => {
           const Icon = item.icon;
-          const isActive = item.path ? location.pathname === item.path : false;
+          const isActive = item.type === 'menu_button' 
+            ? isMenuOpen 
+            : (item.path ? location.pathname === item.path : false);
 
-          if (item.type === 'button' || item.type === 'menu_button') {
-            const isItemActive = item.type === 'menu_button' ? isMenuOpen : false;
+          const innerContent = (
+            <>
+              <div className="w-10 h-10 rounded-full flex items-center justify-center relative shrink-0">
+                {isActive && (
+                  <motion.div
+                    layoutId="activeNavBubble"
+                    className="absolute inset-0 rounded-full bg-[#1a4d2e] shadow-md shadow-[#1a4d2e]/30"
+                    transition={{
+                      type: "spring",
+                      stiffness: 420,
+                      damping: 32,
+                      mass: 0.8
+                    }}
+                  />
+                )}
+                {!isActive && item.isSpecial && (
+                  <div className={cn("absolute inset-0 rounded-full transition-transform duration-200 group-hover:scale-105", item.specialBgClass)} />
+                )}
+                <Icon 
+                  className={cn(
+                    "h-4.5 w-4.5 relative z-10 transition-colors duration-200", 
+                    isActive 
+                      ? "text-white stroke-[2.5px]" 
+                      : item.isSpecial 
+                      ? item.specialIconClass 
+                      : "text-stone-500 group-hover:text-stone-800"
+                  )} 
+                />
+                {item.hasBadge && (
+                  <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-red-600 ring-2 ring-white animate-pulse z-20" />
+                )}
+              </div>
+              <span
+                className={cn(
+                  "text-[10px] sm:text-[11px] mt-1 text-center whitespace-nowrap leading-none transition-colors relative z-10",
+                  isActive ? "font-black text-[#1a4d2e]" : "font-bold text-stone-600 group-hover:text-stone-900"
+                )}
+              >
+                {item.label}
+              </span>
+            </>
+          );
+
+          if (item.type === 'menu_button') {
             return (
               <button
                 key={index}
                 type="button"
                 onClick={item.onClick}
-                className={cn(
-                  "flex flex-col items-center justify-center py-1 px-3 rounded-2xl transition-all relative cursor-pointer active:scale-95",
-                  isItemActive ? "text-[#1a4d2e] font-black" : "text-stone-500 hover:text-stone-800"
-                )}
+                className="flex-1 flex flex-col items-center justify-center py-1 px-0.5 rounded-2xl transition-all relative cursor-pointer active:scale-95 group focus:outline-none min-w-0"
               >
-                <div
-                  className={cn(
-                    "w-8 h-8 rounded-xl flex items-center justify-center transition-all relative",
-                    isItemActive
-                      ? "bg-[#1a4d2e] text-white shadow-xs"
-                      : "bg-stone-50 border border-stone-200/50 text-stone-600 hover:bg-emerald-50 hover:text-[#1a4d2e]"
-                  )}
-                >
-                  <Icon className="h-4 w-4" />
-                </div>
-                <span
-                  className={cn(
-                    "text-[10px] mt-0.5 truncate max-w-[56px] text-center",
-                    isItemActive ? "font-black text-[#1a4d2e]" : "font-bold text-stone-500"
-                  )}
-                >
-                  {item.label}
-                </span>
+                {innerContent}
               </button>
-            );
-          }
-
-          if (item.isSpecial) {
-            return (
-              <div key={index} className="flex flex-col items-center justify-center overflow-hidden h-[54px] w-[64px] relative">
-                <AnimatePresence mode="wait">
-                  <motion.div
-                    key={item.label}
-                    initial={{ y: 24, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    exit={{ y: -24, opacity: 0 }}
-                    transition={{ duration: 0.35, ease: 'easeInOut' }}
-                    className="absolute inset-0 flex flex-col items-center justify-center"
-                  >
-                    <Link
-                      to={item.path!}
-                      className={cn(
-                        "flex flex-col items-center justify-center w-full h-full transition-all relative active:scale-95",
-                        isActive ? "text-[#1a4d2e] font-black" : "text-stone-500 hover:text-stone-800"
-                      )}
-                    >
-                      <div
-                        className={cn(
-                          "w-8 h-8 rounded-xl flex items-center justify-center transition-all relative",
-                          isActive
-                            ? "bg-[#1a4d2e] text-white shadow-xs"
-                            : item.isSpecial
-                            ? item.specialColorClass
-                            : "bg-transparent text-stone-500"
-                        )}
-                      >
-                        <Icon className={cn("h-4 w-4", item.isSpecial && !isActive && item.iconColorClass)} />
-                        {item.hasBadge && (
-                          <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-red-600 ring-2 ring-white animate-pulse" />
-                        )}
-                      </div>
-                      <span
-                        className={cn(
-                          "text-[10px] mt-0.5 truncate max-w-[56px] text-center",
-                          isActive ? "font-black text-[#1a4d2e]" : "font-bold text-stone-500"
-                        )}
-                      >
-                        {item.label}
-                      </span>
-                    </Link>
-                  </motion.div>
-                </AnimatePresence>
-              </div>
             );
           }
 
@@ -159,38 +135,13 @@ export function BottomNavigation({
             <Link
               key={index}
               to={item.path!}
-              className={cn(
-                "flex flex-col items-center justify-center py-1 px-3 rounded-2xl transition-all relative active:scale-95",
-                isActive ? "text-[#1a4d2e] font-black" : "text-stone-500 hover:text-stone-800"
-              )}
+              className="flex-1 flex flex-col items-center justify-center py-1 px-0.5 rounded-2xl transition-all relative cursor-pointer active:scale-95 group focus:outline-none min-w-0"
             >
-              <div
-                className={cn(
-                  "w-8 h-8 rounded-xl flex items-center justify-center transition-all relative",
-                  isActive
-                    ? "bg-[#1a4d2e] text-white shadow-xs"
-                    : item.isSpecial
-                    ? item.specialColorClass
-                    : "bg-transparent text-stone-500"
-                )}
-              >
-                <Icon className={cn("h-4 w-4", item.isSpecial && !isActive && item.iconColorClass)} />
-                {item.hasBadge && (
-                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-red-600 ring-2 ring-white" />
-                )}
-              </div>
-              <span
-                className={cn(
-                  "text-[10px] mt-0.5 truncate max-w-[56px] text-center",
-                  isActive ? "font-black text-[#1a4d2e]" : "font-bold text-stone-500"
-                )}
-              >
-                {item.label}
-              </span>
+              {innerContent}
             </Link>
           );
         })}
       </div>
-    </div>
+    </nav>
   );
 }

@@ -70,7 +70,7 @@ export function BannerSlideshow({ banners }: BannerSlideshowProps) {
     switch (banner.type) {
       case 'business':
         return (
-          <Link to={`/business/${banner.businessId}`} className="block w-full h-full relative" id={`banner-link-${banner.id}`}>
+          <Link to={banner.businessUsername ? `/@${banner.businessUsername}` : `/business/${banner.businessId}`} className="block w-full h-full relative" id={`banner-link-${banner.id}`}>
             {defaultOverlay}
             <img
               src={banner.imageUrl}

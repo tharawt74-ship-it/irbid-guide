@@ -6,6 +6,7 @@ import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
 import { Business } from '../../types';
 import { Heart, Star, MapPin, Phone, Trash2, Store, ArrowLeft, ExternalLink } from 'lucide-react';
 import { getWhatsAppUrl } from '../../lib/contactHelper';
+import { getBusinessLink } from '../../lib/utils';
 
 export function VisitorFavoritesTab() {
   const { userFavorites, toggleFavorite, currentUser } = useAuth();
@@ -147,7 +148,7 @@ export function VisitorFavoritesTab() {
               ) : <div />}
 
               <Link
-                to={`/business/${biz.id}`}
+                to={getBusinessLink(biz)}
                 className="inline-flex items-center gap-1 text-[11px] font-bold text-white bg-[#1a4d2e] hover:bg-[#133b22] px-3 py-1.5 rounded-lg transition-colors shadow-2xs"
               >
                 <span>زيارة المحل</span>

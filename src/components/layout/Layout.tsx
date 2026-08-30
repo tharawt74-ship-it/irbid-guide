@@ -61,6 +61,17 @@ export function Layout() {
   const [showDesktopMoreTooltip, setShowDesktopMoreTooltip] = useState(false);
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
 
+  useEffect(() => {
+    if (mobileMenuOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [mobileMenuOpen]);
+
   const closeMenu = () => {
     setMobileMenuOpen(false);
     setMoreMenuOpen(false);
@@ -82,17 +93,24 @@ export function Layout() {
 
   const handleDismissTooltip = () => {
     setShowMenuTooltip(false);
+    sessionStorage.setItem('dismissed_menu_tooltip', 'true');
   };
 
   const handleDismissDesktopTooltip = () => {
     setShowDesktopMoreTooltip(false);
+    sessionStorage.setItem('dismissed_desktop_tooltip', 'true');
   };
 
-  // Guidance popup for mobile menu - triggers on every page refresh after 2 seconds
+  // Guidance popup for mobile menu - triggers ONLY once per tab session (sessionStorage)
   useEffect(() => {
+    const dismissed = sessionStorage.getItem('dismissed_menu_tooltip');
+    if (dismissed === 'true') return;
+
     const timer = setTimeout(() => {
       if (!mobileMenuOpen) {
         setShowMenuTooltip(true);
+        // Automatically mark as dismissed after we show it once, so it doesn't pop up again
+        sessionStorage.setItem('dismissed_menu_tooltip', 'true');
       }
     }, 2000); // Appear in 2 seconds
 
@@ -104,13 +122,18 @@ export function Layout() {
       clearTimeout(timer);
       clearTimeout(autoHideTimer);
     };
-  }, [mobileMenuOpen]);
+  }, []); // Run on mount only (once per tab session)
 
-  // Guidance popup for desktop 'المزيد' button - triggers on every page refresh after 2 seconds
+  // Guidance popup for desktop 'المزيد' button - triggers ONLY once per tab session (sessionStorage)
   useEffect(() => {
+    const dismissed = sessionStorage.getItem('dismissed_desktop_tooltip');
+    if (dismissed === 'true') return;
+
     const timer = setTimeout(() => {
       if (!moreMenuOpen) {
         setShowDesktopMoreTooltip(true);
+        // Automatically mark as dismissed after we show it once, so it doesn't pop up again
+        sessionStorage.setItem('dismissed_desktop_tooltip', 'true');
       }
     }, 2000); // Appear in 2 seconds
 
@@ -122,7 +145,7 @@ export function Layout() {
       clearTimeout(timer);
       clearTimeout(autoHideTimer);
     };
-  }, [moreMenuOpen]);
+  }, []); // Run on mount only (once per tab session)
 
   // Keyboard shortcut (Ctrl+K, Cmd+K, or /) to open quick search modal
   useEffect(() => {
@@ -430,7 +453,7 @@ export function Layout() {
               className="flex h-8.5 items-center gap-1 text-xs font-bold bg-[#1a4d2e] hover:bg-[#133b22] text-white px-2.5 rounded-xl transition-all shadow-xs"
             >
               <PlusCircle className="h-3.5 w-3.5 text-[#ff9f1c]" />
-              <span>أضف محلك</span>
+              <span>ضاعف زبائنك</span>
             </Link>
 
             {isStaff && (
@@ -582,93 +605,50 @@ export function Layout() {
         </div>
       </header>
 
-      {/* Clean Mobile Menu Overlay with Smooth Entry and Exit Animations */}
+      {/* Clean Full-Page Mobile Menu with Smooth Entry and Exit Animations */}
       <AnimatePresence>
         {mobileMenuOpen && (
-          <div className="lg:hidden fixed inset-0 z-50 overflow-hidden">
-            {/* Backdrop Fade In/Out */}
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.25, ease: "easeInOut" }}
-              className="fixed inset-0 bg-stone-950/70 backdrop-blur-sm"
-              onClick={closeMenu}
-            />
-
-            {/* Drawer Container Slide In/Out with Smooth Spring Physics */}
-            <motion.div 
-              initial={{ x: '100%', opacity: 0.9 }}
-              animate={{ x: 0, opacity: 1 }}
-              exit={{ x: '100%', opacity: 0.9 }}
-              transition={{ type: 'spring', damping: 28, stiffness: 280, mass: 0.8 }}
-              onTouchStart={handleTouchStart}
-              onTouchEnd={handleTouchEnd}
-              className="fixed inset-y-0 right-0 w-full max-w-[320px] bg-stone-50 shadow-2xl flex flex-col h-full max-h-screen z-50 relative" 
-              dir="rtl"
-            >
-            {/* Visual Drag Indicator Handle for Swipe to Dismiss */}
-            <div className="absolute top-1/2 -left-2.5 -translate-y-1/2 w-1.5 h-14 rounded-full bg-stone-300/80 shadow-xs pointer-events-none md:hidden" />
-            
+          <motion.div 
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 15 }}
+            transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+            className="lg:hidden fixed top-[64px] md:top-[72px] inset-x-0 bottom-0 z-40 bg-[#faf9f6] flex flex-col overflow-hidden" 
+            dir="rtl"
+          >
             {/* Scrollable Content Wrapper */}
-            <div className="flex-1 overflow-y-auto p-5 space-y-5 min-h-0">
-              
-              {/* Drawer Header */}
-              <div className="flex items-center justify-between pb-3 border-b border-stone-200/80">
-                <Link to="/" onClick={closeMenu} className="flex items-center gap-2.5 font-black text-lg text-[#2d2a26]">
-                  {globalSettings.logoUrl && globalSettings.useFullLogo ? (
-                    <img src={globalSettings.logoUrl} alt={globalSettings.siteName} className="h-8 max-w-[160px] object-contain" />
-                  ) : (
-                    <>
-                      <div className="w-8 h-8 rounded-xl bg-[#1a4d2e] flex items-center justify-center text-white shadow-xs overflow-hidden shrink-0">
-                        {globalSettings.logoUrl ? (
-                          <img src={globalSettings.logoUrl} alt={globalSettings.siteName} className="w-full h-full object-cover" />
-                        ) : (
-                          <Store className="h-4 w-4 text-[#ff9f1c]" />
-                        )}
-                      </div>
-                      <span>{globalSettings.siteName}</span>
-                    </>
-                  )}
-                </Link>
-
-                <button
-                  onClick={closeMenu}
-                  className="p-2 rounded-xl text-stone-500 hover:text-stone-900 hover:bg-stone-200/70 transition-colors cursor-pointer"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-
+            <div className="flex-1 overflow-y-auto px-5 py-6 space-y-6 pb-24">
               {/* User Account / Welcome Header Bar */}
               {currentUser ? (
-                <div className="bg-white p-3.5 rounded-2xl border border-stone-200/90 shadow-2xs flex items-center justify-between gap-2 hover:border-[#1a4d2e]/40 transition-colors">
+                <div className="bg-white p-4 rounded-2xl border border-stone-200/90 shadow-2xs flex items-center justify-between gap-3 hover:border-[#1a4d2e]/40 transition-colors">
                   <Link 
                     to="/profile" 
                     onClick={closeMenu} 
-                    className="flex items-center gap-2.5 min-w-0 flex-1 group"
+                    className="flex items-center gap-3 min-w-0 flex-1 group"
                   >
-                    <div className="w-9 h-9 rounded-xl bg-[#1a4d2e] text-white font-black flex items-center justify-center text-sm shadow-2xs group-hover:scale-105 transition-transform shrink-0">
+                    <div className="w-11 h-11 rounded-xl bg-[#1a4d2e] text-white font-black flex items-center justify-center text-base shadow-2xs group-hover:scale-105 transition-transform shrink-0">
                       {(currentUser.displayName || currentUser.email || 'U').charAt(0).toUpperCase()}
                     </div>
                     <div className="min-w-0">
-                      <p className="text-xs font-black text-stone-800 truncate group-hover:text-[#1a4d2e] transition-colors">
+                      <p className="text-sm font-black text-stone-800 truncate group-hover:text-[#1a4d2e] transition-colors">
                         {currentUser.displayName || currentUser.email?.split('@')[0]}
                       </p>
-                      <p className="text-[10px] text-emerald-700 font-bold flex items-center gap-0.5">
+                      <p className="text-xs text-emerald-700 font-bold flex items-center gap-0.5 mt-0.5">
                         <span>الملف الشخصي والحساب</span>
                         <ChevronLeft className="h-3 w-3" />
                       </p>
                     </div>
                   </Link>
-                  <div className="flex items-center gap-1 shrink-0">
+                  <div className="flex items-center gap-1.5 shrink-0">
                     <Link
                       to="/profile/settings"
                       onClick={closeMenu}
                       className="p-2 text-stone-400 hover:text-[#1a4d2e] hover:bg-stone-100 rounded-xl transition-colors cursor-pointer"
                       title="إعدادات الحساب"
                     >
-                      <Settings className="h-4 w-4" />
+                      <Settings className="h-4.5 w-4.5" />
                     </Link>
                     <button
                       onClick={() => {
@@ -678,28 +658,28 @@ export function Layout() {
                       className="p-2 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors cursor-pointer"
                       title="تسجيل الخروج"
                     >
-                      <LogOut className="h-4 w-4" />
+                      <LogOut className="h-4.5 w-4.5" />
                     </button>
                   </div>
                 </div>
               ) : (
-                <div className="bg-gradient-to-r from-stone-900 to-[#1a4d2e] p-3.5 rounded-2xl text-white shadow-xs flex items-center justify-between gap-2">
+                <div className="bg-gradient-to-r from-stone-900 to-[#1a4d2e] p-4 rounded-2xl text-white shadow-xs flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-xs font-black text-white">أهلاً بك في إربد! 👋</p>
-                    <p className="text-[10px] text-stone-300">سجل حسابك لحفظ المفضلات والرسائل</p>
+                    <p className="text-sm font-black text-white">أهلاً بك في إربد! 👋</p>
+                    <p className="text-xs text-stone-300 mt-0.5">سجل حسابك لحفظ المفضلات والرسائل</p>
                   </div>
-                  <div className="flex items-center gap-1 shrink-0">
+                  <div className="flex items-center gap-1.5 shrink-0">
                     <Link
                       to="/login"
                       onClick={closeMenu}
-                      className="px-2.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-stone-950 text-xs font-black rounded-xl transition-colors"
+                      className="px-3.5 py-2 bg-emerald-500 hover:bg-emerald-600 text-stone-950 text-xs font-black rounded-xl transition-colors"
                     >
                       دخول
                     </Link>
                     <Link
                       to="/register"
                       onClick={closeMenu}
-                      className="px-2.5 py-1.5 bg-white/20 hover:bg-white/30 text-white text-xs font-bold rounded-xl transition-colors"
+                      className="px-3.5 py-2 bg-white/20 hover:bg-white/30 text-white text-xs font-bold rounded-xl transition-colors"
                     >
                       تسجيل
                     </Link>
@@ -714,15 +694,18 @@ export function Layout() {
                   closeMenu();
                   triggerPwaInstallModal();
                 }}
-                className="w-full p-3 rounded-2xl bg-gradient-to-r from-stone-900 via-stone-800 to-[#1a4d2e] text-white flex items-center justify-between border border-stone-800 shadow-xs hover:shadow-md transition-all cursor-pointer active:scale-98"
+                className="w-full p-3.5 rounded-2xl bg-gradient-to-r from-stone-900 via-stone-800 to-[#1a4d2e] text-white flex items-center justify-between border border-stone-800 shadow-xs hover:shadow-md transition-all cursor-pointer active:scale-98"
               >
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/30">
-                    <Smartphone className="h-4 w-4 animate-pulse" />
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/30">
+                    <Smartphone className="h-4.5 w-4.5 animate-pulse" />
                   </div>
-                  <span className="text-xs font-black text-emerald-300">تنزيل تطبيق الهاتف مجاناً</span>
+                  <div className="text-right">
+                    <span className="text-xs font-black text-emerald-300 block">تنزيل تطبيق الهاتف مجاناً</span>
+                    <span className="text-[10px] text-stone-300 font-medium">تجربة أسرع بدون تصفح</span>
+                  </div>
                 </div>
-                <span className="text-[10px] bg-emerald-500/20 text-emerald-400 font-extrabold px-2 py-0.5 rounded-md border border-emerald-500/30">
+                <span className="text-xs bg-emerald-500 text-stone-950 font-black px-3 py-1 rounded-lg shadow-2xs shrink-0">
                   تثبيت 📲
                 </span>
               </button>
@@ -734,29 +717,29 @@ export function Layout() {
                   closeMenu();
                   setIsSearchModalOpen(true);
                 }}
-                className="w-full p-2.5 rounded-2xl bg-white text-stone-600 hover:text-stone-900 border border-stone-200/90 shadow-2xs flex items-center justify-between transition-all cursor-pointer"
+                className="w-full p-3.5 rounded-2xl bg-white text-stone-600 hover:text-stone-900 border border-stone-200/90 shadow-2xs flex items-center justify-between transition-all cursor-pointer"
               >
-                <div className="flex items-center gap-2.5">
-                  <Search className="h-4 w-4 text-[#1a4d2e]" />
+                <div className="flex items-center gap-3">
+                  <Search className="h-4.5 w-4.5 text-[#1a4d2e]" />
                   <span className="text-xs font-bold">عن ماذا تبحث في إربد؟</span>
                 </div>
-                <span className="text-[10px] bg-stone-100 text-stone-500 font-bold px-2 py-0.5 rounded-lg border border-stone-200">
+                <span className="text-[10px] bg-stone-100 text-stone-500 font-bold px-2.5 py-1 rounded-lg border border-stone-200">
                   بحث
                 </span>
               </button>
 
               {/* Section: Communications (Notifications & Messages) */}
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-3">
                 <Link
                   to="/notifications"
                   onClick={closeMenu}
-                  className="p-2.5 rounded-2xl bg-white border border-stone-200/90 shadow-2xs hover:border-emerald-300 transition-all flex items-center gap-2"
+                  className="p-3 rounded-2xl bg-white border border-stone-200/90 shadow-2xs hover:border-emerald-300 transition-all flex items-center gap-3"
                 >
-                  <div className="w-7 h-7 rounded-lg bg-emerald-50 text-[#1a4d2e] flex items-center justify-center shrink-0">
-                    <Bell className="h-3.5 w-3.5" />
+                  <div className="w-8 h-8 rounded-xl bg-emerald-50 text-[#1a4d2e] flex items-center justify-center shrink-0">
+                    <Bell className="h-4 w-4" />
                   </div>
                   <div className="flex flex-col min-w-0">
-                    <span className="text-[11px] font-black text-stone-800 truncate">الإشعارات</span>
+                    <span className="text-xs font-black text-stone-800 truncate">الإشعارات</span>
                     <span className="text-[9px] text-stone-500 font-bold truncate">تنبيهات عاجلة</span>
                   </div>
                 </Link>
@@ -764,41 +747,56 @@ export function Layout() {
                 <Link
                   to="/messages"
                   onClick={closeMenu}
-                  className="p-2.5 rounded-2xl bg-white border border-stone-200/90 shadow-2xs hover:border-emerald-300 transition-all flex items-center gap-2 relative"
+                  className="p-3 rounded-2xl bg-white border border-stone-200/90 shadow-2xs hover:border-emerald-300 transition-all flex items-center gap-3 relative"
                 >
-                  <div className="w-7 h-7 rounded-lg bg-emerald-50 text-[#1a4d2e] flex items-center justify-center shrink-0">
-                    <MessageSquare className="h-3.5 w-3.5" />
+                  <div className="w-8 h-8 rounded-xl bg-emerald-50 text-[#1a4d2e] flex items-center justify-center shrink-0">
+                    <MessageSquare className="h-4 w-4" />
                   </div>
                   <div className="flex flex-col min-w-0">
-                    <span className="text-[11px] font-black text-stone-800 truncate">المحادثات</span>
+                    <span className="text-xs font-black text-stone-800 truncate">المحادثات</span>
                     <span className="text-[9px] text-stone-500 font-bold truncate">دردشة ورسائل</span>
                   </div>
                   {hasUnreadMessages && (
-                    <span className="absolute top-2 left-2 w-2 h-2 rounded-full bg-red-600 animate-pulse" />
+                    <span className="absolute top-3 left-3 w-2 h-2 rounded-full bg-red-600 animate-pulse" />
                   )}
                 </Link>
               </div>
 
               {/* Section: Main App Grid */}
-              <div className="space-y-2 pt-1">
-                <p className="text-[11px] font-black text-stone-400 px-1">تصفح أقسام المنصة</p>
-                <nav className="grid grid-cols-2 gap-2">
+              <div className="space-y-3 pt-1">
+                {/* Always show "Add your business" button as it's a primary action of the site */}
+                <Link
+                  to="/contact"
+                  onClick={closeMenu}
+                  className="w-full p-3.5 rounded-2xl bg-emerald-50 hover:bg-emerald-100 text-[#1a4d2e] border border-emerald-200/80 font-black text-xs flex items-center justify-between transition-all"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <PlusCircle className="h-4.5 w-4.5 text-[#1a4d2e]" />
+                    <span>هل تملك محلاً في إربد؟</span>
+                  </div>
+                  <span className="text-[10px] bg-[#1a4d2e] text-white font-bold px-2.5 py-1 rounded-md">
+                    ضاعف زبائنك
+                  </span>
+                </Link>
+
+                <p className="text-xs font-black text-stone-400 px-1">تصفح أقسام المنصة</p>
+                <nav className="grid grid-cols-2 gap-3">
                   <Link
                     to="/"
                     onClick={closeMenu}
-                    className="p-3 rounded-2xl bg-[#1a4d2e] text-white flex items-center gap-2 font-black text-xs shadow-2xs transition-all hover:bg-[#143d24]"
+                    className="p-3.5 rounded-2xl bg-[#1a4d2e] text-white flex items-center gap-2.5 font-black text-xs shadow-2xs transition-all hover:bg-[#143d24]"
                   >
-                    <Store className="h-4 w-4 text-[#ff9f1c]" />
+                    <Store className="h-4.5 w-4.5 text-[#ff9f1c]" />
                     <span>الرئيسية</span>
                   </Link>
 
                   <Link
                     to="/offers"
                     onClick={closeMenu}
-                    className="p-3 rounded-2xl bg-gradient-to-r from-amber-500 to-red-600 text-white flex items-center justify-between font-black text-xs shadow-2xs transition-all hover:brightness-105"
+                    className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-500 to-red-600 text-white flex items-center justify-between font-black text-xs shadow-2xs transition-all hover:brightness-105"
                   >
                     <div className="flex items-center gap-1.5">
-                      <Flame className="h-4 w-4 text-amber-200" />
+                      <Flame className="h-4.5 w-4.5 text-amber-200" />
                       <span>عروض وخصومات</span>
                     </div>
                   </Link>
@@ -806,117 +804,93 @@ export function Layout() {
                   <Link
                     to="/jobs"
                     onClick={closeMenu}
-                    className="p-3 rounded-2xl bg-white border border-stone-200/90 text-stone-800 hover:bg-stone-100 flex items-center gap-2 font-bold text-xs transition-all"
+                    className="p-3.5 rounded-2xl bg-white border border-stone-200/90 text-stone-800 hover:bg-stone-100 flex items-center gap-2.5 font-bold text-xs transition-all"
                   >
-                    <Briefcase className="h-4 w-4 text-emerald-700" />
+                    <Briefcase className="h-4.5 w-4.5 text-emerald-700" />
                     <span>الوظائف</span>
                   </Link>
 
                   <Link
                     to="/housing"
                     onClick={closeMenu}
-                    className="p-3 rounded-2xl bg-white border border-stone-200/90 text-stone-800 hover:bg-stone-100 flex items-center gap-2 font-bold text-xs transition-all"
+                    className="p-3.5 rounded-2xl bg-white border border-stone-200/90 text-stone-800 hover:bg-stone-100 flex items-center gap-2.5 font-bold text-xs transition-all"
                   >
-                    <Building2 className="h-4 w-4 text-blue-600" />
+                    <Building2 className="h-4.5 w-4.5 text-blue-600" />
                     <span>سكنات وعقارات</span>
                   </Link>
 
                   <Link
                     to="/transportation"
                     onClick={closeMenu}
-                    className="p-3 rounded-2xl bg-white border border-stone-200/90 text-stone-800 hover:bg-stone-100 flex items-center gap-2 font-bold text-xs transition-all col-span-2"
+                    className="p-3.5 rounded-2xl bg-white border border-stone-200/90 text-stone-800 hover:bg-stone-100 flex items-center gap-2.5 font-bold text-xs transition-all col-span-2"
                   >
-                    <Bus className="h-4 w-4 text-amber-600" />
+                    <Bus className="h-4.5 w-4.5 text-amber-600" />
                     <span>دليل المواصلات والمجمعات</span>
                   </Link>
 
                   <Link
                     to="/news"
                     onClick={closeMenu}
-                    className="p-3 rounded-2xl bg-white border border-stone-200/90 text-stone-800 hover:bg-stone-100 flex items-center gap-2 font-bold text-xs transition-all"
+                    className="p-3.5 rounded-2xl bg-white border border-stone-200/90 text-stone-800 hover:bg-stone-100 flex items-center gap-2.5 font-bold text-xs transition-all"
                   >
-                    <Newspaper className="h-4 w-4 text-purple-600" />
+                    <Newspaper className="h-4.5 w-4.5 text-purple-600" />
                     <span>أخبار إربد</span>
                   </Link>
 
                   <Link
                     to="/tourism"
                     onClick={closeMenu}
-                    className="p-3 rounded-2xl bg-white border border-stone-200/90 text-stone-800 hover:bg-stone-100 flex items-center gap-2 font-bold text-xs transition-all"
+                    className="p-3.5 rounded-2xl bg-white border border-stone-200/90 text-stone-800 hover:bg-stone-100 flex items-center gap-2.5 font-bold text-xs transition-all"
                   >
-                    <Compass className="h-4 w-4 text-teal-600" />
+                    <Compass className="h-4.5 w-4.5 text-teal-600" />
                     <span>أماكن سياحية</span>
                   </Link>
 
                   <Link
                     to="/prayer-times"
                     onClick={closeMenu}
-                    className="p-3 rounded-2xl bg-white border border-stone-200/90 text-stone-800 hover:bg-stone-100 flex items-center gap-2 font-bold text-xs transition-all"
+                    className="p-3.5 rounded-2xl bg-white border border-stone-200/90 text-stone-800 hover:bg-stone-100 flex items-center gap-2.5 font-bold text-xs transition-all"
                   >
-                    <Clock className="h-4 w-4 text-indigo-600" />
+                    <Clock className="h-4.5 w-4.5 text-indigo-600" />
                     <span>مواقيت الصلاة</span>
                   </Link>
 
                   <Link
                     to="/packages"
                     onClick={closeMenu}
-                    className="p-3 rounded-2xl bg-white border border-stone-200/90 text-stone-800 hover:bg-stone-100 flex items-center gap-2 font-bold text-xs transition-all"
+                    className="p-3.5 rounded-2xl bg-white border border-stone-200/90 text-stone-800 hover:bg-stone-100 flex items-center gap-2.5 font-bold text-xs transition-all"
                   >
-                    <Sparkles className="h-4 w-4 text-amber-500" />
+                    <Sparkles className="h-4.5 w-4.5 text-amber-500" />
                     <span>باقات VIP</span>
                   </Link>
 
-                  {currentUser && (
-                    <Link
-                      to="/profile"
-                      onClick={closeMenu}
-                      className="p-3 rounded-2xl bg-emerald-50 hover:bg-emerald-100 text-[#1a4d2e] border border-emerald-200/80 flex items-center justify-between font-black text-xs transition-all col-span-2"
-                    >
-                      <div className="flex items-center gap-2">
-                        <UserIcon className="h-4 w-4 text-[#1a4d2e]" />
-                        <span>الملف الشخصي والحساب</span>
-                      </div>
-                      <ChevronLeft className="h-3.5 w-3.5 text-[#1a4d2e]" />
-                    </Link>
-                  )}
                 </nav>
               </div>
 
-              {/* Section: Admin or Add Business Button */}
-              {isAdmin ? (
-                <Link
-                  to="/admin"
-                  onClick={closeMenu}
-                  className="w-full p-3 rounded-2xl bg-amber-500 hover:bg-amber-600 text-stone-950 font-black text-xs flex items-center justify-center gap-2 shadow-sm transition-all"
-                >
-                  <Shield className="h-4 w-4" />
-                  <span>لوحة التحكم والإدارة</span>
-                </Link>
-              ) : (
-                <Link
-                  to="/contact"
-                  onClick={closeMenu}
-                  className="w-full p-3 rounded-2xl bg-emerald-50 hover:bg-emerald-100 text-[#1a4d2e] border border-emerald-200/80 font-black text-xs flex items-center justify-between transition-all"
-                >
-                  <div className="flex items-center gap-2">
-                    <PlusCircle className="h-4 w-4 text-[#1a4d2e]" />
-                    <span>هل تملك محلاً في إربد؟</span>
-                  </div>
-                  <span className="text-[10px] bg-[#1a4d2e] text-white font-bold px-2 py-0.5 rounded-md">
-                    أضف مجاناً
-                  </span>
-                </Link>
-              )}
+              {/* Section: Action Buttons */}
+              <div className="space-y-3 shrink-0">
+                {/* Show Admin/Staff Dashboard button if they have permission */}
+                {isStaff && (
+                  <Link
+                    to="/admin"
+                    onClick={closeMenu}
+                    className="w-full p-3.5 rounded-2xl bg-amber-500 hover:bg-amber-600 text-stone-950 font-black text-sm flex items-center justify-center gap-2 shadow-sm transition-all"
+                  >
+                    <Shield className="h-4.5 w-4.5" />
+                    <span>لوحة التحكم والإدارة</span>
+                  </Link>
+                )}
+              </div>
 
               {/* Footer info links */}
-              <div className="flex items-center justify-around pt-3 text-[11px] font-bold text-stone-500 border-t border-stone-200/80">
-                <Link to="/about" onClick={closeMenu} className="hover:text-stone-900 transition-colors flex items-center gap-1">
-                  <Info className="h-3.5 w-3.5" />
+              <div className="flex items-center justify-around pt-4 text-xs font-bold text-stone-500 border-t border-stone-200/80">
+                <Link to="/about" onClick={closeMenu} className="hover:text-stone-900 transition-colors flex items-center gap-1.5">
+                  <Info className="h-4 w-4" />
                   <span>عن المنصة</span>
                 </Link>
                 <span className="text-stone-300">•</span>
-                <Link to="/contact" onClick={closeMenu} className="hover:text-stone-900 transition-colors flex items-center gap-1">
-                  <Phone className="h-3.5 w-3.5" />
+                <Link to="/contact" onClick={closeMenu} className="hover:text-stone-900 transition-colors flex items-center gap-1.5">
+                  <Phone className="h-4 w-4" />
                   <span>اتصل بنا</span>
                 </Link>
               </div>
@@ -929,15 +903,14 @@ export function Layout() {
               </div>
             </div>
           </motion.div>
-        </div>
-      )}
-    </AnimatePresence>
+        )}
+      </AnimatePresence>
       
       <main className="flex-1 w-full max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-20 md:py-12 flex flex-col">
         <Outlet />
       </main>
       
-      <footer className="bg-white border-t border-[#e5e1da] mt-auto">
+      <footer className="bg-white border-t border-[#e5e1da] mt-auto pb-28 md:pb-0">
         <div className="max-w-[1200px] mx-auto px-4 py-12 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
             <div className="md:col-span-2">
@@ -978,7 +951,7 @@ export function Layout() {
                 <li><Link to="/offers" className="hover:text-[#ff9f1c] transition-colors font-black text-orange-600">عروض وخصومات إربد</Link></li>
                 <li><Link to="/jobs" className="hover:text-[#ff9f1c] transition-colors font-bold text-[#1a4d2e]">وظائف وشواغر إربد</Link></li>
                 <li><Link to="/packages" className="hover:text-[#ff9f1c] transition-colors font-bold text-[#1a4d2e]">باقات الاشتراك والترويج</Link></li>
-                <li><Link to="/contact" className="hover:text-[#ff9f1c] transition-colors">أضف محلك</Link></li>
+                <li><Link to="/contact" className="hover:text-[#ff9f1c] transition-colors font-bold text-[#1a4d2e]">ضاعف زبائنك (سجل محلك)</Link></li>
               </ul>
             </div>
             <div>

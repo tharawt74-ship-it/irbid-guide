@@ -92,24 +92,25 @@ export async function requestPushPermission(userId?: string): Promise<PushStatus
   }
 }
 
-export function showNativeNotification(title: string, body: string, url: string = '/') {
+export function showNativeNotification(title: string, body: string, url: string = '/', iconUrl?: string) {
   if (typeof window === 'undefined' || !('Notification' in window)) return;
 
   if (Notification.permission === 'granted') {
     try {
+      const icon = iconUrl || '/favicon.ico';
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.ready.then((reg) => {
           reg.showNotification(title, {
             body,
-            icon: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&q=80&w=192',
-            badge: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&q=80&w=192',
+            icon,
+            badge: icon,
             data: { url }
           });
         }).catch(() => {
-          new Notification(title, { body, icon: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&q=80&w=192' });
+          new Notification(title, { body, icon });
         });
       } else {
-        new Notification(title, { body, icon: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&q=80&w=192' });
+        new Notification(title, { body, icon });
       }
     } catch (e) {
       console.warn("Native notification display failed:", e);

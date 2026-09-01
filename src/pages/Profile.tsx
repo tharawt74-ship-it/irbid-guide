@@ -234,12 +234,15 @@ export function Profile() {
     if (!db) return;
     setLoadingBusinessReviews(true);
     try {
-      const q = query(collection(db, 'businesses', businessId, 'reviews'), orderBy('createdAt', 'desc'));
+      // Need an index on businessId + createdAt if using where + orderBy, but let's safely fetch and sort client side if needed, or assume index exists.
+      // Assuming index exists as it's common.
+      const q = query(collection(db, 'reviews'), where('businessId', '==', businessId));
       const snap = await getDocs(q);
       const list: any[] = [];
       snap.forEach(d => {
         list.push({ id: d.id, ...d.data() });
       });
+      list.sort((a, b) => b.createdAt - a.createdAt);
       setBusinessReviews(list);
     } catch (err) {
       console.warn("Error fetching reviews:", err);
@@ -252,10 +255,13 @@ export function Profile() {
     const replyText = replyTexts[reviewId];
     if (!db || !replyText?.trim() || !selectedBusiness) return;
     try {
-      const reviewRef = doc(db, 'businesses', selectedBusiness.id, 'reviews', reviewId);
+      const reviewRef = doc(db, 'reviews', reviewId);
       await updateDoc(reviewRef, {
-        merchantReply: replyText,
-        merchantReplyAt: new Date().toISOString()
+        reply: {
+          text: replyText,
+          createdAt: Date.now(),
+          authorName: selectedBusiness.name
+        }
       });
       setReplyTexts(prev => ({ ...prev, [reviewId]: '' }));
       fetchReviewsForBusiness(selectedBusiness.id);
@@ -269,10 +275,9 @@ export function Profile() {
   const handleDeleteReply = async (reviewId: string) => {
     if (!db || !selectedBusiness || !window.confirm('هل أنت متأكد من حذف هذا الرد؟')) return;
     try {
-      const reviewRef = doc(db, 'businesses', selectedBusiness.id, 'reviews', reviewId);
+      const reviewRef = doc(db, 'reviews', reviewId);
       await updateDoc(reviewRef, {
-        merchantReply: null,
-        merchantReplyAt: null
+        reply: null
       });
       fetchReviewsForBusiness(selectedBusiness.id);
     } catch (err) {
@@ -2056,7 +2061,7 @@ export function Profile() {
                                 </p>
 
                                 {/* Existing Reply Block */}
-                                {review.merchantReply ? (
+                                {review.reply ? (
                                   <div className="bg-[#1a4d2e]/5 p-3.5 rounded-xl border border-[#1a4d2e]/15 space-y-1.5 relative">
                                     <div className="flex justify-between items-center">
                                       <span className="text-[11px] font-black text-[#1a4d2e] flex items-center gap-1">
@@ -2070,10 +2075,10 @@ export function Profile() {
                                         حذف الرد
                                       </button>
                                     </div>
-                                    <p className="text-xs text-stone-800 leading-relaxed font-bold">{review.merchantReply}</p>
-                                    {review.merchantReplyAt && (
+                                    <p className="text-xs text-stone-800 leading-relaxed font-bold">{review.reply.text}</p>
+                                    {review.reply.createdAt && (
                                       <span className="text-[9px] text-stone-400 block">
-                                        تم الرد في: {new Date(review.merchantReplyAt).toLocaleString('ar-JO', { dateStyle: 'medium', timeStyle: 'short' })}
+                                        تم الرد في: {new Date(review.reply.createdAt).toLocaleString('ar-JO', { dateStyle: 'medium', timeStyle: 'short' })}
                                       </span>
                                     )}
                                   </div>

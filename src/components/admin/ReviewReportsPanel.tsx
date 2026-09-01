@@ -56,8 +56,8 @@ export function ReviewReportsPanel({ onShowToast, onRefreshTrigger }: ReviewRepo
   const handleDeleteReview = async (report: ReviewReport) => {
     if (!window.confirm('هل أنت متأكد من حذف هذا التقييم نهائياً من دليل المحل؟')) return;
     try {
-      // 1. Delete the review from the business reviews subcollection
-      const reviewRef = doc(db, 'businesses', report.businessId, 'reviews', report.reviewId);
+      // 1. Delete the review from the global reviews collection
+      const reviewRef = doc(db, 'reviews', report.reviewId);
       await deleteDoc(reviewRef);
 
       // 2. Mark report status as deleted

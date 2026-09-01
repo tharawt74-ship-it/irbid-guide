@@ -50,7 +50,7 @@ import { ShoppingBag } from 'lucide-react';
 
 export function Layout() {
   const { currentUser, isAdmin, isSupervisor, isStaff, isMerchant, userRole, logout } = useAuth();
-  const { globalSettings } = useSystemSettings();
+  const { globalSettings, isSettingsLoaded } = useSystemSettings();
   const { totalCount } = useCart();
   const location = useLocation();
   const navigate = useNavigate();
@@ -239,12 +239,17 @@ export function Layout() {
               className="flex items-center gap-2 group shrink-0 focus:outline-none py-0.5" 
               onClick={closeMenu}
             >
-              {globalSettings.logoUrl && globalSettings.useFullLogo ? (
+              {globalSettings.logoUrl ? (
                 <img 
                   src={globalSettings.logoUrl} 
                   alt={globalSettings.siteName} 
                   style={{ height: `${Math.min(64, Math.max(28, globalSettings.logoHeight || 52))}px` }}
                   className="max-h-[64px] max-w-[280px] md:max-w-[380px] object-contain group-hover:scale-102 transition-all duration-200" 
+                />
+              ) : !isSettingsLoaded ? (
+                <div 
+                  style={{ height: `${Math.min(64, Math.max(28, globalSettings.logoHeight || 52))}px` }}
+                  className="w-32 opacity-0 pointer-events-none"
                 />
               ) : (
                 <>
@@ -255,11 +260,7 @@ export function Layout() {
                     }}
                     className="rounded-2xl bg-gradient-to-br from-[#1a4d2e] to-[#133b22] text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-all duration-300 shrink-0 overflow-hidden"
                   >
-                    {globalSettings.logoUrl ? (
-                      <img src={globalSettings.logoUrl} alt={globalSettings.siteName} className="w-full h-full object-cover" />
-                    ) : (
-                      <Store className="h-5 w-5 md:h-6 md:w-6 text-[#ff9f1c]" />
-                    )}
+                    <Store className="h-5 w-5 md:h-6 md:w-6 text-[#ff9f1c]" />
                   </div>
                   <div className="flex flex-col">
                     <span 
@@ -556,44 +557,42 @@ export function Layout() {
           </div>
 
           {/* Centered Logo absolutely aligned to the middle */}
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-auto max-w-[62%] h-full">
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-auto max-w-[70%] h-full">
             <Link 
               to="/" 
-              className="flex items-center gap-1.5 group shrink-0 focus:outline-none py-1 h-full max-h-full" 
+              className="flex items-center gap-2 group shrink-0 focus:outline-none py-1 h-full max-h-full" 
               onClick={closeMenu}
             >
-              {globalSettings.logoUrl && globalSettings.useFullLogo ? (
+              {globalSettings.logoUrl ? (
                 <img 
                   src={globalSettings.logoUrl} 
                   alt={globalSettings.siteName} 
-                  style={{ height: `${Math.min(54, Math.max(26, globalSettings.logoHeight || 44))}px` }}
-                  className="max-h-[54px] max-w-[260px] object-contain group-hover:scale-102 transition-transform" 
+                  style={{ height: `${Math.min(48, Math.max(28, globalSettings.logoHeight || 42))}px` }}
+                  className="max-h-[48px] max-w-[220px] object-contain group-hover:scale-102 transition-transform" 
+                />
+              ) : !isSettingsLoaded ? (
+                <div 
+                  style={{ height: `${Math.min(48, Math.max(28, globalSettings.logoHeight || 42))}px` }}
+                  className="w-24 opacity-0 pointer-events-none"
                 />
               ) : (
-                <>
-                  <div 
-                    style={{
-                      width: `${Math.min(48, Math.max(30, Math.round((globalSettings.logoHeight || 52) * 0.75)))}px`,
-                      height: `${Math.min(48, Math.max(30, Math.round((globalSettings.logoHeight || 52) * 0.75)))}px`
-                    }}
-                    className="rounded-xl bg-gradient-to-br from-[#1a4d2e] to-[#133b22] text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-all duration-300 shrink-0 overflow-hidden"
-                  >
-                    {globalSettings.logoUrl ? (
-                      <img src={globalSettings.logoUrl} alt={globalSettings.siteName} className="w-full h-full object-cover" />
-                    ) : (
-                      <Store className="h-5 w-5 text-[#ff9f1c]" />
-                    )}
-                  </div>
-                  <div className="flex flex-col text-right">
+                <div className="flex items-center gap-2 flex-row-reverse text-right">
+                  <div className="flex flex-col text-right justify-center">
                     <span 
-                      style={{ fontSize: `${Math.min(18, Math.max(12, Math.round((globalSettings.logoHeight || 52) * 0.3)))}px` }}
-                      className="font-black tracking-tight text-[#1a4d2e] leading-none whitespace-nowrap"
+                      className="font-black tracking-tight text-[#1a4d2e] leading-tight text-base sm:text-lg whitespace-nowrap"
                     >
                       {globalSettings.siteName}
                     </span>
-                    <span className="text-[8px] sm:text-[9px] font-bold text-stone-400 mt-0.5 whitespace-nowrap">{globalSettings.siteSubtitle}</span>
+                    <span className="text-[9px] font-bold text-stone-400 leading-tight whitespace-nowrap">
+                      {globalSettings.siteSubtitle}
+                    </span>
                   </div>
-                </>
+                  <div 
+                    className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#1a4d2e] to-[#133b22] text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-all duration-300 shrink-0 overflow-hidden"
+                  >
+                    <Store className="h-4.5 w-4.5 text-[#ff9f1c]" />
+                  </div>
+                </div>
               )}
             </Link>
           </div>
@@ -928,21 +927,22 @@ export function Layout() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
             <div className="md:col-span-2">
               <Link to="/" className="text-2xl sm:text-3xl font-black tracking-tighter text-[#1a4d2e] flex items-center gap-2.5 mb-4 group">
-                {globalSettings.logoUrl && globalSettings.useFullLogo ? (
+                {globalSettings.logoUrl ? (
                   <img 
                     src={globalSettings.logoUrl} 
                     alt={globalSettings.siteName} 
                     style={{ height: `${Math.min(65, Math.max(44, globalSettings.logoHeight || 55))}px` }}
                     className="max-h-[65px] max-w-[280px] object-contain group-hover:scale-102 transition-transform" 
                   />
+                ) : !isSettingsLoaded ? (
+                  <div 
+                    style={{ height: `${Math.min(65, Math.max(44, globalSettings.logoHeight || 55))}px` }}
+                    className="w-32 opacity-0 pointer-events-none"
+                  />
                 ) : (
                   <>
                     <div className="w-10 h-10 rounded-2xl bg-[#1a4d2e] flex items-center justify-center text-white shadow-xs overflow-hidden shrink-0 group-hover:scale-105 transition-transform">
-                      {globalSettings.logoUrl ? (
-                        <img src={globalSettings.logoUrl} alt={globalSettings.siteName} className="w-full h-full object-cover" />
-                      ) : (
-                        <Store className="h-6 w-6 text-[#ff9f1c]" />
-                      )}
+                      <Store className="h-6 w-6 text-[#ff9f1c]" />
                     </div>
                     <span>{globalSettings.siteName}</span>
                   </>

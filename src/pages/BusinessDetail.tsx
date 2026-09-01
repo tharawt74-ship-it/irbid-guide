@@ -314,9 +314,9 @@ export function BusinessDetail() {
           
           // Fetch reviews, offers, and jobs in parallel for maximum speed
           const [reviewsSnap, offersSnap1, offersSnap2, jobsSnap1, jobsSnap2] = await Promise.all([
-            getDocs(query(collection(db, 'reviews'), where('businessId', '==', actualId))),
+            getDocs(query(collection(db, 'reviews'), where('businessId', 'in', Array.from(new Set([actualId, id, cleanParam].filter(Boolean)))))),
             getDocs(query(collection(db, 'offers'), where('businessName', '==', bizData.name))),
-            getDocs(query(collection(db, 'offers'), where('businessId', '==', actualId))),
+            getDocs(query(collection(db, 'offers'), where('businessId', 'in', Array.from(new Set([actualId, id, cleanParam].filter(Boolean)))))),
             getDocs(query(collection(db, 'jobs'), where('businessId', '==', actualId))).catch(() => ({ forEach: () => {} } as any)),
             getDocs(query(collection(db, 'jobs'), where('company', '==', bizData.name))).catch(() => ({ forEach: () => {} } as any))
           ]);
@@ -355,6 +355,7 @@ export function BusinessDetail() {
               loadedOffers.push({ id: oDoc.id, ...oDoc.data() });
             }
           });
+          loadedOffers.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
           setActiveOffers(loadedOffers);
 
           const loadedJobs: JobOffer[] = [];
@@ -384,7 +385,13 @@ export function BusinessDetail() {
 
             // Fetch real database reviews left on this demo business page
             try {
-              const reviewsSnap = await getDocs(query(collection(db, 'reviews'), where('businessId', '==', id)));
+              const demoIds = Array.from(new Set([id, cleanParam].filter(Boolean)));
+              const [reviewsSnap, offersSnap, jobsSnap] = await Promise.all([
+                getDocs(query(collection(db, 'reviews'), where('businessId', 'in', demoIds))),
+                getDocs(query(collection(db, 'offers'), where('businessId', 'in', demoIds))),
+                getDocs(query(collection(db, 'jobs'), where('businessId', 'in', demoIds)))
+              ]);
+
               const fetchedReviews: Review[] = [];
               reviewsSnap.forEach((docSnapItem) => {
                 fetchedReviews.push({ id: docSnapItem.id, ...docSnapItem.data() } as Review);
@@ -399,15 +406,29 @@ export function BusinessDetail() {
                   reviewCount: fetchedReviews.length
                 } : null);
               }
-            } catch (rErr) {
-              console.warn("Could not load database reviews for demo business:", rErr);
-            }
 
-            // Populate demo jobs matching this business
-            const demoJobs = (DEMO_SEED_DATA.jobs || [])
-              .filter(j => j.company === demoFound.name)
-              .map((j, idx) => ({ id: `demo-job-${idx}`, ...j } as JobOffer));
-            setActiveJobs(demoJobs);
+              const fetchedOffers: any[] = [];
+              offersSnap.forEach((docSnapItem) => {
+                fetchedOffers.push({ id: docSnapItem.id, ...docSnapItem.data() });
+              });
+              fetchedOffers.sort((a, b) => b.createdAt - a.createdAt);
+              setActiveOffers(fetchedOffers);
+
+              // Populate demo jobs matching this business + real jobs
+              const demoJobs = (DEMO_SEED_DATA.jobs || [])
+                .filter(j => j.company === demoFound.name)
+                .map((j, idx) => ({ id: `demo-job-${idx}`, ...j } as JobOffer));
+                
+              const fetchedJobs: JobOffer[] = [];
+              jobsSnap.forEach((docSnapItem) => {
+                fetchedJobs.push({ id: docSnapItem.id, ...docSnapItem.data() } as JobOffer);
+              });
+              fetchedJobs.sort((a, b) => b.createdAt - a.createdAt);
+              setActiveJobs([...fetchedJobs, ...demoJobs]);
+
+            } catch (rErr) {
+              console.warn("Could not load database extra data for demo business:", rErr);
+            }
           } else {
             setBusiness(null);
             setError('المحل غير موجود أو تم حذفه.');
@@ -892,7 +913,7 @@ export function BusinessDetail() {
     setSubmittingReview(true);
     try {
       const reviewData = {
-        businessId: id,
+        businessId: business?.id || id,
         userId: currentUser.uid,
         userName: currentUser.displayName || currentUser.email?.split('@')[0] || 'مستخدم',
         rating: newRating,

@@ -415,17 +415,6 @@ export function Home() {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-[50vh]">
-        <div className="relative w-16 h-16">
-          <div className="absolute inset-0 rounded-full border-4 border-[#e5e1da]"></div>
-          <div className="absolute inset-0 rounded-full border-4 border-[#1a4d2e] border-t-transparent animate-spin"></div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6 md:space-y-10">
       <SEO 

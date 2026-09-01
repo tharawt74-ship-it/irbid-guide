@@ -1104,7 +1104,7 @@ export function AdminDashboard() {
       setMarketingRequests(prev => prev.map(r => r.id === reqId ? { ...r, status: newStatus } : r));
 
       // Side Effect: If sponsored or homepage banner is approved, mark the business as featured in Firestore
-      if ((serviceType === 'sponsored' || serviceType === 'homepage_banner') && businessId) {
+      if ((serviceType === 'sponsored' || serviceType === 'homepage_banner') && businessId && typeof businessId === 'string' && businessId.trim() !== '' && businessId !== 'undefined' && businessId !== 'null') {
         const isApproved = newStatus === 'completed' || newStatus === 'approved';
         
         // Helper to convert duration string to weeks count
@@ -1127,102 +1127,114 @@ export function AdminDashboard() {
         const durationMs = weeks * 7 * 24 * 60 * 60 * 1000;
         const expiryDate = startDate + durationMs;
 
-        if (isApproved) {
-          await updateDoc(doc(db, 'businesses', businessId), { 
-            isFeatured: true,
-            featuredStartDate: startDate,
-            featuredExpiryDate: expiryDate
-          });
-          setBusinesses(prev => prev.map(b => b.id === businessId ? { 
-            ...b, 
-            isFeatured: true,
-            featuredStartDate: startDate,
-            featuredExpiryDate: expiryDate
-          } : b));
-        } else {
-          // If rejected or reset, clear feature flags
-          await updateDoc(doc(db, 'businesses', businessId), { 
-            isFeatured: false,
-            featuredStartDate: null,
-            featuredExpiryDate: null
-          });
-          setBusinesses(prev => prev.map(b => b.id === businessId ? { 
-            ...b, 
-            isFeatured: false,
-            featuredStartDate: undefined,
-            featuredExpiryDate: undefined
-          } : b));
+        try {
+          if (isApproved) {
+            await updateDoc(doc(db, 'businesses', businessId), { 
+              isFeatured: true,
+              featuredStartDate: startDate,
+              featuredExpiryDate: expiryDate
+            });
+            setBusinesses(prev => prev.map(b => b.id === businessId ? { 
+              ...b, 
+              isFeatured: true,
+              featuredStartDate: startDate,
+              featuredExpiryDate: expiryDate
+            } : b));
+          } else {
+            // If rejected or reset, clear feature flags
+            await updateDoc(doc(db, 'businesses', businessId), { 
+              isFeatured: false,
+              featuredStartDate: null,
+              featuredExpiryDate: null
+            });
+            setBusinesses(prev => prev.map(b => b.id === businessId ? { 
+              ...b, 
+              isFeatured: false,
+              featuredStartDate: undefined,
+              featuredExpiryDate: undefined
+            } : b));
+          }
+        } catch (busErr) {
+          console.warn("Could not update business feature status in Firestore (it might be a demo business or deleted):", busErr);
         }
 
         if (serviceType === 'homepage_banner') {
-          if (isApproved) {
-            const biz = businesses.find(b => b.id === businessId);
-            if (biz) {
-              const bannerData: any = {
-                type: reqDoc?.bannerType || 'business',
-                title: reqDoc?.bannerTitle || biz.name,
-                subtitle: reqDoc?.bannerSubtitle || biz.description || '',
-                imageUrl: reqDoc?.bannerImageUrl || biz.imageUrl || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1200&q=80',
-                businessId: biz.id,
-                businessName: biz.name,
-                category: biz.category || '',
-                rating: (biz.rating && biz.rating > 0) ? biz.rating : undefined,
-                address: biz.address || '',
-                active: true,
-                createdAt: reqDoc?.createdAt || Date.now(),
-                marketingRequestId: reqId,
-                bannerStartDate: startDate,
-                bannerExpiryDate: expiryDate
-              };
-              if (reqDoc?.buttonText) bannerData.buttonText = reqDoc.buttonText;
-              if (reqDoc?.buttonLink) bannerData.buttonLink = reqDoc.buttonLink;
-              if (reqDoc?.badgeText) bannerData.badgeText = reqDoc.badgeText;
-              
-              await setDoc(doc(db, 'banners', `business_banner_${businessId}`), bannerData);
-              
-              // Redirect/switch active tab to banners list!
-              setTimeout(() => {
-                setActiveTab('banners');
-              }, 100);
+          try {
+            if (isApproved) {
+              const biz = businesses.find(b => b.id === businessId);
+              if (biz) {
+                const bannerData: any = {
+                  type: reqDoc?.bannerType || 'business',
+                  title: reqDoc?.bannerTitle || biz.name,
+                  subtitle: reqDoc?.bannerSubtitle || biz.description || '',
+                  imageUrl: reqDoc?.bannerImageUrl || biz.imageUrl || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1200&q=80',
+                  businessId: biz.id,
+                  businessName: biz.name,
+                  category: biz.category || '',
+                  rating: (biz.rating && biz.rating > 0) ? biz.rating : undefined,
+                  address: biz.address || '',
+                  active: true,
+                  createdAt: reqDoc?.createdAt || Date.now(),
+                  marketingRequestId: reqId,
+                  bannerStartDate: startDate,
+                  bannerExpiryDate: expiryDate
+                };
+                if (reqDoc?.buttonText) bannerData.buttonText = reqDoc.buttonText;
+                if (reqDoc?.buttonLink) bannerData.buttonLink = reqDoc.buttonLink;
+                if (reqDoc?.badgeText) bannerData.badgeText = reqDoc.badgeText;
+                
+                await setDoc(doc(db, 'banners', `business_banner_${businessId}`), bannerData);
+                
+                // Redirect/switch active tab to banners list!
+                setTimeout(() => {
+                  setActiveTab('banners');
+                }, 100);
+              }
+            } else {
+              // Remove the banner on rejection or cancel
+              await deleteDoc(doc(db, 'banners', `business_banner_${businessId}`));
             }
-          } else {
-            // Remove the banner on rejection or cancel
-            await deleteDoc(doc(db, 'banners', `business_banner_${businessId}`));
+          } catch (bannerErr) {
+            console.warn("Could not update banners collection:", bannerErr);
           }
         }
       }
 
       // Side Effect: If push notification request is approved, publish it to notifications collection in Firestore
       if (serviceType === 'push_notifications') {
-        const isApproved = newStatus === 'completed' || newStatus === 'approved';
-        const reqDoc = marketingRequests.find(r => r.id === reqId);
-        if (isApproved && reqDoc) {
-          let publishDate = Date.now();
-          if (reqDoc.publishTimeOption === 'scheduled' && reqDoc.publishStartDate) {
-            publishDate = new Date(reqDoc.publishStartDate).getTime();
-          } else if (reqDoc.scheduledTime && reqDoc.scheduledTime !== 'immediately') {
-            publishDate = new Date(reqDoc.scheduledTime).getTime();
-          }
+        try {
+          const isApproved = newStatus === 'completed' || newStatus === 'approved';
+          const reqDoc = marketingRequests.find(r => r.id === reqId);
+          if (isApproved && reqDoc) {
+            let publishDate = Date.now();
+            if (reqDoc.publishTimeOption === 'scheduled' && reqDoc.publishStartDate) {
+              publishDate = new Date(reqDoc.publishStartDate).getTime();
+            } else if (reqDoc.scheduledTime && reqDoc.scheduledTime !== 'immediately') {
+              publishDate = new Date(reqDoc.scheduledTime).getTime();
+            }
 
-          const biz = businessId ? businesses.find(b => b.id === businessId) : undefined;
-          const notifId = `notif_marketing_${reqId}`;
-          const notifData = {
-            id: notifId,
-            title: reqDoc.notificationTitle || `إعلان جديد`,
-            message: reqDoc.notificationBody || '',
-            type: 'marketing',
-            link: reqDoc.targetLink || (businessId ? `/business/${businessId}` : ''),
-            userId: 'all',
-            createdAt: publishDate,
-            isRead: false,
-            businessId: businessId || undefined,
-            businessName: biz?.name || reqDoc.businessName || undefined,
-            businessLogoUrl: biz?.logoUrl || reqDoc.businessLogoUrl || undefined,
-          };
-          await setDoc(doc(db, 'notifications', notifId), notifData);
-        } else {
-          // If unapproved or rejected, remove the notification document
-          await deleteDoc(doc(db, 'notifications', `notif_marketing_${reqId}`));
+            const biz = (businessId && businessId !== 'undefined' && businessId !== 'null') ? businesses.find(b => b.id === businessId) : undefined;
+            const notifId = `notif_marketing_${reqId}`;
+            const notifData = {
+              id: notifId,
+              title: reqDoc.notificationTitle || `إعلان جديد`,
+              message: reqDoc.notificationBody || '',
+              type: 'marketing',
+              link: reqDoc.targetLink || (businessId ? `/business/${businessId}` : ''),
+              userId: 'all',
+              createdAt: publishDate,
+              isRead: false,
+              businessId: businessId || undefined,
+              businessName: biz?.name || reqDoc.businessName || undefined,
+              businessLogoUrl: biz?.logoUrl || reqDoc.businessLogoUrl || undefined,
+            };
+            await setDoc(doc(db, 'notifications', notifId), notifData);
+          } else {
+            // If unapproved or rejected, remove the notification document
+            await deleteDoc(doc(db, 'notifications', `notif_marketing_${reqId}`));
+          }
+        } catch (notifErr) {
+          console.warn("Could not set/delete notifications:", notifErr);
         }
       }
 

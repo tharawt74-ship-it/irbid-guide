@@ -21,8 +21,8 @@ const DEFAULT_STORIES: StoryConfig[] = [
 const DEFAULT_GLOBAL_SETTINGS: GlobalSiteSettings = {
   siteName: 'شو في بإربد؟',
   siteSubtitle: 'دليل عروس الشمال والمحلات والخدمات الشامل',
-  logoUrl: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=120&q=80',
-  useFullLogo: false,
+  logoUrl: '',
+  useFullLogo: true,
   logoHeight: 68,
   contactPhone: '0790000000',
   whatsappNumber: '962790000000',
@@ -120,6 +120,7 @@ interface SystemSettingsContextType {
   neighborhoods: IrbidAreaGroup[];
   vipPlans: VipPlanConfig[];
   globalSettings: GlobalSiteSettings;
+  isSettingsLoaded: boolean;
   staticPages: StaticPagesConfig;
   seasonalCampaigns: SeasonalCampaign[];
   stories: StoryConfig[];
@@ -153,7 +154,27 @@ export function SystemSettingsProvider({ children }: { children: React.ReactNode
 
   const [neighborhoods, setNeighborhoods] = useState<IrbidAreaGroup[]>(IRBID_REGIONS_CATEGORIZED);
   const [vipPlans, setVipPlans] = useState<VipPlanConfig[]>(DEFAULT_VIP_PLANS);
-  const [globalSettings, setGlobalSettings] = useState<GlobalSiteSettings>(DEFAULT_GLOBAL_SETTINGS);
+  
+  const [globalSettings, setGlobalSettings] = useState<GlobalSiteSettings>(() => {
+    try {
+      const cached = localStorage.getItem('shoof_global_settings');
+      if (cached) {
+        return { ...DEFAULT_GLOBAL_SETTINGS, ...JSON.parse(cached) };
+      }
+    } catch {
+      // ignore
+    }
+    return DEFAULT_GLOBAL_SETTINGS;
+  });
+
+  const [isSettingsLoaded, setIsSettingsLoaded] = useState<boolean>(() => {
+    try {
+      return !!localStorage.getItem('shoof_global_settings');
+    } catch {
+      return false;
+    }
+  });
+
   const [staticPages, setStaticPages] = useState<StaticPagesConfig>(DEFAULT_STATIC_PAGES);
   const [seasonalCampaigns, setSeasonalCampaigns] = useState<SeasonalCampaign[]>(DEFAULT_SEASONAL_CAMPAIGNS);
   const [stories, setStories] = useState<StoryConfig[]>(DEFAULT_STORIES);
@@ -161,7 +182,10 @@ export function SystemSettingsProvider({ children }: { children: React.ReactNode
   // Load settings from Firestore on mount
   useEffect(() => {
     async function loadSettings() {
-      if (!db) return;
+      if (!db) {
+        setIsSettingsLoaded(true);
+        return;
+      }
       try {
         const docRef = doc(db, 'systemConfig', 'settings');
         const snap = await getDoc(docRef);
@@ -175,13 +199,22 @@ export function SystemSettingsProvider({ children }: { children: React.ReactNode
           }
           if (data.neighborhoods) setNeighborhoods(data.neighborhoods);
           if (data.vipPlans) setVipPlans(data.vipPlans);
-          if (data.globalSettings) setGlobalSettings(data.globalSettings);
+          if (data.globalSettings) {
+            setGlobalSettings(data.globalSettings);
+            try {
+              localStorage.setItem('shoof_global_settings', JSON.stringify(data.globalSettings));
+            } catch {
+              // ignore
+            }
+          }
           if (data.staticPages) setStaticPages(data.staticPages);
           if (data.seasonalCampaigns) setSeasonalCampaigns(data.seasonalCampaigns);
           if (data.stories) setStories(data.stories);
         }
       } catch (err) {
         console.warn('Could not load system config from Firestore:', err);
+      } finally {
+        setIsSettingsLoaded(true);
       }
     }
     loadSettings();
@@ -307,6 +340,11 @@ export function SystemSettingsProvider({ children }: { children: React.ReactNode
 
   const updateGlobalSettings = async (updated: GlobalSiteSettings) => {
     setGlobalSettings(updated);
+    try {
+      localStorage.setItem('shoof_global_settings', JSON.stringify(updated));
+    } catch {
+      // ignore
+    }
     await saveAllToFirestore({ globalSettings: updated });
   };
 
@@ -349,6 +387,7 @@ export function SystemSettingsProvider({ children }: { children: React.ReactNode
         neighborhoods,
         vipPlans,
         globalSettings,
+        isSettingsLoaded,
         staticPages,
         seasonalCampaigns,
         stories,

@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { 
   Check, Sparkles, Crown, MapPin, 
-  ArrowLeft, Phone, Building2, Plus, ArrowRight
+  ArrowLeft, Phone, Building2, Plus, ArrowRight,
+  Tv, TrendingUp, Bell, Video, Smartphone
 } from 'lucide-react';
 import { SEO } from '../components/common/SEO';
 import { useSystemSettings } from '../contexts/SystemSettingsContext';
@@ -10,8 +11,61 @@ import { useAuth } from '../contexts/AuthContext';
 import { Business } from '../types';
 import { VipUpgradeRequestModal } from '../components/vip/VipUpgradeRequestModal';
 
+const MARKETING_SERVICES_DATA = [
+  {
+    id: 'banner',
+    title: 'إعلان بانر ترويجي متحرك',
+    price: '29 د.أ / أسبوع',
+    description: 'وضع محلك أو عرضك الخاص في السلايدر الرئيسي أعلى الصفحة الرئيسية للمنصة لضمان أعلى نسبة مشاهدة واهتمام من زوار إربد.',
+    icon: Tv,
+    whatsappText: 'أرغب في حجز مساحة إعلان بانر ترويجي متحرك في الصفحة الرئيسية لمحلي.',
+    colorClass: 'bg-blue-50 text-blue-700 border-blue-200',
+    iconColor: 'text-blue-600'
+  },
+  {
+    id: 'sponsored',
+    title: 'صدارة نتائج البحث والترشيح Sponsored',
+    price: '19 د.أ / أسبوع',
+    description: 'احصل على الأولوية القصوى والظهور الدائم في أعلى نتائج البحث والتصنيفات وفي قائمة "المحلات المقترحة" للمستخدمين.',
+    icon: TrendingUp,
+    whatsappText: 'أرغب في تفعيل خدمة صدارة نتائج البحث والتصنيف Sponsored لمحلي.',
+    colorClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    iconColor: 'text-emerald-600'
+  },
+  {
+    id: 'notifications',
+    title: 'إرسال إشعار ترويجي جماعي فوري',
+    price: '15 د.أ / إشعار',
+    description: 'أرسل إشعاراً فورياً ومباشراً يصل لجميع مستخدمي المنصة في إربد للإعلان عن افتتاح، عرض جديد، أو فعالية خاصة بمحلك.',
+    icon: Bell,
+    whatsappText: 'أرغب في إرسال إشعار ترويجي جماعي فوري لجميع مستخدمي المنصة للإعلان عن محلي.',
+    colorClass: 'bg-amber-50 text-amber-700 border-amber-200',
+    iconColor: 'text-amber-600'
+  },
+  {
+    id: 'video',
+    title: 'تغطية فيديو ريلز (Reels) وتصوير احترافي',
+    price: '69 د.أ / تغطية',
+    description: 'فريقنا الاحترافي يزور محلك مجهزاً بأحدث الكاميرات والمعدات لتصوير ومونتاج فيديو ريلز تسويقي إبداعي لنشره على منصاتنا الاجتماعية.',
+    icon: Video,
+    whatsappText: 'أرغب في حجز موعد لتغطية فيديو ريلز وتصوير احترافي لمحلي.',
+    colorClass: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+    iconColor: 'text-indigo-600'
+  },
+  {
+    id: 'nfc',
+    title: 'طاولات ستاندات التقييم الذكي NFC',
+    price: '12 د.أ / ستاند مبرمج',
+    description: 'ستاند ذكي أنيق ومبرمج يوضع على طاولات ومحاسبة محلك، يتيح للزبائن تقييم محلك على جوجل مابس أو فتح منيو الطعام بمجرد لمسة هاتف فوري.',
+    icon: Smartphone,
+    whatsappText: 'أرغب في طلب وبرمجة ستاندات طاولات التقييم الذكي NFC لمحلي.',
+    colorClass: 'bg-purple-50 text-purple-700 border-purple-200',
+    iconColor: 'text-purple-600'
+  }
+];
+
 export function Pricing() {
-  const { vipPlans } = useSystemSettings();
+  const { vipPlans, globalSettings } = useSystemSettings();
   const { currentUser, ownedBusinesses } = useAuth();
   const navigate = useNavigate();
   
@@ -20,13 +74,15 @@ export function Pricing() {
   // Selection states
   const [showBusinessSelectModal, setShowBusinessSelectModal] = useState(false);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
+  const [selectedServiceWhatsapp, setSelectedServiceWhatsapp] = useState<string | null>(null);
   
   // Upgrade Modal states
   const [upgradeBusiness, setUpgradeBusiness] = useState<Business | null>(null);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   
-  // Only show active plans if we implemented an active flag, else show all
+  // Split subscription package plans from on-demand/pay-per-use marketing services
   const activePlans = vipPlans.filter(p => p.active !== false);
+  const subscriptionPlans = activePlans.filter(p => p.id !== 'pay_per_use');
 
   const handlePlanAction = (planId: string) => {
     if (!currentUser) {
@@ -39,31 +95,53 @@ export function Pricing() {
       return;
     }
     
-    // For VIP / Pay per use
+    // For VIP
     if (ownedBusinesses.length === 0) {
       navigate('/add-business');
     } else {
       setSelectedPlanId(planId);
+      setSelectedServiceWhatsapp(null);
+      setShowBusinessSelectModal(true);
+    }
+  };
+
+  const handleMarketingServiceAction = (whatsappText: string) => {
+    if (!currentUser) {
+      navigate('/register');
+      return;
+    }
+
+    const whatsappNum = globalSettings?.whatsappNumber || '962790000000';
+
+    if (ownedBusinesses.length === 0) {
+      // Direct WhatsApp if they don't have registered businesses yet
+      const msg = encodeURIComponent(`السلام عليكم، أرغب بالاستفسار عن الخدمات الإعلانية: ${whatsappText}`);
+      window.open(`https://wa.me/${whatsappNum}?text=${msg}`, '_blank');
+    } else {
+      setSelectedPlanId('pay_per_use');
+      setSelectedServiceWhatsapp(whatsappText);
       setShowBusinessSelectModal(true);
     }
   };
 
   const handleBusinessSelection = (business: Business) => {
     setShowBusinessSelectModal(false);
+    const whatsappNum = globalSettings?.whatsappNumber || '962790000000';
     
     if (selectedPlanId === 'golden') {
       setUpgradeBusiness(business);
       setShowUpgradeModal(true);
     } else if (selectedPlanId === 'pay_per_use') {
-      // Direct WhatsApp redirect for marketing services
-      const msg = encodeURIComponent(`السلام عليكم، بخصوص محلي (${business.name})، أرغب بالاستفسار عن الحملات التسويقية والخدمات الإضافية.\nمعرف المحل: ${business.id}`);
-      window.open(`https://wa.me/962790000000?text=${msg}`, '_blank');
+      // Direct WhatsApp redirect for marketing services with selected business context
+      const serviceQuery = selectedServiceWhatsapp || 'أرغب بالاستفسار عن الحملات التسويقية والخدمات الإضافية.';
+      const msg = encodeURIComponent(`السلام عليكم، بخصوص محلي (${business.name})، ${serviceQuery}\nمعرف المحل في الدليل: ${business.id}`);
+      window.open(`https://wa.me/${whatsappNum}?text=${msg}`, '_blank');
     }
   };
 
   const handleAddNewBusiness = () => {
     setShowBusinessSelectModal(false);
-    navigate('/add-business');
+    navigate('/contact?type=business');
   };
 
   return (
@@ -121,9 +199,9 @@ export function Pricing() {
         </div>
       </div>
 
-      {/* Pricing Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 items-stretch max-w-7xl mx-auto">
-        {activePlans.map((plan, idx) => (
+      {/* Pricing Cards Grid (Basic & Golden VIP subscriptions) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch max-w-4xl mx-auto px-4">
+        {subscriptionPlans.map((plan) => (
           <div 
             key={plan.id}
             className={`rounded-3xl border p-6 sm:p-8 flex flex-col justify-between shadow-xs hover:shadow-md transition-all relative ${
@@ -157,10 +235,6 @@ export function Pricing() {
                   <p className="text-[10px] text-amber-600 font-extrabold bg-amber-50 px-2 py-1 rounded inline-block">
                     ✓ تفعيل فوري مخصص عبر الواتساب
                   </p>
-                </div>
-              ) : plan.id === 'pay_per_use' || plan.price === 0 ? (
-                <div className="flex items-baseline gap-1 text-[#2d2a26]">
-                  <span className="text-3xl font-black">حسب الطلب</span>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -196,7 +270,12 @@ export function Pricing() {
                   الميزات المشمولة:
                 </h3>
                 <ul className="space-y-3.5 text-xs sm:text-sm text-stone-700">
-                  {plan.features.map((feature, fIdx) => (
+                  {((plan.id === 'golden' && plan.features.length <= 8) ? [
+                    ...plan.features,
+                    'معرض الصور المتطور وأجواء المحل الاستكشافية 📸',
+                    'الرسائل والمحادثات الحية والمباشرة مع الزبائن 💬',
+                    'تضمين فيديوهات ريلز (Reels) ترويجية بداخل صفحتك 🎬'
+                  ] : plan.features).map((feature, fIdx) => (
                     <li key={fIdx} className="flex items-start gap-2.5">
                       <div className="p-1 bg-emerald-100 text-emerald-700 rounded-lg shrink-0 mt-0.5">
                         <Check className="h-3.5 w-3.5 stroke-[3]" />
@@ -223,6 +302,62 @@ export function Pricing() {
             </div>
           </div>
         ))}
+      </div>
+
+      {/* Services paid upon purchase (Pay-per-use on-demand marketing) - Dedicated Gorgeous Section */}
+      <div className="max-w-7xl mx-auto px-4 pt-8">
+        <div className="bg-stone-50/70 border border-stone-200/60 rounded-3xl p-6 sm:p-10 space-y-8">
+          <div className="text-center max-w-2xl mx-auto space-y-3">
+            <div className="inline-flex items-center gap-1.5 bg-[#1a4d2e]/10 text-[#1a4d2e] px-3.5 py-1 rounded-full text-xs font-black border border-[#1a4d2e]/20">
+              <Sparkles className="h-3.5 w-3.5" />
+              <span>خدمات ترويجية إضافية - حسب الطلب</span>
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-black text-[#2d2a26]">
+              🛍️ خدمات تسويقية تدفع عند الشراء فقط
+            </h2>
+            <p className="text-stone-500 text-xs sm:text-sm leading-relaxed">
+              عزز مبيعاتك واكتسب مئات الزبائن الجدد فوراً من خلال حلولنا الترويجية المخصصة. هذه الخدمات تدفع <span className="font-bold text-stone-800 underline">مرة واحدة عند الطلب وليست باقة اشتراك دورية</span>.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {MARKETING_SERVICES_DATA.map((service) => {
+              const IconComp = service.icon;
+              return (
+                <div 
+                  key={service.id}
+                  className="bg-white border border-stone-200/80 rounded-2xl p-5 hover:border-[#1a4d2e] hover:shadow-md transition-all flex flex-col justify-between"
+                >
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className={`p-2.5 rounded-xl ${service.colorClass}`}>
+                        <IconComp className="h-5 w-5 stroke-[2.5]" />
+                      </div>
+                      <span className="text-xs font-black bg-stone-100 text-stone-700 border border-stone-200 px-2.5 py-1 rounded-lg">
+                        {service.price}
+                      </span>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <h3 className="font-black text-stone-800 text-sm sm:text-base">{service.title}</h3>
+                      <p className="text-stone-500 text-xs leading-relaxed">{service.description}</p>
+                    </div>
+                  </div>
+
+                  <div className="pt-5 mt-4 border-t border-stone-100">
+                    <button
+                      onClick={() => handleMarketingServiceAction(service.whatsappText)}
+                      className="w-full py-2.5 sm:py-3 bg-stone-50 text-stone-800 border border-stone-200 hover:bg-[#1a4d2e] hover:text-white hover:border-[#1a4d2e] rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                    >
+                      <span>اطلب الخدمة الآن</span>
+                      <ArrowLeft className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </div>
       
       {/* Footer Info */}
@@ -270,29 +405,29 @@ export function Pricing() {
                 return (
                   <div key={bus.id} className={`flex items-center justify-between p-4 rounded-2xl border ${isAlreadyOnPlan ? 'bg-stone-50 border-stone-200 opacity-60' : 'bg-white border-stone-200 hover:border-[#1a4d2e] cursor-pointer'}`}
                        onClick={() => !isAlreadyOnPlan && handleBusinessSelection(bus)}>
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-stone-100 rounded-xl overflow-hidden flex items-center justify-center">
-                        {bus.logoUrl || bus.image ? (
-                          <img src={bus.logoUrl || bus.image} alt={bus.name} className="w-full h-full object-cover" />
-                        ) : (
-                          <Building2 className="h-6 w-6 text-stone-400" />
-                        )}
-                      </div>
-                      <div>
-                        <h4 className="font-black text-stone-800">{bus.name}</h4>
-                        <p className="text-xs text-stone-500 font-medium">{bus.category}</p>
-                      </div>
-                    </div>
-                    <div>
-                      {isAlreadyOnPlan ? (
-                        <span className="text-[10px] font-bold bg-stone-200 text-stone-600 px-2 py-1 rounded-lg">مشترك بالفعل</span>
-                      ) : (
-                        <span className="text-xs font-bold text-[#1a4d2e] bg-emerald-50 px-3 py-1.5 rounded-lg flex items-center gap-1">
-                          ترقية
-                          <ArrowRight className="h-3 w-3" />
-                        </span>
-                      )}
-                    </div>
+                     <div className="flex items-center gap-3">
+                       <div className="w-12 h-12 bg-stone-100 rounded-xl overflow-hidden flex items-center justify-center">
+                         {bus.logoUrl || bus.image ? (
+                           <img src={bus.logoUrl || bus.image} alt={bus.name} className="w-full h-full object-cover" />
+                         ) : (
+                           <Building2 className="h-6 w-6 text-stone-400" />
+                         )}
+                       </div>
+                       <div>
+                         <h4 className="font-black text-stone-800">{bus.name}</h4>
+                         <p className="text-xs text-stone-500 font-medium">{bus.category}</p>
+                       </div>
+                     </div>
+                     <div>
+                       {isAlreadyOnPlan ? (
+                         <span className="text-[10px] font-bold bg-stone-200 text-stone-600 px-2 py-1 rounded-lg">مشترك بالفعل</span>
+                       ) : (
+                         <span className="text-xs font-bold text-[#1a4d2e] bg-emerald-50 px-3 py-1.5 rounded-lg flex items-center gap-1">
+                           ترقية
+                           <ArrowRight className="h-3 w-3" />
+                         </span>
+                       )}
+                     </div>
                   </div>
                 );
               })}

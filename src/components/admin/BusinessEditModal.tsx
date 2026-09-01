@@ -553,13 +553,13 @@ export function BusinessEditModal({
           {/* Rating & Review Count & Owner Name */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-stone-50 p-4 rounded-2xl border border-stone-200">
             <div>
-              <label className="block text-[11px] font-black text-stone-600 mb-1">التقييم الافتراضي (من 5)</label>
+              <label className="block text-[11px] font-black text-stone-600 mb-1">التقييم (من 5 - 0 للجديد)</label>
               <input
                 type="number"
                 step="0.1"
                 min="0"
                 max="5"
-                value={formData.rating ?? 4.8}
+                value={formData.rating ?? 0}
                 onChange={e => setFormData({ ...formData, rating: parseFloat(e.target.value) || 0 })}
                 className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2 text-sm font-bold text-stone-800"
               />
@@ -570,7 +570,7 @@ export function BusinessEditModal({
               <input
                 type="number"
                 min="0"
-                value={formData.reviewCount ?? 1}
+                value={formData.reviewCount ?? 0}
                 onChange={e => setFormData({ ...formData, reviewCount: parseInt(e.target.value) || 0 })}
                 className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2 text-sm font-bold text-stone-800"
               />

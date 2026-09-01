@@ -84,7 +84,8 @@ import { BannersManager } from '../components/admin/BannersManager';
 import { UpgradeRequestsManager } from '../components/admin/UpgradeRequestsManager';
 import { recordAuditLog } from '../lib/auditLogHelper';
 import { getBusinessVipStatus } from '../lib/vipHelper';
-import { sanitizeFirestorePayload } from '../lib/firestoreHelper';
+import { sanitizeFirestorePayload, compressAndSanitizeFirestorePayload } from '../lib/firestoreHelper';
+import { invalidateCache } from '../lib/dataCache';
 import { getAppConfig, setAppConfig, seedDemoDataToFirestore, clearDemoDataFromFirestore } from '../lib/demoDataHelper';
 import { getWhatsAppUrl } from '../lib/contactHelper';
 
@@ -847,7 +848,7 @@ export function AdminDashboard() {
     try {
       const isPrimary = !request.parentBusinessId && !request.isBranch;
       const now = Date.now();
-      const twoWeeksMs = 14 * 24 * 60 * 60 * 1000;
+      const oneMonthMs = 30 * 24 * 60 * 60 * 1000;
 
       const newBusiness: Omit<Business, 'id'> = {
         name: request.name || '',
@@ -861,17 +862,17 @@ export function AdminDashboard() {
         googlePlaceUrl: request.googlePlaceUrl || '',
         userId: request.userId || null,
         ownerName: request.ownerName || '',
-        rating: 4.8,
-        reviewCount: 1,
+        rating: Number(request.rating) || 0,
+        reviewCount: Number(request.reviewCount) || 0,
         createdAt: now,
         isFeatured: false,
         hideSiteReviews: false,
         hideGoogleReviews: false,
-        // 2-Week Free Trial for primary new businesses (not branches)
+        // 1-Month Free Trial for primary new businesses (not branches)
         packagePlan: isPrimary ? 'golden' : (request.packagePlan || 'basic'),
         isVipTrial: isPrimary,
         vipSubscriptionStartsAt: isPrimary ? now : undefined,
-        vipSubscriptionExpiresAt: isPrimary ? now + twoWeeksMs : undefined,
+        vipSubscriptionExpiresAt: isPrimary ? now + oneMonthMs : undefined,
         isVerified: isPrimary,
         workingHours: request.workingHours || {
           isOpen24Hours: false,
@@ -881,30 +882,31 @@ export function AdminDashboard() {
           isCustomClosed: false
         },
         socialLinks: request.socialLinks || (request.socialMedia ? { website: request.socialMedia } : {}),
-        views: 35,
+        views: 0,
         analytics: {
-          views: 35,
-          whatsappClicks: 8,
-          callClicks: 6,
-          directionClicks: 12,
-          menuViews: 18,
-          shareClicks: 3,
+          views: 0,
+          whatsappClicks: 0,
+          callClicks: 0,
+          directionClicks: 0,
+          menuViews: 0,
+          shareClicks: 0,
           lastUpdated: now
         }
       };
 
       const docRef = doc(collection(db, 'businesses'));
-      const sanitized = sanitizeFirestorePayload(newBusiness, false);
+      const sanitized = await compressAndSanitizeFirestorePayload(newBusiness, false);
       await setDoc(docRef, sanitized);
       await updateDoc(doc(db, 'businessRequests', request.id), { status: 'approved' });
 
       setRequests(prev => prev.map(r => r.id === request.id ? { ...r, status: 'approved' } : r));
       setBusinesses(prev => [{ id: docRef.id, ...newBusiness }, ...prev]);
+      invalidateCache();
 
       // Push notification
       await addNotification({
         title: `تم توثيق محل جديد: ${request.name} 🏬`,
-        message: `انضم محل ${request.name} رسمياً إلى دليل شو في بإربد وحصل على أسبوعين تجربة مجانية للباقة الذهبية VIP!`,
+        message: `انضم محل ${request.name} رسمياً إلى دليل شو في بإربد وحصل على شهر تجربة مجانية للباقة الذهبية VIP!`,
         type: 'business',
         link: `/business/${docRef.id}`,
         badge: 'محل جديد VIP 🌟',
@@ -914,7 +916,7 @@ export function AdminDashboard() {
         businessLogoUrl: request.logoUrl || request.logo || ''
       });
 
-      showToast(`تم قبول وتوثيق محل (${request.name}) وتفعيل تجربة VIP مجانية (أسبوعين) بنجاح!`);
+      showToast(`تم قبول وتوثيق محل (${request.name}) وتفعيل تجربة VIP مجانية (شهر كامل) بنجاح!`);
 
       // Record Audit Log
       recordAuditLog({
@@ -965,22 +967,23 @@ export function AdminDashboard() {
     try {
       const isPrimary = !newBiz.parentBusinessId && !newBiz.isBranch;
       const now = Date.now();
-      const twoWeeksMs = 14 * 24 * 60 * 60 * 1000;
+      const oneMonthMs = 30 * 24 * 60 * 60 * 1000;
 
       const preparedBiz = { ...newBiz };
       if (isPrimary && !preparedBiz.vipSubscriptionExpiresAt) {
         preparedBiz.packagePlan = 'golden';
         preparedBiz.isVipTrial = true;
         preparedBiz.vipSubscriptionStartsAt = now;
-        preparedBiz.vipSubscriptionExpiresAt = now + twoWeeksMs;
+        preparedBiz.vipSubscriptionExpiresAt = now + oneMonthMs;
         preparedBiz.isVerified = true;
       }
 
       const docRef = doc(collection(db, 'businesses'));
-      const sanitized = sanitizeFirestorePayload(preparedBiz, false);
+      const sanitized = await compressAndSanitizeFirestorePayload(preparedBiz, false);
       await setDoc(docRef, sanitized);
       const created = { id: docRef.id, ...preparedBiz } as Business;
       setBusinesses(prev => [created, ...prev]);
+      invalidateCache();
 
       await addNotification({
         title: `إضافة مميزة: ${newBiz.name} ✨`,
@@ -1006,9 +1009,10 @@ export function AdminDashboard() {
     if (!db || !updated.id) return;
     try {
       const { id, ...data } = updated;
-      const sanitized = sanitizeFirestorePayload(data, true);
+      const sanitized = await compressAndSanitizeFirestorePayload(data, true);
       await updateDoc(doc(db, 'businesses', id), sanitized);
       setBusinesses(prev => prev.map(b => b.id === id ? updated : b));
+      invalidateCache();
       showToast(`تم حفظ تعديلات (${updated.name}) بنجاح!`);
     } catch (error) {
       console.error('Error updating business:', error);
@@ -1023,6 +1027,7 @@ export function AdminDashboard() {
     try {
       await updateDoc(doc(db, 'businesses', biz.id), { isFeatured: newStatus });
       setBusinesses(prev => prev.map(b => b.id === biz.id ? { ...b, isFeatured: newStatus } : b));
+      invalidateCache();
       showToast(newStatus ? `تم تمييز محل (${biz.name}) في البانر والصدارة ⭐` : `تم إلغاء تمييز (${biz.name})`, 'info');
     } catch (error) {
       console.error('Error toggling featured status:', error);
@@ -1037,6 +1042,7 @@ export function AdminDashboard() {
     try {
       await updateDoc(doc(db, 'businesses', biz.id), { hideSiteReviews: newStatus });
       setBusinesses(prev => prev.map(b => b.id === biz.id ? { ...b, hideSiteReviews: newStatus } : b));
+      invalidateCache();
       showToast(newStatus ? `تم إخفاء تقييمات الموقع لمحل (${biz.name})` : `تم إظهار تقييمات الموقع لمحل (${biz.name})`, 'info');
     } catch (error) {
       console.error('Error toggling site reviews:', error);
@@ -1051,6 +1057,7 @@ export function AdminDashboard() {
     try {
       await updateDoc(doc(db, 'businesses', biz.id), { hideGoogleReviews: newStatus });
       setBusinesses(prev => prev.map(b => b.id === biz.id ? { ...b, hideGoogleReviews: newStatus } : b));
+      invalidateCache();
       showToast(newStatus ? `تم إخفاء تقييمات Google Maps لمحل (${biz.name})` : `تم إظهار تقييمات Google Maps لمحل (${biz.name})`, 'info');
     } catch (error) {
       console.error('Error toggling google reviews:', error);
@@ -1076,6 +1083,7 @@ export function AdminDashboard() {
       }
 
       setBusinesses(prev => prev.filter(b => b.id !== id));
+      invalidateCache();
       showToast(`تم حذف محل (${name}) من الدليل وإزالة إعلاناته تلقائياً`, 'info');
     } catch (err) {
       console.error("Error deleting business:", err);
@@ -1158,7 +1166,7 @@ export function AdminDashboard() {
                 businessId: biz.id,
                 businessName: biz.name,
                 category: biz.category || '',
-                rating: biz.rating || 5,
+                rating: (biz.rating && biz.rating > 0) ? biz.rating : undefined,
                 address: biz.address || '',
                 active: true,
                 createdAt: reqDoc?.createdAt || Date.now(),
@@ -1840,10 +1848,14 @@ export function AdminDashboard() {
 
                         {/* Rating */}
                         <td className="p-4 text-center font-bold text-stone-800">
-                          <div className="inline-flex items-center gap-1 bg-yellow-50 text-yellow-800 px-2 py-0.5 rounded-md text-xs">
-                            <Star className="h-3 w-3 fill-yellow-500 text-yellow-500" />
-                            <span>{(biz.rating && !isNaN(biz.rating)) ? biz.rating.toFixed(1) : '4.8'}</span>
-                          </div>
+                          {(biz.rating && !isNaN(biz.rating) && biz.rating > 0 && biz.reviewCount && biz.reviewCount > 0) ? (
+                            <div className="inline-flex items-center gap-1 bg-yellow-50 text-yellow-800 px-2 py-0.5 rounded-md text-xs">
+                              <Star className="h-3 w-3 fill-yellow-500 text-yellow-500" />
+                              <span>{biz.rating.toFixed(1)}</span>
+                            </div>
+                          ) : (
+                            <span className="bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded text-xs font-black">جديد</span>
+                          )}
                         </td>
 
                         {/* VIP Status & Manage Button */}
@@ -1864,7 +1876,7 @@ export function AdminDashboard() {
                             <span>
                               {vipInfo.isVip 
                                 ? (vipInfo.isTrial 
-                                    ? `🎁 تجربة مجانية (${vipInfo.daysRemaining ?? 14} يوم)`
+                                    ? `🎁 تجربة مجانية (${vipInfo.daysRemaining ?? 30} يوم)`
                                     : (vipInfo.isScheduled ? (vipInfo.isExpiringSoon ? `متبقي ${vipInfo.daysRemaining} يوم ⏳` : 'VIP مؤقت') : 'VIP دائم')) 
                                 : 'ترقية VIP'}
                             </span>
@@ -2027,7 +2039,11 @@ export function AdminDashboard() {
 
                     <div className="text-[11px] text-stone-400 pt-1 flex items-center justify-between">
                       <span className="truncate">{biz.address}</span>
-                      <span className="font-bold text-yellow-600">⭐ {(biz.rating && !isNaN(biz.rating)) ? biz.rating.toFixed(1) : '4.8'}</span>
+                      {(biz.rating && !isNaN(biz.rating) && biz.rating > 0 && biz.reviewCount && biz.reviewCount > 0) ? (
+                        <span className="font-bold text-yellow-600">⭐ {biz.rating.toFixed(1)}</span>
+                      ) : (
+                        <span className="font-black text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded text-[10px]">جديد</span>
+                      )}
                     </div>
                   </div>
 

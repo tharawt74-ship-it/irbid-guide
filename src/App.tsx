@@ -39,6 +39,7 @@ const Terms = lazy(() => import('./pages/Terms').then(m => ({ default: m.Terms }
 const Privacy = lazy(() => import('./pages/Privacy').then(m => ({ default: m.Privacy })));
 const AboutUs = lazy(() => import('./pages/AboutUs').then(m => ({ default: m.AboutUs })));
 const CartPage = lazy(() => import('./pages/CartPage').then(m => ({ default: m.CartPage })));
+const Search = lazy(() => import('./pages/Search').then(m => ({ default: m.Search })));
 
 function PageLoader() {
   return (
@@ -72,6 +73,7 @@ export default function App() {
                     <Route path="notifications" element={<NotificationsPage />} />
                     <Route path="messages" element={<Messages />} />
                     <Route path="cart" element={<CartPage />} />
+                    <Route path="search" element={<Search />} />
                     <Route path="business/:id" element={<BusinessDetail />} />
                   <Route path="b/:id" element={<BusinessDetail />} />
                   <Route path=":id" element={<BusinessDetail />} />

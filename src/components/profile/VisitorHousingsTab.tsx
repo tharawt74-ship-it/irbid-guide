@@ -398,15 +398,15 @@ export function VisitorHousingsTab({ housings, onRefresh }: VisitorHousingsTabPr
                       <div className="grid grid-cols-3 gap-2 text-center pt-1">
                         <div className="bg-white p-2 rounded-xl border border-stone-200/80">
                           <span className="text-[10px] text-stone-500 font-bold block">المشاهدات</span>
-                          <span className="text-xs font-black text-stone-900">{item.viewsCount || 214}</span>
+                          <span className="text-xs font-black text-stone-900">{item.viewsCount || 0}</span>
                         </div>
                         <div className="bg-white p-2 rounded-xl border border-stone-200/80">
                           <span className="text-[10px] text-stone-500 font-bold block">الواتساب</span>
-                          <span className="text-xs font-black text-emerald-700">{item.whatsappClicks || 38}</span>
+                          <span className="text-xs font-black text-emerald-700">{item.whatsappClicks || 0}</span>
                         </div>
                         <div className="bg-white p-2 rounded-xl border border-stone-200/80">
                           <span className="text-[10px] text-stone-500 font-bold block">الاتصالات</span>
-                          <span className="text-xs font-black text-amber-700">{item.phoneClicks || 12}</span>
+                          <span className="text-xs font-black text-amber-700">{item.phoneClicks || 0}</span>
                         </div>
                       </div>
                     </div>

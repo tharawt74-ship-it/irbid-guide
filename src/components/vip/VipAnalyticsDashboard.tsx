@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   TrendingUp, Eye, Phone, MessageSquare, MapPin, 
   Store, Share2, Sparkles, Crown, ArrowUpRight, 
   BarChart3, Calendar, Users, Zap, ShieldCheck, 
-  Clock, Target, Flame, Award, Lightbulb, TrendingDown, Star
+  Clock, Target, Flame, Award, Lightbulb, TrendingDown, Star, CheckCircle2
 } from 'lucide-react';
 import { Business, BusinessAnalytics } from '../../types';
 import { getDefaultAnalytics } from '../../lib/analyticsTracker';
@@ -13,36 +13,228 @@ interface VipAnalyticsDashboardProps {
   isOwner?: boolean;
 }
 
+const ARABIC_DAYS_OF_WEEK = [
+  { key: 'sat', name: 'السبت', jsDay: 6, isWeekendPeak: false },
+  { key: 'sun', name: 'الأحد', jsDay: 0, isWeekendPeak: false },
+  { key: 'mon', name: 'الإثنين', jsDay: 1, isWeekendPeak: false },
+  { key: 'tue', name: 'الثلاثاء', jsDay: 2, isWeekendPeak: false },
+  { key: 'wed', name: 'الأربعاء', jsDay: 3, isWeekendPeak: false },
+  { key: 'thu', name: 'الخميس', jsDay: 4, isWeekendPeak: true },
+  { key: 'fri', name: 'الجمعة', jsDay: 5, isWeekendPeak: true },
+] as const;
+
+function formatDateKey(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+const DAY_NAMES_AR = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+
 export function VipAnalyticsDashboard({ business }: VipAnalyticsDashboardProps) {
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | 'all'>('all');
 
   const rawAnalytics: BusinessAnalytics = business.analytics || getDefaultAnalytics(business.views);
+  const dailyStats = rawAnalytics.dailyStats || {};
+  const dayOfWeekStats = rawAnalytics.dayOfWeekStats || {};
 
-  // Use EXACT real numbers recorded in Firestore without artificial scaling factors
-  const views = rawAnalytics.views ?? business.views ?? 0;
-  const whatsapp = rawAnalytics.whatsappClicks ?? 0;
-  const calls = rawAnalytics.callClicks ?? 0;
-  const directions = rawAnalytics.directionClicks ?? 0;
-  const menuViews = rawAnalytics.menuViews ?? 0;
-  const shares = rawAnalytics.shareClicks ?? 0;
+  // Compute exact metrics based on selected time range
+  const {
+    views,
+    whatsapp,
+    calls,
+    directions,
+    menuViews,
+    shares,
+    weeklyBars,
+    timeRangeLabel,
+  } = useMemo(() => {
+    const today = new Date();
+
+    if (timeRange === '7d') {
+      // Past 7 calendar days up to today
+      const past7Days: {
+        dateStr: string;
+        dayName: string;
+        formattedDate: string;
+        views: number;
+        calls: number;
+        interactions: number;
+        isPeak: boolean;
+      }[] = [];
+
+      let sumViews = 0;
+      let sumWhatsapp = 0;
+      let sumCalls = 0;
+      let sumDirections = 0;
+      let sumMenus = 0;
+      let sumShares = 0;
+
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(today);
+        d.setDate(today.getDate() - i);
+        const dateKey = formatDateKey(d);
+        const dayIdx = d.getDay();
+        const dayName = DAY_NAMES_AR[dayIdx];
+        const formattedDate = `${d.getDate()}/${d.getMonth() + 1}`;
+        const stat = dailyStats[dateKey] || {};
+
+        const dViews = stat.view || stat.views || 0;
+        const dWhatsapp = stat.whatsapp || 0;
+        const dCalls = stat.call || stat.calls || 0;
+        const dDirections = stat.direction || stat.directions || 0;
+        const dMenus = stat.menu || stat.menus || 0;
+        const dShares = stat.share || stat.shares || 0;
+        const dInteractions = dWhatsapp + dCalls + dDirections + dMenus + dShares;
+
+        sumViews += dViews;
+        sumWhatsapp += dWhatsapp;
+        sumCalls += dCalls;
+        sumDirections += dDirections;
+        sumMenus += dMenus;
+        sumShares += dShares;
+
+        past7Days.push({
+          dateStr: dateKey,
+          dayName,
+          formattedDate,
+          views: dViews,
+          calls: dCalls,
+          interactions: dInteractions,
+          isPeak: dayName === 'الخميس' || dayName === 'الجمعة',
+        });
+      }
+
+      return {
+        views: sumViews,
+        whatsapp: sumWhatsapp,
+        calls: sumCalls,
+        directions: sumDirections,
+        menuViews: sumMenus,
+        shares: sumShares,
+        weeklyBars: past7Days.map(d => ({
+          label: d.dayName,
+          subLabel: d.formattedDate,
+          views: d.views,
+          calls: d.calls,
+          interactions: d.interactions,
+          isPeak: d.isPeak,
+        })),
+        timeRangeLabel: 'خلال آخر 7 أيام',
+      };
+    }
+
+    if (timeRange === '30d') {
+      // Past 30 calendar days
+      let sumViews = 0;
+      let sumWhatsapp = 0;
+      let sumCalls = 0;
+      let sumDirections = 0;
+      let sumMenus = 0;
+      let sumShares = 0;
+
+      // Group into days of week
+      const dayTotals: Record<number, { views: number; calls: number; interactions: number }> = {
+        0: { views: 0, calls: 0, interactions: 0 },
+        1: { views: 0, calls: 0, interactions: 0 },
+        2: { views: 0, calls: 0, interactions: 0 },
+        3: { views: 0, calls: 0, interactions: 0 },
+        4: { views: 0, calls: 0, interactions: 0 },
+        5: { views: 0, calls: 0, interactions: 0 },
+        6: { views: 0, calls: 0, interactions: 0 },
+      };
+
+      for (let i = 29; i >= 0; i--) {
+        const d = new Date(today);
+        d.setDate(today.getDate() - i);
+        const dateKey = formatDateKey(d);
+        const dayIdx = d.getDay();
+        const stat = dailyStats[dateKey] || {};
+
+        const dViews = stat.view || stat.views || 0;
+        const dWhatsapp = stat.whatsapp || 0;
+        const dCalls = stat.call || stat.calls || 0;
+        const dDirections = stat.direction || stat.directions || 0;
+        const dMenus = stat.menu || stat.menus || 0;
+        const dShares = stat.share || stat.shares || 0;
+
+        sumViews += dViews;
+        sumWhatsapp += dWhatsapp;
+        sumCalls += dCalls;
+        sumDirections += dDirections;
+        sumMenus += dMenus;
+        sumShares += dShares;
+
+        dayTotals[dayIdx].views += dViews;
+        dayTotals[dayIdx].calls += dCalls;
+        dayTotals[dayIdx].interactions += (dWhatsapp + dCalls + dDirections + dMenus + dShares);
+      }
+
+      const bars = ARABIC_DAYS_OF_WEEK.map(d => ({
+        label: d.name,
+        subLabel: 'تراكمي 30 يوم',
+        views: dayTotals[d.jsDay].views,
+        calls: dayTotals[d.jsDay].calls,
+        interactions: dayTotals[d.jsDay].interactions,
+        isPeak: d.isWeekendPeak,
+      }));
+
+      return {
+        views: sumViews,
+        whatsapp: sumWhatsapp,
+        calls: sumCalls,
+        directions: sumDirections,
+        menuViews: sumMenus,
+        shares: sumShares,
+        weeklyBars: bars,
+        timeRangeLabel: 'خلال آخر 30 يوماً',
+      };
+    }
+
+    // Default 'all' - Full all-time recorded counters
+    const allViews = rawAnalytics.views ?? business.views ?? 0;
+    const allWhatsapp = rawAnalytics.whatsappClicks ?? 0;
+    const allCalls = rawAnalytics.callClicks ?? 0;
+    const allDirections = rawAnalytics.directionClicks ?? 0;
+    const allMenus = rawAnalytics.menuViews ?? 0;
+    const allShares = rawAnalytics.shareClicks ?? 0;
+
+    const bars = ARABIC_DAYS_OF_WEEK.map(d => {
+      const recorded = dayOfWeekStats[d.key];
+      const dayViews = recorded?.views ?? 0;
+      const dayCalls = recorded?.calls ?? 0;
+      const dayInteractions = recorded?.interactions ?? 0;
+      return {
+        label: d.name,
+        subLabel: '',
+        views: dayViews,
+        calls: dayCalls,
+        interactions: dayInteractions,
+        isPeak: d.isWeekendPeak,
+      };
+    });
+
+    return {
+      views: allViews,
+      whatsapp: allWhatsapp,
+      calls: allCalls,
+      directions: allDirections,
+      menuViews: allMenus,
+      shares: allShares,
+      weeklyBars: bars,
+      timeRangeLabel: 'إجمالي المشاهدات والتفاعلات المسجلة',
+    };
+  }, [timeRange, rawAnalytics, business.views, dailyStats, dayOfWeekStats]);
 
   const totalInteractions = whatsapp + calls + directions + menuViews;
   const conversionRate = views > 0 ? ((totalInteractions / views) * 100).toFixed(1) : '0';
 
-  const weeklyDays = [
-    { day: 'السبت', views: Math.round(views * 0.18), calls: Math.round(calls * 0.19) },
-    { day: 'الأحد', views: Math.round(views * 0.11), calls: Math.round(calls * 0.10) },
-    { day: 'الإثنين', views: Math.round(views * 0.12), calls: Math.round(calls * 0.11) },
-    { day: 'الثلاثاء', views: Math.round(views * 0.13), calls: Math.round(calls * 0.12) },
-    { day: 'الأربعاء', views: Math.round(views * 0.15), calls: Math.round(calls * 0.16) },
-    { day: 'الخميس', views: Math.round(views * 0.22), calls: Math.round(calls * 0.24) },
-    { day: 'الجمعة', views: Math.round(views * 0.19), calls: Math.round(calls * 0.20) },
-  ];
-
-  const maxDayViews = Math.max(...weeklyDays.map(d => d.views), 1);
+  const maxDayViews = Math.max(...weeklyBars.map(b => b.views), 0);
+  const totalWeeklyRecordedViews = weeklyBars.reduce((acc, b) => acc + b.views, 0);
 
   return (
-    <div className="space-y-6 text-right" dir="rtl">
+    <div className="space-y-6 text-right" dir="rtl" id="vip-analytics-dashboard">
       
       {/* Header with VIP Banner */}
       <div className="bg-gradient-to-l from-amber-500 via-yellow-500 to-amber-600 rounded-3xl p-6 sm:p-7 text-white shadow-lg relative overflow-hidden">
@@ -55,7 +247,7 @@ export function VipAnalyticsDashboard({ business }: VipAnalyticsDashboardProps) 
             </div>
             <h2 className="text-xl sm:text-2xl font-black">إحصائيات وتفاعل زبائن "{business.name}"</h2>
             <p className="text-xs sm:text-sm text-amber-100 font-medium">
-              القراءات والأرقام الحقيقية المسجلة لمشاهدات وتفاعلات محلّك بدقة لحظية
+              القراءات والأرقام الحقيقية المسجلة لمشاهدات وتفاعلات محلّك بدقة لحظية وبدون أرقام تقديرية
             </p>
           </div>
 
@@ -63,8 +255,9 @@ export function VipAnalyticsDashboard({ business }: VipAnalyticsDashboardProps) 
           <div className="flex bg-black/25 backdrop-blur-md p-1 rounded-2xl border border-white/20 self-start sm:self-center">
             <button
               type="button"
+              id="analytics-filter-7d"
               onClick={() => setTimeRange('7d')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
                 timeRange === '7d' ? 'bg-white text-amber-900 shadow-sm' : 'text-white/80 hover:text-white'
               }`}
             >
@@ -72,8 +265,9 @@ export function VipAnalyticsDashboard({ business }: VipAnalyticsDashboardProps) 
             </button>
             <button
               type="button"
+              id="analytics-filter-30d"
               onClick={() => setTimeRange('30d')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
                 timeRange === '30d' ? 'bg-white text-amber-900 shadow-sm' : 'text-white/80 hover:text-white'
               }`}
             >
@@ -81,8 +275,9 @@ export function VipAnalyticsDashboard({ business }: VipAnalyticsDashboardProps) 
             </button>
             <button
               type="button"
+              id="analytics-filter-all"
               onClick={() => setTimeRange('all')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
                 timeRange === 'all' ? 'bg-white text-amber-900 shadow-sm' : 'text-white/80 hover:text-white'
               }`}
             >
@@ -90,6 +285,17 @@ export function VipAnalyticsDashboard({ business }: VipAnalyticsDashboardProps) 
             </button>
           </div>
         </div>
+      </div>
+
+      {/* Time Range Context Banner */}
+      <div className="bg-stone-50 border border-stone-200/80 rounded-2xl px-4 py-2.5 flex items-center justify-between text-xs text-stone-600">
+        <span className="font-bold flex items-center gap-1.5 text-stone-800">
+          <Calendar className="h-4 w-4 text-[#1a4d2e]" />
+          <span>نطاق البيانات المعروضة: <strong className="text-[#1a4d2e]">{timeRangeLabel}</strong></span>
+        </span>
+        <span className="text-[11px] text-stone-500 font-medium">
+          يتم تسجيل كل نقرة وزيارة لحظياً ومباشرة في قاعدة البيانات
+        </span>
       </div>
 
       {/* 6 Key Stat Cards Grid */}
@@ -106,7 +312,7 @@ export function VipAnalyticsDashboard({ business }: VipAnalyticsDashboardProps) 
           <div className="text-2xl sm:text-3xl font-black text-[#2d2a26]">{views.toLocaleString('ar-JO')}</div>
           <div className="flex items-center gap-1 text-[11px] font-bold text-emerald-600 mt-2">
             <TrendingUp className="h-3 w-3" />
-            <span>إجمالي المشاهدات المسجلة للبطاقة</span>
+            <span>مشاهدات مسجلة وموثوقة</span>
           </div>
         </div>
 
@@ -148,7 +354,7 @@ export function VipAnalyticsDashboard({ business }: VipAnalyticsDashboardProps) 
           </div>
           <div className="text-2xl sm:text-3xl font-black text-[#2d2a26]">{directions.toLocaleString('ar-JO')}</div>
           <div className="flex items-center gap-1 text-[11px] font-bold text-stone-500 mt-2">
-            <span>زبائن توجهوا للمحل جغرافياً</span>
+            <span>زبائن فتحوا موقع المحل على الخريطة</span>
           </div>
         </div>
 
@@ -162,7 +368,7 @@ export function VipAnalyticsDashboard({ business }: VipAnalyticsDashboardProps) 
           </div>
           <div className="text-2xl sm:text-3xl font-black text-purple-700">{menuViews.toLocaleString('ar-JO')}</div>
           <div className="flex items-center gap-1 text-[11px] font-bold text-stone-500 mt-2">
-            <span>تصفح الأسعار والأصناف</span>
+            <span>تصفح الأسعار والكتالوج</span>
           </div>
         </div>
 
@@ -176,7 +382,7 @@ export function VipAnalyticsDashboard({ business }: VipAnalyticsDashboardProps) 
           </div>
           <div className="text-2xl sm:text-3xl font-black text-[#2d2a26]">{shares.toLocaleString('ar-JO')}</div>
           <div className="flex items-center gap-1 text-[11px] font-bold text-stone-500 mt-2">
-            <span>إرسال وتوصية بين الأصدقاء</span>
+            <span>مشاركات وتوصيات بين الأصدقاء</span>
           </div>
         </div>
 
@@ -190,49 +396,77 @@ export function VipAnalyticsDashboard({ business }: VipAnalyticsDashboardProps) 
           <div className="flex items-center justify-between border-b border-stone-100 pb-3">
             <div className="flex items-center gap-2">
               <BarChart3 className="h-5 w-5 text-[#1a4d2e]" />
-              <h3 className="font-black text-[#2d2a26] text-base">توزيع التفاعل والزيارات الأسبوعية</h3>
+              <h3 className="font-black text-[#2d2a26] text-base">
+                {timeRange === '7d' ? 'الزيارات اليومية الفعلية (آخر 7 أيام)' : 'توزيع التفاعل والزيارات الأسبوعية'}
+              </h3>
             </div>
-            <span className="text-xs font-bold text-stone-400">تحديث لحظي</span>
+            <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+              إحصاء دقيق لحظي
+            </span>
           </div>
 
           {/* Interactive Bars */}
-          <div className="pt-4 space-y-3">
-            <div className="grid grid-cols-7 gap-2 sm:gap-3 items-end h-44 sm:h-52 pt-6 px-1">
-              {weeklyDays.map((item, index) => {
-                const validMaxViews = maxDayViews > 0 && !isNaN(maxDayViews) ? maxDayViews : 1;
-                const rawPercent = (!isNaN(item.views)) ? Math.round((item.views / validMaxViews) * 100) : 15;
-                const heightPercent = isNaN(rawPercent) ? 15 : Math.max(rawPercent, 15);
-                const isThursday = item.day === 'الخميس' || item.day === 'الجمعة';
+          <div className="pt-2 space-y-3">
+            <div className="grid grid-cols-7 gap-2 sm:gap-3 items-end h-44 sm:h-52 pt-4 px-1">
+              {weeklyBars.map((item, index) => {
+                const heightPercent = maxDayViews > 0 
+                  ? Math.max(Math.round((item.views / maxDayViews) * 100), 8) 
+                  : (item.views > 0 ? 8 : 4);
+
                 return (
-                  <div key={index} className="flex flex-col items-center gap-2 h-full justify-end group">
-                    <div className="text-[10px] font-black text-stone-600 group-hover:text-[#1a4d2e] transition-colors">
+                  <div key={index} className="flex flex-col items-center gap-1.5 h-full justify-end group relative">
+                    {/* Tooltip on hover */}
+                    <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute -top-8 bg-stone-900 text-white text-[10px] font-bold py-1 px-2 rounded-lg pointer-events-none whitespace-nowrap z-20 shadow-md">
+                      {item.views} مشاهدة • {item.calls || 0} نقرة اتصال
+                    </div>
+
+                    <div className={`text-[11px] font-black transition-colors ${
+                      item.views > 0 ? 'text-stone-800 group-hover:text-[#1a4d2e]' : 'text-stone-400'
+                    }`}>
                       {item.views}
                     </div>
+
                     <div className="w-full max-w-[36px] bg-stone-100 rounded-t-xl overflow-hidden h-full flex items-end">
                       <div 
-                        style={{ height: `${heightPercent}%` }}
+                        style={{ height: item.views > 0 ? `${heightPercent}%` : '4px' }}
                         className={`w-full rounded-t-xl transition-all duration-700 ${
-                          isThursday 
-                            ? 'bg-gradient-to-t from-amber-500 to-yellow-400 group-hover:brightness-110' 
-                            : 'bg-gradient-to-t from-[#1a4d2e] to-[#2d7d4e] group-hover:brightness-110'
+                          item.views === 0
+                            ? 'bg-stone-200'
+                            : item.isPeak 
+                              ? 'bg-gradient-to-t from-amber-500 to-yellow-400 group-hover:brightness-110' 
+                              : 'bg-gradient-to-t from-[#1a4d2e] to-[#2d7d4e] group-hover:brightness-110'
                         }`}
                       ></div>
                     </div>
-                    <span className="text-[11px] font-bold text-stone-600 whitespace-nowrap">
-                      {item.day}
+
+                    <span className="text-[11px] font-bold text-stone-700 whitespace-nowrap">
+                      {item.label}
                     </span>
+                    {item.subLabel ? (
+                      <span className="text-[9px] font-semibold text-stone-400 -mt-1">
+                        {item.subLabel}
+                      </span>
+                    ) : null}
                   </div>
                 );
               })}
             </div>
-            <div className="flex items-center justify-center gap-4 text-xs font-bold text-stone-500 pt-2 border-t border-stone-100">
+
+            {/* Note / Empty state explanation */}
+            {totalWeeklyRecordedViews === 0 && (
+              <div className="p-3 bg-amber-50/70 border border-amber-200/80 rounded-2xl text-center text-xs text-amber-900 font-medium">
+                ✨ ستبدأ الأعمدة بالارتفاع بدقة لحظية عند تسجيل أولى الزيارات اليومية لبطاقة المحل.
+              </div>
+            )}
+
+            <div className="flex items-center justify-center gap-4 text-xs font-bold text-stone-500 pt-3 border-t border-stone-100">
               <div className="flex items-center gap-1.5">
                 <span className="w-3 h-3 rounded-full bg-[#1a4d2e]"></span>
                 <span>الأيام العادية</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="w-3 h-3 rounded-full bg-amber-500"></span>
-                <span>ذروة عطلة نهاية الأسبوع (الخميس والجمعة)</span>
+                <span>عطلة نهاية الأسبوع (الخميس والجمعة)</span>
               </div>
             </div>
           </div>
@@ -243,7 +477,7 @@ export function VipAnalyticsDashboard({ business }: VipAnalyticsDashboardProps) 
           <div className="space-y-4">
             <div className="flex items-center gap-2 border-b border-stone-200/80 pb-3">
               <Target className="h-5 w-5 text-amber-600" />
-              <h3 className="font-black text-[#2d2a26] text-base">مؤشرات الأداء الذكية</h3>
+              <h3 className="font-black text-[#2d2a26] text-base">مؤشرات الأداء الفعلية</h3>
             </div>
 
             {/* Conversion Rate */}
@@ -251,8 +485,14 @@ export function VipAnalyticsDashboard({ business }: VipAnalyticsDashboardProps) 
               <span className="text-xs text-stone-500 font-bold block">معدل تحويل الزائرين لزبائن:</span>
               <div className="flex items-baseline gap-2">
                 <span className="text-2xl font-black text-[#1a4d2e]">{conversionRate}%</span>
-                <span className="text-[11px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md">
-                  ممتاز جداً ⭐
+                <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${
+                  parseFloat(conversionRate) >= 15 
+                    ? 'text-emerald-700 bg-emerald-50' 
+                    : parseFloat(conversionRate) > 0 
+                      ? 'text-amber-700 bg-amber-50' 
+                      : 'text-stone-500 bg-stone-100'
+                }`}>
+                  {parseFloat(conversionRate) >= 15 ? 'أداء ممتاز ⭐' : parseFloat(conversionRate) > 0 ? 'أداء جيد' : 'جديد'}
                 </span>
               </div>
               <p className="text-[11px] text-stone-400">نسبة الزوار الذين ضغطوا على الاتصال أو الواتساب أو الخريطة.</p>
@@ -262,10 +502,10 @@ export function VipAnalyticsDashboard({ business }: VipAnalyticsDashboardProps) 
             <div className="bg-white p-4 rounded-2xl border border-[#e5e1da] space-y-1">
               <span className="text-xs text-stone-500 font-bold block">تقييم المحل في دليل إربد:</span>
               <div className="flex items-center gap-2">
-                <span className="text-lg font-black text-amber-600">⭐ {business.rating || 'جديد'}</span>
-                <span className="text-xs text-stone-600">({(business as any).reviewsCount || business.reviewCount || 0} تقييم مسجل)</span>
+                <span className="text-lg font-black text-amber-600">⭐ {business.rating ? `${business.rating} / 5` : 'جديد'}</span>
+                <span className="text-xs text-stone-600">({business.reviewCount || 0} تقييم مسجل)</span>
               </div>
-              <p className="text-[11px] text-stone-400">بناءً على تقييمات زوار وراد المحل الفعليين.</p>
+              <p className="text-[11px] text-stone-400">تقييمات زوار وراد المحل المعتمدة.</p>
             </div>
 
             {/* Peak Hours */}
@@ -275,7 +515,7 @@ export function VipAnalyticsDashboard({ business }: VipAnalyticsDashboardProps) 
                 <span>أوقات ذروة طلب الزبائن في إربد:</span>
               </div>
               <div className="text-sm font-black text-[#2d2a26]">5:30 مساءً - 11:00 ليلاً</div>
-              <p className="text-[11px] text-stone-400">أفضل وقت لنشر عروض جديدة على صفحتك.</p>
+              <p className="text-[11px] text-stone-400">الفترة الأكثر نشاطاً لطلب الخدمات والمأكولات في إربد.</p>
             </div>
           </div>
 
@@ -289,210 +529,144 @@ export function VipAnalyticsDashboard({ business }: VipAnalyticsDashboardProps) 
 
       </div>
 
-      {/* 4️⃣ لوحة مقارنة الأداء ومستوى المنافسة في الشارع (Local Competitor Benchmarking) */}
+      {/* 4️⃣ لوحة معايير الأداء ونصائح النمو */}
       <div className="bg-gradient-to-b from-stone-50 to-white rounded-3xl border border-[#e5e1da] p-5 sm:p-7 shadow-xs space-y-6">
         {/* Section Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-stone-200 pb-4">
           <div className="flex items-center gap-2.5">
             <div className="bg-emerald-50 p-2 rounded-xl text-emerald-800 border border-emerald-100">
-              <Flame className="h-5 w-5 text-emerald-700 animate-pulse" />
+              <Flame className="h-5 w-5 text-emerald-700" />
             </div>
             <div>
-              <h3 className="font-black text-[#2d2a26] text-base">مقارنة الأداء ومستوى المنافسة في الشارع (Competitor Benchmarking)</h3>
-              <p className="text-xs text-stone-500">مقارنة أداء محلّك بالمتوسط المحلي والمحلات المتصدرة في منطقتك</p>
+              <h3 className="font-black text-[#2d2a26] text-base">معايير أداء السوق والنمو التجاري</h3>
+              <p className="text-xs text-stone-500">مقارنة أداء محلّك بالمعايير القياسية لدليل إربد التجاري</p>
             </div>
           </div>
           
           <div className="inline-flex items-center gap-1.5 bg-[#1a4d2e]/10 text-[#1a4d2e] px-3 py-1 rounded-full text-xs font-black">
-            <span>المنطقة: {(() => {
-              if (!business.address) return "إربد";
-              const streets = ["شارع الجامعة", "شارع أيدون", "شارع الثقافة", "شارع الحصن", "شارع اليرموك", "حي الروضة", "وسط البلد"];
-              for (const s of streets) {
-                if (business.address.includes(s)) return s;
-              }
-              const parts = business.address.split(/[،,]/);
-              return parts[0]?.trim() || "إربد";
-            })()}</span>
+            <span>النشاط: {business.category || 'تجاري'}</span>
           </div>
         </div>
 
-        {/* Dynamic Comparison Grid */}
+        {/* Realistic Standard Benchmarks Grid */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           
-          {/* 1. views comparison */}
+          {/* 1. conversion benchmark */}
           <div className="bg-white p-4.5 rounded-2xl border border-[#e5e1da] space-y-4">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-black text-stone-700">مشاهدات الصفحة الأسبوعية</span>
-              <Eye className="h-4 w-4 text-stone-400" />
+              <span className="text-xs font-black text-stone-700">معدل تحويل الزائر إلى متصل</span>
+              <Zap className="h-4 w-4 text-amber-500" />
             </div>
             
             <div className="space-y-3 pt-1">
-              {/* This business */}
               <div className="space-y-1">
                 <div className="flex justify-between text-xs">
-                  <span className="font-bold text-emerald-800">محلّك ({business.name})</span>
-                  <span className="font-black text-stone-900">{views}</span>
-                </div>
-                <div className="w-full bg-stone-100 h-2.5 rounded-full overflow-hidden">
-                  <div className="bg-emerald-600 h-full rounded-full" style={{ width: `${Math.min(100, (views / Math.max(1, views * 1.5)) * 100)}%` }}></div>
-                </div>
-              </div>
-
-              {/* District Avg */}
-              <div className="space-y-1">
-                <div className="flex justify-between text-[11px] text-stone-500">
-                  <span>متوسط المنطقة (المنافسين)</span>
-                  <span>{Math.round(views * 0.65 + 12)}</span>
-                </div>
-                <div className="w-full bg-stone-100 h-2 rounded-full overflow-hidden">
-                  <div className="bg-amber-500 h-full rounded-full" style={{ width: `${Math.min(100, ((views * 0.65 + 12) / Math.max(1, views * 1.5)) * 100)}%` }}></div>
-                </div>
-              </div>
-
-              {/* Top 10% */}
-              <div className="space-y-1">
-                <div className="flex justify-between text-[11px] text-stone-500">
-                  <span>أعلى 10% من المحلات</span>
-                  <span>{Math.round(views * 1.4 + 45)}</span>
-                </div>
-                <div className="w-full bg-stone-100 h-2 rounded-full overflow-hidden">
-                  <div className="bg-yellow-500 h-full rounded-full" style={{ width: '95%' }}></div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* 2. conversion rate comparison */}
-          <div className="bg-white p-4.5 rounded-2xl border border-[#e5e1da] space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-black text-stone-700">معدل تحويل الزوار (نقرات الاتصال)</span>
-              <Zap className="h-4 w-4 text-stone-400" />
-            </div>
-            
-            <div className="space-y-3 pt-1">
-              {/* This business */}
-              <div className="space-y-1">
-                <div className="flex justify-between text-xs">
-                  <span className="font-bold text-emerald-800">محلّك ({conversionRate}%)</span>
+                  <span className="font-bold text-emerald-800">محلّك الحالي</span>
                   <span className="font-black text-stone-900">{conversionRate}%</span>
                 </div>
                 <div className="w-full bg-stone-100 h-2.5 rounded-full overflow-hidden">
-                  <div className="bg-emerald-600 h-full rounded-full" style={{ width: `${Math.min(100, (parseFloat(conversionRate) / 30) * 100)}%` }}></div>
+                  <div className="bg-emerald-600 h-full rounded-full" style={{ width: `${Math.min(100, (parseFloat(conversionRate) / 25) * 100)}%` }}></div>
                 </div>
               </div>
 
-              {/* District Avg */}
               <div className="space-y-1">
                 <div className="flex justify-between text-[11px] text-stone-500">
-                  <span>متوسط المنطقة (المنافسين)</span>
-                  <span>11.4%</span>
+                  <span>المتوسط القياسي للسوق</span>
+                  <span>10% - 15%</span>
                 </div>
                 <div className="w-full bg-stone-100 h-2 rounded-full overflow-hidden">
-                  <div className="bg-amber-500 h-full rounded-full" style={{ width: '38%' }}></div>
-                </div>
-              </div>
-
-              {/* Top 10% */}
-              <div className="space-y-1">
-                <div className="flex justify-between text-[11px] text-stone-500">
-                  <span>أعلى 10% من المحلات</span>
-                  <span>22.6%</span>
-                </div>
-                <div className="w-full bg-stone-100 h-2 rounded-full overflow-hidden">
-                  <div className="bg-yellow-500 h-full rounded-full" style={{ width: '75%' }}></div>
+                  <div className="bg-stone-400 h-full rounded-full" style={{ width: '50%' }}></div>
                 </div>
               </div>
             </div>
+            <p className="text-[11px] text-stone-400">يقيس مدى قدرة الصفحة على تحويل الزائر إلى اتصال مباشر.</p>
           </div>
 
-          {/* 3. ratings comparison */}
+          {/* 2. digital menu engagement */}
           <div className="bg-white p-4.5 rounded-2xl border border-[#e5e1da] space-y-4">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-black text-stone-700">تقييم الزوار الفعليين</span>
-              <Star className="h-4 w-4 text-stone-400" />
+              <span className="text-xs font-black text-stone-700">تفاعل القائمة والكتالوج الرقمي</span>
+              <Store className="h-4 w-4 text-purple-500" />
             </div>
             
             <div className="space-y-3 pt-1">
-              {/* This business */}
               <div className="space-y-1">
                 <div className="flex justify-between text-xs">
-                  <span className="font-bold text-emerald-800">محلّك ({business.rating || 'جديد'})</span>
-                  <span className="font-black text-stone-900">{business.rating || 5.0} / 5</span>
+                  <span className="font-bold text-purple-800">مشاهدات الكتالوج</span>
+                  <span className="font-black text-stone-900">{menuViews}</span>
                 </div>
                 <div className="w-full bg-stone-100 h-2.5 rounded-full overflow-hidden">
-                  <div className="bg-emerald-600 h-full rounded-full" style={{ width: `${((business.rating || 5.0) / 5) * 100}%` }}></div>
+                  <div className="bg-purple-600 h-full rounded-full" style={{ width: `${Math.min(100, (menuViews / Math.max(1, views)) * 100)}%` }}></div>
                 </div>
               </div>
 
-              {/* District Avg */}
               <div className="space-y-1">
                 <div className="flex justify-between text-[11px] text-stone-500">
-                  <span>متوسط المنطقة (المنافسين)</span>
-                  <span>4.1 / 5</span>
-                </div>
-                <div className="w-full bg-stone-100 h-2 rounded-full overflow-hidden">
-                  <div className="bg-amber-500 h-full rounded-full" style={{ width: '82%' }}></div>
-                </div>
-              </div>
-
-              {/* Top 10% */}
-              <div className="space-y-1">
-                <div className="flex justify-between text-[11px] text-stone-500">
-                  <span>أعلى 10% من المحلات</span>
-                  <span>4.8 / 5</span>
-                </div>
-                <div className="w-full bg-stone-100 h-2 rounded-full overflow-hidden">
-                  <div className="bg-yellow-500 h-full rounded-full" style={{ width: '96%' }}></div>
+                  <span>نسبة تصفح الأصناف</span>
+                  <span>{views > 0 ? Math.round((menuViews / views) * 100) : 0}%</span>
                 </div>
               </div>
             </div>
+            <p className="text-[11px] text-stone-400">إضافة صور وأسعار الأصناف يضاعف رغبة الزبون بالشراء.</p>
+          </div>
+
+          {/* 3. profile completeness */}
+          <div className="bg-white p-4.5 rounded-2xl border border-[#e5e1da] space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-black text-stone-700">اكتمال وجاهزية البطاقة التجارية</span>
+              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+            </div>
+            
+            <div className="space-y-3 pt-1">
+              {(() => {
+                let score = 0;
+                if (business.name) score += 20;
+                if (business.phone) score += 20;
+                if (business.address) score += 20;
+                if (business.logoUrl || business.imageUrl) score += 20;
+                if (business.menuItems && business.menuItems.length > 0) score += 20;
+                return (
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-xs">
+                      <span className="font-bold text-emerald-800">مستوى الجاهزية</span>
+                      <span className="font-black text-stone-900">{score}%</span>
+                    </div>
+                    <div className="w-full bg-stone-100 h-2.5 rounded-full overflow-hidden">
+                      <div className="bg-emerald-600 h-full rounded-full" style={{ width: `${score}%` }}></div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+            <p className="text-[11px] text-stone-400">البطاقات الكاملة تنال ثقة أعلى ونسبة نقر أكبر من الزبائن.</p>
           </div>
 
         </div>
 
-        {/* Competition Heat Index & Recommendation Coach */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-          {/* Heat Index Card */}
-          <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200 flex items-start gap-3.5">
-            <div className="p-3 bg-red-50 text-red-600 rounded-xl shrink-0">
-              <Flame className="h-6 w-6 text-red-600 fill-red-500" />
-            </div>
-            <div className="space-y-1.5">
-              <span className="text-[11px] font-black text-stone-500 block uppercase tracking-wider">مؤشر ضغط المنافسة المحلية</span>
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-black text-stone-900">حرارة المنافسة في منطقتك:</span>
-                <span className="bg-red-100 text-red-800 border border-red-200 px-2.5 py-0.5 rounded-md text-xs font-black">
-                  🔥 مرتفعة جداً (88%)
-                </span>
-              </div>
-              <p className="text-[11px] text-stone-600 leading-relaxed">
-                تصنيف <span className="font-bold text-stone-800">({business.category})</span> في هذه المنطقة يشهد نشاطاً تسويقياً مرتفعاً. ننصحك بالتميز من خلال العروض المستمرة.
-              </p>
-            </div>
+        {/* Actionable Recommendations Coach */}
+        <div className="bg-[#1a4d2e]/5 p-5 rounded-2xl border border-[#1a4d2e]/15 flex items-start gap-4">
+          <div className="p-3 bg-emerald-50 text-[#1a4d2e] rounded-xl shrink-0">
+            <Lightbulb className="h-6 w-6 text-emerald-700" />
           </div>
-
-          {/* Smart AI Recommendation Coach */}
-          <div className="bg-[#1a4d2e]/5 p-4 rounded-2xl border border-[#1a4d2e]/10 flex items-start gap-3.5">
-            <div className="p-3 bg-emerald-50 text-[#1a4d2e] rounded-xl shrink-0">
-              <Lightbulb className="h-6 w-6 text-emerald-700 fill-yellow-200" />
-            </div>
-            <div className="space-y-1.5">
-              <span className="text-[11px] font-black text-[#1a4d2e]/75 block uppercase tracking-wider">مدرب نمو الأعمال الذكي (Coach)</span>
-              <span className="text-xs font-black text-stone-800 block">نصيحة مخصصة للتفوق على جيرانك:</span>
-              <ul className="text-[11px] text-stone-600 space-y-1 list-disc pr-4 font-medium font-sans">
-                {views < Math.round(views * 1.4 + 45) && (
-                  <li>👑 <span className="font-bold text-stone-800">رفع المشاهدات:</span> قم بتثبيت عروض ترويجية طيلة فترة عطلة نهاية الأسبوع لتتفوق على المحلات القريبة.</li>
-                )}
-                {parseFloat(conversionRate) < 20 && (
-                  <li>💬 <span className="font-bold text-stone-800">زيادة الطلبات:</span> فعّل منيو الكتالوج الرقمي بصور ملونة لزيادة تحويل المشاهدة إلى تواصل مباشر عبر الواتساب.</li>
-                )}
-                {(!business.logoUrl || !business.imageUrl) && (
-                  <li>🖼️ <span className="font-bold text-stone-800">مظهر البطاقة:</span> تحديث اللوجو والصورة الشخصية يرفع نسبة النقر للاتصال بـ 35% حسب إحصاءات الدليل.</li>
-                )}
-              </ul>
-            </div>
+          <div className="space-y-2 text-right">
+            <span className="text-xs font-black text-[#1a4d2e] block uppercase tracking-wider">
+              نصائح موجهة لزيادة مبيعاتك في إربد:
+            </span>
+            <ul className="text-xs text-stone-700 space-y-1.5 list-disc pr-4 font-medium">
+              {(!business.menuItems || business.menuItems.length === 0) && (
+                <li>🍽️ <strong className="text-stone-900">إضافة المنيو والأسعار:</strong> زبائن إربد يفضلون تصفح الأسعار والوجبات قبل الاتصال، تفعيل المنيو يزيد الاتصالات بوضوح.</li>
+              )}
+              {(!business.logoUrl || !business.imageUrl) && (
+                <li>🖼️ <strong className="text-stone-900">إضافة صور واضحة وشعار المحل:</strong> يمنح بطاقتك مظهراً احترافياً وموثوقاً بين المحلات المنافسة.</li>
+              )}
+              {(!business.workingHours?.openTime) && (
+                <li>⏰ <strong className="text-stone-900">تحديد ساعات العمل:</strong> يساعد الزبائن على معرفة أوقات دوامك بدقة وتجنب الاتصال في غير أوقات الدوام.</li>
+              )}
+              <li>📢 <strong className="text-stone-900">إطلاق عروض خاصة:</strong> نشر العروض الترويجية أيام الخميس والجمعة يرفع عدد الزيارات خلال أوقات الذروة.</li>
+            </ul>
           </div>
         </div>
+
       </div>
 
     </div>

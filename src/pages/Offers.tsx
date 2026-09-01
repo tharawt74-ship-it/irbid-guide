@@ -26,6 +26,7 @@ import { db } from '../lib/firebase';
 import { getAppConfig } from '../lib/demoDataHelper';
 import { ShareButton } from '../components/ShareButton';
 import { getWhatsAppUrl, formatOfferWhatsAppMessage } from '../lib/contactHelper';
+import { WhatsApp3DIcon, Phone3DIcon } from '../components/common/PremiumContactButtons';
 import { SEO } from '../components/common/SEO';
 
 interface OfferItem {
@@ -344,23 +345,23 @@ export function Offers() {
               </div>
 
               {/* Bottom Actions */}
-              <div className="p-5 sm:p-6 pt-0 border-t border-stone-100 flex items-center gap-2">
+              <div className="p-4 sm:p-5 pt-0 border-t border-stone-100 flex items-center gap-2 mt-auto">
                 <a
                   href={getWhatsAppUrl(offer.whatsapp || offer.phone, formatOfferWhatsAppMessage(offer.title, offer.businessName))}
                   target="_blank"
                   rel="noreferrer"
                   className="flex-1 inline-flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 px-3 rounded-xl text-xs font-bold transition-colors shadow-xs cursor-pointer"
                 >
-                  <MessageSquare className="h-3.5 w-3.5" />
+                  <WhatsApp3DIcon className="h-4 w-4 text-white" />
                   <span>استفسار واتساب</span>
                 </a>
 
                 <a
                   href={`tel:${offer.phone}`}
-                  className="inline-flex items-center justify-center gap-1.5 bg-stone-100 hover:bg-stone-200 text-stone-800 py-2.5 px-3 rounded-xl text-xs font-bold transition-colors"
+                  className="inline-flex items-center justify-center gap-1.5 bg-[#1a4d2e] hover:bg-[#133c23] text-white py-2.5 px-3 rounded-xl text-xs font-bold transition-colors shadow-xs"
                   title="اتصال بالمنشأة"
                 >
-                  <Phone className="h-3.5 w-3.5" />
+                  <Phone3DIcon className="h-4 w-4 text-white" />
                   <span>اتصال</span>
                 </a>
 

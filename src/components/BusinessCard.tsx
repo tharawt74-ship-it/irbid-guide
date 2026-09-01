@@ -7,6 +7,7 @@ import { getLiveWorkingStatus } from '../lib/businessHoursHelper';
 import { getBusinessVipStatus } from '../lib/vipHelper';
 import { useAuth } from '../contexts/AuthContext';
 import { getBusinessLink } from '../lib/utils';
+import { WhatsApp3DIcon, Phone3DIcon } from './common/PremiumContactButtons';
 
 interface BusinessCardProps {
   business: Business;
@@ -102,8 +103,14 @@ export function BusinessCard({ business, featured = false, searchReasons }: Busi
 
             <div className='flex items-center justify-between'>
               <div className='flex items-center gap-1 sm:gap-2 text-white'>
-                <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                <span className='font-bold text-sm'>{business.rating ? business.rating.toFixed(1) : 'جديد'}</span>
+                {typeof business.rating === 'number' && !isNaN(business.rating) && business.rating > 0 && typeof business.reviewCount === 'number' && business.reviewCount > 0 ? (
+                  <>
+                    <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                    <span className='font-bold text-sm'>{business.rating.toFixed(1)}</span>
+                  </>
+                ) : (
+                  <span className='font-black text-[11px] bg-white/20 backdrop-blur-xs px-2.5 py-0.5 rounded-md'>جديد</span>
+                )}
               </div>
               <div className='flex items-center gap-1 sm:gap-2 text-white/80 text-xs sm:text-sm'>
                 <MapPin className="h-3 w-3 sm:h-4 sm:w-4 shrink-0" />
@@ -181,10 +188,16 @@ export function BusinessCard({ business, featured = false, searchReasons }: Busi
               <VerifiedBadge size="sm" businessName={business.name} />
             )}
           </div>
-          <div className="flex items-center gap-1.5 bg-[#fdfcfb] border border-[#e5e1da] px-2.5 py-1 rounded-lg text-sm font-bold shrink-0">
-            <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
-            <span>{business.rating ? business.rating.toFixed(1) : 'جديد'}</span>
-          </div>
+          {typeof business.rating === 'number' && !isNaN(business.rating) && business.rating > 0 && typeof business.reviewCount === 'number' && business.reviewCount > 0 ? (
+            <div className="flex items-center gap-1.5 bg-[#fdfcfb] border border-[#e5e1da] px-2.5 py-1 rounded-lg text-sm font-bold shrink-0">
+              <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
+              <span>{business.rating.toFixed(1)}</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1 bg-emerald-50 text-emerald-800 border border-emerald-200/60 px-2 py-0.5 rounded-lg text-xs font-black shrink-0">
+              <span>جديد</span>
+            </div>
+          )}
         </div>
 
         <p className="text-stone-500 text-sm line-clamp-2 mb-4 flex-1 leading-relaxed">
@@ -214,11 +227,11 @@ export function BusinessCard({ business, featured = false, searchReasons }: Busi
                   e.stopPropagation();
                   window.location.href = `tel:${business.phone}`;
                 }}
-                className="min-h-[44px] px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-[#1a4d2e] rounded-xl flex items-center justify-center gap-1.5 font-black transition-all border border-emerald-200/80 active:scale-95 cursor-pointer shadow-2xs"
+                className="min-h-[40px] px-3 py-1.5 bg-[#1a4d2e] hover:bg-[#133c23] text-white rounded-xl flex items-center justify-center gap-1.5 font-bold transition-all active:scale-95 cursor-pointer shadow-xs"
                 title="اتصال تلفوني مباشر"
               >
-                <span className="text-sm">📞</span>
-                <span className="text-[11px] dir-ltr font-mono">{business.phone}</span>
+                <Phone3DIcon className="w-3.5 h-3.5 text-white" />
+                <span className="text-[11px] dir-ltr font-mono font-bold tracking-tight">{business.phone}</span>
               </button>
             )}
             {(business.socialLinks?.whatsapp || business.phone) && (
@@ -232,10 +245,10 @@ export function BusinessCard({ business, featured = false, searchReasons }: Busi
                     window.open(`https://wa.me/${cleanPhone}`, '_blank', 'noopener,noreferrer');
                   }
                 }}
-                className="min-h-[44px] min-w-[44px] px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl flex items-center justify-center gap-1 font-bold transition-all active:scale-95 cursor-pointer shadow-2xs"
+                className="min-h-[40px] min-w-[40px] px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl flex items-center justify-center transition-all active:scale-95 cursor-pointer shadow-xs"
                 title="مراسلة عبر الواتساب"
               >
-                <span className="text-sm">💬</span>
+                <WhatsApp3DIcon className="w-4 h-4 text-white" />
               </button>
             )}
           </div>

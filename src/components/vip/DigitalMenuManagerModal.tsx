@@ -10,6 +10,7 @@ import { Business, MenuItem } from '../../types';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { getBusinessVipStatus } from '../../lib/vipHelper';
+import { sanitizeFirestorePayload, compressAndSanitizeFirestorePayload } from '../../lib/firestoreHelper';
 import { VipUpgradeRequestModal } from './VipUpgradeRequestModal';
 import { useAuth } from '../../contexts/AuthContext';
 import { ImageUploader } from '../ui/ImageUploader';
@@ -529,10 +530,9 @@ export function DigitalMenuManagerModal({
     setIsSaving(true);
     try {
       const sanitizedItems = JSON.parse(JSON.stringify(items));
+      const payload = await compressAndSanitizeFirestorePayload({ menuItems: sanitizedItems }, true);
       const docRef = doc(db, 'businesses', business.id);
-      await updateDoc(docRef, {
-        menuItems: sanitizedItems
-      });
+      await updateDoc(docRef, payload);
       onMenuUpdated(items);
       setSaveSuccess(true);
       setTimeout(() => {

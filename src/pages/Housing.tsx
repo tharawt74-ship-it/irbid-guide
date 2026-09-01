@@ -11,6 +11,7 @@ import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { ShareButton } from '../components/ShareButton';
 import { getWhatsAppUrl } from '../lib/contactHelper';
+import { WhatsApp3DIcon, Phone3DIcon } from '../components/common/PremiumContactButtons';
 import { SEO } from '../components/common/SEO';
 import { HousingItem } from '../types';
 import { HousingFormModal } from '../components/housing/HousingFormModal';
@@ -574,18 +575,18 @@ export function Housing() {
                       target="_blank"
                       rel="noreferrer"
                       onClick={(e) => e.stopPropagation()}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition-all shadow-2xs cursor-pointer shrink-0"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors shadow-xs cursor-pointer shrink-0"
                     >
-                      <MessageSquare className="h-3.5 w-3.5" />
+                      <WhatsApp3DIcon className="h-3.5 w-3.5 text-white" />
                       <span>واتساب</span>
                     </a>
 
                     <a
                       href={`tel:${h.contactPhone}`}
                       onClick={(e) => e.stopPropagation()}
-                      className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl text-xs font-bold transition-all shrink-0"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-[#1a4d2e] hover:bg-[#133c23] text-white rounded-xl text-xs font-bold transition-colors shadow-xs shrink-0"
                     >
-                      <Phone className="h-3.5 w-3.5" />
+                      <Phone3DIcon className="h-3.5 w-3.5 text-white" />
                       <span>اتصال</span>
                     </a>
 
@@ -812,17 +813,17 @@ export function Housing() {
                   href={getWhatsAppUrl(selectedDetail.contactWhatsapp || selectedDetail.contactPhone, `مرحباً، أود الاستفسار بخصوص السكن/العقار المعلن عنه: (${selectedDetail.title}) على منصة شو في بإربد؟.`)}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex-1 sm:flex-initial inline-flex justify-center items-center gap-2 px-5 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs sm:text-sm rounded-xl transition-all shadow-md cursor-pointer"
+                  className="flex-1 sm:flex-initial inline-flex justify-center items-center gap-2 px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm rounded-xl transition-colors shadow-xs cursor-pointer"
                 >
-                  <MessageSquare className="h-4.5 w-4.5" />
+                  <WhatsApp3DIcon className="h-5 w-5 text-white" />
                   <span>واتساب</span>
                 </a>
 
                 <a
                   href={`tel:${selectedDetail.contactPhone}`}
-                  className="inline-flex justify-center items-center gap-2 px-4 py-3.5 bg-stone-100 hover:bg-stone-200 text-stone-800 font-bold text-xs sm:text-sm rounded-xl transition-colors cursor-pointer"
+                  className="inline-flex justify-center items-center gap-2 px-4 py-3 bg-[#1a4d2e] hover:bg-[#133c23] text-white font-bold text-xs sm:text-sm rounded-xl transition-colors shadow-xs cursor-pointer"
                 >
-                  <Phone className="h-4.5 w-4.5" />
+                  <Phone3DIcon className="h-5 w-5 text-white" />
                   <span>اتصال هاتفي</span>
                 </a>
               </div>

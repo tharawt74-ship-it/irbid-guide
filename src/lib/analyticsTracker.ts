@@ -4,6 +4,9 @@ import { Business, BusinessAnalytics } from '../types';
 
 export type InteractionType = 'view' | 'whatsapp' | 'call' | 'direction' | 'menu' | 'share';
 
+const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
+export type DayKey = typeof DAY_KEYS[number];
+
 export async function trackBusinessInteraction(businessId: string, type: InteractionType): Promise<void> {
   if (!businessId) return;
 
@@ -11,8 +14,8 @@ export async function trackBusinessInteraction(businessId: string, type: Interac
   const sessionKey = `biz_interact_${businessId}_${type}`;
   const now = Date.now();
   const lastTime = sessionStorage.getItem(sessionKey);
-  if (lastTime && (now - parseInt(lastTime, 10) < 60000)) {
-    // Only track once per minute per session for views/menus
+  if (lastTime && (now - parseInt(lastTime, 10) < 45000)) {
+    // Only track once per 45 seconds per session for views/menus
     if (type === 'view' || type === 'menu') return;
   }
   sessionStorage.setItem(sessionKey, now.toString());
@@ -30,10 +33,27 @@ export async function trackBusinessInteraction(businessId: string, type: Interac
       share: 'analytics.shareClicks',
     };
 
+    // Calculate current day and ISO date key (YYYY-MM-DD)
+    const today = new Date();
+    const dayIndex = today.getDay(); // 0 = sun, 1 = mon, ..., 6 = sat
+    const dayKey = DAY_KEYS[dayIndex];
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    const dateKey = `${year}-${month}-${day}`;
+
     const updateObj: Record<string, any> = {
       [fieldMap[type]]: increment(1),
       'analytics.lastUpdated': now,
+      // Track real day of week counts
+      [`analytics.dayOfWeekStats.${dayKey}.${type === 'view' ? 'views' : 'interactions'}`]: increment(1),
+      // Track real daily date key
+      [`analytics.dailyStats.${dateKey}.${type}`]: increment(1),
     };
+
+    if (type === 'call') {
+      updateObj[`analytics.dayOfWeekStats.${dayKey}.calls`] = increment(1);
+    }
 
     if (type === 'view') {
       updateObj['views'] = increment(1);
@@ -56,6 +76,16 @@ export function getDefaultAnalytics(views = 0, isVip = false): BusinessAnalytics
     shareClicks: 0,
     lastUpdated: Date.now(),
     peakHours: '5:30 مساءً - 11:00 ليلاً',
+    dayOfWeekStats: {
+      sat: { views: 0, interactions: 0, calls: 0 },
+      sun: { views: 0, interactions: 0, calls: 0 },
+      mon: { views: 0, interactions: 0, calls: 0 },
+      tue: { views: 0, interactions: 0, calls: 0 },
+      wed: { views: 0, interactions: 0, calls: 0 },
+      thu: { views: 0, interactions: 0, calls: 0 },
+      fri: { views: 0, interactions: 0, calls: 0 },
+    },
+    dailyStats: {},
   };
 }
 

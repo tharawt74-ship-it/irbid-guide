@@ -17,9 +17,12 @@ import { JobFormModal } from '../components/jobs/JobFormModal';
 import { VipAnalyticsModal } from '../components/vip/VipAnalyticsModal';
 import { VipAnalyticsDashboard } from '../components/vip/VipAnalyticsDashboard';
 import { DigitalMenuManagerModal } from '../components/vip/DigitalMenuManagerModal';
+import { VipPopupManagerModal } from '../components/vip/VipPopupManagerModal';
 import { VipUpgradeRequestModal } from '../components/vip/VipUpgradeRequestModal';
 import { getBusinessVipStatus } from '../lib/vipHelper';
 import { ensureBusinessAnalyticsSaved } from '../lib/analyticsTracker';
+import { sanitizeFirestorePayload, compressAndSanitizeFirestorePayload } from '../lib/firestoreHelper';
+import { invalidateCache } from '../lib/dataCache';
 import { BUSINESS_CATEGORIES, MainCategory, IRBID_REGIONS_CATEGORIZED } from '../lib/categories';
 import { SearchableSelect } from '../components/ui/SearchableSelect';
 import { WorkingHoursEditor } from '../components/ui/WorkingHoursEditor';
@@ -129,6 +132,8 @@ export function Profile() {
   const [isMenuModalOpen, setIsMenuModalOpen] = useState(false);
   const [selectedBusinessForUpgrade, setSelectedBusinessForUpgrade] = useState<Business | null>(null);
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
+  const [selectedBusinessForPopup, setSelectedBusinessForPopup] = useState<Business | null>(null);
+  const [isVipPopupManagerOpen, setIsVipPopupManagerOpen] = useState(false);
 
   // Merchant Tool Modals state
   const [isQrPosterOpen, setIsQrPosterOpen] = useState(false);
@@ -814,6 +819,7 @@ export function Profile() {
       }
 
       setBusinesses(prev => prev.filter(b => b.id !== businessId));
+      invalidateCache();
       if (selectedBusiness?.id === businessId) {
         const remaining = businesses.filter(b => b.id !== businessId);
         setSelectedBusiness(remaining.length > 0 ? remaining[0] : null);
@@ -845,6 +851,10 @@ export function Profile() {
     socialLinks?: SocialLinks;
     hideSiteReviews?: boolean;
     hideGoogleReviews?: boolean;
+    aboutMedia?: any;
+    aboutVideoUrl?: string;
+    aboutImageUrl?: string;
+    vipPopup?: any;
   }) => {
     const targetBusiness = editingBusiness || selectedBusiness;
     if (!targetBusiness || !db || !currentUser) return;
@@ -858,7 +868,7 @@ export function Profile() {
     setIsSavingBusiness(true);
     try {
       const docRef = doc(db, 'businesses', targetBusiness.id);
-      await updateDoc(docRef, {
+      const dataToSave: any = {
         name: updatedData.name,
         ownerName: updatedData.ownerName || '',
         username: updatedData.username || '',
@@ -875,12 +885,29 @@ export function Profile() {
         hideGoogleReviews: !!updatedData.hideGoogleReviews,
         workingHours: updatedData.workingHours,
         socialLinks: updatedData.socialLinks,
-      });
+      };
+
+      if (updatedData.aboutMedia !== undefined) {
+        dataToSave.aboutMedia = updatedData.aboutMedia;
+      }
+      if (updatedData.aboutVideoUrl !== undefined) {
+        dataToSave.aboutVideoUrl = updatedData.aboutVideoUrl;
+      }
+      if (updatedData.aboutImageUrl !== undefined) {
+        dataToSave.aboutImageUrl = updatedData.aboutImageUrl;
+      }
+      if (updatedData.vipPopup !== undefined) {
+        dataToSave.vipPopup = updatedData.vipPopup;
+      }
+
+      const sanitizedData = await compressAndSanitizeFirestorePayload(dataToSave, true);
+      await updateDoc(docRef, sanitizedData);
       
       setBusinesses(prev => prev.map(b => b.id === targetBusiness.id ? { 
         ...b, 
         ...updatedData
       } as Business : b));
+      invalidateCache();
 
       if (selectedBusiness && selectedBusiness.id === targetBusiness.id) {
         setSelectedBusiness(prev => prev ? {
@@ -1183,74 +1210,54 @@ export function Profile() {
           </div>
         </div>
 
-        {/* Executive Merchant KPI Summary Bar */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {/* Executive Merchant Navigation */}
+        <div className="flex flex-wrap sm:flex-nowrap bg-stone-100/80 p-1.5 rounded-2xl gap-1.5 border border-stone-200/50">
           <button 
             type="button"
             onClick={() => setMerchantSubTab('businesses')}
-            className={`p-3.5 rounded-2xl border text-right transition-all cursor-pointer flex items-center justify-between gap-2 ${
+            className={`flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
               merchantSubTab === 'businesses'
-                ? 'bg-[#1a4d2e] text-white border-[#1a4d2e] shadow-xs'
-                : 'bg-white text-stone-800 border-stone-200/80 hover:border-[#1a4d2e]/40'
+                ? 'bg-white text-[#1a4d2e] shadow-sm ring-1 ring-stone-200/50'
+                : 'text-stone-600 hover:bg-white/50 hover:text-stone-900'
             }`}
           >
-            <div>
-              <span className={`text-[10px] font-bold block ${merchantSubTab === 'businesses' ? 'text-emerald-100' : 'text-stone-500'}`}>محلات وأفرع</span>
-              <span className={`text-lg font-black ${merchantSubTab === 'businesses' ? 'text-white' : 'text-[#1a4d2e]'}`}>{businesses.length}</span>
-            </div>
-            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${merchantSubTab === 'businesses' ? 'bg-white/20 text-white' : 'bg-[#1a4d2e]/10 text-[#1a4d2e]'}`}>
-              <Store className="h-5 w-5" />
-            </div>
+            <Store className={`h-4 w-4 ${merchantSubTab === 'businesses' ? 'text-[#1a4d2e]' : 'text-stone-400'}`} />
+            <span>محلاتي وأفرعي</span>
+            <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ml-1 ${merchantSubTab === 'businesses' ? 'bg-[#1a4d2e]/10 text-[#1a4d2e]' : 'bg-stone-200 text-stone-500'}`}>
+              {businesses.length}
+            </span>
           </button>
 
           <button 
             type="button"
             onClick={() => setMerchantSubTab('housings')}
-            className={`p-3.5 rounded-2xl border text-right transition-all cursor-pointer flex items-center justify-between gap-2 ${
+            className={`flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
               merchantSubTab === 'housings'
-                ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs'
-                : 'bg-white text-stone-800 border-stone-200/80 hover:border-emerald-500/50'
+                ? 'bg-white text-emerald-700 shadow-sm ring-1 ring-stone-200/50'
+                : 'text-stone-600 hover:bg-white/50 hover:text-stone-900'
             }`}
           >
-            <div>
-              <span className={`text-[10px] font-bold block ${merchantSubTab === 'housings' ? 'text-emerald-100' : 'text-stone-500'}`}>سكنات وعقارات</span>
-              <span className={`text-lg font-black ${merchantSubTab === 'housings' ? 'text-white' : 'text-emerald-700'}`}>{userHousings.length}</span>
-            </div>
-            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${merchantSubTab === 'housings' ? 'bg-white/20 text-white' : 'bg-emerald-50 text-emerald-700'}`}>
-              <Home className="h-5 w-5" />
-            </div>
-          </button>
-
-          <button 
-            type="button"
-            onClick={() => setMerchantSubTab('businesses')}
-            className="p-3.5 rounded-2xl border border-stone-200/80 bg-white text-stone-800 text-right transition-all cursor-pointer flex items-center justify-between gap-2 hover:border-amber-400/60"
-          >
-            <div>
-              <span className="text-[10px] font-bold text-stone-500 block">عروض وتنزيلات</span>
-              <span className="text-lg font-black text-amber-600">{offers.length}</span>
-            </div>
-            <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-              <Tag className="h-5 w-5" />
-            </div>
+            <Home className={`h-4 w-4 ${merchantSubTab === 'housings' ? 'text-emerald-600' : 'text-stone-400'}`} />
+            <span>سكنات وعقارات</span>
+            <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ml-1 ${merchantSubTab === 'housings' ? 'bg-emerald-100 text-emerald-700' : 'bg-stone-200 text-stone-500'}`}>
+              {userHousings.length}
+            </span>
           </button>
 
           <button 
             type="button"
             onClick={() => setMerchantSubTab('jobs')}
-            className={`p-3.5 rounded-2xl border text-right transition-all cursor-pointer flex items-center justify-between gap-2 ${
+            className={`flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
               merchantSubTab === 'jobs'
-                ? 'bg-indigo-700 text-white border-indigo-700 shadow-xs'
-                : 'bg-white text-stone-800 border-stone-200/80 hover:border-indigo-400/60'
+                ? 'bg-white text-indigo-700 shadow-sm ring-1 ring-stone-200/50'
+                : 'text-stone-600 hover:bg-white/50 hover:text-stone-900'
             }`}
           >
-            <div>
-              <span className={`text-[10px] font-bold block ${merchantSubTab === 'jobs' ? 'text-indigo-100' : 'text-stone-500'}`}>فرص التوظيف</span>
-              <span className={`text-lg font-black ${merchantSubTab === 'jobs' ? 'text-white' : 'text-indigo-600'}`}>{userJobs.length}</span>
-            </div>
-            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${merchantSubTab === 'jobs' ? 'bg-white/20 text-white' : 'bg-indigo-50 text-indigo-600'}`}>
-              <Briefcase className="h-5 w-5" />
-            </div>
+            <Briefcase className={`h-4 w-4 ${merchantSubTab === 'jobs' ? 'text-indigo-600' : 'text-stone-400'}`} />
+            <span>فرص التوظيف</span>
+            <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ml-1 ${merchantSubTab === 'jobs' ? 'bg-indigo-100 text-indigo-700' : 'bg-stone-200 text-stone-500'}`}>
+              {userJobs.length}
+            </span>
           </button>
         </div>
 
@@ -1279,120 +1286,72 @@ export function Profile() {
           <div className="space-y-6">
             {/* Hierarchical Business & Branch Selector */}
             {businesses.length > 0 && (() => {
-              // Helper to extract base shop name
-              const getBaseName = (name: string) => name ? name.split(' - ')[0].trim() : '';
-              
-              // Find primary businesses (root businesses that have no parentBusinessId in user list)
               const primaryBusinesses = businesses.filter(b => !b.parentBusinessId || !businesses.some(p => p.id === b.parentBusinessId));
-              
-              // Active primary business (either the selected business if it's primary, or its parent)
-              const activePrimary = selectedBusiness
-                ? (businesses.find(p => p.id === (selectedBusiness.parentBusinessId || selectedBusiness.id)) || selectedBusiness)
-                : primaryBusinesses[0];
-
-              // All branches belonging to activePrimary (primary shop + sub-branches)
-              const activeBranches = activePrimary
-                ? businesses.filter(b => b.id === activePrimary.id || b.parentBusinessId === activePrimary.id)
-                : [];
+              const hasMultiple = businesses.length > 1;
 
               return (
-                <div className="space-y-3" dir="rtl">
-                  {/* Primary Business Selector (if multiple main shops) */}
-                  {primaryBusinesses.length > 1 && (
-                    <div className="bg-stone-100/80 p-1.5 rounded-2xl border border-stone-200/80 flex flex-wrap gap-1.5">
-                      {primaryBusinesses.map((pBiz) => {
-                        const isMainActive = activePrimary?.id === pBiz.id;
-                        const branchCount = businesses.filter(b => b.id === pBiz.id || b.parentBusinessId === pBiz.id).length;
-                        return (
-                          <button
-                            key={pBiz.id}
-                            type="button"
-                            onClick={() => {
-                              setSelectedBusiness(pBiz);
-                              setActiveSectionTab('overview');
-                              setIsAddingOffer(false);
-                            }}
-                            className={`px-4 py-2.5 rounded-xl font-black text-xs transition-all cursor-pointer flex items-center gap-2 ${
-                              isMainActive
-                                ? 'bg-[#1a4d2e] text-white shadow-xs'
-                                : 'bg-white text-stone-700 hover:bg-stone-200/70 border border-stone-200/60'
-                            }`}
-                          >
-                            <Building2 className={`h-4 w-4 ${isMainActive ? 'text-amber-400' : 'text-stone-400'}`} />
-                            <span>{getBaseName(pBiz.name)}</span>
-                            {branchCount > 1 && (
-                              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
-                                isMainActive ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-600'
-                              }`}>
-                                {branchCount} فروع
-                              </span>
-                            )}
-                          </button>
-                        );
-                      })}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-white border border-stone-200/80 p-3 sm:p-4 rounded-2xl shadow-2xs gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-xl bg-[#1a4d2e]/10 text-[#1a4d2e] flex items-center justify-center shrink-0">
+                      <Store className="h-6 w-6" />
                     </div>
-                  )}
-
-                  {/* Branch Sub-Tabs Ribbon */}
-                  {activePrimary && (
-                    <div className="bg-gradient-to-r from-stone-50 via-amber-50/20 to-stone-50 p-2 rounded-2xl border border-amber-200/60 shadow-3xs flex flex-wrap items-center gap-2">
-                      <div className="flex items-center gap-1.5 px-2 select-none text-stone-500 font-black text-xs border-l border-stone-200 ml-1">
-                        <Store className="h-4 w-4 text-[#1a4d2e]" />
-                        <span>فروع محل ({getBaseName(activePrimary.name)}):</span>
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-1.5 flex-1">
-                        {activeBranches.map((branch, idx) => {
-                          const isSelectedBranch = selectedBusiness?.id === branch.id;
-                          const isVipBranch = getBusinessVipStatus(branch).isVip;
-                          const branchLocationName = branch.name.includes(' - ') 
-                            ? branch.name.split(' - ')[1] 
-                            : (branch.district || (idx === 0 ? 'الفرع الرئيسي' : `فرع ${idx + 1}`));
-
-                          return (
-                            <button
-                              key={branch.id}
-                              type="button"
-                              onClick={() => {
-                                setSelectedBusiness(branch);
+                    <div>
+                      <span className="text-[11px] font-bold text-stone-500 block mb-0.5">المنشأة المحددة للإدارة</span>
+                      {hasMultiple ? (
+                        <div className="relative">
+                          <select
+                            value={selectedBusiness?.id || ''}
+                            onChange={(e) => {
+                              const biz = businesses.find(b => b.id === e.target.value);
+                              if (biz) {
+                                setSelectedBusiness(biz);
                                 setActiveSectionTab('overview');
                                 setIsAddingOffer(false);
-                              }}
-                              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                                isSelectedBranch
-                                  ? 'bg-[#1a4d2e] text-white shadow-sm font-black ring-2 ring-[#1a4d2e]/30'
-                                  : 'bg-white text-stone-700 hover:bg-stone-100 border border-stone-200'
-                              }`}
-                            >
-                              <MapPin className={`h-3.5 w-3.5 ${isSelectedBranch ? 'text-amber-400' : 'text-stone-400'}`} />
-                              <span>{branchLocationName}</span>
-                              {isVipBranch ? (
-                                <Crown className="h-3 w-3 text-amber-500 fill-amber-500 shrink-0" />
-                              ) : (
-                                <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${isSelectedBranch ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-500'}`}>
-                                  أساسي
-                                </span>
-                              )}
-                            </button>
-                          );
-                        })}
-
-                        {/* Add New Branch Action Button */}
-                        <button
-                          type="button"
-                          onClick={() => setIsMultiBranchOpen(true)}
-                          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-black bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white shadow-2xs transition-all cursor-pointer mr-auto"
-                        >
-                          <Plus className="h-3.5 w-3.5" />
-                          <span>إضافة فرع جديد (خصم 60% VIP)</span>
-                        </button>
-                      </div>
+                              }
+                            }}
+                            className="appearance-none bg-stone-50 border border-stone-200 text-[#2d2a26] text-sm font-black rounded-lg pl-8 pr-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]/30 cursor-pointer outline-none"
+                            dir="rtl"
+                          >
+                            {primaryBusinesses.map(pBiz => {
+                              const branches = businesses.filter(b => b.id === pBiz.id || b.parentBusinessId === pBiz.id);
+                              return (
+                                <optgroup key={pBiz.id} label={pBiz.name.split(' - ')[0].trim()}>
+                                  {branches.map((branch, idx) => {
+                                    const branchLocationName = branch.name.includes(' - ') 
+                                      ? branch.name.split(' - ')[1] 
+                                      : (branch.district || (idx === 0 ? 'الفرع الرئيسي' : `فرع ${idx + 1}`));
+                                    return (
+                                      <option key={branch.id} value={branch.id}>
+                                        {branchLocationName} {getBusinessVipStatus(branch).isVip ? '⭐ VIP' : ''}
+                                      </option>
+                                    );
+                                  })}
+                                </optgroup>
+                              );
+                            })}
+                          </select>
+                          <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center px-2 text-stone-500">
+                            <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+                          </div>
+                        </div>
+                      ) : (
+                        <h3 className="font-black text-sm text-[#2d2a26] bg-stone-50 px-3 py-1.5 rounded-lg border border-stone-200 inline-block">
+                          {selectedBusiness?.name}
+                        </h3>
+                      )}
                     </div>
-                  )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsMultiBranchOpen(true)}
+                    className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-black bg-[#fbf9f6] text-[#1a4d2e] border border-[#1a4d2e]/20 hover:bg-[#1a4d2e]/10 transition-colors cursor-pointer"
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span>إضافة فرع جديد</span>
+                  </button>
                 </div>
               );
             })()}
-
             {/* Currently Selected Store WorkSpace */}
             {selectedBusiness && (() => {
               const vipInfo = getBusinessVipStatus(selectedBusiness);
@@ -1443,75 +1402,80 @@ export function Profile() {
                   </div>
 
                   {/* Dashboard Workspace Tab Navigation */}
-                  <div className="flex border-b border-stone-200 overflow-x-auto bg-stone-50/50">
+                  <div className="flex overflow-x-auto bg-stone-50/80 p-2 gap-2 border-b border-stone-200 snap-x [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
                     <button
                       type="button"
                       onClick={() => { setActiveSectionTab('overview'); setIsAddingOffer(false); }}
-                      className={`flex-1 min-w-[90px] py-3 text-center text-xs font-bold border-b-2 transition-all cursor-pointer ${
+                      className={`shrink-0 sm:flex-1 py-2.5 px-4 rounded-xl text-center text-[11px] sm:text-xs font-bold transition-all cursor-pointer snap-start flex items-center justify-center gap-1.5 ${
                         activeSectionTab === 'overview' 
-                          ? 'border-[#1a4d2e] text-[#1a4d2e] bg-white font-black' 
-                          : 'border-transparent text-stone-500 hover:text-stone-800'
+                          ? 'bg-[#1a4d2e] text-white shadow-xs font-black' 
+                          : 'bg-transparent text-stone-600 hover:bg-stone-200/50'
                       }`}
                     >
-                      📊 ملخص الأداء
+                      <span>📊 ملخص الأداء</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => { setActiveSectionTab('edit_info'); setIsAddingOffer(false); }}
-                      className={`flex-1 min-w-[90px] py-3 text-center text-xs font-bold border-b-2 transition-all cursor-pointer ${
+                      className={`shrink-0 sm:flex-1 py-2.5 px-4 rounded-xl text-center text-[11px] sm:text-xs font-bold transition-all cursor-pointer snap-start flex items-center justify-center gap-1.5 ${
                         activeSectionTab === 'edit_info' 
-                          ? 'border-[#1a4d2e] text-[#1a4d2e] bg-white font-black' 
-                          : 'border-transparent text-stone-500 hover:text-stone-800'
+                          ? 'bg-[#1a4d2e] text-white shadow-xs font-black' 
+                          : 'bg-transparent text-stone-600 hover:bg-stone-200/50'
                       }`}
                     >
-                      ✍️ تعديل المعلومات
+                      <span>✍️ تعديل المحل</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => { setActiveSectionTab('offers'); setIsAddingOffer(false); }}
-                      className={`flex-1 min-w-[90px] py-3 text-center text-xs font-bold border-b-2 transition-all cursor-pointer ${
+                      className={`shrink-0 sm:flex-1 py-2.5 px-4 rounded-xl text-center text-[11px] sm:text-xs font-bold transition-all cursor-pointer snap-start flex items-center justify-center gap-1.5 ${
                         activeSectionTab === 'offers' 
-                          ? 'border-[#1a4d2e] text-[#1a4d2e] bg-white font-black' 
-                          : 'border-transparent text-stone-500 hover:text-stone-800'
+                          ? 'bg-amber-500 text-white shadow-xs font-black' 
+                          : 'bg-transparent text-stone-600 hover:bg-stone-200/50'
                       }`}
                     >
-                      🏷️ العروض والتنزيلات ({offers.length})
+                      <span>🏷️ العروض</span>
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${activeSectionTab === 'offers' ? 'bg-white/20 text-white' : 'bg-stone-200 text-stone-600'}`}>
+                        {offers.length}
+                      </span>
                     </button>
                     <button
                       type="button"
                       onClick={() => { setActiveSectionTab('reviews'); setIsAddingOffer(false); }}
-                      className={`flex-1 min-w-[120px] py-3 text-center text-xs font-bold border-b-2 transition-all cursor-pointer ${
+                      className={`shrink-0 sm:flex-1 py-2.5 px-4 rounded-xl text-center text-[11px] sm:text-xs font-bold transition-all cursor-pointer snap-start flex items-center justify-center gap-1.5 ${
                         activeSectionTab === 'reviews' 
-                          ? 'border-[#1a4d2e] text-[#1a4d2e] bg-white font-black' 
-                          : 'border-transparent text-stone-500 hover:text-stone-800'
+                          ? 'bg-sky-600 text-white shadow-xs font-black' 
+                          : 'bg-transparent text-stone-600 hover:bg-stone-200/50'
                       }`}
                     >
-                      💬 إدارة التقييمات والردود ({businessReviews.length})
+                      <span>💬 التقييمات</span>
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${activeSectionTab === 'reviews' ? 'bg-white/20 text-white' : 'bg-stone-200 text-stone-600'}`}>
+                        {businessReviews.length}
+                      </span>
                     </button>
                     <button
                       type="button"
                       onClick={() => { setActiveSectionTab('homepage_banner'); setIsAddingOffer(false); }}
-                      className={`flex-1 min-w-[130px] py-3 text-center text-xs font-bold border-b-2 transition-all cursor-pointer ${
+                      className={`shrink-0 sm:flex-1 py-2.5 px-4 rounded-xl text-center text-[11px] sm:text-xs font-bold transition-all cursor-pointer snap-start flex items-center justify-center gap-1.5 ${
                         activeSectionTab === 'homepage_banner' 
-                          ? 'border-[#1a4d2e] text-[#1a4d2e] bg-white font-black' 
-                          : 'border-transparent text-stone-500 hover:text-stone-800'
+                          ? 'bg-fuchsia-600 text-white shadow-xs font-black' 
+                          : 'bg-transparent text-stone-600 hover:bg-stone-200/50'
                       }`}
                     >
-                      📢 بانر الصفحة الرئيسية
+                      <span>📢 بانر الصفحة</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => { setActiveSectionTab('shared_accounts'); setIsAddingOffer(false); }}
-                      className={`flex-1 min-w-[120px] py-3 text-center text-xs font-bold border-b-2 transition-all cursor-pointer ${
+                      className={`shrink-0 sm:flex-1 py-2.5 px-4 rounded-xl text-center text-[11px] sm:text-xs font-bold transition-all cursor-pointer snap-start flex items-center justify-center gap-1.5 ${
                         activeSectionTab === 'shared_accounts' 
-                          ? 'border-[#1a4d2e] text-[#1a4d2e] bg-white font-black' 
-                          : 'border-transparent text-stone-500 hover:text-stone-800'
+                          ? 'bg-[#2d2a26] text-white shadow-xs font-black' 
+                          : 'bg-transparent text-stone-600 hover:bg-stone-200/50'
                       }`}
                     >
-                      👥 الحسابات المشتركة
+                      <span>👥 الحسابات المشتركة</span>
                     </button>
                   </div>
-
                   {/* Active Panel Content */}
                   <div className="p-5 min-h-[220px]">
                     {/* 1. OVERVIEW PANEL */}
@@ -1564,6 +1528,24 @@ export function Profile() {
                           </div>
                         </div>
 
+                        <div className="bg-emerald-50/50 border border-emerald-200 p-4 rounded-2xl flex items-center justify-between flex-wrap gap-3">
+                          <div className="flex items-center gap-2">
+                            <Sparkles className="h-5 w-5 text-emerald-600 fill-emerald-500" />
+                            <div>
+                              <h4 className="text-sm font-black text-emerald-950">النافذة الترحيبية التفاعلية 🎬</h4>
+                              <p className="text-xs text-stone-500">متاحة لجميع المحلات لعرض عروض أو ترحيب خاص</p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => { setSelectedBusinessForPopup(selectedBusiness); setIsVipPopupManagerOpen(true); }}
+                            className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white rounded-xl text-xs font-bold transition-colors shadow-xs cursor-pointer"
+                          >
+                            <Sparkles className="h-3.5 w-3.5 text-emerald-200" />
+                            <span>إعداد النافذة الترحيبية</span>
+                          </button>
+                        </div>
+
                         {/* VIP Exclusive Live Analytics or Non-VIP Upgrade Callout */}
                         {vipInfo.isVip ? (
                           <div className="space-y-5 pt-2">
@@ -1575,7 +1557,7 @@ export function Profile() {
                                   <p className="text-xs text-stone-500">مؤشرات أداء مسجلة ومحدثة تلقائياً في قاعدة البيانات</p>
                                 </div>
                               </div>
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
                                 <button
                                   type="button"
                                   onClick={() => { setSelectedBusinessForMenu(selectedBusiness); setIsMenuModalOpen(true); }}
@@ -2235,7 +2217,7 @@ export function Profile() {
                                       {currentBannerRequest.bannerType === 'business' && (
                                         <span className="bg-stone-900/60 backdrop-blur-xs text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded-full border border-stone-700/50 inline-flex items-center gap-1">
                                           <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
-                                          {selectedBusiness?.rating || 5}
+                                          {(selectedBusiness?.rating && selectedBusiness.rating > 0) ? selectedBusiness.rating.toFixed(1) : 'جديد'}
                                         </span>
                                       )}
                                     </div>
@@ -2427,7 +2409,7 @@ export function Profile() {
                                       {bannerForm.bannerType === 'business' && (
                                         <span className="bg-stone-900/60 backdrop-blur-xs text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded-full border border-stone-700/50 inline-flex items-center gap-1">
                                           <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
-                                          {selectedBusiness?.rating || 5}
+                                          {(selectedBusiness?.rating && selectedBusiness.rating > 0) ? selectedBusiness.rating.toFixed(1) : 'جديد'}
                                         </span>
                                       )}
                                     </div>
@@ -3275,6 +3257,24 @@ export function Profile() {
           business={selectedBusinessForMenu}
           onMenuUpdated={(updatedItems) => {
             setBusinesses(prev => prev.map(b => b.id === selectedBusinessForMenu.id ? { ...b, menuItems: updatedItems } : b));
+          }}
+        />
+      )}
+
+      {/* VIP Welcome Popup Manager Modal */}
+      {selectedBusinessForPopup && (
+        <VipPopupManagerModal
+          isOpen={isVipPopupManagerOpen}
+          onClose={() => {
+            setIsVipPopupManagerOpen(false);
+            setSelectedBusinessForPopup(null);
+          }}
+          business={selectedBusinessForPopup}
+          onUpdated={(newPopup) => {
+            setBusinesses(prev => prev.map(b => b.id === selectedBusinessForPopup.id ? { ...b, vipPopup: newPopup } : b));
+            if (selectedBusiness?.id === selectedBusinessForPopup.id) {
+              setSelectedBusiness(prev => prev ? { ...prev, vipPopup: newPopup } : null);
+            }
           }}
         />
       )}

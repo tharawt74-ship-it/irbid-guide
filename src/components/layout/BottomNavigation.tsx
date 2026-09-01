@@ -37,8 +37,6 @@ export function BottomNavigation({
       path: '/offers',
       icon: Flame,
       type: 'link',
-      isSpecial: true,
-      specialBgClass: "bg-amber-50",
       specialIconClass: "text-amber-600"
     },
     {
@@ -46,8 +44,6 @@ export function BottomNavigation({
       path: '/contact',
       icon: PlusCircle,
       type: 'link',
-      isSpecial: true,
-      specialBgClass: "bg-emerald-50",
       specialIconClass: "text-emerald-700"
     },
     {
@@ -68,7 +64,7 @@ export function BottomNavigation({
   return (
     <nav 
       aria-label="التنقل السفلي"
-      className="md:hidden fixed bottom-4 left-3 right-3 sm:left-6 sm:right-6 z-40 bg-white/92 backdrop-blur-2xl border border-stone-200/90 shadow-[0_12px_36px_rgba(0,0,0,0.14),0_2px_8px_rgba(0,0,0,0.06)] rounded-full px-2 py-1.5 max-w-[400px] mx-auto"
+      className="md:hidden fixed bottom-5 left-4 right-4 z-40 bg-white/45 backdrop-blur-3xl border border-white/60 shadow-[0_24px_50px_-6px_rgba(0,0,0,0.14),inset_0_1.5px_1px_rgba(255,255,255,0.85),inset_0_-1px_1px_rgba(0,0,0,0.04),0_2px_8px_rgba(0,0,0,0.04)] rounded-full px-2.5 py-2 max-w-[390px] mx-auto"
     >
       <div className="flex items-center justify-between w-full gap-0.5" dir="rtl">
         {navItems.map((item, index) => {
@@ -83,7 +79,7 @@ export function BottomNavigation({
                 {isActive && (
                   <motion.div
                     layoutId="activeNavBubble"
-                    className="absolute inset-0 rounded-full bg-[#1a4d2e] shadow-md shadow-[#1a4d2e]/30"
+                    className="absolute inset-0 rounded-full bg-[#1a4d2e]/14 backdrop-blur-[6px] border border-[#1a4d2e]/25 shadow-[inset_1px_1px_1.5px_rgba(255,255,255,0.75),inset_-1px_-1px_2px_rgba(26,77,46,0.15),0_3px_8px_rgba(26,77,46,0.12)]"
                     transition={{
                       type: "spring",
                       stiffness: 420,
@@ -92,27 +88,24 @@ export function BottomNavigation({
                     }}
                   />
                 )}
-                {!isActive && item.isSpecial && (
-                  <div className={cn("absolute inset-0 rounded-full transition-transform duration-200 group-hover:scale-105", item.specialBgClass)} />
-                )}
                 <Icon 
                   className={cn(
                     "h-4.5 w-4.5 relative z-10 transition-colors duration-200", 
                     isActive 
-                      ? "text-white stroke-[2.5px]" 
-                      : item.isSpecial 
+                      ? "text-[#1a4d2e] stroke-[2.5px] drop-shadow-[0_0.5px_1px_rgba(26,77,46,0.15)]" 
+                      : item.specialIconClass 
                       ? item.specialIconClass 
                       : "text-stone-500 group-hover:text-stone-800"
                   )} 
                 />
                 {item.hasBadge && (
-                  <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-red-600 ring-2 ring-white animate-pulse z-20" />
+                  <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-red-600 ring-2 ring-white/60 animate-pulse z-20" />
                 )}
               </div>
               <span
                 className={cn(
                   "text-[10px] sm:text-[11px] mt-1 text-center whitespace-nowrap leading-none transition-colors relative z-10",
-                  isActive ? "font-black text-[#1a4d2e]" : "font-bold text-stone-600 group-hover:text-stone-900"
+                  isActive ? "font-black text-[#1a4d2e] drop-shadow-[0_1px_1px_rgba(255,255,255,0.85)]" : "font-bold text-stone-600 group-hover:text-stone-900"
                 )}
               >
                 {item.label}

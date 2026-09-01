@@ -39,9 +39,9 @@ export function getBusinessVipStatus(business?: Business | null): VipStatusResul
   const now = Date.now();
   const isTrial = !!business.isVipTrial;
   
-  // Explicitly check package plan. If explicitly set to 'basic' or 'pay_per_use', it is NOT golden.
+  // Explicitly check package plan or trial status. If explicitly set to 'golden', 'vip', or has active trial, it is golden.
   let plan: 'golden' | 'basic' | 'pay_per_use' = 'basic';
-  if (business.packagePlan === 'golden' || business.packagePlan === 'vip') {
+  if (business.packagePlan === 'golden' || business.packagePlan === 'vip' || isTrial) {
     plan = 'golden';
   } else if (business.packagePlan === 'pay_per_use') {
     plan = 'pay_per_use';
@@ -101,7 +101,7 @@ export function getBusinessVipStatus(business?: Business | null): VipStatusResul
       isScheduled: true,
       startsAt,
       expiresAt,
-      statusLabel: isTrial ? 'انتهت فترة التجربة المجانية (14 يوم)' : 'انتهت فترة الترقية الذهبية',
+      statusLabel: isTrial ? 'انتهت فترة التجربة المجانية (شهر مجاني)' : 'انتهت فترة الترقية الذهبية',
       badgeColor: 'bg-rose-50 text-rose-700 border-rose-200',
       isTrial,
     };
@@ -116,11 +116,11 @@ export function getBusinessVipStatus(business?: Business | null): VipStatusResul
   }
 
   const badgeLabel = isTrial
-    ? `تجربة مجانية VIP (${daysRemaining ?? 14} يوم)`
+    ? `تجربة مجانية VIP (${daysRemaining ?? 30} يوم)`
     : 'الباقة الذهبية VIP';
 
   const statusLabel = isTrial
-    ? `تجربة مجانية 14 يوم (متبقي ${daysRemaining ?? 14} يوم)`
+    ? `تجربة مجانية شهر (متبقي ${daysRemaining ?? 30} يوم)`
     : (expiresAt ? `ذهبي VIP (متبقي ${daysRemaining} يوم)` : 'ذهبي VIP (دائم)');
 
   return {

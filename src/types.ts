@@ -79,6 +79,21 @@ export interface HousingItem {
   isVip?: boolean;
 }
 
+export interface DayStatsRecord {
+  view?: number;
+  call?: number;
+  direction?: number;
+  menu?: number;
+  share?: number;
+  views?: number;
+  whatsapp?: number;
+  calls?: number;
+  directions?: number;
+  menus?: number;
+  shares?: number;
+  interactions?: number;
+}
+
 export interface BusinessAnalytics {
   views: number;
   whatsappClicks: number;
@@ -88,6 +103,16 @@ export interface BusinessAnalytics {
   shareClicks: number;
   lastUpdated?: number;
   peakHours?: string;
+  dayOfWeekStats?: {
+    sat?: DayStatsRecord;
+    sun?: DayStatsRecord;
+    mon?: DayStatsRecord;
+    tue?: DayStatsRecord;
+    wed?: DayStatsRecord;
+    thu?: DayStatsRecord;
+    fri?: DayStatsRecord;
+  };
+  dailyStats?: Record<string, DayStatsRecord>;
   weeklyDistribution?: { day: string; views: number; calls: number }[];
 }
 
@@ -159,6 +184,32 @@ export interface Business {
   reels?: VipReel[];
   gallery?: (string | VipGalleryItem)[];
   staffEmails?: string[];
+
+  // VIP Interactive Visitor Welcome Popup
+  vipPopup?: VipPopupConfig;
+
+  // About Section Media (Available to all businesses: Video or Image)
+  aboutMedia?: AboutMediaConfig;
+  aboutVideoUrl?: string;
+  aboutImageUrl?: string;
+}
+
+export interface VipPopupConfig {
+  enabled: boolean;
+  type: 'image' | 'video';
+  imageUrl?: string;
+  videoUrl?: string;
+  title?: string;
+  description?: string;
+  buttonText?: string;
+  buttonUrl?: string;
+  dismissible?: boolean;
+}
+
+export interface AboutMediaConfig {
+  type: 'image' | 'video';
+  url: string;
+  caption?: string;
 }
 
 export interface VipGalleryItem {

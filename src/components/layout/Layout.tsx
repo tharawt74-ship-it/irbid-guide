@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Outlet, Link, useLocation } from 'react-router';
+import { Outlet, Link, useLocation, useNavigate } from 'react-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { 
   Store, 
@@ -34,7 +34,7 @@ import {
 import { cn } from '../../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { NotificationDropdown } from '../notifications/NotificationDropdown';
-import { HeaderSearchModal } from '../search/HeaderSearchModal';
+// Removed HeaderSearchModal import
 import { PwaInstallBanner, triggerPwaInstallModal } from '../pwa/PwaInstallBanner';
 import { BottomNavigation } from './BottomNavigation';
 import { FloatingScrollToTop } from '../FloatingScrollToTop';
@@ -53,6 +53,7 @@ export function Layout() {
   const { globalSettings } = useSystemSettings();
   const { totalCount } = useCart();
   const location = useLocation();
+  const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
@@ -147,25 +148,24 @@ export function Layout() {
     };
   }, []); // Run on mount only (once per tab session)
 
-  // Keyboard shortcut (Ctrl+K, Cmd+K, or /) to open quick search modal
+  // Keyboard shortcut (Ctrl+K, Cmd+K, or /) to redirect to search page
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
-        setIsSearchModalOpen(prev => !prev);
+        navigate('/search');
       } else if (
         e.key === '/' && 
-        !isSearchModalOpen &&
         !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || (e.target as HTMLElement)?.isContentEditable)
       ) {
         e.preventDefault();
-        setIsSearchModalOpen(true);
+        navigate('/search');
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isSearchModalOpen]);
+  }, [navigate]);
 
   useEffect(() => {
     const path = location.pathname;
@@ -405,7 +405,7 @@ export function Layout() {
           <div className="flex items-center gap-1.5 lg:gap-2 flex-nowrap shrink-0 min-w-0">
             <button
               type="button"
-              onClick={() => setIsSearchModalOpen(true)}
+              onClick={() => navigate('/search')}
               className="relative w-8.5 h-8.5 rounded-xl transition-all duration-200 cursor-pointer focus:outline-none flex items-center justify-center shrink-0 border bg-stone-50 hover:bg-stone-100 text-stone-600 hover:text-[#1a4d2e] border-stone-200 shadow-2xs hover:shadow-xs group"
               title="البحث السريع (Ctrl+K)"
             >
@@ -728,7 +728,7 @@ export function Layout() {
                 type="button"
                 onClick={() => {
                   closeMenu();
-                  setIsSearchModalOpen(true);
+                  navigate('/search');
                 }}
                 className="w-full p-3.5 rounded-2xl bg-white text-stone-600 hover:text-stone-900 border border-stone-200/90 shadow-2xs flex items-center justify-between transition-all cursor-pointer"
               >
@@ -1031,11 +1031,7 @@ export function Layout() {
         </div>
       </footer>
 
-      {/* Global Quick Search Modal Dialog */}
-      <HeaderSearchModal 
-        isOpen={isSearchModalOpen} 
-        onClose={() => setIsSearchModalOpen(false)} 
-      />
+      {/* Global Quick Search Modal Dialog - Removed */}
 
       {/* Progressive Web App Install Banner */}
       <PwaInstallBanner />
@@ -1049,7 +1045,7 @@ export function Layout() {
 
       {/* Mobile Fixed Bottom Navigation Bar */}
       <BottomNavigation 
-        onOpenSearch={() => setIsSearchModalOpen(true)} 
+        onOpenSearch={() => navigate('/search')} 
         hasUnreadMessages={hasUnreadMessages} 
         onToggleMenu={() => setMobileMenuOpen(!mobileMenuOpen)}
         onCloseMenu={closeMenu}

@@ -16,6 +16,7 @@ import { getAppConfig } from '../lib/demoDataHelper';
 import { BlueCheckIcon } from '../components/vip/VerifiedBadge';
 import { ShareButton } from '../components/ShareButton';
 import { getWhatsAppUrl, formatJobWhatsAppMessage } from '../lib/contactHelper';
+import { WhatsApp3DIcon, Phone3DIcon } from '../components/common/PremiumContactButtons';
 import { SEO } from '../components/common/SEO';
 
 const CATEGORIES = ['الكل', 'مطاعم ومقاهي', 'تسويق وتكنولوجيا', 'مبيعات وتجزئة', 'تعليم وتدريب', 'صحة وخدمات', 'محاسبة وإدارة', 'صناعة وحرف', 'زراعة ومزارع'];
@@ -403,18 +404,18 @@ export function Jobs() {
                     target="_blank"
                     rel="noreferrer"
                     onClick={(e) => e.stopPropagation()}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition-all shadow-2xs cursor-pointer shrink-0"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors shadow-xs cursor-pointer shrink-0"
                   >
-                    <MessageSquare className="h-3.5 w-3.5" />
+                    <WhatsApp3DIcon className="h-3.5 w-3.5 text-white" />
                     <span>واتساب</span>
                   </a>
 
                   <a
                     href={`tel:${job.contactPhone}`}
                     onClick={(e) => e.stopPropagation()}
-                    className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl text-xs font-bold transition-all shrink-0"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-[#1a4d2e] hover:bg-[#133c23] text-white rounded-xl text-xs font-bold transition-colors shadow-xs shrink-0"
                   >
-                    <Phone className="h-3.5 w-3.5" />
+                    <Phone3DIcon className="h-3.5 w-3.5 text-white" />
                     <span>اتصال</span>
                   </a>
 
@@ -634,17 +635,17 @@ export function Jobs() {
                   href={`https://wa.me/${(selectedDetailJob.contactWhatsapp || selectedDetailJob.contactPhone).replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`مرحباً، أود التقدم لوظيفة (${selectedDetailJob.title}) لدى (${selectedDetailJob.company}) المعلنة على دليل شو في بإربد.`)}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex-1 sm:flex-initial inline-flex justify-center items-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm rounded-xl transition-all shadow-md cursor-pointer"
+                  className="flex-1 sm:flex-initial inline-flex justify-center items-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl transition-colors shadow-xs cursor-pointer"
                 >
-                  <MessageSquare className="h-4 w-4" />
+                  <WhatsApp3DIcon className="h-5 w-5 text-white" />
                   <span>قدم عبر الواتساب الآن</span>
                 </a>
 
                 <a
                   href={`tel:${selectedDetailJob.contactPhone}`}
-                  className="inline-flex justify-center items-center gap-2 px-4 py-3 bg-stone-100 hover:bg-stone-200 text-stone-800 font-bold text-sm rounded-xl transition-colors cursor-pointer"
+                  className="inline-flex justify-center items-center gap-2 px-4 py-3 bg-[#1a4d2e] hover:bg-[#133c23] text-white font-bold text-sm rounded-xl transition-colors shadow-xs cursor-pointer"
                 >
-                  <Phone className="h-4 w-4" />
+                  <Phone3DIcon className="h-5 w-5 text-white" />
                   <span>اتصال</span>
                 </a>
               </div>

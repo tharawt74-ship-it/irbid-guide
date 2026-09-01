@@ -7,6 +7,7 @@ import { Business } from '../../types';
 import { Heart, Star, MapPin, Phone, Trash2, Store, ArrowLeft, ExternalLink } from 'lucide-react';
 import { getWhatsAppUrl } from '../../lib/contactHelper';
 import { getBusinessLink } from '../../lib/utils';
+import { Phone3DIcon } from '../common/PremiumContactButtons';
 
 export function VisitorFavoritesTab() {
   const { userFavorites, toggleFavorite, currentUser } = useAuth();
@@ -122,10 +123,16 @@ export function VisitorFavoritesTab() {
                 <p className="text-[11px] text-stone-500 truncate mt-0.5">{biz.category}</p>
 
                 <div className="flex items-center gap-2 mt-1.5 text-xs text-stone-600">
-                  <span className="flex items-center gap-1 font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded text-[10px]">
-                    <Star className="h-2.5 w-2.5 fill-amber-500 text-amber-500" />
-                    {biz.rating || 5.0}
-                  </span>
+                  {(biz.rating && biz.rating > 0 && biz.reviewCount && biz.reviewCount > 0) ? (
+                    <span className="flex items-center gap-1 font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded text-[10px]">
+                      <Star className="h-2.5 w-2.5 fill-amber-500 text-amber-500" />
+                      {biz.rating.toFixed(1)}
+                    </span>
+                  ) : (
+                    <span className="font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded text-[10px]">
+                      جديد
+                    </span>
+                  )}
                   {biz.district && (
                     <span className="flex items-center gap-1 text-[10px] text-stone-500 truncate">
                       <MapPin className="h-2.5 w-2.5 text-stone-400" />
@@ -140,9 +147,9 @@ export function VisitorFavoritesTab() {
               {biz.phone ? (
                 <a
                   href={`tel:${biz.phone}`}
-                  className="inline-flex items-center gap-1 text-[11px] font-bold text-stone-700 hover:text-[#1a4d2e] bg-stone-50 hover:bg-stone-100 px-2.5 py-1.5 rounded-lg transition-colors"
+                  className="inline-flex items-center gap-1.5 text-[11px] font-bold text-white bg-[#1a4d2e] hover:bg-[#133c23] px-2.5 py-1.5 rounded-lg transition-colors shadow-2xs"
                 >
-                  <Phone className="h-3 w-3 text-[#1a4d2e]" />
+                  <Phone3DIcon className="h-3 w-3 text-white" />
                   <span>اتصال</span>
                 </a>
               ) : <div />}

@@ -1,6 +1,7 @@
 import { storage } from './firebase';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { compressImage } from './imageCompression';
+import { compressBase64Image } from './firestoreHelper';
 
 export interface UploadOptions {
   folder?: string; // e.g. 'businesses', 'menus', 'offers', 'avatars'
@@ -122,7 +123,15 @@ export async function uploadAndCompressImage(
 function convertFileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
+    reader.onload = async () => {
+      const raw = reader.result as string;
+      if (raw && raw.startsWith('data:image/')) {
+        const compressed = await compressBase64Image(raw, 800, 0.65);
+        resolve(compressed);
+      } else {
+        resolve(raw || '');
+      }
+    };
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });

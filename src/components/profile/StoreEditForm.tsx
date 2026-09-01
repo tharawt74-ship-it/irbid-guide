@@ -2,14 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { 
   Store, User, MapPin, Phone, Globe, Image as ImageIcon,
   MessageSquare, EyeOff, Sparkles, Check, Clock, ShieldCheck, 
-  ExternalLink, Info, AtSign, Copy, Trash2, AlertTriangle, Eye
+  ExternalLink, Info, AtSign, Copy, Trash2, AlertTriangle, Eye,
+  Video, Play, HelpCircle, Crown
 } from 'lucide-react';
-import { Business, WorkingHours, SocialLinks } from '../../types';
+import { Business, WorkingHours, SocialLinks, AboutMediaConfig, VipPopupConfig } from '../../types';
 import { BUSINESS_CATEGORIES, IRBID_REGIONS_CATEGORIZED, MainCategory } from '../../lib/categories';
 import { SearchableSelect } from '../ui/SearchableSelect';
 import { WorkingHoursEditor } from '../ui/WorkingHoursEditor';
 import { SocialLinksEditor } from '../ui/SocialLinksEditor';
 import { ImageUploader } from '../ui/ImageUploader';
+import { MediaRenderer } from '../common/MediaRenderer';
+import { VipPopupManagerModal } from '../vip/VipPopupManagerModal';
+import { getBusinessVipStatus } from '../../lib/vipHelper';
 import { cn } from '../../lib/utils';
 
 interface StoreEditFormProps {
@@ -31,6 +35,9 @@ interface StoreEditFormProps {
     socialLinks?: SocialLinks;
     hideSiteReviews?: boolean;
     hideGoogleReviews?: boolean;
+    aboutMedia?: AboutMediaConfig | null;
+    aboutVideoUrl?: string | null;
+    aboutImageUrl?: string | null;
   }) => Promise<void>;
   onDelete?: (businessId: string) => Promise<void>;
   isSaving?: boolean;
@@ -59,7 +66,23 @@ export function StoreEditForm({
   const [googlePlaceUrl, setGooglePlaceUrl] = useState(business.googlePlaceUrl || '');
   const [hideSiteReviews, setHideSiteReviews] = useState(!!business.hideSiteReviews);
   const [hideGoogleReviews, setHideGoogleReviews] = useState(!!business.hideGoogleReviews);
+
+  // About Media state (Available to all accounts)
+  const initialAboutType: 'video' | 'image' = 
+    business.aboutMedia?.type || 
+    (business.aboutVideoUrl ? 'video' : business.aboutImageUrl ? 'image' : 'video');
+  const initialAboutUrl: string = 
+    business.aboutMedia?.url || business.aboutVideoUrl || business.aboutImageUrl || '';
+  const initialAboutCaption: string = business.aboutMedia?.caption || '';
+
+  const [aboutMediaType, setAboutMediaType] = useState<'video' | 'image'>(initialAboutType);
+  const [aboutMediaUrl, setAboutMediaUrl] = useState<string>(initialAboutUrl);
+  const [aboutMediaCaption, setAboutMediaCaption] = useState<string>(initialAboutCaption);
   
+  // VIP Popup Manager Modal State
+  const [isVipPopupManagerOpen, setIsVipPopupManagerOpen] = useState(false);
+  const vipInfo = getBusinessVipStatus(business);
+
   // UI interaction states
   const [copiedLink, setCopiedLink] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -99,6 +122,12 @@ export function StoreEditForm({
     setGooglePlaceUrl(business.googlePlaceUrl || '');
     setHideSiteReviews(!!business.hideSiteReviews);
     setHideGoogleReviews(!!business.hideGoogleReviews);
+
+    const bAboutType = business.aboutMedia?.type || (business.aboutVideoUrl ? 'video' : business.aboutImageUrl ? 'image' : 'video');
+    const bAboutUrl = business.aboutMedia?.url || business.aboutVideoUrl || business.aboutImageUrl || '';
+    setAboutMediaType(bAboutType);
+    setAboutMediaUrl(bAboutUrl);
+    setAboutMediaCaption(business.aboutMedia?.caption || '');
 
     // Find main category
     let foundMain: MainCategory | null = null;
@@ -174,6 +203,13 @@ export function StoreEditForm({
       socialLinks,
       hideSiteReviews,
       hideGoogleReviews,
+      aboutMedia: aboutMediaUrl.trim() ? {
+        type: aboutMediaType,
+        url: aboutMediaUrl.trim(),
+        ...(aboutMediaCaption.trim() ? { caption: aboutMediaCaption.trim() } : {})
+      } : null,
+      aboutVideoUrl: aboutMediaType === 'video' && aboutMediaUrl.trim() ? aboutMediaUrl.trim() : null,
+      aboutImageUrl: aboutMediaType === 'image' && aboutMediaUrl.trim() ? aboutMediaUrl.trim() : null,
     });
   };
 
@@ -481,6 +517,171 @@ export function StoreEditForm({
           </div>
         </div>
 
+        {/* 5.5. Media for "About" Section (Video or Image for all accounts) */}
+        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-stone-200/80 shadow-2xs space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-stone-100">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 rounded-lg bg-emerald-50 text-[#1a4d2e]">
+                <Video className="h-4 w-4" />
+              </div>
+              <div>
+                <h4 className="text-sm font-black text-stone-800">ميديا وفيديو / صورة قسم "عن المحل"</h4>
+                <p className="text-[11px] text-stone-500 font-medium">متاحة لجميع الحسابات: اعرض مقطع فيديو تعريفي أو صورة مميزة تظهر مباشرة في قسم "عن المحل"</p>
+              </div>
+            </div>
+            <span className="text-[10px] bg-emerald-100 text-emerald-800 font-black px-2 py-0.5 rounded-full">
+              جديد لجميع المحلات ✨
+            </span>
+          </div>
+
+          {/* Type selector */}
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => setAboutMediaType('video')}
+              className={cn(
+                "p-3 rounded-xl border font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer",
+                aboutMediaType === 'video'
+                  ? "border-[#1a4d2e] bg-[#1a4d2e]/10 text-[#1a4d2e] shadow-2xs"
+                  : "border-stone-200 bg-stone-50 text-stone-600 hover:bg-white"
+              )}
+            >
+              <Video className="h-4 w-4" />
+              <span>رابط مقطع فيديو (YouTube / Reels / TikTok)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setAboutMediaType('image')}
+              className={cn(
+                "p-3 rounded-xl border font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer",
+                aboutMediaType === 'image'
+                  ? "border-[#1a4d2e] bg-[#1a4d2e]/10 text-[#1a4d2e] shadow-2xs"
+                  : "border-stone-200 bg-stone-50 text-stone-600 hover:bg-white"
+              )}
+            >
+              <ImageIcon className="h-4 w-4" />
+              <span>رفع صورة تعريفية مميزة</span>
+            </button>
+          </div>
+
+          {/* Video Input */}
+          {aboutMediaType === 'video' && (
+            <div className="space-y-2 bg-stone-50 p-4 rounded-xl border border-stone-200">
+              <label className="block text-xs font-black text-stone-800">
+                رابط مقطع الفيديو
+              </label>
+              <div className="relative">
+                <input
+                  type="url"
+                  dir="ltr"
+                  value={aboutMediaUrl}
+                  onChange={e => setAboutMediaUrl(e.target.value)}
+                  placeholder="https://www.youtube.com/watch?v=... أو https://www.instagram.com/reel/..."
+                  className="w-full bg-white border border-stone-300 rounded-xl px-3.5 py-2.5 pl-9 text-xs text-left font-mono text-stone-900 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]/20 focus:border-[#1a4d2e]"
+                />
+                <Video className="h-4 w-4 text-stone-400 absolute top-3 left-3 pointer-events-none" />
+              </div>
+              <p className="text-[11px] text-stone-500 flex items-center gap-1.5">
+                <HelpCircle className="h-3.5 w-3.5 text-[#1a4d2e]" />
+                <span>يدعم يوتيوب، شورتس، ريلز إنستغرام، فيسبوك وتيك توك، أو ملفات الفيديو المباشرة.</span>
+              </p>
+
+              {aboutMediaUrl && (
+                <div className="mt-3 pt-3 border-t border-stone-200">
+                  <div className="text-[11px] font-bold text-stone-600 mb-1.5">معاينة مشغل الفيديو لقسم (عن المحل):</div>
+                  <MediaRenderer type="video" url={aboutMediaUrl} aspectRatio="video" />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Image Uploader */}
+          {aboutMediaType === 'image' && (
+            <div className="space-y-2 bg-stone-50 p-4 rounded-xl border border-stone-200">
+              <ImageUploader
+                label="اختر أو ارفع الصورة من جهازك"
+                folder="about_media"
+                value={aboutMediaUrl}
+                onChange={(url) => setAboutMediaUrl(url)}
+                aspectRatio="cover"
+                placeholder="اضغط لرفع صورة لقسم عن المحل"
+              />
+              {aboutMediaUrl && (
+                <div className="mt-3 pt-3 border-t border-stone-200">
+                  <div className="text-[11px] font-bold text-stone-600 mb-1.5">معاينة الصورة:</div>
+                  <MediaRenderer type="image" url={aboutMediaUrl} aspectRatio="video" />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Caption Input */}
+          <div>
+            <label className="block text-xs font-black text-stone-700 mb-1">
+              عنوان أو تعليق مصاحب للميديا <span className="text-stone-400 font-normal">(اختياري)</span>
+            </label>
+            <input
+              type="text"
+              value={aboutMediaCaption}
+              onChange={e => setAboutMediaCaption(e.target.value)}
+              placeholder="مثال: جولة تعريفية داخل أروقة المحل، أو لمحة عن خدماتنا"
+              className="w-full bg-[#fdfcfb] border border-stone-200 rounded-xl px-3.5 py-2 text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]/20"
+            />
+          </div>
+
+          {/* Clear Media Option if set */}
+          {aboutMediaUrl && (
+            <div className="flex justify-end pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setAboutMediaUrl('');
+                  setAboutMediaCaption('');
+                }}
+                className="text-xs font-bold text-rose-600 hover:text-rose-700 flex items-center gap-1 cursor-pointer"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>إزالة الميديا من قسم عن المحل</span>
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* 5.6 VIP Interactive Welcome Popup Shortcut (If VIP) */}
+        {vipInfo.isVip && (
+          <div className="bg-gradient-to-br from-amber-50 to-amber-100/50 border border-amber-300/80 rounded-2xl p-5 shadow-2xs space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shadow-xs">
+                  <Crown className="h-4 w-4 fill-amber-200" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-black text-stone-900">النافذة المنبثقة الترحيبية (VIP)</h4>
+                  <p className="text-xs text-stone-600">اعرض صورة بوستر أو فيديو ترحيبي يظهر تلقائياً للزوار عند فتح صفحة محلك</p>
+                </div>
+              </div>
+              <span className="text-[10px] font-black bg-amber-200 text-amber-900 px-2.5 py-1 rounded-full">
+                👑 ميزة VIP
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t border-amber-200/60">
+              <div className="text-xs font-bold text-stone-700">
+                حالة النافذة: {business.vipPopup?.enabled ? <span className="text-emerald-700 font-black">مفعلة 🟢</span> : <span className="text-stone-500">معطلة ⚪</span>}
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsVipPopupManagerOpen(true)}
+                className="inline-flex items-center gap-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black text-xs px-4 py-2 rounded-xl shadow-xs transition-all cursor-pointer"
+              >
+                <Sparkles className="h-3.5 w-3.5 text-amber-200" />
+                <span>إدارة وتعديل النافذة المنبثقة</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* 6. Live Working Hours Editor */}
         <WorkingHoursEditor
           workingHours={workingHours}
@@ -679,6 +880,17 @@ export function StoreEditForm({
             </div>
           </div>
         </div>
+      )}
+      {/* VIP Popup Manager Modal */}
+      {isVipPopupManagerOpen && (
+        <VipPopupManagerModal
+          business={business}
+          isOpen={isVipPopupManagerOpen}
+          onClose={() => setIsVipPopupManagerOpen(false)}
+          onUpdated={(newPopup) => {
+            business.vipPopup = newPopup;
+          }}
+        />
       )}
     </>
   );

@@ -160,7 +160,7 @@ export function BannersManager({ showToast }: BannersManagerProps) {
             businessId,
             businessName: found.name,
             category: found.category,
-            rating: found.rating || 5,
+            rating: (found.rating && found.rating > 0) ? found.rating : undefined,
             address: found.address || ''
           };
         }
@@ -226,7 +226,7 @@ export function BannersManager({ showToast }: BannersManagerProps) {
           businessId: biz.id,
           businessName: biz.name,
           category: biz.category,
-          rating: biz.rating || 4.5,
+          rating: (biz.rating && biz.rating > 0) ? biz.rating : undefined,
           address: biz.address,
           active: true,
           createdAt: Date.now()

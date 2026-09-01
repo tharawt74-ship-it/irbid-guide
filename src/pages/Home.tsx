@@ -3,7 +3,7 @@ import { collection, query, orderBy, getDocs } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { Business, HomepageBanner } from '../types';
-import { Link, useSearchParams } from 'react-router';
+import { Link, useSearchParams, useNavigate } from 'react-router';
 import { getAppConfig } from '../lib/demoDataHelper';
 import { BusinessCard } from '../components/BusinessCard';
 import { BannerSlideshow } from '../components/BannerSlideshow';
@@ -14,10 +14,9 @@ import { getLiveWorkingStatus } from '../lib/businessHoursHelper';
 import { DynamicSmartSuggestions } from '../components/DynamicSmartSuggestions';
 import { SEO } from '../components/common/SEO';
 import { CategoriesModal } from '../components/CategoriesModal';
-import { IrbidInteractiveMap } from '../components/IrbidInteractiveMap';
 import { getCachedBusinesses, setCachedBusinesses, getCachedBanners, setCachedBanners } from '../lib/dataCache';
 import { 
-  MapPin, Star, Search, Store, Filter,
+  MapPin, Star, Search, Store, Filter, X,
   LayoutGrid, UtensilsCrossed, Coffee, CakeSlice, 
   BookOpen, Building2, Landmark, HeartPulse, 
   Shirt, Smartphone, ShoppingCart, Scissors, Dumbbell, Car, Sparkles,
@@ -139,6 +138,7 @@ export const SYNONYM_MAP: { [key: string]: string[] } = {
 
 export function Home() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const { userFavorites } = useAuth();
   const [businesses, setBusinesses] = useState<Business[]>(() => getCachedBusinesses() || []);
   const [banners, setBanners] = useState<HomepageBanner[]>(() => getCachedBanners() || []);
@@ -151,7 +151,7 @@ export function Home() {
   const [error, setError] = useState('');
   const [openNowFilter, setOpenNowFilter] = useState(false);
   const [favoritesOnly, setFavoritesOnly] = useState(false);
-  const [activeTab, setActiveTab] = useState<'all' | 'featured' | 'popular' | 'recent' | 'map'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'featured' | 'popular' | 'recent'>('all');
   const [isCategoriesModalOpen, setIsCategoriesModalOpen] = useState(false);
 
   useEffect(() => {
@@ -487,29 +487,48 @@ export function Home() {
           </p>
 
           {/* Glassmorphism Search Bar */}
-          <div className="mt-6 md:mt-10 w-full max-w-2xl mx-auto relative group">
-            <div className="absolute inset-y-0 right-0 pr-4 md:pr-6 flex items-center pointer-events-none text-white/60 group-focus-within:text-amber-300 transition-colors z-20">
-              <Search className="h-5 w-5 md:h-7 md:w-7 drop-shadow-md" />
-            </div>
+          <form 
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (searchTerm.trim()) {
+                navigate(`/search?q=${encodeURIComponent(searchTerm.trim())}`);
+              }
+            }}
+            className="mt-6 md:mt-10 w-full max-w-2xl mx-auto relative group"
+          >
             <input
               type="text"
-              className="block w-full pr-12 pl-10 py-3.5 md:pr-16 md:pl-6 md:py-5 border border-white/20 rounded-2xl md:rounded-[28px] leading-5 bg-white/10 backdrop-blur-xl text-white placeholder-white/70 focus:outline-none focus:ring-4 focus:ring-amber-500/30 focus:border-amber-400/50 focus:bg-white/15 shadow-[0_8px_32px_rgba(0,0,0,0.2)] font-bold text-sm md:text-lg transition-all duration-300"
+              className="block w-full pr-6 pl-24 py-3.5 md:pr-8 md:pl-28 md:py-5 border border-white/20 rounded-2xl md:rounded-[28px] leading-5 bg-white/10 backdrop-blur-xl text-white placeholder-white/70 focus:outline-none focus:ring-4 focus:ring-amber-500/30 focus:border-amber-400/50 focus:bg-white/15 shadow-[0_8px_32px_rgba(0,0,0,0.2)] font-bold text-sm md:text-lg transition-all duration-300"
               placeholder="عن ماذا تبحث؟ (مثال: شاورما، ملابس)..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
-            {searchTerm && (
-              <button 
-                onClick={() => setSearchTerm('')}
-                className="absolute left-3 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/30 text-white rounded-full p-1.5 md:p-2 transition-colors cursor-pointer text-xs md:text-sm z-20"
+            <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1 z-20">
+              {searchTerm && (
+                <button 
+                  type="button"
+                  onClick={() => setSearchTerm('')}
+                  className="hover:bg-white/10 text-white/80 hover:text-white rounded-full p-2 transition-colors cursor-pointer"
+                  title="مسح"
+                >
+                  <X className="h-4 w-4 md:h-5 md:w-5" />
+                </button>
+              )}
+              <button
+                type="submit"
+                className="hover:bg-white/10 text-white/90 hover:text-white p-2 md:p-2.5 rounded-full transition-all active:scale-95 cursor-pointer flex items-center justify-center"
+                title="بحث"
               >
-                ✕
+                <Search className="h-5 w-5 md:h-6 md:w-6 drop-shadow-sm" />
               </button>
-            )}
-          </div>
+            </div>
+          </form>
 
           {/* Dynamic Smart Suggestions Deck with continuous auto-rotation & animation */}
-          <DynamicSmartSuggestions onSelectSuggestion={(queryText) => setSearchTerm(queryText)} />
+          <DynamicSmartSuggestions onSelectSuggestion={(queryText) => {
+            setSearchTerm(queryText);
+            navigate(`/search?q=${encodeURIComponent(queryText)}`);
+          }} />
 
           {/* Intelligent Search Feedback Badge */}
           {searchTerm && (
@@ -567,8 +586,16 @@ export function Home() {
         </div>
       </div>
 
-      {!isFiltering && banners.length > 0 && (
-        <BannerSlideshow banners={banners} />
+      {banners.length > 0 && (
+        <BannerSlideshow 
+          banners={
+            categoryFilter
+              ? (banners.filter(b => b.category && (b.category.toLowerCase().includes(categoryFilter.toLowerCase()) || categoryFilter.toLowerCase().includes(b.category.toLowerCase()))).length > 0
+                  ? banners.filter(b => b.category && (b.category.toLowerCase().includes(categoryFilter.toLowerCase()) || categoryFilter.toLowerCase().includes(b.category.toLowerCase())))
+                  : banners)
+              : banners
+          } 
+        />
       )}
 
       {mainCategories.length > 0 && (
@@ -836,29 +863,11 @@ export function Home() {
                 <Clock className={`h-3.5 w-3.5 md:h-3.5 md:w-3.5 ${activeTab === 'recent' ? 'text-white' : 'text-blue-500'}`} />
                 <span>المضافة حديثاً</span>
               </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveTab('map')}
-                className={`snap-start shrink-0 flex items-center gap-1.5 px-5 py-2.5 sm:px-4 sm:py-2 rounded-xl sm:rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap border sm:border-transparent ${
-                  activeTab === 'map'
-                    ? 'bg-sky-600 text-white border-sky-600 sm:shadow-xs'
-                    : 'bg-white sm:bg-transparent border-[#e5e1da] text-stone-600 hover:text-sky-600'
-                }`}
-              >
-                <span className="text-sm">🗺️</span>
-                <span>خريطة إربد التفاعلية (VIP)</span>
-              </button>
             </div>
           </div>
 
           {/* Unified Business Grid */}
-          {activeTab === 'map' ? (
-            <IrbidInteractiveMap 
-              businesses={businesses} 
-              onClose={() => setActiveTab('all')} 
-            />
-          ) : displayedBusinesses.length > 0 ? (
+          {displayedBusinesses.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {displayedBusinesses.map((business) => (
                 <BusinessCard key={business.id} business={business} />

@@ -23,9 +23,13 @@ import { DigitalMenuManagerModal } from '../components/vip/DigitalMenuManagerMod
 import { VipAnalyticsDashboard } from '../components/vip/VipAnalyticsDashboard';
 import { VipAnalyticsModal } from '../components/vip/VipAnalyticsModal';
 import { VipUpgradeRequestModal } from '../components/vip/VipUpgradeRequestModal';
+import { VipWelcomePopupModal } from '../components/vip/VipWelcomePopupModal';
+import { VipPopupManagerModal } from '../components/vip/VipPopupManagerModal';
+import { MediaRenderer } from '../components/common/MediaRenderer';
 import { ImageUploader } from '../components/ui/ImageUploader';
 import { VerifiedBadge } from '../components/vip/VerifiedBadge';
 import { getBusinessVipStatus } from '../lib/vipHelper';
+import { compressAndSanitizeFirestorePayload } from '../lib/firestoreHelper';
 import { getWhatsAppUrl, formatBusinessWhatsAppMessage } from '../lib/contactHelper';
 import { ShareButton } from '../components/ShareButton';
 import { getCachedBusinessDetail, setCachedBusinessDetail } from '../lib/dataCache';
@@ -34,6 +38,7 @@ import { DEMO_SEED_DATA } from '../lib/demoDataHelper';
 import { trackBusinessInteraction } from '../lib/analyticsTracker';
 import { SEO } from '../components/common/SEO';
 import { isBotSubmission, checkSubmissionRateLimit, recordSubmissionTime, sanitizeInput, executeReCaptcha } from '../lib/security';
+import { WhatsApp3DIcon, Phone3DIcon } from '../components/common/PremiumContactButtons';
 
 function getLiveWorkingStatus(hours?: WorkingHours) {
   if (!hours || (!hours.isOpen24Hours && !hours.openTime && !hours.closeTime)) {
@@ -240,6 +245,8 @@ export function BusinessDetail() {
   const [isMenuManagerOpen, setIsMenuManagerOpen] = useState(false);
   const [isAnalyticsModalOpen, setIsAnalyticsModalOpen] = useState(false);
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
+  const [isVipWelcomePopupOpen, setIsVipWelcomePopupOpen] = useState(false);
+  const [isVipPopupManagerOpen, setIsVipPopupManagerOpen] = useState(false);
   const [copiedHandle, setCopiedHandle] = useState(false);
   const [hpValue, setHpValue] = useState('');
   const [familyBranches, setFamilyBranches] = useState<Business[]>([]);
@@ -320,6 +327,25 @@ export function BusinessDetail() {
           });
           fetchedReviews.sort((a, b) => b.createdAt - a.createdAt);
           setReviews(fetchedReviews);
+
+          // Real-time synchronization of ratings: ensure database document has 100% accurate rating matching real reviews
+          if (!bizData.isDemo) {
+            const valid = fetchedReviews.filter(r => r && typeof r.rating === 'number' && !isNaN(r.rating) && r.rating > 0);
+            if (valid.length === 0) {
+              // If no valid reviews exist, make sure business rating is clean 0
+              if (bizData.rating !== 0 || (bizData.reviewCount && bizData.reviewCount > 0)) {
+                updateDoc(doc(db, 'businesses', actualId), { rating: 0, reviewCount: 0 }).catch(() => {});
+                setBusiness(prev => prev ? { ...prev, rating: 0, reviewCount: 0 } : null);
+              }
+            } else {
+              const sum = valid.reduce((acc, curr) => acc + curr.rating, 0);
+              const realAvg = Number((sum / valid.length).toFixed(1));
+              if (bizData.rating !== realAvg || bizData.reviewCount !== valid.length) {
+                updateDoc(doc(db, 'businesses', actualId), { rating: realAvg, reviewCount: valid.length }).catch(() => {});
+                setBusiness(prev => prev ? { ...prev, rating: realAvg, reviewCount: valid.length } : null);
+              }
+            }
+          }
 
           const loadedOffers: any[] = [];
           offersSnap1.forEach(oDoc => loadedOffers.push({ id: oDoc.id, ...oDoc.data() }));
@@ -512,6 +538,41 @@ export function BusinessDetail() {
     }
   }, [business?.id, vipInfo.isVip, activeTab]);
 
+  // Automatic VIP Welcome Popup Trigger for visitors (Displays 1 out of every 5 visits: 1st, 6th, 11th, etc.)
+  useEffect(() => {
+    if (!business) return;
+    const popupConfig = business.vipPopup;
+    if (popupConfig?.enabled && (popupConfig.videoUrl || popupConfig.imageUrl || popupConfig.title || popupConfig.description)) {
+      const visitsKey = `welcome_popup_visit_count_${business.id}`;
+
+      try {
+        let visits = 0;
+        const storedVisits = localStorage.getItem(visitsKey);
+        visits = storedVisits ? parseInt(storedVisits, 10) : 0;
+
+        // Increment visit count on every page mount
+        const currentVisit = visits + 1;
+        localStorage.setItem(visitsKey, currentVisit.toString());
+
+        // Show only on the 1st, 6th, 11th, 16th, etc. visits (i.e. once every 5 visits)
+        const shouldShowThisVisit = (currentVisit - 1) % 5 === 0;
+
+        if (shouldShowThisVisit) {
+          const timer = setTimeout(() => {
+            setIsVipWelcomePopupOpen(true);
+          }, 600);
+          return () => clearTimeout(timer);
+        }
+      } catch (err) {
+        // Fallback in case storage options are disabled/restricted
+        const timer = setTimeout(() => {
+          setIsVipWelcomePopupOpen(true);
+        }, 600);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [business?.id, business?.vipPopup?.enabled, business?.vipPopup?.videoUrl, business?.vipPopup?.imageUrl, business?.vipPopup?.title, business?.vipPopup?.description]);
+
   const isOwner = Boolean(
     currentUser && business && (
       business.userId === currentUser.uid ||
@@ -566,7 +627,8 @@ export function BusinessDetail() {
         workingHours: editForm.workingHours || null,
       };
 
-      await updateDoc(docRef, updatedFields);
+      const sanitizedPayload = await compressAndSanitizeFirestorePayload(updatedFields, true);
+      await updateDoc(docRef, sanitizedPayload);
 
       setBusiness({
         ...business,
@@ -683,7 +745,8 @@ export function BusinessDetail() {
       const currentReels = business.reels || [];
       const updatedReels = [newReel, ...currentReels];
 
-      await updateDoc(docRef, { reels: updatedReels });
+      const reelsPayload = await compressAndSanitizeFirestorePayload({ reels: updatedReels }, true);
+      await updateDoc(docRef, reelsPayload);
 
       setBusiness({
         ...business,
@@ -737,7 +800,8 @@ export function BusinessDetail() {
       const currentGallery = business.gallery || [];
       const updatedGallery = [newItem, ...currentGallery];
 
-      await updateDoc(docRef, { gallery: updatedGallery });
+      const galleryPayload = await compressAndSanitizeFirestorePayload({ gallery: updatedGallery }, true);
+      await updateDoc(docRef, galleryPayload);
 
       setBusiness({
         ...business,
@@ -1090,15 +1154,13 @@ export function BusinessDetail() {
   const { viewUrl: googleMapsUrl } = business ? getGoogleMapsActionUrls(business) : { viewUrl: '' };
   const embedMapUrl = business ? getGoogleMapsEmbedUrl(business) : '';
 
-  // Calculate actual site rating average
-  const validReviews = reviews.filter(r => r && typeof r.rating === 'number' && !isNaN(r.rating));
+  // Calculate actual site rating average strictly from verified reviews in database
+  const validReviews = reviews.filter(r => r && typeof r.rating === 'number' && !isNaN(r.rating) && r.rating > 0);
   let calculatedRating: string | null = null;
   if (validReviews.length > 0) {
     const sum = validReviews.reduce((acc, curr) => acc + curr.rating, 0);
     const avg = sum / validReviews.length;
     calculatedRating = isNaN(avg) ? null : avg.toFixed(1);
-  } else if (business?.rating && !isNaN(business.rating)) {
-    calculatedRating = business.rating.toFixed(1);
   }
 
   const renderSocialMediaButtons = (links?: Business['socialLinks']) => {
@@ -1421,21 +1483,34 @@ export function BusinessDetail() {
                       <span className="text-xs">التقييمات معطلة من صاحب المحل</span>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-2.5 bg-stone-50 px-4 py-2 rounded-xl text-[#2d2a26] font-bold border border-stone-100 shadow-3xs">
-                      <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center text-[#1a4d2e] font-black text-sm border border-emerald-100">
-                        <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                      </div>
-                      <div className="flex flex-col">
-                        <div className="flex items-center gap-1">
-                          <span className="text-base font-black leading-none text-stone-900">
-                            {calculatedRating || 'جديد'}
+                    calculatedRating ? (
+                      <div className="flex items-center gap-2.5 bg-stone-50 px-4 py-2 rounded-xl text-[#2d2a26] font-bold border border-stone-100 shadow-3xs">
+                        <div className="w-8 h-8 rounded-lg bg-yellow-50 flex items-center justify-center text-amber-700 font-black text-sm border border-yellow-100">
+                          <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                        </div>
+                        <div className="flex flex-col">
+                          <div className="flex items-center gap-1">
+                            <span className="text-base font-black leading-none text-stone-900">
+                              {calculatedRating}
+                            </span>
+                          </div>
+                          <span className="text-[10px] font-semibold text-stone-500 mt-0.5">
+                            تقييمات الموقع ({validReviews.length})
                           </span>
                         </div>
-                        <span className="text-[10px] font-semibold text-stone-500 mt-0.5">
-                          تقييمات الموقع ({reviews.length})
-                        </span>
                       </div>
-                    </div>
+                    ) : (
+                      <div className="flex items-center gap-2 bg-stone-50 px-3.5 py-2 rounded-xl text-[#2d2a26] font-bold border border-stone-100 shadow-3xs">
+                        <div className="flex flex-col text-right">
+                          <span className="text-xs font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100 w-fit">
+                            محل جديد 🌟
+                          </span>
+                          <span className="text-[10px] font-semibold text-stone-500 mt-0.5">
+                            لا توجد تقييمات مسجلة بعد
+                          </span>
+                        </div>
+                      </div>
+                    )
                   )}
                 </div>
               </div>
@@ -1502,6 +1577,18 @@ export function BusinessDetail() {
                         <span className={`h-1.5 w-1.5 rounded-full ${liveStatus.isOpen ? 'bg-emerald-500' : 'bg-red-500'} animate-pulse`}></span>
                         <span>{liveStatus.isOpen ? 'مفتوح الآن' : 'مغلق حالياً'}</span>
                       </span>
+
+                      {business.vipPopup?.enabled && (
+                        <button
+                          type="button"
+                          onClick={() => setIsVipWelcomePopupOpen(true)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 hover:from-amber-600 hover:to-amber-800 text-white rounded-xl text-xs font-black transition-all shadow-xs cursor-pointer border border-amber-300/40"
+                          title="انقر لمشاهدة الترحيب الخاص والعروض التفصيلية"
+                        >
+                          <Sparkles className="h-3.5 w-3.5 text-amber-200 fill-amber-200 animate-spin" style={{ animationDuration: '3s' }} />
+                          <span>{business.vipPopup.title ? `عرض خاص: ${business.vipPopup.title}` : 'عرض خاص من المحل 🎁'}</span>
+                        </button>
+                      )}
                     </div>
 
                     {/* Social Media Links in Hero Header */}
@@ -1524,15 +1611,22 @@ export function BusinessDetail() {
                         <span>التقييمات معطلة من صاحب المحل</span>
                       </p>
                     ) : (
-                      <div className="flex items-center gap-2">
-                        <div className="flex items-center gap-1 bg-yellow-50 px-2.5 py-1 rounded-lg border border-yellow-100 text-yellow-700 text-xs font-black">
-                          <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
-                          <span>{calculatedRating || 'جديد'}</span>
+                      calculatedRating ? (
+                        <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1 bg-yellow-50 px-2.5 py-1 rounded-lg border border-yellow-100 text-yellow-700 text-xs font-black">
+                            <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
+                            <span>{calculatedRating}</span>
+                          </div>
+                          <span className="text-[10px] font-semibold text-stone-500">
+                            تقييمات الموقع ({validReviews.length})
+                          </span>
                         </div>
-                        <span className="text-[10px] font-semibold text-stone-500">
-                          تقييمات الموقع ({reviews.length})
-                        </span>
-                      </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5 text-xs text-stone-500 font-bold">
+                          <span className="bg-emerald-50 text-emerald-800 text-[10px] font-black px-2 py-0.5 rounded border border-emerald-100">جديد</span>
+                          <span className="text-[10px] text-stone-400">لا توجد تقييمات بعد</span>
+                        </div>
+                      )
                     )}
                   </div>
                 </div>
@@ -1843,6 +1937,59 @@ export function BusinessDetail() {
                         {business.description || "لا يوجد وصف متوفر حالياً لهذا المحل."}
                       </div>
                     </div>
+
+                    {/* About Media (Video or Image for all accounts) */}
+                    {(() => {
+                      const rawUrl = (business.aboutMedia?.url || business.aboutVideoUrl || business.aboutImageUrl || '').trim();
+                      const rawType = business.aboutMedia?.type || (business.aboutVideoUrl ? 'video' : business.aboutImageUrl ? 'image' : null);
+                      const mediaCaption = business.aboutMedia?.caption;
+
+                      if (!rawUrl) return null;
+
+                      const isKnownVideo = rawUrl.includes('youtube') || 
+                        rawUrl.includes('youtu.be') || 
+                        rawUrl.includes('vimeo') || 
+                        rawUrl.includes('reel') || 
+                        rawUrl.includes('tiktok') || 
+                        rawUrl.includes('facebook') ||
+                        rawUrl.includes('drive.google.com') ||
+                        /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(rawUrl);
+
+                      const mediaType: 'video' | 'image' = rawType || (isKnownVideo ? 'video' : 'image');
+
+                      return (
+                        <div className="pt-5 border-t border-[#e5e1da]/60 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <h3 className="text-sm sm:text-base font-black text-stone-800 flex items-center gap-2">
+                              {mediaType === 'video' ? (
+                                <>
+                                  <Video className="h-4 w-4 text-[#1a4d2e]" />
+                                  <span>{mediaCaption || 'مقطع فيديو تعريفي عن المحل'}</span>
+                                </>
+                              ) : (
+                                <>
+                                  <ImageIcon className="h-4 w-4 text-[#1a4d2e]" />
+                                  <span>{mediaCaption || 'صورة تعريفية عن المحل'}</span>
+                                </>
+                              )}
+                            </h3>
+                            {mediaType === 'video' && (
+                              <span className="text-[11px] bg-[#1a4d2e]/10 text-[#1a4d2e] font-bold px-2.5 py-0.5 rounded-md">
+                                مشغل فيديو تفاعلي
+                              </span>
+                            )}
+                          </div>
+
+                          <MediaRenderer
+                            type={mediaType}
+                            url={rawUrl}
+                            caption={undefined}
+                            aspectRatio="video"
+                            className="w-full rounded-2xl overflow-hidden shadow-xs border border-stone-200/80"
+                          />
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
 
@@ -3016,12 +3163,22 @@ export function BusinessDetail() {
                     )}
                   </div>
 
+                  {vipInfo.isVip && (
+                    <button
+                      onClick={() => setIsVipPopupManagerOpen(true)}
+                      className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white py-2.5 px-4 rounded-xl font-bold text-xs transition-colors shadow-xs cursor-pointer"
+                    >
+                      <Sparkles className="h-4 w-4 text-amber-200" />
+                      <span>إدارة النافذة الترحيبية VIP (فيديو/صورة)</span>
+                    </button>
+                  )}
+
                   <button
                     onClick={handleOpenEditModal}
-                    className="w-full flex items-center justify-center gap-2 bg-amber-700 hover:bg-amber-800 text-white py-2.5 px-4 rounded-xl font-bold text-xs transition-colors shadow-xs"
+                    className="w-full flex items-center justify-center gap-2 bg-stone-800 hover:bg-stone-900 text-white py-2.5 px-4 rounded-xl font-bold text-xs transition-colors shadow-xs cursor-pointer"
                   >
                     <Edit3 className="h-4 w-4" />
-                    <span>تعديل المحل وإعدادات التقييمات</span>
+                    <span>تعديل المحل والميديا والتقييمات</span>
                   </button>
                 </div>
               )}
@@ -3076,16 +3233,16 @@ export function BusinessDetail() {
                       onClick={() => { if (business?.id) trackBusinessInteraction(business.id, 'whatsapp'); }}
                       className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-3 px-4 rounded-xl font-bold text-sm transition-colors shadow-xs cursor-pointer"
                     >
-                      <MessageSquare className="h-4 w-4" />
+                      <WhatsApp3DIcon className="h-5 w-5 text-white" />
                       <span>واتساب مباشر بضغطة زر</span>
                     </a>
 
                     <a
                       href={`tel:${business.phone}`}
                       onClick={() => { if (business?.id) trackBusinessInteraction(business.id, 'call'); }}
-                      className="w-full flex items-center justify-center gap-2 bg-[#1a4d2e] hover:bg-[#133b22] text-white py-3 px-4 rounded-xl font-bold text-sm transition-colors shadow-xs"
+                      className="w-full flex items-center justify-center gap-2 bg-[#1a4d2e] hover:bg-[#133c23] text-white py-3 px-4 rounded-xl font-bold text-sm transition-colors shadow-xs"
                     >
-                      <Phone className="h-4 w-4" />
+                      <Phone3DIcon className="h-5 w-5 text-white" />
                       <span>اتصال موصول ({business.phone})</span>
                     </a>
                     
@@ -4039,10 +4196,10 @@ export function BusinessDetail() {
                 <a
                   href={`tel:${business.phone}`}
                   onClick={() => { if (business?.id) trackBusinessInteraction(business.id, 'call'); }}
-                  className="flex-1 flex flex-col items-center justify-center gap-1 bg-[#1a4d2e] text-white py-2 px-1 rounded-2xl font-bold text-xs shadow-xs active:scale-95 transition-transform min-w-0"
+                  className="flex-1 flex flex-col items-center justify-center gap-1 bg-[#1a4d2e] text-white py-2 px-1 rounded-xl font-bold text-xs shadow-xs active:scale-95 transition-transform min-w-0"
                 >
-                  <Phone className="h-4.5 w-4.5 text-white animate-bounce" />
-                  <span className="text-[10px] font-black whitespace-nowrap">اتصال</span>
+                  <Phone3DIcon className="h-4.5 w-4.5 text-white" />
+                  <span className="text-[10px] font-bold whitespace-nowrap">اتصال</span>
                 </a>
 
                 <a
@@ -4050,10 +4207,10 @@ export function BusinessDetail() {
                   target="_blank"
                   rel="noreferrer"
                   onClick={() => { if (business?.id) trackBusinessInteraction(business.id, 'whatsapp'); }}
-                  className="flex-1 flex flex-col items-center justify-center gap-1 bg-emerald-600 text-white py-2 px-1 rounded-2xl font-bold text-xs shadow-xs active:scale-95 transition-transform min-w-0"
+                  className="flex-1 flex flex-col items-center justify-center gap-1 bg-emerald-600 text-white py-2 px-1 rounded-xl font-bold text-xs shadow-xs active:scale-95 transition-transform min-w-0"
                 >
-                  <MessageSquare className="h-4.5 w-4.5 text-white" />
-                  <span className="text-[10px] font-black whitespace-nowrap">واتساب</span>
+                  <WhatsApp3DIcon className="h-4.5 w-4.5 text-white" />
+                  <span className="text-[10px] font-bold whitespace-nowrap">واتساب</span>
                 </a>
               </>
             ) : null}
@@ -4307,6 +4464,30 @@ export function BusinessDetail() {
             document.body
           )}
         </>
+      )}
+
+      {/* Visitor VIP Interactive Welcome Popup */}
+      {business && business.vipPopup?.enabled && (
+        <VipWelcomePopupModal
+          business={business}
+          popupConfig={business.vipPopup}
+          isOpen={isVipWelcomePopupOpen}
+          onClose={() => {
+            setIsVipWelcomePopupOpen(false);
+          }}
+        />
+      )}
+
+      {/* Owner VIP Popup Manager Modal */}
+      {business && isVipPopupManagerOpen && (
+        <VipPopupManagerModal
+          business={business}
+          isOpen={isVipPopupManagerOpen}
+          onClose={() => setIsVipPopupManagerOpen(false)}
+          onUpdated={(newPopup) => {
+            setBusiness(prev => prev ? { ...prev, vipPopup: newPopup } : null);
+          }}
+        />
       )}
     </div>
   );

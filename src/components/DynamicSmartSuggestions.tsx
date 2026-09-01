@@ -68,14 +68,14 @@ export const SUGGESTION_GROUPS: SuggestionGroup[] = [
   },
   {
     id: 'students',
-    categoryName: 'سكن وطلاب الجامعات',
+    categoryName: 'خدمات طلابية وجامعية',
     categoryIcon: '🎓',
     badgeBg: 'bg-indigo-500/20 text-indigo-300 border-indigo-400/30',
     suggestions: [
-      { text: 'سكن طالبات وطلاب 🎓', query: 'سكن', highlight: true },
-      { text: 'شقق مفروشة للإيجار 🏢', query: 'شقه' },
-      { text: 'قرطاسية وأدوات جامعية 📖', query: 'كتب' },
-      { text: 'خدمات طلابية وطباعة 📑', query: 'دراسه' },
+      { text: 'مكتبات وقرطاسية جامعية 📚', query: 'مكتبه', highlight: true },
+      { text: 'طباعة وتصوير أبحاث 📑', query: 'طباعة' },
+      { text: 'مراكز تدريب ولغات 🎓', query: 'تدريب' },
+      { text: 'كافيهات دراسة وهدوء ☕', query: 'دراسه' },
     ]
   },
   {

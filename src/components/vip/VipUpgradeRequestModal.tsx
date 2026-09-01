@@ -229,6 +229,25 @@ export function VipUpgradeRequestModal({
                   </div>
                 </div>
                 
+                <div className="space-y-1.5 pt-1 text-[11px] text-stone-700">
+                  <div className="flex items-center gap-1.5 font-bold">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                    <span>نافذة ترحيبية منبثقة تفاعلية 🎬 (صورة أو فيديو عند فتح صفحة المحل)</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 font-medium">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                    <span>كتالوج ومنيو رقمي تفاعلي كامل مع صور وأسعار</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 font-medium">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                    <span>لوحة تحليلات وإحصائيات دقيقة لتفاعل الزوار</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 font-medium">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                    <span>شارة التوثيق الذهبية ⭐ وأولوية الظهور في البحث</span>
+                  </div>
+                </div>
+
                 {isBranch && (
                   <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 text-[11px] p-2.5 rounded-xl font-bold">
                     🎉 تم تطبيق خصم 60% الخاص بالفروع الإضافية على هذا الاشتراك!

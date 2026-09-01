@@ -65,6 +65,7 @@ const DEFAULT_VIP_PLANS: VipPlanConfig[] = [
     badgeColor: 'bg-amber-100 text-amber-800 border-amber-300',
     features: [
       'شارة التوثيق الذهبية ⭐ لتمييز المحل',
+      'نافذة ترحيبية منبثقة تفاعلية 🎬 (صورة أو فيديو عند فتح صفحة المحل)',
       'كتالوج المنتجات والمنيو الرقمي التفاعلي بالكامل',
       'لوحة الإحصائيات الشاملة والتحليلات ونقرات الزوار',
       'توفير حسابات موظفين مشتركة 👥 لإدارة الفريق والمنيو',
@@ -166,7 +167,12 @@ export function SystemSettingsProvider({ children }: { children: React.ReactNode
         const snap = await getDoc(docRef);
         if (snap.exists()) {
           const data = snap.data();
-          if (data.categories) setCategories(data.categories);
+          if (data.categories) {
+            const sanitizedCats = (data.categories as CategoryConfig[]).filter(
+              c => !c.name.includes('عقارات وسكنات') && c.name !== '🏠 عقارات وسكنات'
+            );
+            setCategories(sanitizedCats.length > 0 ? sanitizedCats : categories);
+          }
           if (data.neighborhoods) setNeighborhoods(data.neighborhoods);
           if (data.vipPlans) setVipPlans(data.vipPlans);
           if (data.globalSettings) setGlobalSettings(data.globalSettings);

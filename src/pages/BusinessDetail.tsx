@@ -382,6 +382,27 @@ export function BusinessDetail() {
             setBusiness(demoBiz);
             setCachedBusinessDetail(id, demoBiz);
 
+            // Fetch real database reviews left on this demo business page
+            try {
+              const reviewsSnap = await getDocs(query(collection(db, 'reviews'), where('businessId', '==', id)));
+              const fetchedReviews: Review[] = [];
+              reviewsSnap.forEach((docSnapItem) => {
+                fetchedReviews.push({ id: docSnapItem.id, ...docSnapItem.data() } as Review);
+              });
+              fetchedReviews.sort((a, b) => b.createdAt - a.createdAt);
+              setReviews(fetchedReviews);
+              
+              if (fetchedReviews.length > 0) {
+                // Update review count based on real reviews in database
+                setBusiness(prev => prev ? {
+                  ...prev,
+                  reviewCount: fetchedReviews.length
+                } : null);
+              }
+            } catch (rErr) {
+              console.warn("Could not load database reviews for demo business:", rErr);
+            }
+
             // Populate demo jobs matching this business
             const demoJobs = (DEMO_SEED_DATA.jobs || [])
               .filter(j => j.company === demoFound.name)

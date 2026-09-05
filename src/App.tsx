@@ -18,6 +18,7 @@ import { Loader2 } from 'lucide-react';
 import { Home } from './pages/Home';
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
+import { Verify } from './pages/Verify';
 
 // Helper for resilient lazy component loading
 function lazyWithRetry<T extends React.ComponentType<any>>(
@@ -98,6 +99,7 @@ export default function App() {
                   <Route path="about" element={<AboutUs />} />
                   <Route path="login" element={<Login />} />
                   <Route path="register" element={<Register />} />
+                  <Route path="verify" element={<Verify />} />
                 </Route>
               </Routes>
             </Suspense>

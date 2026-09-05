@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router';
 import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, sendPasswordResetEmail, sendEmailVerification, signOut as firebaseSignOut } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
+import { sendDirectEmailVerification } from '../lib/sendCustomVerification';
 import { Store, KeyRound, Mail, CheckCircle2, ArrowRight, X, AlertCircle, Eye, EyeOff, ShieldCheck, RefreshCw, Copy, Check } from 'lucide-react';
 
 export function Login() {
@@ -169,16 +170,7 @@ export function Login() {
       // Log them in briefly to get user instance
       const credential = await signInWithEmailAndPassword(auth, unverifiedEmail, password);
       if (credential.user) {
-        const actionCodeSettings = {
-          url: window.location.origin + '/login?verified=true',
-          handleCodeInApp: false
-        };
-        try {
-          await sendEmailVerification(credential.user, actionCodeSettings);
-        } catch (verr: any) {
-          console.warn("Manual resend verification link with continue URL failed, trying fallback:", verr);
-          await sendEmailVerification(credential.user);
-        }
+        await sendDirectEmailVerification(credential.user, unverifiedEmail);
         setResendSuccess(true);
       }
       // Force sign out back

@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router';
 import { createUserWithEmailAndPassword, updateProfile, sendEmailVerification, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
+import { sendDirectEmailVerification } from '../lib/sendCustomVerification';
 import { Store, Eye, EyeOff, ShieldCheck, Mail, CheckCircle2, ArrowRight, RefreshCw, AlertCircle, Hourglass, Sparkles } from 'lucide-react';
 
 export function Register() {
@@ -100,25 +101,11 @@ export function Register() {
          displayName: name.trim()
       });
 
-      // Firebase Action Code Settings to Redirect Back
-      const actionCodeSettings = {
-        url: window.location.origin + '/login?verified=true',
-        handleCodeInApp: false
-      };
-
-      // Send Firebase Email Verification link with fallback for unlisted domains
+      // Send direct branded email verification with zero Firebase white screens
       try {
-        await sendEmailVerification(user, actionCodeSettings);
+        await sendDirectEmailVerification(user, cleanEmail);
       } catch (verr: any) {
-        console.warn("Firebase sendEmailVerification with continue URL failed, trying fallback without redirect:", verr);
-        try {
-          await sendEmailVerification(user);
-        } catch (fallbackErr: any) {
-          console.warn("Firebase sendEmailVerification fallback also failed:", fallbackErr);
-          if (fallbackErr?.code === 'auth/too-many-requests' || fallbackErr?.message?.includes('too-many-requests')) {
-            setError('تم إنشاء الحساب، ولكن تم إرسال عدة طلبات تأكيد مؤخراً. يرجى الانتظار دقيقة قبل طلب إعادة إرسال الرابط.');
-          }
-        }
+        console.warn("Direct verification email failed:", verr);
       }
 
       const isBootstrapAdmin = ['princessofx2344@gmail.com', 'admin@shoofiirbid.com', 'irbid.admin@gmail.com'].includes(cleanEmail);
@@ -170,16 +157,7 @@ export function Register() {
     setResendSuccess(false);
 
     try {
-      const actionCodeSettings = {
-        url: window.location.origin + '/login?verified=true',
-        handleCodeInApp: false
-      };
-      try {
-        await sendEmailVerification(auth.currentUser, actionCodeSettings);
-      } catch (verr: any) {
-        console.warn("Resend link with continue URL failed, trying fallback:", verr);
-        await sendEmailVerification(auth.currentUser);
-      }
+      await sendDirectEmailVerification(auth.currentUser, auth.currentUser.email || '');
       setResendSuccess(true);
       setTimeout(() => setResendSuccess(false), 5000);
     } catch (err: any) {

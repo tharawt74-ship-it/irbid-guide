@@ -3,7 +3,6 @@ import { Link, useNavigate, useLocation } from 'react-router';
 import { createUserWithEmailAndPassword, updateProfile, sendEmailVerification, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
-import { sendDirectEmailVerification } from '../lib/sendCustomVerification';
 import { Store, Eye, EyeOff, ShieldCheck, Mail, CheckCircle2, ArrowRight, RefreshCw, AlertCircle, Hourglass, Sparkles } from 'lucide-react';
 
 export function Register() {
@@ -101,11 +100,11 @@ export function Register() {
          displayName: name.trim()
       });
 
-      // Send direct branded email verification with zero Firebase white screens
+      // Send Firebase Email Verification link
       try {
-        await sendDirectEmailVerification(user, cleanEmail);
+        await sendEmailVerification(user);
       } catch (verr: any) {
-        console.warn("Direct verification email failed:", verr);
+        console.warn("Firebase sendEmailVerification failed:", verr);
       }
 
       const isBootstrapAdmin = ['princessofx2344@gmail.com', 'admin@shoofiirbid.com', 'irbid.admin@gmail.com'].includes(cleanEmail);
@@ -157,7 +156,7 @@ export function Register() {
     setResendSuccess(false);
 
     try {
-      await sendDirectEmailVerification(auth.currentUser, auth.currentUser.email || '');
+      await sendEmailVerification(auth.currentUser);
       setResendSuccess(true);
       setTimeout(() => setResendSuccess(false), 5000);
     } catch (err: any) {

@@ -3,7 +3,6 @@ import { Link, useNavigate, useLocation } from 'react-router';
 import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, sendPasswordResetEmail, sendEmailVerification, signOut as firebaseSignOut } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
-import { sendDirectEmailVerification } from '../lib/sendCustomVerification';
 import { Store, KeyRound, Mail, CheckCircle2, ArrowRight, X, AlertCircle, Eye, EyeOff, ShieldCheck, RefreshCw, Copy, Check } from 'lucide-react';
 
 export function Login() {
@@ -170,7 +169,7 @@ export function Login() {
       // Log them in briefly to get user instance
       const credential = await signInWithEmailAndPassword(auth, unverifiedEmail, password);
       if (credential.user) {
-        await sendDirectEmailVerification(credential.user, unverifiedEmail);
+        await sendEmailVerification(credential.user);
         setResendSuccess(true);
       }
       // Force sign out back

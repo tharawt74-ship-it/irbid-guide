@@ -39,6 +39,7 @@ import { trackBusinessInteraction } from '../lib/analyticsTracker';
 import { SEO } from '../components/common/SEO';
 import { isBotSubmission, checkSubmissionRateLimit, recordSubmissionTime, sanitizeInput, executeReCaptcha } from '../lib/security';
 import { WhatsApp3DIcon, Phone3DIcon } from '../components/common/PremiumContactButtons';
+import { WorkingHoursEditor } from '../components/ui/WorkingHoursEditor';
 
 function getLiveWorkingStatus(hours?: WorkingHours) {
   if (!hours || (!hours.isOpen24Hours && !hours.openTime && !hours.closeTime)) {
@@ -3622,104 +3623,11 @@ export function BusinessDetail() {
                       </div>
 
                       {/* Live Working Hours Subsection */}
-                      <div className="p-4 bg-stone-50 rounded-2xl border border-stone-200/80 space-y-3">
-                        <div className="flex items-center gap-2 font-bold text-stone-800 text-sm">
-                          <Clock className="h-4 w-4 text-[#1a4d2e]" />
-                          <span>ساعات وأيام العمل الحية</span>
-                        </div>
-                        
-                        <div className="grid grid-cols-2 gap-3">
-                          <label className="flex items-center gap-2 p-2.5 bg-white rounded-xl border border-stone-200 cursor-pointer hover:border-emerald-500 transition-colors">
-                            <input
-                              type="checkbox"
-                              checked={Boolean(editForm.workingHours?.isOpen24Hours)}
-                              onChange={(e) => setEditForm({
-                                ...editForm,
-                                workingHours: {
-                                  isOpen24Hours: e.target.checked,
-                                  openTime: e.target.checked ? "" : (editForm.workingHours?.openTime || "09:00"),
-                                  closeTime: e.target.checked ? "" : (editForm.workingHours?.closeTime || "23:00"),
-                                  days: editForm.workingHours?.days || "طوال أيام الأسبوع",
-                                  isCustomClosed: e.target.checked ? false : Boolean(editForm.workingHours?.isCustomClosed)
-                                }
-                              })}
-                              className="h-4 w-4 rounded text-[#1a4d2e] focus:ring-[#1a4d2e] border-stone-300"
-                            />
-                            <span className="text-xs font-bold text-stone-700">مفتوح 24 ساعة 🕒</span>
-                          </label>
-
-                          <label className="flex items-center gap-2 p-2.5 bg-white rounded-xl border border-stone-200 cursor-pointer hover:border-red-500 transition-colors">
-                            <input
-                              type="checkbox"
-                              checked={Boolean(editForm.workingHours?.isCustomClosed)}
-                              onChange={(e) => setEditForm({
-                                ...editForm,
-                                workingHours: {
-                                  isOpen24Hours: e.target.checked ? false : Boolean(editForm.workingHours?.isOpen24Hours),
-                                  openTime: editForm.workingHours?.openTime || "09:00",
-                                  closeTime: editForm.workingHours?.closeTime || "23:00",
-                                  days: editForm.workingHours?.days || "طوال أيام الأسبوع",
-                                  isCustomClosed: e.target.checked
-                                }
-                              })}
-                              className="h-4 w-4 rounded text-red-600 focus:ring-red-500 border-stone-300"
-                            />
-                            <span className="text-xs font-bold text-red-700">مغلق مؤقتاً 🔴</span>
-                          </label>
-                        </div>
-
-                        {!editForm.workingHours?.isOpen24Hours && !editForm.workingHours?.isCustomClosed && (
-                          <div className="grid grid-cols-2 gap-3 pt-1">
-                            <div>
-                              <label className="block text-[11px] font-bold text-stone-600 mb-1">وقت الفتح اليومي</label>
-                              <input
-                                type="time"
-                                value={editForm.workingHours?.openTime || "09:00"}
-                                onChange={(e) => setEditForm({
-                                  ...editForm,
-                                  workingHours: {
-                                    ...(editForm.workingHours || {}),
-                                    openTime: e.target.value
-                                  }
-                                })}
-                                className="w-full px-3 py-2 rounded-lg border border-[#e5e1da] focus:ring-2 focus:ring-[#1a4d2e]/20 focus:border-[#1a4d2e] outline-none text-xs font-medium"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-[11px] font-bold text-stone-600 mb-1">وقت الإغلاق اليومي</label>
-                              <input
-                                type="time"
-                                value={editForm.workingHours?.closeTime || "23:00"}
-                                onChange={(e) => setEditForm({
-                                  ...editForm,
-                                  workingHours: {
-                                    ...(editForm.workingHours || {}),
-                                    closeTime: e.target.value
-                                  }
-                                })}
-                                className="w-full px-3 py-2 rounded-lg border border-[#e5e1da] focus:ring-2 focus:ring-[#1a4d2e]/20 focus:border-[#1a4d2e] outline-none text-xs font-medium"
-                              />
-                            </div>
-                          </div>
-                        )}
-
-                        <div>
-                          <label className="block text-[11px] font-bold text-stone-600 mb-1">أيام العمل الأسبوعية</label>
-                          <input
-                            type="text"
-                            value={editForm.workingHours?.days || "طوال أيام الأسبوع"}
-                            onChange={(e) => setEditForm({
-                              ...editForm,
-                              workingHours: {
-                                ...(editForm.workingHours || {}),
-                                days: e.target.value
-                              }
-                            })}
-                            className="w-full px-3 py-2 rounded-lg border border-[#e5e1da] focus:ring-2 focus:ring-[#1a4d2e]/20 focus:border-[#1a4d2e] outline-none text-xs font-medium"
-                            placeholder="مثال: طوال أيام الأسبوع أو من السبت إلى الخميس"
-                          />
-                        </div>
-                      </div>
+                      <WorkingHoursEditor
+                        workingHours={editForm.workingHours || {}}
+                        onChange={(wh) => setEditForm(prev => ({ ...prev, workingHours: wh }))}
+                        showVacationToggle={true}
+                      />
                     </div>
 
                     {/* Review Visibility Privacy Options */}

@@ -98,7 +98,13 @@ export function StoreEditForm({
     openTime: business.workingHours?.openTime || '09:00',
     closeTime: business.workingHours?.closeTime || '23:00',
     days: business.workingHours?.days || 'طوال أيام الأسبوع',
+    selectedDays: business.workingHours?.selectedDays,
     isCustomClosed: business.workingHours?.isCustomClosed || false,
+    vacationReason: business.workingHours?.vacationReason || '',
+    isRamadanMode: business.workingHours?.isRamadanMode || false,
+    ramadanOpenTime: business.workingHours?.ramadanOpenTime || '14:00',
+    ramadanCloseTime: business.workingHours?.ramadanCloseTime || '02:30',
+    exceptionalNote: business.workingHours?.exceptionalNote || '',
   });
 
   // Social links
@@ -153,7 +159,13 @@ export function StoreEditForm({
       openTime: business.workingHours?.openTime || '09:00',
       closeTime: business.workingHours?.closeTime || '23:00',
       days: business.workingHours?.days || 'طوال أيام الأسبوع',
+      selectedDays: business.workingHours?.selectedDays,
       isCustomClosed: business.workingHours?.isCustomClosed || false,
+      vacationReason: business.workingHours?.vacationReason || '',
+      isRamadanMode: business.workingHours?.isRamadanMode || false,
+      ramadanOpenTime: business.workingHours?.ramadanOpenTime || '14:00',
+      ramadanCloseTime: business.workingHours?.ramadanCloseTime || '02:30',
+      exceptionalNote: business.workingHours?.exceptionalNote || '',
     });
 
     setSocialLinks(business.socialLinks || {});
@@ -686,6 +698,7 @@ export function StoreEditForm({
         <WorkingHoursEditor
           workingHours={workingHours}
           onChange={setWorkingHours}
+          showVacationToggle={true}
         />
 
         {/* 7. Official Social Links Editor */}

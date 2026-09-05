@@ -22,6 +22,17 @@ export class ErrorBoundary extends Component<Props, State> {
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('Uncaught error in React tree:', error, errorInfo);
+    // Auto-reload on chunk load error if not retried yet
+    const errorStr = error?.toString() || '';
+    if (
+      (errorStr.includes('Failed to fetch dynamically imported module') ||
+       errorStr.includes('Importing a module script failed') ||
+       errorStr.includes('Loading chunk')) &&
+      !sessionStorage.getItem('chunk_reload_attempted')
+    ) {
+      sessionStorage.setItem('chunk_reload_attempted', 'true');
+      window.location.reload();
+    }
   }
 
   public render() {

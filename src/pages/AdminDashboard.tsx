@@ -3,7 +3,8 @@ import {
   collection, 
   query, 
   where,
-  getDocs, 
+  getDocs,
+  getDoc, 
   updateDoc, 
   doc, 
   deleteDoc, 
@@ -1161,38 +1162,54 @@ export function AdminDashboard() {
         if (serviceType === 'homepage_banner') {
           try {
             if (isApproved) {
-              const biz = businesses.find(b => b.id === businessId);
-              if (biz) {
-                const bannerData: any = {
-                  type: reqDoc?.bannerType || 'business',
-                  title: reqDoc?.bannerTitle || biz.name,
-                  subtitle: reqDoc?.bannerSubtitle || biz.description || '',
-                  imageUrl: reqDoc?.bannerImageUrl || biz.imageUrl || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1200&q=80',
-                  businessId: biz.id,
-                  businessName: biz.name,
-                  category: biz.category || '',
-                  rating: (biz.rating && biz.rating > 0) ? biz.rating : undefined,
-                  address: biz.address || '',
-                  active: true,
-                  createdAt: reqDoc?.createdAt || Date.now(),
-                  marketingRequestId: reqId,
-                  bannerStartDate: startDate,
-                  bannerExpiryDate: expiryDate
-                };
-                if (reqDoc?.buttonText) bannerData.buttonText = reqDoc.buttonText;
-                if (reqDoc?.buttonLink) bannerData.buttonLink = reqDoc.buttonLink;
-                if (reqDoc?.badgeText) bannerData.badgeText = reqDoc.badgeText;
-                
-                await setDoc(doc(db, 'banners', `business_banner_${businessId}`), bannerData);
-                
-                // Redirect/switch active tab to banners list!
-                setTimeout(() => {
-                  setActiveTab('banners');
-                }, 100);
+              let biz = businesses.find(b => b.id === businessId);
+              if (!biz) {
+                // Fetch directly from Firestore if not found in local state
+                const bizDocSnap = await getDoc(doc(db, 'businesses', businessId));
+                if (bizDocSnap.exists()) {
+                  biz = { id: bizDocSnap.id, ...bizDocSnap.data() } as Business;
+                }
               }
+
+              const bannerTitle = reqDoc?.bannerTitle || biz?.name || 'إعلان مميز';
+              const bannerImageUrl = reqDoc?.bannerImageUrl || biz?.imageUrl || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1200&q=80';
+
+              const rawBannerData: any = {
+                type: reqDoc?.bannerType || 'business',
+                title: bannerTitle,
+                subtitle: reqDoc?.bannerSubtitle || biz?.description || '',
+                imageUrl: bannerImageUrl,
+                businessId: businessId,
+                businessName: biz?.name || bannerTitle,
+                category: biz?.category || '',
+                rating: (biz?.rating && biz.rating > 0) ? biz.rating : 0,
+                reviewCount: (typeof biz?.reviewCount === 'number') ? biz.reviewCount : 0,
+                address: biz?.address || '',
+                active: true,
+                createdAt: reqDoc?.createdAt || Date.now(),
+                marketingRequestId: reqId,
+                bannerStartDate: startDate,
+                bannerExpiryDate: expiryDate
+              };
+              if (reqDoc?.buttonText) rawBannerData.buttonText = reqDoc.buttonText;
+              if (reqDoc?.buttonLink) rawBannerData.buttonLink = reqDoc.buttonLink;
+              if (reqDoc?.badgeText) rawBannerData.badgeText = reqDoc.badgeText;
+              
+              const bannerData = Object.fromEntries(
+                Object.entries(rawBannerData).filter(([_, v]) => v !== undefined)
+              );
+
+              await setDoc(doc(db, 'banners', `business_banner_${businessId}`), bannerData);
+              invalidateCache();
+              
+              // Redirect/switch active tab to banners list!
+              setTimeout(() => {
+                setActiveTab('banners');
+              }, 100);
             } else {
               // Remove the banner on rejection or cancel
               await deleteDoc(doc(db, 'banners', `business_banner_${businessId}`));
+              invalidateCache();
             }
           } catch (bannerErr) {
             console.warn("Could not update banners collection:", bannerErr);

@@ -112,7 +112,13 @@ export function BusinessEditModal({
           openTime: business.workingHours.openTime || '09:00',
           closeTime: business.workingHours.closeTime || '23:00',
           days: business.workingHours.days || 'طوال أيام الأسبوع',
+          selectedDays: business.workingHours.selectedDays,
           isCustomClosed: !!business.workingHours.isCustomClosed,
+          vacationReason: business.workingHours.vacationReason || '',
+          isRamadanMode: business.workingHours.isRamadanMode || false,
+          ramadanOpenTime: business.workingHours.ramadanOpenTime || '14:00',
+          ramadanCloseTime: business.workingHours.ramadanCloseTime || '02:30',
+          exceptionalNote: business.workingHours.exceptionalNote || '',
         });
       } else {
         setWorkingHours({
@@ -121,6 +127,9 @@ export function BusinessEditModal({
           closeTime: '23:00',
           days: 'طوال أيام الأسبوع',
           isCustomClosed: false,
+          vacationReason: '',
+          isRamadanMode: false,
+          exceptionalNote: '',
         });
       }
       
@@ -377,6 +386,7 @@ export function BusinessEditModal({
           <WorkingHoursEditor
             workingHours={workingHours}
             onChange={setWorkingHours}
+            showVacationToggle={true}
           />
           <SocialLinksEditor
             socialLinks={socialLinks}

@@ -314,6 +314,7 @@ export function BusinessAddModal({
           <WorkingHoursEditor
             workingHours={workingHours}
             onChange={setWorkingHours}
+            showVacationToggle={false}
           />
 
           <SocialLinksEditor

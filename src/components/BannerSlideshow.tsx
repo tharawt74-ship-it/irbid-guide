@@ -101,14 +101,24 @@ export function BannerSlideshow({ banners }: BannerSlideshowProps) {
               )}
 
               <div className="flex items-center gap-2 sm:gap-3 md:gap-4 text-white/90 text-[8px] sm:text-[10px] md:text-sm font-bold">
-                {banner.rating !== undefined && (
-                  <div className="flex items-center gap-0.5 sm:gap-1">
+                {typeof banner.rating === 'number' && !isNaN(banner.rating) && banner.rating > 0 && typeof banner.reviewCount === 'number' && banner.reviewCount > 0 ? (
+                  <div className="flex items-center gap-1 bg-black/35 backdrop-blur-xs px-2 py-0.5 rounded-full border border-white/10 text-white">
+                    <Star className="h-2.5 w-2.5 sm:h-3.5 sm:w-3.5 md:h-4 md:w-4 fill-yellow-400 text-yellow-400" />
+                    <span>{banner.rating.toFixed(1)}</span>
+                    <span className="text-white/70 text-[8px] sm:text-[9px] md:text-xs">({banner.reviewCount})</span>
+                  </div>
+                ) : typeof banner.rating === 'number' && !isNaN(banner.rating) && banner.rating > 0 ? (
+                  <div className="flex items-center gap-1 bg-black/35 backdrop-blur-xs px-2 py-0.5 rounded-full border border-white/10 text-white">
                     <Star className="h-2.5 w-2.5 sm:h-3.5 sm:w-3.5 md:h-4 md:w-4 fill-yellow-400 text-yellow-400" />
                     <span>{banner.rating.toFixed(1)}</span>
                   </div>
+                ) : (
+                  <span className="bg-white/20 backdrop-blur-xs text-white text-[8px] sm:text-[9px] md:text-xs font-black px-2 py-0.5 rounded-full">
+                    جديد
+                  </span>
                 )}
                 {banner.address && (
-                  <div className="flex items-center gap-0.5 sm:gap-1">
+                  <div className="flex items-center gap-0.5 sm:gap-1 bg-black/35 backdrop-blur-xs px-2 py-0.5 rounded-full border border-white/10">
                     <MapPin className="h-2.5 w-2.5 sm:h-3.5 sm:w-3.5 md:h-4 md:w-4 text-emerald-400" />
                     <span className="truncate max-w-[100px] sm:max-w-[200px] md:max-w-xs">{banner.address}</span>
                   </div>

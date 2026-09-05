@@ -14,32 +14,50 @@ import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { SystemSettingsProvider } from './contexts/SystemSettingsContext';
 import { Loader2 } from 'lucide-react';
 
-// Eagerly load critical Home page for immediate initial paint
+// Eagerly load critical Home and Auth pages for instant loading
 import { Home } from './pages/Home';
+import { Login } from './pages/Login';
+import { Register } from './pages/Register';
 
-// Lazy load secondary pages to minimize initial bundle size on mobile
-const BusinessDetail = lazy(() => import('./pages/BusinessDetail').then(m => ({ default: m.BusinessDetail })));
-const Contact = lazy(() => import('./pages/Contact').then(m => ({ default: m.Contact })));
-const Login = lazy(() => import('./pages/Login').then(m => ({ default: m.Login })));
-const Register = lazy(() => import('./pages/Register').then(m => ({ default: m.Register })));
-const AdminDashboard = lazy(() => import('./pages/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
-const Profile = lazy(() => import('./pages/Profile').then(m => ({ default: m.Profile })));
-const ProfileSettings = lazy(() => import('./pages/ProfileSettings').then(m => ({ default: m.ProfileSettings })));
-const Offers = lazy(() => import('./pages/Offers').then(m => ({ default: m.Offers })));
-const Housing = lazy(() => import('./pages/Housing').then(m => ({ default: m.Housing })));
-const Tourism = lazy(() => import('./pages/Tourism').then(m => ({ default: m.Tourism })));
-const News = lazy(() => import('./pages/News').then(m => ({ default: m.News })));
-const Pricing = lazy(() => import('./pages/Pricing').then(m => ({ default: m.Pricing })));
-const Jobs = lazy(() => import('./pages/Jobs').then(m => ({ default: m.Jobs })));
-const NotificationsPage = lazy(() => import('./pages/NotificationsPage').then(m => ({ default: m.NotificationsPage })));
-const Messages = lazy(() => import('./pages/Messages').then(m => ({ default: m.Messages })));
-const PrayerTimes = lazy(() => import('./pages/PrayerTimes').then(m => ({ default: m.PrayerTimes })));
-const Transportation = lazy(() => import('./pages/Transportation').then(m => ({ default: m.Transportation })));
-const Terms = lazy(() => import('./pages/Terms').then(m => ({ default: m.Terms })));
-const Privacy = lazy(() => import('./pages/Privacy').then(m => ({ default: m.Privacy })));
-const AboutUs = lazy(() => import('./pages/AboutUs').then(m => ({ default: m.AboutUs })));
-const CartPage = lazy(() => import('./pages/CartPage').then(m => ({ default: m.CartPage })));
-const Search = lazy(() => import('./pages/Search').then(m => ({ default: m.Search })));
+// Helper for resilient lazy component loading
+function lazyWithRetry<T extends React.ComponentType<any>>(
+  factory: () => Promise<{ default: T }>
+) {
+  return lazy(async () => {
+    try {
+      return await factory();
+    } catch (error: any) {
+      const pageKey = 'lazy_retry_' + window.location.pathname;
+      if (!sessionStorage.getItem(pageKey)) {
+        sessionStorage.setItem(pageKey, 'true');
+        window.location.reload();
+      }
+      throw error;
+    }
+  });
+}
+
+// Lazy load secondary pages
+const BusinessDetail = lazyWithRetry(() => import('./pages/BusinessDetail').then(m => ({ default: m.BusinessDetail })));
+const Contact = lazyWithRetry(() => import('./pages/Contact').then(m => ({ default: m.Contact })));
+const AdminDashboard = lazyWithRetry(() => import('./pages/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
+const Profile = lazyWithRetry(() => import('./pages/Profile').then(m => ({ default: m.Profile })));
+const ProfileSettings = lazyWithRetry(() => import('./pages/ProfileSettings').then(m => ({ default: m.ProfileSettings })));
+const Offers = lazyWithRetry(() => import('./pages/Offers').then(m => ({ default: m.Offers })));
+const Housing = lazyWithRetry(() => import('./pages/Housing').then(m => ({ default: m.Housing })));
+const Tourism = lazyWithRetry(() => import('./pages/Tourism').then(m => ({ default: m.Tourism })));
+const News = lazyWithRetry(() => import('./pages/News').then(m => ({ default: m.News })));
+const Pricing = lazyWithRetry(() => import('./pages/Pricing').then(m => ({ default: m.Pricing })));
+const Jobs = lazyWithRetry(() => import('./pages/Jobs').then(m => ({ default: m.Jobs })));
+const NotificationsPage = lazyWithRetry(() => import('./pages/NotificationsPage').then(m => ({ default: m.NotificationsPage })));
+const Messages = lazyWithRetry(() => import('./pages/Messages').then(m => ({ default: m.Messages })));
+const PrayerTimes = lazyWithRetry(() => import('./pages/PrayerTimes').then(m => ({ default: m.PrayerTimes })));
+const Transportation = lazyWithRetry(() => import('./pages/Transportation').then(m => ({ default: m.Transportation })));
+const Terms = lazyWithRetry(() => import('./pages/Terms').then(m => ({ default: m.Terms })));
+const Privacy = lazyWithRetry(() => import('./pages/Privacy').then(m => ({ default: m.Privacy })));
+const AboutUs = lazyWithRetry(() => import('./pages/AboutUs').then(m => ({ default: m.AboutUs })));
+const CartPage = lazyWithRetry(() => import('./pages/CartPage').then(m => ({ default: m.CartPage })));
+const Search = lazyWithRetry(() => import('./pages/Search').then(m => ({ default: m.Search })));
 
 export default function App() {
   return (

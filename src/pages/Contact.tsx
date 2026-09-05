@@ -417,6 +417,7 @@ export function Contact() {
           <WorkingHoursEditor
             workingHours={workingHours}
             onChange={setWorkingHours}
+            showVacationToggle={false}
           />
 
           <SocialLinksEditor

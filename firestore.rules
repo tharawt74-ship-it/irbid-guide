@@ -131,7 +131,13 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // 13. Admin Registry
+    // 13. Homepage Banners Collection
+    match /banners/{bannerId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // 14. Admin Registry
     match /admins/{adminId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();

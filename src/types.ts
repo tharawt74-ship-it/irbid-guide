@@ -29,7 +29,9 @@ export interface WorkingHours {
   openTime?: string; // e.g. "09:00"
   closeTime?: string; // e.g. "23:00"
   days?: string; // e.g. "طوال أيام الأسبوع"
+  selectedDays?: string[]; // e.g. ['السبت', 'الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة']
   isCustomClosed?: boolean;
+  vacationReason?: string; // e.g. "إجازة عيد الأضحى المبارك" أو "أعمال صيانة وتجديد"
   isRamadanMode?: boolean;
   ramadanOpenTime?: string;
   ramadanCloseTime?: string;
@@ -293,6 +295,8 @@ export interface UserProfile {
   isMerchant?: boolean;
   merchantBusinessIds?: string[];
   supervisorPermissions?: SupervisorPermissions;
+  emailVerified?: boolean;
+  verificationCode?: string;
 }
 
 export interface NewsArticle {
@@ -612,6 +616,7 @@ export interface HomepageBanner {
   businessUsername?: string;
   category?: string; // Optional category badge
   rating?: number;
+  reviewCount?: number;
   address?: string;
   // For 'text_and_button' type:
   buttonText?: string;

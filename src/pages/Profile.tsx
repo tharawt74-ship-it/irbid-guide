@@ -6,12 +6,12 @@ import { collection, query, where, getDocs, doc, updateDoc, addDoc, deleteDoc, o
 import { Business, JobOffer, HousingItem } from '../types';
 import { Link, useLocation } from 'react-router';
 import { 
-  Store, User, Mail, Edit3, X, CheckCircle, EyeOff, MessageSquare, 
+  Store, User, Mail, Edit3, X, CheckCircle, Eye, EyeOff, MessageSquare, 
   Globe, Settings, TrendingUp, Bell, Image as ImageIcon, Smartphone, 
   Megaphone, Rocket, Check, Briefcase, Plus, Flame, MapPin, DollarSign, 
   Trash2, ExternalLink, Clock, Users, Award, Crown, BarChart3, UtensilsCrossed,
   Lock, Tag, Info, Sparkles, ChevronLeft, ChevronRight, Phone, MessageCircle, Star,
-  Home, Copy, ShieldCheck, Key, Heart, MessageSquareText, Building2, Shield, Printer, QrCode, Calendar
+  Home, Copy, ShieldCheck, Key, Heart, MessageSquareText, Building2, Shield, Printer, QrCode, Calendar, ArrowLeft
 } from 'lucide-react';
 import { JobFormModal } from '../components/jobs/JobFormModal';
 import { VipAnalyticsModal } from '../components/vip/VipAnalyticsModal';
@@ -203,7 +203,13 @@ export function Profile() {
         openTime: selectedBusiness.workingHours?.openTime || '09:00',
         closeTime: selectedBusiness.workingHours?.closeTime || '23:00',
         days: selectedBusiness.workingHours?.days || 'طوال أيام الأسبوع',
-        isCustomClosed: selectedBusiness.workingHours?.isCustomClosed || false
+        selectedDays: selectedBusiness.workingHours?.selectedDays,
+        isCustomClosed: selectedBusiness.workingHours?.isCustomClosed || false,
+        vacationReason: selectedBusiness.workingHours?.vacationReason || '',
+        isRamadanMode: selectedBusiness.workingHours?.isRamadanMode || false,
+        ramadanOpenTime: selectedBusiness.workingHours?.ramadanOpenTime || '14:00',
+        ramadanCloseTime: selectedBusiness.workingHours?.ramadanCloseTime || '02:30',
+        exceptionalNote: selectedBusiness.workingHours?.exceptionalNote || ''
       });
       setSocialLinks(selectedBusiness.socialLinks || {});
 
@@ -2304,83 +2310,95 @@ export function Profile() {
                             </div>
 
                             {/* 2. Banner Form Fields */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              {/* Title */}
+                            <div className="space-y-4">
+                              {/* Title & Subtitle */}
                               {bannerForm.bannerType !== 'image_only' && bannerForm.bannerType !== 'animated_image' && (
-                                <div className="space-y-1.5">
-                                  <label className="text-xs font-bold text-stone-700 block">العنوان الإعلاني الرئيسي:</label>
-                                  <input
-                                    type="text"
-                                    value={bannerForm.bannerTitle}
-                                    onChange={(e) => setBannerForm(prev => ({ ...prev, bannerTitle: e.target.value }))}
-                                    placeholder="مثال: خصم 50% على جميع المنتجات!"
-                                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]/20"
-                                  />
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div className="space-y-1.5">
+                                    <label className="text-xs font-black text-stone-700 block">العنوان الإعلاني الرئيسي: <span className="text-red-500">*</span></label>
+                                    <input
+                                      type="text"
+                                      required
+                                      value={bannerForm.bannerTitle}
+                                      onChange={(e) => setBannerForm(prev => ({ ...prev, bannerTitle: e.target.value }))}
+                                      placeholder="مثال: خصم 50% على جميع المنتجات!"
+                                      className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3.5 py-2.5 text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                                    />
+                                  </div>
+
+                                  <div className="space-y-1.5">
+                                    <label className="text-xs font-black text-stone-700 block">العنوان الفرعي / الوصف:</label>
+                                    <input
+                                      type="text"
+                                      value={bannerForm.bannerSubtitle}
+                                      onChange={(e) => setBannerForm(prev => ({ ...prev, bannerSubtitle: e.target.value }))}
+                                      placeholder="اكتب وصفاً جذاباً ومختصراً يلفت انتباه الزبائن..."
+                                      className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3.5 py-2.5 text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                                    />
+                                  </div>
                                 </div>
                               )}
 
-                              {/* Image URL */}
+                              {/* Image Uploader */}
                               <div className="space-y-1.5">
-                                <label className="text-xs font-bold text-stone-700 block">رابط صورة البانر (URL):</label>
-                                <input
-                                  type="text"
+                                <ImageUploader
+                                  label="صورة وتصميم البانر الإعلاني (رفع ملف من الجهاز) *"
+                                  folder="banners"
                                   value={bannerForm.bannerImageUrl}
-                                  onChange={(e) => setBannerForm(prev => ({ ...prev, bannerImageUrl: e.target.value }))}
-                                  placeholder="أدخل رابط صورة عالي الجودة أو ارفعها أولاً"
-                                  className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]/20"
+                                  onChange={(url) => setBannerForm(prev => ({ ...prev, bannerImageUrl: url }))}
+                                  aspectRatio="banner"
+                                  placeholder="اختر ملف صورة البانر من جهازك أو اسحب التصميم هنا"
                                 />
+                                {bannerForm.bannerType === 'animated_image' && (
+                                  <p className="text-[11px] text-purple-700 font-bold mt-1 bg-purple-50 p-2 rounded-lg border border-purple-200">
+                                    💡 يمكنك رفع صور بصيغة GIF أو APNG متحركة للحصول على تفاعل بصري متميز.
+                                  </p>
+                                )}
                               </div>
 
-                              {/* Subtitle */}
+                              {/* Button & Badge Details */}
                               {bannerForm.bannerType !== 'image_only' && bannerForm.bannerType !== 'animated_image' && (
-                                <div className="space-y-1.5 md:col-span-2 col-span-1">
-                                  <label className="text-xs font-bold text-stone-700 block">وصف الإعلان / النص الفرعي:</label>
-                                  <textarea
-                                    value={bannerForm.bannerSubtitle}
-                                    onChange={(e) => setBannerForm(prev => ({ ...prev, bannerSubtitle: e.target.value }))}
-                                    placeholder="اكتب وصفاً جذاباً ومختصراً يلفت انتباه الزبائن..."
-                                    rows={2.5}
-                                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]/20"
-                                  ></textarea>
+                                <div className="p-4 rounded-2xl border border-amber-200 bg-amber-50/20 space-y-3">
+                                  <div className="text-xs font-black text-amber-900 flex items-center gap-1.5">
+                                    <Sparkles className="h-4 w-4 text-amber-600" />
+                                    <span>خيارات الأزرار والشارات الترويجية:</span>
+                                  </div>
+                                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                    <div className="space-y-1">
+                                      <label className="text-[11px] font-bold text-stone-700 block">نص زر التفاعل:</label>
+                                      <input
+                                        type="text"
+                                        value={bannerForm.buttonText}
+                                        onChange={(e) => setBannerForm(prev => ({ ...prev, buttonText: e.target.value }))}
+                                        placeholder="مثال: اطلب الآن / اتصل بنا"
+                                        className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2 text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                                      />
+                                    </div>
+
+                                    <div className="space-y-1">
+                                      <label className="text-[11px] font-bold text-stone-700 block">رابط الزر:</label>
+                                      <input
+                                        type="text"
+                                        dir="ltr"
+                                        value={bannerForm.buttonLink}
+                                        onChange={(e) => setBannerForm(prev => ({ ...prev, buttonLink: e.target.value }))}
+                                        placeholder="رابط صفحة، واتساب، الخ"
+                                        className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2 text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e] text-left"
+                                      />
+                                    </div>
+
+                                    <div className="space-y-1">
+                                      <label className="text-[11px] font-bold text-stone-700 block">الشارة الإعلانية (Badge):</label>
+                                      <input
+                                        type="text"
+                                        value={bannerForm.badgeText}
+                                        onChange={(e) => setBannerForm(prev => ({ ...prev, badgeText: e.target.value }))}
+                                        placeholder="مثال: خصم خاص ⭐ / حصري"
+                                        className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2 text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                                      />
+                                    </div>
+                                  </div>
                                 </div>
-                              )}
-
-                              {/* Button details */}
-                              {bannerForm.bannerType !== 'image_only' && bannerForm.bannerType !== 'animated_image' && (
-                                <>
-                                  <div className="space-y-1.5">
-                                    <label className="text-xs font-bold text-stone-700 block">نص زر التفاعل:</label>
-                                    <input
-                                      type="text"
-                                      value={bannerForm.buttonText}
-                                      onChange={(e) => setBannerForm(prev => ({ ...prev, buttonText: e.target.value }))}
-                                      placeholder="مثال: اطلب الآن / اتصل بنا"
-                                      className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]/20"
-                                    />
-                                  </div>
-
-                                  <div className="space-y-1.5">
-                                    <label className="text-xs font-bold text-stone-700 block">رابط الزر (رابط صفحة، واتساب، الخ):</label>
-                                    <input
-                                      type="text"
-                                      value={bannerForm.buttonLink}
-                                      onChange={(e) => setBannerForm(prev => ({ ...prev, buttonLink: e.target.value }))}
-                                      placeholder="أدخل رابط توجيه الزبائن عند النقر على الزر"
-                                      className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]/20"
-                                    />
-                                  </div>
-
-                                  <div className="space-y-1.5">
-                                    <label className="text-xs font-bold text-stone-700 block">الشارة الإعلانية المرافقة (اختياري):</label>
-                                    <input
-                                      type="text"
-                                      value={bannerForm.badgeText}
-                                      onChange={(e) => setBannerForm(prev => ({ ...prev, badgeText: e.target.value }))}
-                                      placeholder="مثال: خصم خاص / الأكثر طلباً"
-                                      className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]/20"
-                                    />
-                                  </div>
-                                </>
                               )}
                             </div>
 
@@ -3525,99 +3543,143 @@ export function Profile() {
 
               {/* 3. Homepage Banner */}
               {activeMarketingModalType === 'homepage_banner' && (
-                <div className="space-y-4 pt-2 border-t border-stone-100">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold text-stone-700 mb-1.5 font-black">نوع تصميم البانر المطلوب:</label>
-                      <select
-                        value={marketingForm.bannerType}
-                        onChange={e => setMarketingForm(prev => ({ ...prev, bannerType: e.target.value as any }))}
-                        className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs font-bold text-stone-700"
-                      >
-                        <option value="business">ربط تلقائي بصفحة المحل وتفاصيله</option>
-                        <option value="text_and_button">نصوص مخصصة مع زر تفاعلي خارجي</option>
-                        <option value="image_only">صورة إعلانية ثابتة (بدون نصوص وزر)</option>
-                        <option value="animated_image">صورة متحركة GIF جذابة</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-stone-700 mb-1.5 font-black">الشارة الإعلانية الجاذبة:</label>
-                      <input
-                        type="text"
-                        value={marketingForm.badgeText}
-                        onChange={e => setMarketingForm(prev => ({ ...prev, badgeText: e.target.value }))}
-                        placeholder="مثال: موصى به ⭐ ، عرض الجمعة ✨"
-                        className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold text-stone-700 mb-1.5 font-black">العنوان الرئيسي للإعلان: <span className="text-red-500">*</span></label>
-                      <input
-                        type="text"
-                        required
-                        value={marketingForm.bannerTitle}
-                        onChange={e => setMarketingForm(prev => ({ ...prev, bannerTitle: e.target.value }))}
-                        className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-stone-700 mb-1.5 font-black">العنوان الفرعي أو الوصف: <span className="text-red-500">*</span></label>
-                      <input
-                        type="text"
-                        required
-                        value={marketingForm.bannerSubtitle}
-                        onChange={e => setMarketingForm(prev => ({ ...prev, bannerSubtitle: e.target.value }))}
-                        className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
-                      />
+                <div className="space-y-5 pt-2 border-t border-stone-100">
+                  {/* Banner Type Cards Selector */}
+                  <div className="space-y-2">
+                    <label className="block text-xs font-black text-stone-800">1. نوع وهيكل البانر الإعلاني المطلوب:</label>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                      {[
+                        { id: 'business', label: 'صفحة محل', desc: 'توجيه لصفحة المتجر وعرض التقييم' },
+                        { id: 'text_and_button', label: 'نصوص وأزرار', desc: 'نص مخصص مع زر تفاعلي وشارة' },
+                        { id: 'image_only', label: 'صورة فقط', desc: 'تصميم إعلاني كامل وثابت' },
+                        { id: 'animated_image', label: 'صورة متحركة GIF', desc: 'تصميم ديناميكي عالي الجاذبية' }
+                      ].map((opt) => (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => setMarketingForm(prev => ({ ...prev, bannerType: opt.id as any }))}
+                          className={`p-3 rounded-2xl border text-right transition-all cursor-pointer flex flex-col justify-between ${
+                            marketingForm.bannerType === opt.id 
+                              ? 'border-[#1a4d2e] bg-[#1a4d2e]/5 text-[#1a4d2e] ring-2 ring-[#1a4d2e]/10 font-black shadow-xs' 
+                              : 'border-stone-200 hover:border-stone-300 text-stone-700 bg-white'
+                          }`}
+                        >
+                          <div>
+                            <span className="text-xs block font-black">{opt.label}</span>
+                            <span className="text-[10px] block text-stone-500 font-medium mt-0.5">{opt.desc}</span>
+                          </div>
+                          <div className="mt-2 text-left">
+                            {marketingForm.bannerType === opt.id ? (
+                              <span className="text-[10px] font-black bg-[#1a4d2e] text-white px-2 py-0.5 rounded-full">محدد ✓</span>
+                            ) : (
+                              <span className="text-[10px] text-stone-400">تحديد</span>
+                            )}
+                          </div>
+                        </button>
+                      ))}
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold text-stone-700 mb-1.5 font-black">نص الزر التفاعلي:</label>
-                      <input
-                        type="text"
-                        value={marketingForm.buttonText}
-                        onChange={e => setMarketingForm(prev => ({ ...prev, buttonText: e.target.value }))}
-                        className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
-                      />
-                    </div>
+                  {/* Title & Subtitle (conditional) */}
+                  {marketingForm.bannerType !== 'image_only' && marketingForm.bannerType !== 'animated_image' && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-black text-stone-700 mb-1.5">العنوان الرئيسي للإعلان: <span className="text-red-500">*</span></label>
+                        <input
+                          type="text"
+                          required
+                          value={marketingForm.bannerTitle}
+                          onChange={e => setMarketingForm(prev => ({ ...prev, bannerTitle: e.target.value }))}
+                          placeholder="مثال: عروض نهاية الأسبوع الخاصة"
+                          className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3.5 py-2.5 text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                        />
+                      </div>
 
-                    <div>
-                      <label className="block text-xs font-bold text-stone-700 mb-1.5 font-black">رابط توجيه الزر التفاعلي:</label>
-                      <input
-                        type="text"
-                        value={marketingForm.buttonLink}
-                        onChange={e => setMarketingForm(prev => ({ ...prev, buttonLink: e.target.value }))}
-                        className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e] ltr"
-                      />
+                      <div>
+                        <label className="block text-xs font-black text-stone-700 mb-1.5">العنوان الفرعي أو الوصف:</label>
+                        <input
+                          type="text"
+                          value={marketingForm.bannerSubtitle}
+                          onChange={e => setMarketingForm(prev => ({ ...prev, bannerSubtitle: e.target.value }))}
+                          placeholder="مثال: خصم 25% على جميع الأصناف والوجبات"
+                          className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3.5 py-2.5 text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                        />
+                      </div>
                     </div>
-                  </div>
+                  )}
 
+                  {/* Image Uploader */}
                   <div>
                     <ImageUploader
-                      label="صورة الإعلان المصممة (رفع ملف من الجهاز):"
+                      label="2. صورة وتصميم الإعلان (رفع ملف من الجهاز أو رابط مباشر): *"
                       folder="banners"
                       value={marketingForm.bannerImageUrl}
                       onChange={(url) => setMarketingForm(prev => ({ ...prev, bannerImageUrl: url }))}
                       aspectRatio="banner"
                       placeholder="اختر ملف صورة الإعلان من جهازك أو اسحب التصميم هنا"
                     />
-                    <p className="text-[10px] text-stone-400 mt-1">تنبيه: يمكنك تزويدنا بالتصميم أيضاً لاحقاً عبر الواتساب في حال لم يكن الرابط جاهزاً.</p>
+                    {marketingForm.bannerType === 'animated_image' ? (
+                      <p className="text-[11px] text-purple-700 font-bold mt-1 bg-purple-50 p-2 rounded-lg border border-purple-200">
+                        💡 يمكنك رفع ملف بصيغة GIF أو APNG متحركة للحصول على تفاعل بصري رائع في أعلى الصفحة.
+                      </p>
+                    ) : (
+                      <p className="text-[10px] text-stone-400 mt-1">تنبيه: يمكنك تزويدنا بالتصميم أيضاً لاحقاً عبر الواتساب في حال لم يكن الملف جاهزاً الآن.</p>
+                    )}
                   </div>
 
+                  {/* Buttons & Badges Options (conditional) */}
+                  {marketingForm.bannerType === 'text_and_button' && (
+                    <div className="p-4 rounded-2xl border border-amber-200 bg-amber-50/20 space-y-3">
+                      <div className="text-xs font-black text-amber-900 flex items-center gap-1.5">
+                        <Sparkles className="h-4 w-4 text-amber-600" />
+                        <span>خيارات الأزرار والشارات الترويجية:</span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                          <label className="block text-[11px] font-bold text-stone-700 mb-1">نص الزر التفاعلي:</label>
+                          <input
+                            type="text"
+                            value={marketingForm.buttonText}
+                            onChange={e => setMarketingForm(prev => ({ ...prev, buttonText: e.target.value }))}
+                            placeholder="مثال: اطلب الآن / تواصل واتساب"
+                            className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2 text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-bold text-stone-700 mb-1">رابط توجيه الزر:</label>
+                          <input
+                            type="text"
+                            dir="ltr"
+                            value={marketingForm.buttonLink}
+                            onChange={e => setMarketingForm(prev => ({ ...prev, buttonLink: e.target.value }))}
+                            placeholder="https://wa.me/..."
+                            className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2 text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e] text-left"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-bold text-stone-700 mb-1">الشارة الترويجية (Badge):</label>
+                          <input
+                            type="text"
+                            value={marketingForm.badgeText}
+                            onChange={e => setMarketingForm(prev => ({ ...prev, badgeText: e.target.value }))}
+                            placeholder="مثال: موصى به ⭐ ، عرض الجمعة ✨"
+                            className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2 text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Duration & Scheduling */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-bold text-stone-700 mb-1.5 font-black">المدة الإعلانية المطلوبة لبقاء البانر:</label>
+                      <label className="block text-xs font-black text-stone-700 mb-1.5">المدة الإعلانية المطلوبة لبقاء البانر:</label>
                       <select
                         value={marketingForm.durationWeeks}
                         onChange={e => setMarketingForm(prev => ({ ...prev, durationWeeks: e.target.value }))}
-                        className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs font-bold text-stone-700"
+                        className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs font-bold text-stone-700 cursor-pointer"
                       >
                         <option value="أسبوع واحد">أسبوع واحد (25 دينار)</option>
                         <option value="أسبوعين">أسبوعين (45 دينار)</option>
@@ -3627,13 +3689,13 @@ export function Profile() {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-[#1a4d2e] mb-1.5 font-black">توقيت نشر البانر المطلوب:</label>
+                      <label className="block text-xs font-black text-[#1a4d2e] mb-1.5">توقيت نشر البانر المطلوب:</label>
                       <select
                         value={marketingForm.publishTimeOption}
                         onChange={e => setMarketingForm(prev => ({ ...prev, publishTimeOption: e.target.value as any }))}
-                        className="w-full bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 text-xs font-bold text-amber-900 focus:outline-none"
+                        className="w-full bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 text-xs font-bold text-amber-900 focus:outline-none cursor-pointer"
                       >
-                        <option value="immediately">فورا بعد موافقة الإدارة وتفعيلها ⚡</option>
+                        <option value="immediately">فوراً بعد موافقة الإدارة وتفعيلها ⚡</option>
                         <option value="scheduled">جدولة وتحديد تاريخ البدء يدوياً 📅</option>
                       </select>
                     </div>
@@ -3641,7 +3703,7 @@ export function Profile() {
 
                   {marketingForm.publishTimeOption === 'scheduled' && (
                     <div className="animate-in slide-in-from-top-2 duration-200">
-                      <label className="block text-xs font-bold text-amber-950 mb-1.5 font-black">تاريخ ووقت بدء نشر البانر المطلوب:</label>
+                      <label className="block text-xs font-black text-amber-950 mb-1.5">تاريخ ووقت بدء نشر البانر المطلوب:</label>
                       <input
                         type="datetime-local"
                         required={marketingForm.publishTimeOption === 'scheduled'}
@@ -3651,6 +3713,55 @@ export function Profile() {
                       />
                     </div>
                   )}
+
+                  {/* Live Interactive Preview Box */}
+                  <div className="p-4.5 rounded-2xl bg-stone-50 border border-stone-200 space-y-3 text-right">
+                    <span className="text-xs font-black text-stone-800 flex items-center gap-1.5">
+                      <Eye className="h-4 w-4 text-[#1a4d2e]" />
+                      معاينة حية ومباشرة للبانر:
+                    </span>
+                    <div className="relative w-full aspect-[21/9] sm:aspect-[2.39/1] min-h-[160px] max-h-[340px] rounded-2xl overflow-hidden border border-stone-200 shadow-md bg-stone-950 select-none">
+                      {marketingForm.bannerImageUrl ? (
+                        <img
+                          src={marketingForm.bannerImageUrl}
+                          alt="Banner Preview"
+                          className="absolute inset-0 w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <div className="absolute inset-0 bg-stone-800 flex items-center justify-center text-xs font-bold text-stone-400">
+                          [ بانتظار رفع صورة البانر أو اختيارها ]
+                        </div>
+                      )}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent" />
+
+                      {(marketingForm.bannerType === 'business' || marketingForm.bannerType === 'text_and_button') && (
+                        <div className="absolute inset-x-0 bottom-0 p-4 sm:p-6 text-white text-right space-y-1.5 max-w-xl">
+                          {marketingForm.badgeText && (
+                            <span className="bg-[#ff9f1c] text-stone-950 text-[10px] font-black px-2.5 py-0.5 rounded-full inline-block">
+                              {marketingForm.badgeText}
+                            </span>
+                          )}
+                          <h4 className="text-base sm:text-2xl font-black text-white drop-shadow-md line-clamp-1">
+                            {marketingForm.bannerTitle || 'العنوان الرئيسي للإعلان'}
+                          </h4>
+                          {marketingForm.bannerSubtitle && (
+                            <p className="text-xs sm:text-sm text-stone-200 drop-shadow-sm line-clamp-2 font-medium leading-relaxed">
+                              {marketingForm.bannerSubtitle}
+                            </p>
+                          )}
+                          {marketingForm.buttonText && (
+                            <div className="pt-1">
+                              <span className="inline-flex items-center gap-1.5 bg-[#ff9f1c] text-stone-950 text-xs font-black px-3.5 py-1.5 rounded-xl shadow-xs">
+                                <span>{marketingForm.buttonText}</span>
+                                <ArrowLeft className="h-3.5 w-3.5" />
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
 

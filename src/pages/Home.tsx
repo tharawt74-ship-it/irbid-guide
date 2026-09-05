@@ -196,12 +196,14 @@ export function Home() {
         setBusinesses(fetchedBusinesses);
         setCachedBusinesses(fetchedBusinesses);
 
-        // Create set of valid active business IDs for banner filtering
+        // Create lookup maps for live business data
         const validBusinessIds = new Set(fetchedBusinesses.map(b => b.id));
-        const businessUsernamesMap = new Map<string, string>();
+        const businessById = new Map<string, Business>();
+        const businessByUsername = new Map<string, Business>();
         fetchedBusinesses.forEach(b => {
+          businessById.set(b.id, b);
           if (b.username && b.username.trim()) {
-            businessUsernamesMap.set(b.id, b.username.trim());
+            businessByUsername.set(b.username.trim().toLowerCase(), b);
           }
         });
 
@@ -238,9 +240,48 @@ export function Home() {
               if (startsOk && endsOk) {
                 const bannerObj = { id: docSnap.id, ...data } as HomepageBanner;
                 
-                // Attach businessUsername if the banner points to a business with a username
-                if (bannerObj.businessId && businessUsernamesMap.has(bannerObj.businessId)) {
-                  bannerObj.businessUsername = businessUsernamesMap.get(bannerObj.businessId);
+                // Identify target business (by businessId or buttonLink) to guarantee live accurate ratings and details
+                let linkedBusiness: Business | undefined = undefined;
+                if (bannerObj.businessId && businessById.has(bannerObj.businessId)) {
+                  linkedBusiness = businessById.get(bannerObj.businessId);
+                } else if (bannerObj.buttonLink) {
+                  if (bannerObj.buttonLink.includes('/business/')) {
+                    const parts = bannerObj.buttonLink.split('/business/');
+                    const bId = parts[1]?.split('?')[0]?.split('#')[0];
+                    if (bId && businessById.has(bId)) {
+                      linkedBusiness = businessById.get(bId);
+                    }
+                  } else if (bannerObj.buttonLink.includes('/@')) {
+                    const parts = bannerObj.buttonLink.split('/@');
+                    const uName = parts[1]?.split('?')[0]?.split('#')[0]?.toLowerCase();
+                    if (uName && businessByUsername.has(uName)) {
+                      linkedBusiness = businessByUsername.get(uName);
+                    }
+                  }
+                }
+
+                // If linked to a business, sync actual live rating and review count from verified store data
+                if (linkedBusiness) {
+                  bannerObj.businessId = linkedBusiness.id;
+                  if (linkedBusiness.username && linkedBusiness.username.trim()) {
+                    bannerObj.businessUsername = linkedBusiness.username.trim();
+                  }
+                  if (typeof linkedBusiness.rating === 'number' && !isNaN(linkedBusiness.rating) && linkedBusiness.rating > 0) {
+                    bannerObj.rating = linkedBusiness.rating;
+                  } else {
+                    bannerObj.rating = 0;
+                  }
+                  bannerObj.reviewCount = (typeof linkedBusiness.reviewCount === 'number' && !isNaN(linkedBusiness.reviewCount)) ? linkedBusiness.reviewCount : 0;
+                  
+                  if (!bannerObj.address && linkedBusiness.address) {
+                    bannerObj.address = linkedBusiness.district ? `${linkedBusiness.district} - ${linkedBusiness.address}` : linkedBusiness.address;
+                  }
+                  if (!bannerObj.category && linkedBusiness.category) {
+                    bannerObj.category = linkedBusiness.category;
+                  }
+                  if (!bannerObj.businessName && linkedBusiness.name) {
+                    bannerObj.businessName = linkedBusiness.name;
+                  }
                 }
                 
                 // Rewrite buttonLink if it points to /business/ID and that business has a username
@@ -248,9 +289,11 @@ export function Home() {
                   const parts = bannerObj.buttonLink.split('/business/');
                   if (parts[1]) {
                     const targetBizId = parts[1].split('?')[0].split('#')[0];
-                    if (targetBizId && businessUsernamesMap.has(targetBizId)) {
-                      const username = businessUsernamesMap.get(targetBizId);
-                      bannerObj.buttonLink = bannerObj.buttonLink.replace(`/business/${targetBizId}`, `/@${username}`);
+                    if (targetBizId && businessById.has(targetBizId)) {
+                      const username = businessById.get(targetBizId)?.username;
+                      if (username && username.trim()) {
+                        bannerObj.buttonLink = bannerObj.buttonLink.replace(`/business/${targetBizId}`, `/@${username.trim()}`);
+                      }
                     }
                   }
                 }

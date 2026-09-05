@@ -25,6 +25,7 @@ export function AccountsManager() {
   const [selectedUserForStatus, setSelectedUserForStatus] = useState<UserProfile | null>(null);
   const [selectedUserForDetails, setSelectedUserForDetails] = useState<UserProfile | null>(null);
   const [selectedUserForMessage, setSelectedUserForMessage] = useState<UserProfile | null>(null);
+  const [selectedUserForDelete, setSelectedUserForDelete] = useState<UserProfile | null>(null);
 
   // Form states
   const [newUser, setNewUser] = useState({
@@ -305,17 +306,19 @@ export function AccountsManager() {
   };
 
   // Handle Delete User
-  const handleDeleteUser = async (user: UserProfile) => {
-    if (!db || !isAdmin) return;
-    if (!confirm(`هل أنت متأكد من حذف حساب (${user.displayName}) نهائياً من قاعدة البيانات؟`)) return;
-
+  const handleDeleteUser = async () => {
+    if (!db || !isAdmin || !selectedUserForDelete) return;
+    setSubmitting(true);
     try {
-      await deleteDoc(doc(db, 'users', user.uid));
-      setUsers(prev => prev.filter(u => u.uid !== user.uid));
-      showToast(`تم حذف الحساب (${user.displayName}) نهائياً.`);
+      await deleteDoc(doc(db, 'users', selectedUserForDelete.uid));
+      setUsers(prev => prev.filter(u => u.uid !== selectedUserForDelete.uid));
+      showToast(`تم حذف الحساب (${selectedUserForDelete.displayName}) نهائياً.`);
+      setSelectedUserForDelete(null);
     } catch (err) {
       console.error('Error deleting user:', err);
       showToast('حدث خطأ أثناء حذف الحساب', 'error');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -627,7 +630,7 @@ export function AccountsManager() {
                           {/* Delete User */}
                           {isAdmin && user.uid !== currentUser?.uid && (
                             <button
-                              onClick={() => handleDeleteUser(user)}
+                              onClick={() => setSelectedUserForDelete(user)}
                               className="p-1.5 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
                               title="حذف الحساب نهائياً"
                             >
@@ -972,6 +975,53 @@ export function AccountsManager() {
                 className="px-5 py-2 bg-stone-900 text-white rounded-xl text-xs font-bold cursor-pointer"
               >
                 إغلاق
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 6: Custom Delete Confirmation Modal */}
+      {selectedUserForDelete && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-stone-200 space-y-5 animate-in zoom-in-95 text-right">
+            <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+              <h3 className="font-black text-base text-rose-600 flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-rose-500" />
+                <span>حذف الحساب نهائياً</span>
+              </h3>
+              <button onClick={() => setSelectedUserForDelete(null)} className="text-stone-400 hover:text-stone-700">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="p-4 bg-rose-50 rounded-2xl border border-rose-100 text-rose-950 text-xs leading-relaxed space-y-1">
+                <p className="font-bold">⚠️ تحذير أمني هام:</p>
+                <p>
+                  أنت على وشك القيام بحذف حساب المستخدم <span className="font-black">({selectedUserForDelete.displayName})</span> وبريده <span className="font-mono font-bold">({selectedUserForDelete.email})</span> بشكل نهائي من قاعدة البيانات.
+                </p>
+              </div>
+              <p className="text-xs text-stone-600 leading-relaxed font-medium">
+                هذا الإجراء سيقوم بإزالة سجل الحساب بالكامل ولا يمكن التراجع عنه بأي شكل من الأشكال. هل تريد الاستمرار في الحذف؟
+              </p>
+            </div>
+
+            <div className="pt-3 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setSelectedUserForDelete(null)}
+                className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl font-bold cursor-pointer text-xs"
+              >
+                إلغاء التراجع
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteUser}
+                disabled={submitting}
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-black shadow-xs cursor-pointer disabled:opacity-50 text-xs flex items-center gap-1.5"
+              >
+                {submitting ? 'جاري الحذف...' : 'تأكيد الحذف النهائي'}
               </button>
             </div>
           </div>

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../../lib/firebase';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, orderBy } from 'firebase/firestore';
 import { HomepageBanner, Business } from '../../types';
+import { invalidateCache } from '../../lib/dataCache';
 import { 
   Plus, Edit2, Trash2, Image, Link, Sparkles, 
   Eye, EyeOff, Save, CheckCircle2, Building2, 
@@ -114,6 +115,7 @@ export function BannersManager({ showToast }: BannersManagerProps) {
       const docRef = doc(db, 'banners', banner.id);
       const nextActive = !banner.active;
       await updateDoc(docRef, { active: nextActive });
+      invalidateCache();
       setBanners(prev => prev.map(b => b.id === banner.id ? { ...b, active: nextActive } : b));
       showToast(nextActive ? "تم تفعيل البانر بنجاح ✅" : "تم إلغاء تفعيل البانر 🛑", "success");
     } catch (err) {
@@ -127,6 +129,7 @@ export function BannersManager({ showToast }: BannersManagerProps) {
     try {
       if (!db) return;
       await deleteDoc(doc(db, 'banners', id));
+      invalidateCache();
       setBanners(prev => prev.filter(b => b.id !== id));
       showToast("تم حذف البانر الإعلاني بنجاح", "success");
     } catch (err) {
@@ -158,18 +161,19 @@ export function BannersManager({ showToast }: BannersManagerProps) {
         if (found) {
           targetBiz = {
             businessId,
-            businessName: found.name,
-            category: found.category,
-            rating: (found.rating && found.rating > 0) ? found.rating : undefined,
+            businessName: found.name || '',
+            category: found.category || '',
+            rating: (found.rating && found.rating > 0) ? found.rating : 0,
+            reviewCount: found.reviewCount || 0,
             address: found.address || ''
           };
         }
       }
 
-      const payload: Omit<HomepageBanner, 'id'> = {
+      const rawPayload: any = {
         type,
         title: title.trim(),
-        subtitle: subtitle.trim() || undefined,
+        subtitle: subtitle.trim() || '',
         imageUrl: imageUrl.trim(),
         active,
         createdAt: editingBanner ? editingBanner.createdAt : Date.now(),
@@ -177,10 +181,15 @@ export function BannersManager({ showToast }: BannersManagerProps) {
       };
 
       if (type === 'text_and_button') {
-        payload.buttonText = buttonText.trim() || undefined;
-        payload.buttonLink = buttonLink.trim() || undefined;
-        payload.badgeText = badgeText.trim() || undefined;
+        if (buttonText.trim()) rawPayload.buttonText = buttonText.trim();
+        if (buttonLink.trim()) rawPayload.buttonLink = buttonLink.trim();
+        if (badgeText.trim()) rawPayload.badgeText = badgeText.trim();
       }
+
+      // Filter out any undefined values to strictly comply with Firestore requirements
+      const payload = Object.fromEntries(
+        Object.entries(rawPayload).filter(([_, v]) => v !== undefined)
+      );
 
       if (editingBanner) {
         // Edit mode
@@ -192,6 +201,7 @@ export function BannersManager({ showToast }: BannersManagerProps) {
         showToast("تمت إضافة البانر الإعلاني الجديد بنجاح 🎉", "success");
       }
 
+      invalidateCache();
       setIsFormOpen(false);
       fetchBanners();
     } catch (err) {
@@ -218,19 +228,23 @@ export function BannersManager({ showToast }: BannersManagerProps) {
       const pool = featuredList.length > 0 ? featuredList : businesses.slice(0, 3);
       
       for (const biz of pool) {
-        const docPayload: Omit<HomepageBanner, 'id'> = {
+        const rawDocPayload: any = {
           type: 'business',
-          title: biz.name,
-          subtitle: biz.description,
+          title: biz.name || '',
+          subtitle: biz.description || '',
           imageUrl: biz.imageUrl || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1200&q=80',
           businessId: biz.id,
-          businessName: biz.name,
-          category: biz.category,
-          rating: (biz.rating && biz.rating > 0) ? biz.rating : undefined,
-          address: biz.address,
+          businessName: biz.name || '',
+          category: biz.category || '',
+          rating: (biz.rating && biz.rating > 0) ? biz.rating : 0,
+          reviewCount: biz.reviewCount || 0,
+          address: biz.address || '',
           active: true,
           createdAt: Date.now()
         };
+        const docPayload = Object.fromEntries(
+          Object.entries(rawDocPayload).filter(([_, v]) => v !== undefined)
+        );
         await addDoc(collection(db, 'banners'), docPayload);
       }
       showToast("تمت زراعة البانرات التلقائية من محلات الدليل بنجاح!", "success");

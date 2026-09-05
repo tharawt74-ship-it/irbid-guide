@@ -40,6 +40,7 @@ export function ProfileSettings() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
   const [passwordSuccess, setPasswordSuccess] = useState('');
   const [passwordError, setPasswordError] = useState('');
@@ -199,8 +200,12 @@ export function ProfileSettings() {
       setResetEmailSent(true);
       setTimeout(() => setResetEmailSent(false), 8000);
     } catch (err: any) {
-      console.error('Error sending reset email:', err);
-      setPasswordError('تعذر إرسال رابط إعادة التعيين. يرجى المحاولة لاحقاً.');
+      console.warn('Error sending reset email:', err);
+      if (err?.code === 'auth/too-many-requests' || err?.message?.includes('too-many-requests')) {
+        setPasswordError('تم إرسال عدة طلبات مؤخراً. يرجى الانتظار دقيقة كاملة قبل المحاولة مجدداً.');
+      } else {
+        setPasswordError('تعذر إرسال رابط إعادة التعيين. يرجى المحاولة لاحقاً.');
+      }
     } finally {
       setSendingResetEmail(false);
     }
@@ -568,15 +573,24 @@ export function ProfileSettings() {
                 <label className="block text-xs font-black text-stone-700">
                   تأكيد كلمة المرور الجديدة *
                 </label>
-                <input
-                  type="password"
-                  required
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full bg-stone-50 border border-stone-200 rounded-2xl py-3 px-4 text-sm font-mono text-stone-900 focus:bg-white focus:border-[#1a4d2e] focus:ring-2 focus:ring-[#1a4d2e]/10 outline-none transition-all"
-                  dir="ltr"
-                />
+                <div className="relative">
+                  <input
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    required
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full bg-stone-50 border border-stone-200 rounded-2xl py-3 px-4 pl-11 text-sm font-mono text-stone-900 focus:bg-white focus:border-[#1a4d2e] focus:ring-2 focus:ring-[#1a4d2e]/10 outline-none transition-all"
+                    dir="ltr"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 p-1 cursor-pointer"
+                  >
+                    {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
             </div>
 

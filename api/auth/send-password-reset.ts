@@ -1,58 +1,5 @@
-import { initializeApp, getApps, getApp, cert } from 'firebase-admin/app';
-import { getAuth } from 'firebase-admin/auth';
-
 // Lazy initialized Firebase Admin instance
-let adminApp: any = null;
-
-function getAdminApp() {
-  if (adminApp) return adminApp;
-
-  try {
-    const existingApps = getApps();
-    if (existingApps.length > 0) {
-      adminApp = getApp();
-      return adminApp;
-    }
-
-    const projectId = process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID || 'irbid-7f4dd';
-    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-    let privateKey = process.env.FIREBASE_PRIVATE_KEY;
-
-    if (clientEmail && privateKey) {
-      // 1. Clean whitespace
-      privateKey = privateKey.trim();
-
-      // 2. Strip surrounding quotes if present
-      if (
-        (privateKey.startsWith('"') && privateKey.endsWith('"')) ||
-        (privateKey.startsWith("'") && privateKey.endsWith("'"))
-      ) {
-        privateKey = privateKey.slice(1, -1).trim();
-      }
-
-      // 3. Replace escaped \n with actual newlines
-      privateKey = privateKey.replace(/\\n/g, '\n');
-
-      adminApp = initializeApp({
-        credential: cert({
-          projectId,
-          clientEmail,
-          privateKey,
-        })
-      });
-      return adminApp;
-    }
-
-    // Ambient Google Cloud / AI Studio preview initialization
-    adminApp = initializeApp({
-      projectId
-    });
-    return adminApp;
-  } catch (err) {
-    console.warn("Firebase Admin initialization error:", err);
-    return null;
-  }
-}
+let cachedAdminApp: any = null;
 
 export default async function handler(req: any, res: any) {
   // Allow OPTIONS preflight request for CORS if needed
@@ -97,15 +44,67 @@ export default async function handler(req: any, res: any) {
       });
     }
 
+    // Dynamic import to prevent Vercel top-level crash on CommonJS/ESM interop
+    let adminAppModule: any;
+    let adminAuthModule: any;
+    try {
+      adminAppModule = await import('firebase-admin/app');
+      adminAuthModule = await import('firebase-admin/auth');
+    } catch (e: any) {
+      console.error("Failed to load firebase-admin modules:", e);
+      return res.status(500).json({ 
+        error: "MODULE_NOT_FOUND", 
+        message: "حدث خطأ أثناء تحميل مكتبة Firebase Admin في خادم Vercel. يرجى التأكد من التحديث وإعادة النشر (Redeploy)." 
+      });
+    }
+
+    const { initializeApp, getApps, getApp, cert } = adminAppModule;
+    const { getAuth } = adminAuthModule;
+
+    // Get Admin App logic
+    let adminApp = cachedAdminApp;
+    if (!adminApp) {
+      const existingApps = getApps();
+      if (existingApps.length > 0) {
+        adminApp = getApp();
+        cachedAdminApp = adminApp;
+      } else {
+        const projectId = process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID || 'irbid-7f4dd';
+        const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+        let privateKey = process.env.FIREBASE_PRIVATE_KEY;
+
+        if (clientEmail && privateKey) {
+          privateKey = privateKey.trim();
+          if ((privateKey.startsWith('"') && privateKey.endsWith('"')) || (privateKey.startsWith("'") && privateKey.endsWith("'"))) {
+            privateKey = privateKey.slice(1, -1).trim();
+          }
+          privateKey = privateKey.replace(/\\n/g, '\n');
+          
+          try {
+            adminApp = initializeApp({
+              credential: cert({ projectId, clientEmail, privateKey })
+            });
+            cachedAdminApp = adminApp;
+          } catch (e: any) {
+             console.warn("initializeApp cert failed:", e);
+             adminApp = initializeApp({ projectId });
+             cachedAdminApp = adminApp;
+          }
+        } else {
+          adminApp = initializeApp({ projectId });
+          cachedAdminApp = adminApp;
+        }
+      }
+    }
+
     let oobCode: string | null = null;
     let authErrorDetails = "";
     let isUserNotFound = false;
 
     // 1. Try using the Firebase Admin SDK (authorized/administrative privileges)
-    const app = getAdminApp();
-    if (app) {
+    if (adminApp) {
       try {
-        const authAdmin = getAuth(app);
+        const authAdmin = getAuth(adminApp);
         const oobLink = await authAdmin.generatePasswordResetLink(cleanEmail);
         const urlParams = new URL(oobLink).searchParams;
         oobCode = urlParams.get('oobCode');

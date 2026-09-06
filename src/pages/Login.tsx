@@ -165,12 +165,18 @@ export function Login() {
       // Log them in briefly to get user instance
       const credential = await signInWithEmailAndPassword(auth, unverifiedEmail, password);
       if (credential.user) {
-        await sendCustomVerificationEmail({
-          uid: credential.user.uid,
-          email: credential.user.email,
-          displayName: credential.user.displayName
-        });
-        setResendSuccess(true);
+        try {
+          await sendCustomVerificationEmail({
+            uid: credential.user.uid,
+            email: credential.user.email,
+            displayName: credential.user.displayName
+          });
+          setResendSuccess(true);
+        } catch (customErr) {
+          console.warn("Custom email verification failed on login screen, trying native fallback:", customErr);
+          await sendEmailVerification(credential.user);
+          setResendSuccess(true);
+        }
       }
       // Force sign out back
       await firebaseSignOut(auth);
@@ -261,7 +267,7 @@ export function Login() {
       await sendCustomPasswordResetEmail(targetEmail);
       setResetSuccess(true);
     } catch (err: any) {
-      console.warn("Reset password error:", err);
+      console.error("Custom reset email failed:", err);
       const msg = err.message || '';
       if (msg.includes('user-not-found') || msg.includes('USER_NOT_FOUND')) {
         setResetError('لم نجد حساباً مسجلاً بهذا البريد الإلكتروني');
@@ -269,6 +275,8 @@ export function Login() {
         setResetError('البريد الإلكتروني المدخل غير صالح');
       } else if (msg.includes('too-many-requests') || msg.includes('TOO_MANY_ATTEMPTS_TRY_LATER')) {
         setResetError('تم إرسال طلبات كثيرة مؤخراً. يرجى الانتظار قليلاً ثم المحاولة');
+      } else if (msg.includes('Admin credentials')) {
+         setResetError('لم يتم إعداد صلاحيات الإدارة (Service Account) لإرسال رابط مخصص. يرجى مراجعة إعدادات الخادم.');
       } else {
         setResetError('حدث خطأ أثناء إرسال رابط إعادة ضبط كلمة المرور. يرجى التأكد من صحة البريد المدخل');
       }

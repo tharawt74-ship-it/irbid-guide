@@ -2,8 +2,38 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
+import { initializeApp, getApps, getApp, cert } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
 
 dotenv.config();
+
+// Initialize Firebase Admin dynamically to avoid startup crashes in different environments
+let adminApp: any = null;
+try {
+  const existingApps = getApps();
+  if (existingApps.length === 0) {
+    const projectId = process.env.VITE_FIREBASE_PROJECT_ID;
+    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+    const privateKey = process.env.FIREBASE_PRIVATE_KEY;
+
+    if (projectId && clientEmail && privateKey) {
+      adminApp = initializeApp({
+        credential: cert({
+          projectId,
+          clientEmail,
+          privateKey: privateKey.replace(/\\n/g, '\n'),
+        })
+      });
+    } else {
+      // Automatically uses ambient Google Cloud Run / AI Studio preview credentials
+      adminApp = initializeApp();
+    }
+  } else {
+    adminApp = getApp();
+  }
+} catch (err) {
+  console.warn("Firebase Admin failed to initialize. Falling back to standard REST API:", err);
+}
 
 async function startServer() {
   const app = express();
@@ -234,28 +264,50 @@ async function startServer() {
         return res.status(500).json({ error: "Email service not configured on server" });
       }
 
-      // Call Google Identity Toolkit to programmatically generate password reset OOB Link
-      const firebaseApiKey = process.env.VITE_FIREBASE_API_KEY || "AIzaSyDDswaCceyey9mjAC7ERlkPQ0dIkNsbquw";
-      const oobResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${firebaseApiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          requestType: 'PASSWORD_RESET',
-          email: email,
-          returnOobLink: true
-        })
-      });
+      let oobCode: string | null = null;
+      let authErrorDetails = "";
 
-      const oobData: any = await oobResponse.json();
-      if (!oobResponse.ok) {
-        console.error("Firebase sendOobCode error:", oobData);
-        const errMessage = oobData.error?.message || "Failed to generate password reset code";
-        return res.status(oobResponse.status).json({ error: errMessage });
+      // 1. Try using Firebase Admin SDK
+      if (adminApp) {
+        try {
+          const authAdmin = getAuth(adminApp);
+          const oobLink = await authAdmin.generatePasswordResetLink(email);
+          const urlParams = new URL(oobLink).searchParams;
+          oobCode = urlParams.get('oobCode');
+        } catch (err: any) {
+          console.warn("Admin SDK failed to generate reset link locally, trying REST API:", err);
+          authErrorDetails = err.message || "";
+        }
       }
 
-      const oobLink = oobData.oobLink;
-      const urlParams = new URL(oobLink).searchParams;
-      const oobCode = urlParams.get('oobCode');
+      // 2. Fall back to REST API
+      if (!oobCode) {
+        const firebaseApiKey = process.env.VITE_FIREBASE_API_KEY || "AIzaSyDDswaCceyey9mjAC7ERlkPQ0dIkNsbquw";
+        const oobResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${firebaseApiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            requestType: 'PASSWORD_RESET',
+            email: email,
+            returnOobLink: true
+          })
+        });
+
+        const oobData: any = await oobResponse.json();
+        if (!oobResponse.ok) {
+          console.error("Firebase sendOobCode error:", oobData);
+          const errMessage = oobData.error?.message || "Failed to generate password reset code";
+          return res.status(oobResponse.status).json({ error: errMessage });
+        }
+
+        const oobLink = oobData.oobLink;
+        const urlParams = new URL(oobLink).searchParams;
+        oobCode = urlParams.get('oobCode');
+      }
+
+      if (!oobCode) {
+        return res.status(500).json({ error: "Failed to generate password reset code. " + authErrorDetails });
+      }
 
       // Build custom reset URL pointing to our app
       const resetUrl = `${req.protocol}://${req.get('host')}/reset-password?oobCode=${oobCode}`;
@@ -287,7 +339,7 @@ async function startServer() {
       background-color: #ffffff;
       border-radius: 32px;
       border: 1px solid #e8e4db;
-      box-shadow: 0 10px 30px rgba(26,77,46,0.04);
+      box-shadow: 0 10px 30px rgba(26,77,46,0.045);
       overflow: hidden;
     }
     .header {

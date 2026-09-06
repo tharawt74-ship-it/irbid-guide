@@ -118,7 +118,12 @@ export function Register() {
           displayName: name.trim()
         });
       } catch (verr: any) {
-        console.warn("sendCustomVerificationEmail failed:", verr);
+        console.warn("sendCustomVerificationEmail failed, trying Firebase native fallback...", verr);
+        try {
+          await sendEmailVerification(user);
+        } catch (fbErr: any) {
+          console.error("Firebase native email verification failed:", fbErr);
+        }
       }
 
       const isBootstrapAdmin = ['princessofx2344@gmail.com', 'admin@shoofiirbid.com', 'irbid.admin@gmail.com'].includes(cleanEmail);
@@ -178,8 +183,15 @@ export function Register() {
       setResendSuccess(true);
       setTimeout(() => setResendSuccess(false), 5000);
     } catch (err: any) {
-      console.warn("Resend error:", err);
-      setError(err.message || 'فشل إعادة إرسال الرابط. يرجى المحاولة مجدداً بعد قليل.');
+      console.warn("Resend custom verification failed, trying native fallback:", err);
+      try {
+        await sendEmailVerification(auth.currentUser);
+        setResendSuccess(true);
+        setTimeout(() => setResendSuccess(false), 5000);
+      } catch (fbErr: any) {
+        console.error("Fallback resend failed:", fbErr);
+        setError(fbErr.message || 'فشل إعادة إرسال الرابط. يرجى المحاولة مجدداً بعد قليل.');
+      }
     } finally {
       setResending(false);
     }

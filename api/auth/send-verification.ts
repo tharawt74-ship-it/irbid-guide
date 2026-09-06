@@ -16,7 +16,16 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const { email, token, displayName } = req.body;
+    let body = req.body;
+    if (typeof body === 'string') {
+      try {
+        body = JSON.parse(body);
+      } catch (e) {
+        // ignore JSON parse error
+      }
+    }
+
+    const { email, token, displayName } = body || {};
     if (!email || !token) {
       return res.status(400).json({ error: "Email and token are required" });
     }
@@ -24,7 +33,7 @@ export default async function handler(req: any, res: any) {
     const resendApiKey = process.env.RESEND_API_KEY;
     if (!resendApiKey) {
       console.error("RESEND_API_KEY is not defined in environment variables");
-      return res.status(500).json({ error: "Email service not configured on server" });
+      return res.status(500).json({ error: "Email service not configured on server (missing RESEND_API_KEY)" });
     }
 
     // Build the verification link pointing back to our /verify route
@@ -168,7 +177,7 @@ export default async function handler(req: any, res: any) {
       </div>
 
       <div class="content">
-        <h2>أهلاً بك يا ${displayName}، 👋</h2>
+        <h2>أهلاً بك يا ${displayName || 'عزيزنا المشترك'}، 👋</h2>
         <p>
           لقد قمت بإنشاء حسابك الجديد بنجاح في <strong>منصة شو في بإربد؟</strong>. لتأكيد ملكيتك للبريد الإلكتروني وتنشيط حسابك بالكامل، يرجى الضغط على رابط التفعيل المباشر والآمن أدناه:
         </p>

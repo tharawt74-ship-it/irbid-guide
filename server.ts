@@ -7,32 +7,50 @@ import { getAuth } from "firebase-admin/auth";
 
 dotenv.config();
 
-// Initialize Firebase Admin dynamically to avoid startup crashes in different environments
+// Lazy initialized Firebase Admin instance
 let adminApp: any = null;
-try {
-  const existingApps = getApps();
-  if (existingApps.length === 0) {
-    const projectId = process.env.VITE_FIREBASE_PROJECT_ID;
-    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-    const privateKey = process.env.FIREBASE_PRIVATE_KEY;
 
-    if (projectId && clientEmail && privateKey) {
+function getAdminApp() {
+  if (adminApp) return adminApp;
+
+  try {
+    const existingApps = getApps();
+    if (existingApps.length > 0) {
+      adminApp = getApp();
+      return adminApp;
+    }
+
+    const projectId = process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID || 'irbid-7f4dd';
+    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+    let privateKey = process.env.FIREBASE_PRIVATE_KEY;
+
+    if (clientEmail && privateKey) {
+      // Clean private key: remove surrounding quotes and replace escaped \n with actual newlines
+      privateKey = privateKey.trim();
+      if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
+        privateKey = privateKey.slice(1, -1);
+      }
+      privateKey = privateKey.replace(/\\n/g, '\n');
+
       adminApp = initializeApp({
         credential: cert({
           projectId,
           clientEmail,
-          privateKey: privateKey.replace(/\\n/g, '\n'),
+          privateKey,
         })
       });
-    } else {
-      // Automatically uses ambient Google Cloud Run / AI Studio preview credentials
-      adminApp = initializeApp();
+      return adminApp;
     }
-  } else {
-    adminApp = getApp();
+
+    // Ambient Google Cloud / AI Studio preview initialization
+    adminApp = initializeApp({
+      projectId
+    });
+    return adminApp;
+  } catch (err) {
+    console.warn("Firebase Admin initialization error:", err);
+    return null;
   }
-} catch (err) {
-  console.warn("Firebase Admin failed to initialize. Falling back to standard REST API:", err);
 }
 
 async function startServer() {
@@ -268,9 +286,10 @@ async function startServer() {
       let authErrorDetails = "";
 
       // 1. Try using Firebase Admin SDK
-      if (adminApp) {
+      const app = getAdminApp();
+      if (app) {
         try {
-          const authAdmin = getAuth(adminApp);
+          const authAdmin = getAuth(app);
           const oobLink = await authAdmin.generatePasswordResetLink(email);
           const urlParams = new URL(oobLink).searchParams;
           oobCode = urlParams.get('oobCode');

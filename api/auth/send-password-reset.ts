@@ -1,32 +1,50 @@
 import { initializeApp, getApps, getApp, cert } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 
-// Initialize Firebase Admin dynamically to avoid startup crashes in different environments
+// Lazy initialized Firebase Admin instance
 let adminApp: any = null;
-try {
-  const existingApps = getApps();
-  if (existingApps.length === 0) {
-    const projectId = process.env.VITE_FIREBASE_PROJECT_ID;
-    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-    const privateKey = process.env.FIREBASE_PRIVATE_KEY;
 
-    if (projectId && clientEmail && privateKey) {
+function getAdminApp() {
+  if (adminApp) return adminApp;
+
+  try {
+    const existingApps = getApps();
+    if (existingApps.length > 0) {
+      adminApp = getApp();
+      return adminApp;
+    }
+
+    const projectId = process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID || 'irbid-7f4dd';
+    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+    let privateKey = process.env.FIREBASE_PRIVATE_KEY;
+
+    if (clientEmail && privateKey) {
+      // Clean private key: remove surrounding quotes and replace escaped \n with actual newlines
+      privateKey = privateKey.trim();
+      if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
+        privateKey = privateKey.slice(1, -1);
+      }
+      privateKey = privateKey.replace(/\\n/g, '\n');
+
       adminApp = initializeApp({
         credential: cert({
           projectId,
           clientEmail,
-          privateKey: privateKey.replace(/\\n/g, '\n'),
+          privateKey,
         })
       });
-    } else {
-      // Automatically uses ambient Google Cloud Run service account credentials in preview
-      adminApp = initializeApp();
+      return adminApp;
     }
-  } else {
-    adminApp = getApp();
+
+    // Ambient Google Cloud / AI Studio preview initialization
+    adminApp = initializeApp({
+      projectId
+    });
+    return adminApp;
+  } catch (err) {
+    console.warn("Firebase Admin initialization error:", err);
+    return null;
   }
-} catch (err) {
-  console.warn("Firebase Admin failed to initialize. Falling back to standard REST API:", err);
 }
 
 export default async function handler(req: any, res: any) {
@@ -47,7 +65,16 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const { email } = req.body;
+    let body = req.body;
+    if (typeof body === 'string') {
+      try {
+        body = JSON.parse(body);
+      } catch (e) {
+        // ignore parse error
+      }
+    }
+
+    const { email } = body || {};
     if (!email) {
       return res.status(400).json({ error: "Email is required" });
     }
@@ -55,16 +82,17 @@ export default async function handler(req: any, res: any) {
     const resendApiKey = process.env.RESEND_API_KEY;
     if (!resendApiKey) {
       console.error("RESEND_API_KEY is not defined in environment variables");
-      return res.status(500).json({ error: "Email service not configured on server" });
+      return res.status(500).json({ error: "Email service not configured on server (missing RESEND_API_KEY)" });
     }
 
     let oobCode: string | null = null;
     let authErrorDetails = "";
 
     // 1. Try using the Firebase Admin SDK (authorized/administrative privileges)
-    if (adminApp) {
+    const app = getAdminApp();
+    if (app) {
       try {
-        const authAdmin = getAuth(adminApp);
+        const authAdmin = getAuth(app);
         const oobLink = await authAdmin.generatePasswordResetLink(email);
         const urlParams = new URL(oobLink).searchParams;
         oobCode = urlParams.get('oobCode');
@@ -92,11 +120,10 @@ export default async function handler(req: any, res: any) {
         console.error("Firebase sendOobCode error:", oobData);
         const errMessage = oobData.error?.message || "Failed to generate password reset code";
         
-        // Provide clear instructions if permission is blocked
         if (errMessage.includes("INSUFFICIENT_PERMISSION")) {
           return res.status(400).json({ 
             error: "INSUFFICIENT_PERMISSION",
-            message: "الرجاء ضبط وتفعيل صلاحيات مفتاح Firebase API أو استخدام حساب الخدمة لإرسال كود الاسترداد" 
+            message: "الرجاء التأكد من إضافة متغيرات FIREBASE_CLIENT_EMAIL و FIREBASE_PRIVATE_KEY في إعدادات Vercel Environment Variables." 
           });
         }
         return res.status(oobResponse.status).json({ error: errMessage });

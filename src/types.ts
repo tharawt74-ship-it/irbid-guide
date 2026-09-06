@@ -296,6 +296,7 @@ export interface UserProfile {
   merchantBusinessIds?: string[];
   supervisorPermissions?: SupervisorPermissions;
   emailVerified?: boolean;
+  customEmailVerified?: boolean;
   verificationCode?: string;
 }
 

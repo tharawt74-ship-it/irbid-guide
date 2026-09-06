@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router';
 import { createUserWithEmailAndPassword, updateProfile, sendEmailVerification, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
+import { sendCustomVerificationEmail } from '../lib/email';
 import { Store, Eye, EyeOff, ShieldCheck, Mail, CheckCircle2, ArrowRight, RefreshCw, AlertCircle, Hourglass, Sparkles } from 'lucide-react';
 
 export function Register() {
@@ -34,7 +35,16 @@ export function Register() {
           // Force Firebase to reload user account details from server to get freshest emailVerified flag
           await auth.currentUser.reload();
           
-          if (auth.currentUser.emailVerified) {
+          let isVerified = auth.currentUser.emailVerified;
+          
+          if (!isVerified && db) {
+            const profileSnap = await getDoc(doc(db, 'users', auth.currentUser.uid));
+            if (profileSnap.exists() && profileSnap.data().customEmailVerified) {
+              isVerified = true;
+            }
+          }
+          
+          if (isVerified) {
             clearInterval(intervalId);
             setAutoVerified(true);
             
@@ -100,11 +110,15 @@ export function Register() {
          displayName: name.trim()
       });
 
-      // Send Firebase Email Verification link
+      // Send custom beautiful Resend verification email
       try {
-        await sendEmailVerification(user);
+        await sendCustomVerificationEmail({
+          uid: user.uid,
+          email: cleanEmail,
+          displayName: name.trim()
+        });
       } catch (verr: any) {
-        console.warn("Firebase sendEmailVerification failed:", verr);
+        console.warn("sendCustomVerificationEmail failed:", verr);
       }
 
       const isBootstrapAdmin = ['princessofx2344@gmail.com', 'admin@shoofiirbid.com', 'irbid.admin@gmail.com'].includes(cleanEmail);
@@ -156,16 +170,16 @@ export function Register() {
     setResendSuccess(false);
 
     try {
-      await sendEmailVerification(auth.currentUser);
+      await sendCustomVerificationEmail({
+        uid: auth.currentUser.uid,
+        email: auth.currentUser.email,
+        displayName: auth.currentUser.displayName || pendingUser?.name
+      });
       setResendSuccess(true);
       setTimeout(() => setResendSuccess(false), 5000);
     } catch (err: any) {
       console.warn("Resend error:", err);
-      if (err?.code === 'auth/too-many-requests' || err?.message?.includes('too-many-requests')) {
-        setError('تم إرسال عدة طلبات مؤخراً. يرجى الانتظار دقيقة كاملة قبل محاولة إعادة الإرسال مجدداً حفاظاً على الأمان.');
-      } else {
-        setError('فشل إعادة إرسال الرابط. يرجى المحاولة مجدداً بعد قليل.');
-      }
+      setError(err.message || 'فشل إعادة إرسال الرابط. يرجى المحاولة مجدداً بعد قليل.');
     } finally {
       setResending(false);
     }

@@ -214,7 +214,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           savedFavorites: activeFavorites,
           isMerchant: userBizList.length > 0,
           merchantBusinessIds: userBizList.map(b => b.id),
-          supervisorPermissions: perms
+          supervisorPermissions: perms,
+          customEmailVerified: profileData?.customEmailVerified || false
         };
 
         setUserProfile(fullProfile);

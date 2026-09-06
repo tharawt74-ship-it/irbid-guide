@@ -142,5 +142,11 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
+
+    // 15. Custom Verification Tokens Collection
+    match /verification_tokens/{tokenId} {
+      allow read, create: if true;
+      allow delete: if true;
+    }
   }
 }

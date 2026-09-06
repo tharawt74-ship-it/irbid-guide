@@ -3,6 +3,8 @@ import { Link, useNavigate, useLocation } from 'react-router';
 import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, sendPasswordResetEmail, sendEmailVerification, signOut as firebaseSignOut } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
+import { sendCustomVerificationEmail } from '../lib/email';
+import { useAuth } from '../contexts/AuthContext';
 import { Store, KeyRound, Mail, CheckCircle2, ArrowRight, X, AlertCircle, Eye, EyeOff, ShieldCheck, RefreshCw, Copy, Check } from 'lucide-react';
 
 export function Login() {
@@ -28,7 +30,15 @@ export function Login() {
   const [resendSuccess, setResendSuccess] = useState(false);
   const [justVerified, setJustVerified] = useState(false);
 
+  const { currentUser } = useAuth();
   const navigate = useNavigate();
+
+  // Automatically redirect verified, logged-in users to home
+  useEffect(() => {
+    if (currentUser && currentUser.emailVerified) {
+      navigate('/', { replace: true });
+    }
+  }, [currentUser, navigate]);
 
   useEffect(() => {
     if (location.state?.email && !email) {
@@ -88,7 +98,7 @@ export function Login() {
         try {
           const userDocRef = doc(db, 'users', user.uid);
           const userDocSnap = await getDoc(userDocRef);
-          if (userDocSnap.exists() && userDocSnap.data()?.emailVerified === true) {
+          if (userDocSnap.exists() && (userDocSnap.data()?.emailVerified === true || userDocSnap.data()?.customEmailVerified === true)) {
             isEmailVerified = true;
           }
         } catch (fErr) {
@@ -97,31 +107,17 @@ export function Login() {
       }
 
       if (!isEmailVerified) {
-        // Send a fresh Firebase Email Verification link automatically with fallback for unlisted domains
-        const actionCodeSettings = {
-          url: window.location.origin + '/login?verified=true',
-          handleCodeInApp: false
-        };
-
+        // Send custom beautiful Resend verification email
         try {
-          try {
-            await sendEmailVerification(user, actionCodeSettings);
-          } catch (verr: any) {
-            console.warn("Firebase sendEmailVerification on login with redirect failed, trying fallback:", verr);
-            await sendEmailVerification(user);
-          }
+          await sendCustomVerificationEmail({
+            uid: user.uid,
+            email: cleanEmail,
+            displayName: user.displayName
+          });
           setResendSuccess(true);
         } catch (verr: any) {
-          console.warn("Firebase sendEmailVerification fallback failed as well:", verr);
+          console.warn("sendCustomVerificationEmail on login failed:", verr);
           setResendSuccess(false);
-          if (verr?.code === 'auth/too-many-requests' || verr?.message?.includes('too-many-requests')) {
-            // Force sign out so unverified user cannot browse logged-in sessions
-            await firebaseSignOut(auth);
-            setUnverifiedEmail(cleanEmail);
-            setIsUnverifiedModalOpen(true);
-            setError('حسابك يتطلب تأكيد البريد الإلكتروني. يرجى الانتظار دقيقة قبل طلب رابط تفعيل جديد نظراً لكثرة المحاولات مؤخراً.');
-            return;
-          }
         }
 
         // Force sign out so unverified user cannot browse logged-in sessions
@@ -169,18 +165,18 @@ export function Login() {
       // Log them in briefly to get user instance
       const credential = await signInWithEmailAndPassword(auth, unverifiedEmail, password);
       if (credential.user) {
-        await sendEmailVerification(credential.user);
+        await sendCustomVerificationEmail({
+          uid: credential.user.uid,
+          email: credential.user.email,
+          displayName: credential.user.displayName
+        });
         setResendSuccess(true);
       }
       // Force sign out back
       await firebaseSignOut(auth);
     } catch (err: any) {
       console.warn("Resend link error:", err);
-      if (err?.code === 'auth/too-many-requests' || err?.message?.includes('too-many-requests')) {
-        alert('تم إرسال عدة طلبات مؤخراً. يرجى الانتظار دقيقة كاملة قبل محاولة إعادة الإرسال مجدداً حفاظاً على الأمان.');
-      } else {
-        alert('فشل إعادة إرسال الرابط. يرجى التأكد من صحة البيانات والمحاولة مجدداً.');
-      }
+      alert(err.message || 'فشل إعادة إرسال الرابط. يرجى التأكد من صحة البيانات والمحاولة مجدداً.');
     } finally {
       setResendingCode(false);
     }

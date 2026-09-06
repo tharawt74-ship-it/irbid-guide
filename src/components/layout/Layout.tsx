@@ -38,8 +38,10 @@ import { NotificationDropdown } from '../notifications/NotificationDropdown';
 import { PwaInstallBanner, triggerPwaInstallModal } from '../pwa/PwaInstallBanner';
 import { BottomNavigation } from './BottomNavigation';
 import { FloatingScrollToTop } from '../FloatingScrollToTop';
-import { db } from '../../lib/firebase';
-import { Smartphone, Download, Facebook, Instagram, Send, Globe } from 'lucide-react';
+import { db, auth } from '../../lib/firebase';
+import { sendEmailVerification } from 'firebase/auth';
+import { sendCustomVerificationEmail } from '../../lib/email';
+import { Smartphone, Download, Facebook, Instagram, Send, Globe, Loader2, AlertCircle, CheckCircle2, RefreshCw, Hourglass } from 'lucide-react';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 
 import { useSystemSettings } from '../../contexts/SystemSettingsContext';
@@ -49,7 +51,7 @@ import { CartConflictModal } from '../cart/CartConflictModal';
 import { ShoppingBag } from 'lucide-react';
 
 export function Layout() {
-  const { currentUser, isAdmin, isSupervisor, isStaff, isMerchant, userRole, logout } = useAuth();
+  const { currentUser, userProfile, refreshUserData, isAdmin, isSupervisor, isStaff, isMerchant, userRole, logout } = useAuth();
   const { globalSettings, isSettingsLoaded } = useSystemSettings();
   const { totalCount } = useCart();
   const location = useLocation();
@@ -61,6 +63,84 @@ export function Layout() {
   const [showMenuTooltip, setShowMenuTooltip] = useState(false);
   const [showDesktopMoreTooltip, setShowDesktopMoreTooltip] = useState(false);
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
+
+  // Email verification lock states
+  const [resendingEmail, setResendingEmail] = useState(false);
+  const [resendEmailSuccess, setResendEmailSuccess] = useState(false);
+  const [checkingEmail, setCheckingEmail] = useState(false);
+  const [verificationError, setVerificationError] = useState('');
+  const [showStatusSuccess, setShowStatusSuccess] = useState(false);
+
+  const isEmailVerified = currentUser?.emailVerified || userProfile?.customEmailVerified;
+
+  // Active polling to check verification status automatically every 3 seconds
+  useEffect(() => {
+    if (!currentUser || isEmailVerified) return;
+
+    const interval = setInterval(async () => {
+      try {
+        if (auth?.currentUser) {
+          await auth.currentUser.reload();
+          await refreshUserData();
+          const isVerifiedNow = auth.currentUser.emailVerified || userProfile?.customEmailVerified;
+          if (isVerifiedNow) {
+            clearInterval(interval);
+            window.location.reload();
+          }
+        }
+      } catch (e) {
+        console.warn("Auto-polling reload error:", e);
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [currentUser, isEmailVerified, refreshUserData, userProfile]);
+
+  const handleResendLockLink = async () => {
+    if (!auth?.currentUser) return;
+    setResendingEmail(true);
+    setResendEmailSuccess(false);
+    setVerificationError('');
+
+    try {
+      await sendCustomVerificationEmail({
+        uid: auth.currentUser.uid,
+        email: auth.currentUser.email,
+        displayName: auth.currentUser.displayName
+      });
+      setResendEmailSuccess(true);
+      setTimeout(() => setResendEmailSuccess(false), 6000);
+    } catch (err: any) {
+      console.warn("Resend lock link error:", err);
+      setVerificationError(err.message || 'فشل إعادة إرسال الرابط. يرجى المحاولة مجدداً بعد قليل.');
+    } finally {
+      setResendingEmail(false);
+    }
+  };
+
+  const handleCheckEmailStatus = async () => {
+    if (!auth?.currentUser) return;
+    setCheckingEmail(true);
+    setVerificationError('');
+    try {
+      await auth.currentUser.reload();
+      await refreshUserData();
+      const isVerifiedNow = auth.currentUser.emailVerified || userProfile?.customEmailVerified;
+      if (isVerifiedNow) {
+        setShowStatusSuccess(true);
+        setTimeout(() => {
+          window.location.reload();
+        }, 1500);
+      } else {
+        setVerificationError('البريد الإلكتروني لا يزال غير مفعل. يرجى الضغط على الرابط المرسل لبريدك الإلكتروني أولاً.');
+      }
+    } catch (err: any) {
+      console.warn("Check email status error:", err);
+      setVerificationError('حدث خطأ أثناء فحص حالة التفعيل. يرجى المحاولة مجدداً.');
+    } finally {
+      setCheckingEmail(false);
+    }
+  };
 
   useEffect(() => {
     if (mobileMenuOpen) {
@@ -919,7 +999,96 @@ export function Layout() {
       </AnimatePresence>
       
       <main className="flex-1 w-full max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-20 md:py-12 flex flex-col">
-        <Outlet />
+        {currentUser && !isEmailVerified && !['/login', '/register', '/verify', '/terms', '/privacy', '/about', '/contact'].includes(location.pathname) ? (
+          <div className="max-w-md mx-auto w-full bg-white py-8 px-6 shadow-xs rounded-[32px] border border-[#e5e1da] text-right space-y-6 mt-4">
+            <div className="space-y-3 text-center py-2">
+              <div className="w-16 h-16 bg-[#1a4d2e]/5 text-[#1a4d2e] rounded-full mx-auto flex items-center justify-center relative">
+                <Mail className="h-7 w-7 text-[#1a4d2e]" />
+                <div className="absolute inset-0 rounded-full border-2 border-dashed border-[#1a4d2e] animate-spin opacity-40" />
+              </div>
+              <div className="space-y-1.5">
+                <h3 className="font-black text-xl text-stone-900">تأكيد البريد الإلكتروني مطلوب ✉️</h3>
+                <p className="text-xs text-stone-500 font-medium leading-relaxed">
+                  لقد قمت بإنشاء الحساب بنجاح، ولكن يرجى تأكيد ملكية بريدك الإلكتروني أولاً لتتمكن من تصفح واستخدام منصة "شو في بإربد؟".
+                </p>
+                <div className="font-mono font-bold text-[#1a4d2e] bg-[#1a4d2e]/5 px-3 py-1.5 rounded-xl border border-[#1a4d2e]/10 inline-block text-xs mt-1">
+                  {currentUser.email}
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-amber-50/70 border border-amber-200/60 p-4 rounded-2xl text-xs space-y-2 text-stone-700 leading-relaxed">
+              <div className="flex items-center gap-1.5 font-black text-amber-900 text-sm">
+                <Hourglass className="h-4.5 w-4.5 animate-pulse text-amber-700" />
+                <span>يرجى مراجعة بريدك الإلكتروني</span>
+              </div>
+              <p>
+                أرسلنا إليك رابط تفعيل آمن. يرجى فتح بريدك الإلكتروني والضغط على الرابط لتفعيل الحساب.
+              </p>
+              <p className="font-bold text-amber-950">
+                💡 بمجرد ضغطك على الرابط في بريدك، ستتعرف هذه الصفحة تلقائياً على التفعيل وتفتح لك كامل الموقع فوراً دون أي إجراء إضافي!
+              </p>
+            </div>
+
+            {verificationError && (
+              <div className="p-3 bg-red-50 border border-red-200 text-red-600 rounded-2xl font-bold text-xs text-center flex items-center justify-center gap-1.5">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{verificationError}</span>
+              </div>
+            )}
+
+            {resendEmailSuccess && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 text-[#1a4d2e] rounded-2xl font-bold text-xs text-center flex items-center justify-center gap-1.5">
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                <span>تم إعادة إرسال رابط التفعيل بنجاح! تفقد بريدك الوارد أو الـ Spam.</span>
+              </div>
+            )}
+
+            {showStatusSuccess && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 text-[#1a4d2e] rounded-2xl font-bold text-xs text-center flex items-center justify-center gap-1.5">
+                <Sparkles className="h-4 w-4 text-[#ff9f1c] shrink-0 animate-bounce" />
+                <span>تم التحقق وتنشيط حسابك بنجاح! جاري دخولك للموقع...</span>
+              </div>
+            )}
+
+            <div className="pt-2 space-y-2.5">
+              <button
+                type="button"
+                onClick={handleCheckEmailStatus}
+                disabled={checkingEmail || showStatusSuccess}
+                className="w-full py-3.5 bg-[#1a4d2e] hover:bg-[#133b22] text-white rounded-2xl font-black text-xs transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 shadow-xs hover:shadow-sm"
+              >
+                {checkingEmail ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5" />
+                )}
+                <span>لقد قمت بالتأكيد، دخول للموقع</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleResendLockLink}
+                disabled={resendingEmail}
+                className="w-full py-3 bg-stone-50 hover:bg-stone-100 text-stone-700 border border-stone-200 rounded-2xl font-bold text-xs transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
+              >
+                <Mail className="h-3.5 w-3.5" />
+                <span>{resendingEmail ? 'جاري إعادة الإرسال...' : 'إعادة إرسال رابط التفعيل'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={logout}
+                className="w-full py-2.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-2xl font-bold text-xs transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                <span>تسجيل الخروج واستخدام بريد آخر</span>
+              </button>
+            </div>
+          </div>
+        ) : (
+          <Outlet />
+        )}
       </main>
       
       <footer className="bg-white border-t border-[#e5e1da] mt-auto pb-28 md:pb-0">

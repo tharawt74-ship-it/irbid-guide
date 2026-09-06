@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { applyActionCode } from 'firebase/auth';
-import { auth } from '../lib/firebase';
+import { doc, getDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { auth, db } from '../lib/firebase';
 import { Loader2, AlertCircle } from 'lucide-react';
 
 export function Verify() {
@@ -12,16 +13,51 @@ export function Verify() {
   useEffect(() => {
     const handleVerification = async () => {
       const params = new URLSearchParams(window.location.search);
-      const mode = params.get('mode');
       const oobCode = params.get('oobCode');
+      const token = params.get('token');
 
-      if (!auth) {
-        setError('يرجى تهيئة نظام Firebase أولاً.');
+      if (!auth || !db) {
+        setError('يرجى تهيئة نظام Firebase وقاعدة البيانات أولاً.');
         setLoading(false);
         return;
       }
 
-      if (oobCode) {
+      if (token) {
+        try {
+          // Check custom verification token in Firestore
+          const tokenRef = doc(db, 'verification_tokens', token);
+          const tokenSnap = await getDoc(tokenRef);
+
+          if (tokenSnap.exists()) {
+            const tokenData = tokenSnap.data();
+            
+            // Check if token has expired
+            if (tokenData.expiresAt && tokenData.expiresAt > Date.now()) {
+              // Valid custom token! Update user profile in Firestore
+              const userProfileRef = doc(db, 'users', tokenData.uid);
+              await updateDoc(userProfileRef, {
+                customEmailVerified: true
+              });
+
+              // Clean up token document
+              await deleteDoc(tokenRef);
+
+              // Redirect straight to login page with verified parameter
+              navigate('/login?verified=true', { replace: true });
+            } else {
+              setError('رابط التفعيل هذا منتهي الصلاحية (صلاحية الرابط 24 ساعة). يرجى طلب رابط جديد.');
+              setLoading(false);
+            }
+          } else {
+            setError('رابط تفعيل غير صحيح أو تم استخدامه مسبقاً. يرجى تسجيل الدخول وطلب رابط جديد.');
+            setLoading(false);
+          }
+        } catch (err: any) {
+          console.error("Custom token verification error:", err);
+          setError('حدث خطأ أثناء تفعيل الحساب. يرجى المحاولة مجدداً بعد قليل.');
+          setLoading(false);
+        }
+      } else if (oobCode) {
         try {
           // Verify the email code directly with Firebase
           await applyActionCode(auth, oobCode);

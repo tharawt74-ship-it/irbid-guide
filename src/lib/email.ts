@@ -23,7 +23,7 @@ export async function sendCustomVerificationEmail(user: { uid: string; email: st
     expiresAt: Date.now() + 24 * 60 * 60 * 1000 // 24 hours expiry
   });
 
-  // 3. Call our Express full-stack backend endpoint to send the beautifully customized email via Resend
+  // 3. Call our backend endpoint to send the beautifully customized email via Resend
   const response = await fetch('/api/auth/send-verification', {
     method: 'POST',
     headers: {
@@ -38,7 +38,7 @@ export async function sendCustomVerificationEmail(user: { uid: string; email: st
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || 'Failed to send verification email.');
+    throw new Error(errorData.message || errorData.error || 'Failed to send verification email.');
   }
 
   return { success: true, token };
@@ -57,7 +57,7 @@ export async function sendCustomPasswordResetEmail(email: string) {
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || 'Failed to send password reset email.');
+    throw new Error(errorData.message || errorData.error || 'Failed to send password reset email.');
   }
 
   return { success: true };

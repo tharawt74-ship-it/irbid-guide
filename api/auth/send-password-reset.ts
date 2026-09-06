@@ -19,11 +19,18 @@ function getAdminApp() {
     let privateKey = process.env.FIREBASE_PRIVATE_KEY;
 
     if (clientEmail && privateKey) {
-      // Clean private key: remove surrounding quotes and replace escaped \n with actual newlines
+      // 1. Clean whitespace
       privateKey = privateKey.trim();
-      if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
-        privateKey = privateKey.slice(1, -1);
+
+      // 2. Strip surrounding quotes if present
+      if (
+        (privateKey.startsWith('"') && privateKey.endsWith('"')) ||
+        (privateKey.startsWith("'") && privateKey.endsWith("'"))
+      ) {
+        privateKey = privateKey.slice(1, -1).trim();
       }
+
+      // 3. Replace escaped \n with actual newlines
       privateKey = privateKey.replace(/\\n/g, '\n');
 
       adminApp = initializeApp({
@@ -70,36 +77,57 @@ export default async function handler(req: any, res: any) {
       try {
         body = JSON.parse(body);
       } catch (e) {
-        // ignore parse error
+        // ignore JSON parse error
       }
     }
 
     const { email } = body || {};
     if (!email) {
-      return res.status(400).json({ error: "Email is required" });
+      return res.status(400).json({ error: "Email is required", message: "البريد الإلكتروني مطلوب" });
     }
+
+    const cleanEmail = email.toLowerCase().trim();
 
     const resendApiKey = process.env.RESEND_API_KEY;
     if (!resendApiKey) {
       console.error("RESEND_API_KEY is not defined in environment variables");
-      return res.status(500).json({ error: "Email service not configured on server (missing RESEND_API_KEY)" });
+      return res.status(500).json({ 
+        error: "Email service not configured", 
+        message: "لم يتم ضبط متغير RESEND_API_KEY في إعدادات البيئة على Vercel." 
+      });
     }
 
     let oobCode: string | null = null;
     let authErrorDetails = "";
+    let isUserNotFound = false;
 
     // 1. Try using the Firebase Admin SDK (authorized/administrative privileges)
     const app = getAdminApp();
     if (app) {
       try {
         const authAdmin = getAuth(app);
-        const oobLink = await authAdmin.generatePasswordResetLink(email);
+        const oobLink = await authAdmin.generatePasswordResetLink(cleanEmail);
         const urlParams = new URL(oobLink).searchParams;
         oobCode = urlParams.get('oobCode');
       } catch (err: any) {
-        console.warn("Admin SDK failed to generate reset link, will attempt REST API fallback:", err);
+        console.warn("Admin SDK failed to generate reset link:", err);
         authErrorDetails = err.message || "";
+        const code = err.code || '';
+        if (
+          code === 'auth/user-not-found' ||
+          authErrorDetails.includes('user-not-found') ||
+          authErrorDetails.includes('no user record')
+        ) {
+          isUserNotFound = true;
+        }
       }
+    }
+
+    if (isUserNotFound) {
+      return res.status(404).json({
+        error: "user-not-found",
+        message: "لم نجد حساباً مسجلاً بهذا البريد الإلكتروني في المنصة."
+      });
     }
 
     // 2. Fall back to Google Identity Toolkit REST API (if Admin SDK is not initialized or fails)
@@ -110,7 +138,7 @@ export default async function handler(req: any, res: any) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           requestType: 'PASSWORD_RESET',
-          email: email,
+          email: cleanEmail,
           returnOobLink: true
         })
       });
@@ -120,13 +148,20 @@ export default async function handler(req: any, res: any) {
         console.error("Firebase sendOobCode error:", oobData);
         const errMessage = oobData.error?.message || "Failed to generate password reset code";
         
+        if (errMessage.includes("EMAIL_NOT_FOUND") || errMessage.includes("USER_NOT_FOUND")) {
+          return res.status(404).json({
+            error: "user-not-found",
+            message: "لم نجد حساباً مسجلاً بهذا البريد الإلكتروني في المنصة."
+          });
+        }
+
         if (errMessage.includes("INSUFFICIENT_PERMISSION")) {
           return res.status(400).json({ 
             error: "INSUFFICIENT_PERMISSION",
-            message: "الرجاء التأكد من إضافة متغيرات FIREBASE_CLIENT_EMAIL و FIREBASE_PRIVATE_KEY في إعدادات Vercel Environment Variables." 
+            message: "الرجاء التأكد من صحة مفتاح FIREBASE_PRIVATE_KEY و FIREBASE_CLIENT_EMAIL في إعدادات Vercel." 
           });
         }
-        return res.status(oobResponse.status).json({ error: errMessage });
+        return res.status(oobResponse.status).json({ error: errMessage, message: errMessage });
       }
 
       const oobLink = oobData.oobLink;
@@ -135,7 +170,10 @@ export default async function handler(req: any, res: any) {
     }
 
     if (!oobCode) {
-      return res.status(500).json({ error: "Failed to generate password reset code. " + authErrorDetails });
+      return res.status(500).json({ 
+        error: "Failed to generate password reset code", 
+        message: authErrorDetails || "تعذر توليد رمز إعادة تعيين كلمة المرور." 
+      });
     }
 
     // Build custom reset URL pointing to our app
@@ -289,7 +327,7 @@ export default async function handler(req: any, res: any) {
       <div class="content">
         <h2>أهلاً بك، 👋</h2>
         <p>
-          لقد تلقينا طلباً لإعادة تعيين كلمة المرور الخاصة بحسابك في <strong>منصة شو في بإربد؟</strong> والمرتبط بالبريد الإلكتروني (<strong>${email}</strong>). لتغيير كلمة المرور الخاصة بك واختيار كلمة مرور جديدة، يرجى الضغط على الزر المباشر والآمن أدناه:
+          لقد تلقينا طلباً لإعادة تعيين كلمة المرور الخاصة بحسابك في <strong>منصة شو في بإربد؟</strong> والمرتبط بالبريد الإلكتروني (<strong>${cleanEmail}</strong>). لتغيير كلمة المرور الخاصة بك واختيار كلمة مرور جديدة، يرجى الضغط على الزر المباشر والآمن أدناه:
         </p>
 
         <div class="btn-container">
@@ -314,7 +352,8 @@ export default async function handler(req: any, res: any) {
 </html>
     `;
 
-    const sendResponse = await fetch("https://api.resend.com/emails", {
+    // Try primary sender domain first
+    let sendResponse = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${resendApiKey}`,
@@ -322,21 +361,52 @@ export default async function handler(req: any, res: any) {
       },
       body: JSON.stringify({
         from: "منصة شو في بإربد؟ <no-reply@shofibirbid.site>",
-        to: [email],
+        to: [cleanEmail],
         subject: "إعادة تعيين كلمة المرور - منصة شو في بإربد؟ 🔑",
         html: htmlContent
       })
     });
 
-    const sendData: any = await sendResponse.json();
+    let sendData: any = await sendResponse.json().catch(() => ({}));
+
+    // If sending from custom domain failed (e.g. domain not verified yet on Resend), retry with onboarding@resend.dev
+    if (
+      !sendResponse.ok &&
+      (sendData?.message?.includes("domain") ||
+        sendData?.message?.includes("verify") ||
+        sendData?.name === "validation_error")
+    ) {
+      console.warn("Resend custom domain not verified yet, falling back to onboarding@resend.dev:", sendData);
+      sendResponse = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${resendApiKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          from: "منصة شو في بإربد؟ <onboarding@resend.dev>",
+          to: [cleanEmail],
+          subject: "إعادة تعيين كلمة المرور - منصة شو في بإربد؟ 🔑",
+          html: htmlContent
+        })
+      });
+      sendData = await sendResponse.json().catch(() => ({}));
+    }
+
     if (!sendResponse.ok) {
       console.error("Resend API send error:", sendData);
-      return res.status(sendResponse.status).json({ error: sendData.message || "Failed to send reset email" });
+      return res.status(sendResponse.status || 500).json({ 
+        error: sendData.message || "Failed to send reset email via Resend",
+        message: sendData.message || "فشل إرسال البريد الإلكتروني عبر خدمة Resend. يرجى التحقق من إعدادات Resend."
+      });
     }
 
     return res.status(200).json({ success: true, messageId: sendData.id });
   } catch (err: any) {
     console.error("Error in reset password route:", err);
-    return res.status(500).json({ error: err.message || "Internal server error" });
+    return res.status(500).json({ 
+      error: err.message || "Internal server error", 
+      message: err.message || "حدث خطأ غير متوقع في الخادم." 
+    });
   }
 }

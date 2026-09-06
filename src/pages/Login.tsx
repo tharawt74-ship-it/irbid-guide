@@ -269,16 +269,20 @@ export function Login() {
     } catch (err: any) {
       console.error("Custom reset email failed:", err);
       const msg = err.message || '';
-      if (msg.includes('user-not-found') || msg.includes('USER_NOT_FOUND')) {
-        setResetError('لم نجد حساباً مسجلاً بهذا البريد الإلكتروني');
+      if (msg.includes('user-not-found') || msg.includes('USER_NOT_FOUND') || msg.includes('لم نجد')) {
+        setResetError('لم نجد حساباً مسجلاً بهذا البريد الإلكتروني في المنصة');
       } else if (msg.includes('invalid-email') || msg.includes('INVALID_EMAIL')) {
         setResetError('البريد الإلكتروني المدخل غير صالح');
       } else if (msg.includes('too-many-requests') || msg.includes('TOO_MANY_ATTEMPTS_TRY_LATER')) {
         setResetError('تم إرسال طلبات كثيرة مؤخراً. يرجى الانتظار قليلاً ثم المحاولة');
-      } else if (msg.includes('Admin credentials')) {
-         setResetError('لم يتم إعداد صلاحيات الإدارة (Service Account) لإرسال رابط مخصص. يرجى مراجعة إعدادات الخادم.');
+      } else if (msg.includes('FIREBASE_PRIVATE_KEY') || msg.includes('INSUFFICIENT_PERMISSION') || msg.includes('صلاحيات الإدارة')) {
+        setResetError('الرجاء التأكد من صحة ضبط مفتاح FIREBASE_PRIVATE_KEY في إعدادات Vercel ثم إعادة النشر (Redeploy).');
+      } else if (msg.includes('RESEND_API_KEY')) {
+        setResetError('الرجاء التأكد من إضافة متغير RESEND_API_KEY في إعدادات Vercel.');
+      } else if (msg && !msg.includes('Failed to send password reset email') && !msg.includes('Internal server error')) {
+        setResetError(msg);
       } else {
-        setResetError('حدث خطأ أثناء إرسال رابط إعادة ضبط كلمة المرور. يرجى التأكد من صحة البريد المدخل');
+        setResetError('حدث خطأ أثناء إرسال رابط إعادة ضبط كلمة المرور. يرجى التأكد من صحة البريد المدخل والمحاولة مجدداً');
       }
     } finally {
       setResetLoading(false);

@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router';
 import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, sendPasswordResetEmail, sendEmailVerification, signOut as firebaseSignOut } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
-import { sendCustomVerificationEmail } from '../lib/email';
+import { sendCustomVerificationEmail, sendCustomPasswordResetEmail } from '../lib/email';
 import { useAuth } from '../contexts/AuthContext';
 import { Store, KeyRound, Mail, CheckCircle2, ArrowRight, X, AlertCircle, Eye, EyeOff, ShieldCheck, RefreshCw, Copy, Check } from 'lucide-react';
 
@@ -258,18 +258,19 @@ export function Login() {
     }
 
     try {
-      await sendPasswordResetEmail(auth, targetEmail);
+      await sendCustomPasswordResetEmail(targetEmail);
       setResetSuccess(true);
     } catch (err: any) {
       console.warn("Reset password error:", err);
-      if (err.code === 'auth/user-not-found') {
+      const msg = err.message || '';
+      if (msg.includes('user-not-found') || msg.includes('USER_NOT_FOUND')) {
         setResetError('لم نجد حساباً مسجلاً بهذا البريد الإلكتروني');
-      } else if (err.code === 'auth/invalid-email') {
+      } else if (msg.includes('invalid-email') || msg.includes('INVALID_EMAIL')) {
         setResetError('البريد الإلكتروني المدخل غير صالح');
-      } else if (err.code === 'auth/too-many-requests') {
+      } else if (msg.includes('too-many-requests') || msg.includes('TOO_MANY_ATTEMPTS_TRY_LATER')) {
         setResetError('تم إرسال طلبات كثيرة مؤخراً. يرجى الانتظار قليلاً ثم المحاولة');
       } else {
-        setResetError('حدث خطأ أثناء إرسال رابط إعادة ضبط كلمة المرور');
+        setResetError('حدث خطأ أثناء إرسال رابط إعادة ضبط كلمة المرور. يرجى التأكد من صحة البريد المدخل');
       }
     } finally {
       setResetLoading(false);

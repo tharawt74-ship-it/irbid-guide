@@ -5,6 +5,10 @@
       "destination": "/api/auth/send-verification.ts"
     },
     {
+      "source": "/api/auth/send-password-reset",
+      "destination": "/api/auth/send-password-reset.ts"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }

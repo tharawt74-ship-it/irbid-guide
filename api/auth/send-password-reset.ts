@@ -16,9 +16,9 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const { email, token, displayName } = req.body;
-    if (!email || !token) {
-      return res.status(400).json({ error: "Email and token are required" });
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ error: "Email is required" });
     }
 
     const resendApiKey = process.env.RESEND_API_KEY;
@@ -27,18 +27,42 @@ export default async function handler(req: any, res: any) {
       return res.status(500).json({ error: "Email service not configured on server" });
     }
 
-    // Build the verification link pointing back to our /verify route
+    // Call Google Identity Toolkit to programmatically generate password reset OOB Link
+    const firebaseApiKey = process.env.VITE_FIREBASE_API_KEY || "AIzaSyDDswaCceyey9mjAC7ERlkPQ0dIkNsbquw";
+    const oobResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${firebaseApiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        requestType: 'PASSWORD_RESET',
+        email: email,
+        returnOobLink: true
+      })
+    });
+
+    const oobData: any = await oobResponse.json();
+    if (!oobResponse.ok) {
+      console.error("Firebase sendOobCode error:", oobData);
+      const errMessage = oobData.error?.message || "Failed to generate password reset code";
+      return res.status(oobResponse.status).json({ error: errMessage });
+    }
+
+    const oobLink = oobData.oobLink;
+    const urlParams = new URL(oobLink).searchParams;
+    const oobCode = urlParams.get('oobCode');
+
+    // Build custom reset URL pointing to our app
     const host = req.headers['x-forwarded-host'] || req.headers.host;
     const protocol = req.headers['x-forwarded-proto'] || 'https';
-    const verifyUrl = `${protocol}://${host}/verify?token=${token}`;
+    const resetUrl = `${protocol}://${host}/reset-password?oobCode=${oobCode}`;
 
+    // Elegant, super-premium HTML content for Password Reset
     const htmlContent = `
 <!DOCTYPE html>
 <html dir="rtl" lang="ar">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>تفعيل حسابك في منصة شو في بإربد؟</title>
+  <title>إعادة تعيين كلمة المرور - منصة شو في بإربد؟</title>
   <style>
     body {
       font-family: 'Cairo', 'Segoe UI', Tahoma, Arial, sans-serif;
@@ -66,6 +90,7 @@ export default async function handler(req: any, res: any) {
       background-image: linear-gradient(135deg, #1a4d2e 0%, #11351e 100%);
       padding: 45px 30px;
       text-align: center;
+      position: relative;
     }
     .header h1 {
       color: #ffffff;
@@ -80,6 +105,7 @@ export default async function handler(req: any, res: any) {
       margin: 8px 0 0 0;
       font-size: 14px;
       font-weight: 700;
+      letter-spacing: 0.5px;
     }
     .security-badge {
       display: inline-block;
@@ -126,14 +152,14 @@ export default async function handler(req: any, res: any) {
       box-shadow: 0 6px 20px rgba(26,77,46,0.25);
       transition: all 0.3s ease;
     }
-    .note-box {
+    .warning-box {
       background-color: #fffbeb;
       border: 1px solid #fef3c7;
       border-radius: 20px;
       padding: 20px 25px;
       margin-top: 30px;
     }
-    .note-box p {
+    .warning-box p {
       color: #b45309;
       font-size: 13px;
       margin: 0;
@@ -156,41 +182,43 @@ export default async function handler(req: any, res: any) {
       text-decoration: none;
       font-weight: 700;
     }
+    .lock-icon {
+      font-size: 40px;
+      margin-bottom: 10px;
+    }
   </style>
 </head>
 <body>
   <div class="wrapper">
     <div class="container">
       <div class="header">
-        <h1>شو في بإربد؟ 🗺️</h1>
-        <p>دليلك الرقمي الأسرع للمحلات، الوظائف، والعروض</p>
-        <div class="security-badge">تفعيل موثق للأمان</div>
+        <div class="lock-icon">🔒</div>
+        <h1>إعادة تعيين كلمة المرور</h1>
+        <p>منصة شو في بإربد؟</p>
+        <div class="security-badge font-weight-bold">طلب أمان موثق</div>
       </div>
 
       <div class="content">
-        <h2>أهلاً بك يا ${displayName}، 👋</h2>
+        <h2>أهلاً بك، 👋</h2>
         <p>
-          لقد قمت بإنشاء حسابك الجديد بنجاح في <strong>منصة شو في بإربد؟</strong>. لتأكيد ملكيتك للبريد الإلكتروني وتنشيط حسابك بالكامل، يرجى الضغط على رابط التفعيل المباشر والآمن أدناه:
+          لقد تلقينا طلباً لإعادة تعيين كلمة المرور الخاصة بحسابك في <strong>منصة شو في بإربد؟</strong> والمرتبط بالبريد الإلكتروني (<strong>${email}</strong>). لتغيير كلمة المرور الخاصة بك واختيار كلمة مرور جديدة، يرجى الضغط على الزر المباشر والآمن أدناه:
         </p>
 
         <div class="btn-container">
-          <a href="${verifyUrl}" class="btn" target="_blank">تأكيد وتفعيل الحساب فوراً ⚡</a>
+          <a href="${resetUrl}" class="btn" target="_blank">إعادة تعيين كلمة المرور الآن 🔑</a>
         </div>
 
-        <div class="note-box">
+        <div class="warning-box">
           <p>
-            <strong>💡 نصيحة هامة:</strong> بمجرد ضغطك على الزر أعلاه، سيتم تأكيد حسابك وسيفتح لك الموقع تلقائياً دون الحاجة لإعادة كتابة كلمة المرور!
+            <strong>⚠️ ملاحظة أمنية هامة:</strong> إذا لم تكن أنت من طلب إعادة تعيين كلمة المرور هذه، يمكنك تجاهل هذا البريد الإلكتروني بأمان تام. لن يطرأ أي تغيير على كلمة مرورك الحالية دون النقر على الرابط وتأكيده.
           </p>
         </div>
-        
-        <p style="margin-top: 30px; font-size: 12px; color: #a5a29e; text-align: center;">
-          إذا لم تقم بطلب التسجيل في منصتنا، يمكنك إهمال وحذف هذه الرسالة بأمان.
-        </p>
       </div>
 
       <div class="footer">
+        <p>صلاحية هذا الرابط هي ساعة واحدة فقط لدواعي الأمان المتقدمة.</p>
         <p>© 2026 جميع الحقوق محفوظة لـ <strong>منصة شو في بإربد؟</strong></p>
-        <p>تصفح الموقع الإلكتروني: <a href="https://shofibirbid.site" target="_blank">shofibirbid.site</a></p>
+        <p><a href="https://shofibirbid.site" target="_blank">shofibirbid.site</a></p>
       </div>
     </div>
   </div>
@@ -198,7 +226,7 @@ export default async function handler(req: any, res: any) {
 </html>
     `;
 
-    const response = await fetch("https://api.resend.com/emails", {
+    const sendResponse = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${resendApiKey}`,
@@ -207,20 +235,20 @@ export default async function handler(req: any, res: any) {
       body: JSON.stringify({
         from: "منصة شو في بإربد؟ <no-reply@shofibirbid.site>",
         to: [email],
-        subject: "تفعيل حسابك في منصة شو في بإربد؟ 🗺️",
+        subject: "إعادة تعيين كلمة المرور - منصة شو في بإربد؟ 🔑",
         html: htmlContent
       })
     });
 
-    const resData: any = await response.json();
-    if (!response.ok) {
-      console.error("Resend API error:", resData);
-      return res.status(response.status).json({ error: resData.message || "Failed to send email via Resend" });
+    const sendData: any = await sendResponse.json();
+    if (!sendResponse.ok) {
+      console.error("Resend API send error:", sendData);
+      return res.status(sendResponse.status).json({ error: sendData.message || "Failed to send reset email" });
     }
 
-    return res.status(200).json({ success: true, messageId: resData.id });
+    return res.status(200).json({ success: true, messageId: sendData.id });
   } catch (err: any) {
-    console.error("Error in send-verification route:", err);
+    console.error("Error in reset password route:", err);
     return res.status(500).json({ error: err.message || "Internal server error" });
   }
 }

@@ -43,3 +43,22 @@ export async function sendCustomVerificationEmail(user: { uid: string; email: st
 
   return { success: true, token };
 }
+
+export async function sendCustomPasswordResetEmail(email: string) {
+  const response = await fetch('/api/auth/send-password-reset', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      email: email.toLowerCase().trim(),
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || 'Failed to send password reset email.');
+  }
+
+  return { success: true };
+}

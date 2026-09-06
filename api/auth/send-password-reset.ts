@@ -1,3 +1,6 @@
+import { initializeApp, getApps, getApp, cert } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
+
 // Lazy initialized Firebase Admin instance
 let cachedAdminApp: any = null;
 
@@ -43,23 +46,6 @@ export default async function handler(req: any, res: any) {
         message: "لم يتم ضبط متغير RESEND_API_KEY في إعدادات البيئة على Vercel." 
       });
     }
-
-    // Dynamic import to prevent Vercel top-level crash on CommonJS/ESM interop
-    let adminAppModule: any;
-    let adminAuthModule: any;
-    try {
-      adminAppModule = await import('firebase-admin/app');
-      adminAuthModule = await import('firebase-admin/auth');
-    } catch (e: any) {
-      console.error("Failed to load firebase-admin modules:", e);
-      return res.status(500).json({ 
-        error: "MODULE_NOT_FOUND", 
-        message: "حدث خطأ أثناء تحميل مكتبة Firebase Admin في خادم Vercel. يرجى التأكد من التحديث وإعادة النشر (Redeploy)." 
-      });
-    }
-
-    const { initializeApp, getApps, getApp, cert } = adminAppModule;
-    const { getAuth } = adminAuthModule;
 
     // Get Admin App logic
     let adminApp = cachedAdminApp;

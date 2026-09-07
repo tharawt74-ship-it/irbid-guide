@@ -331,7 +331,7 @@ export function Search() {
       />
 
       {/* SEARCH HEADER & TABS (Sticky to Layout Header) */}
-      <div className={`sticky top-[62px] sm:top-[68px] md:top-[72px] z-40 bg-white border-b border-stone-200/80 shadow-xs flex flex-col pt-3 pb-0 transition-all duration-300 ${!isHeaderExpanded ? 'shadow-sm' : ''}`}>
+      <div className={`sticky top-[62px] sm:top-[68px] md:top-[72px] z-30 bg-white border-b border-stone-200/80 shadow-xs flex flex-col pt-3 pb-0 transition-all duration-300 ${!isHeaderExpanded ? 'shadow-sm' : ''}`}>
         
         {/* Minimized View (Visible only on mobile when collapsed) */}
         {!isHeaderExpanded && (

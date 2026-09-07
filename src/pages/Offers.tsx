@@ -17,7 +17,8 @@ import {
   Gift, 
   Plus, 
   X,
-  MessageSquare
+  MessageSquare,
+  SlidersHorizontal
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Link } from 'react-router';
@@ -28,6 +29,10 @@ import { ShareButton } from '../components/ShareButton';
 import { getWhatsAppUrl, formatOfferWhatsAppMessage } from '../lib/contactHelper';
 import { WhatsApp3DIcon, Phone3DIcon } from '../components/common/PremiumContactButtons';
 import { SEO } from '../components/common/SEO';
+import { useAuth } from '../contexts/AuthContext';
+import { BannerSlideshow } from '../components/BannerSlideshow';
+import { HomepageBanner } from '../types';
+import { fetchPageBanners, DEFAULT_OFFERS_BANNERS } from '../lib/pageBanners';
 
 interface OfferItem {
   id: string;
@@ -53,7 +58,11 @@ interface OfferItem {
 const CATEGORIES = ['الكل', 'مطاعم ومقاهي', 'أزياء وتسوق', 'صحة ورياضة', 'خدمات وصيانة', 'صناعة وحرف', 'زراعة ومستلزمات'];
 
 export function Offers() {
+  const { currentUser, isAdmin, isStaff, isMerchant, ownedBusinesses } = useAuth();
+  const hasBusiness = Boolean(currentUser && (isAdmin || isStaff || isMerchant || (ownedBusinesses && ownedBusinesses.length > 0)));
+
   const [offers, setOffers] = useState<OfferItem[]>([]);
+  const [banners, setBanners] = useState<HomepageBanner[]>(DEFAULT_OFFERS_BANNERS);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState('الكل');
   const [searchQuery, setSearchQuery] = useState('');
@@ -61,9 +70,14 @@ export function Offers() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
   useEffect(() => {
-    async function loadOffers() {
+    async function loadOffersAndBanners() {
       setLoading(true);
       try {
+        // Load page banners
+        fetchPageBanners(['عروض', 'خصومات', 'تخفيضات', 'تسوق', 'مطاعم'], DEFAULT_OFFERS_BANNERS, 'offers')
+          .then(res => setBanners(res))
+          .catch(() => setBanners(DEFAULT_OFFERS_BANNERS));
+
         if (!db) {
           setOffers([]);
           setLoading(false);
@@ -92,7 +106,7 @@ export function Offers() {
       }
     }
 
-    loadOffers();
+    loadOffersAndBanners();
   }, []);
 
   const handleCopyCode = (code: string) => {
@@ -114,79 +128,77 @@ export function Offers() {
   });
 
   return (
-    <div className="w-full space-y-8 sm:space-y-10 pb-16 relative" dir="rtl">
+    <div className="w-full space-y-6 sm:space-y-8 pb-16 relative" dir="rtl">
       <SEO 
         title="عروض وخصومات إربد | أحدث تخفيضات وكوبونات المطاعم والمحلات"
         description="استكشف أقوى العروض والخصومات والتخفيضات اليومية في مدينة إربد: خصومات مطاعم وكافيهات، عروض الملابس، إلكترونيات، صالونات ومراكز التجميل."
         keywords={['عروض إربد', 'خصومات إربد', 'تخفيضات إربد', 'كوبونات إربد', 'مطاعم إربد عروض']}
         canonicalUrl="https://shofierbid.com/offers"
       />
-      {/* Dynamic Animated Hero Banner for Offers */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-red-600 via-orange-600 to-amber-600 p-6 sm:p-10 text-white shadow-xl">
-        {/* Ambient Glows */}
-        <div className="absolute -right-16 -top-16 w-80 h-80 rounded-full bg-yellow-400/20 blur-3xl pointer-events-none" />
-        <div className="absolute -left-16 -bottom-16 w-80 h-80 rounded-full bg-red-800/40 blur-3xl pointer-events-none" />
 
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-3.5 max-w-2xl">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 bg-white/20 backdrop-blur-md px-3.5 py-1 rounded-full text-xs font-black tracking-wide border border-white/30 shadow-xs">
-                <Flame className="h-4 w-4 text-yellow-300 animate-bounce" />
+      {/* Banner Slideshow */}
+      <BannerSlideshow banners={banners} />
+
+      {/* Page Header & Search Bar */}
+      <div className="bg-white rounded-2xl md:rounded-3xl p-5 sm:p-7 border border-[#e5e1da] shadow-xs space-y-5">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 bg-red-50 text-red-700 border border-red-200 px-3 py-1 rounded-full text-xs font-black">
+                <Flame className="h-3.5 w-3.5 text-red-600" />
                 <span>عروض وتخفيضات إربد الحصرية</span>
               </span>
-              <span className="inline-flex items-center gap-1 bg-yellow-400 text-stone-900 px-3 py-1 rounded-full text-xs font-black shadow-xs">
-                <Percent className="h-3.5 w-3.5" />
-                <span>خصومات تصل حتى 50%</span>
+              <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-900 border border-amber-200 px-2.5 py-1 rounded-full text-xs font-bold">
+                <Percent className="h-3 w-3 text-amber-700" />
+                <span>خصومات حتى 50%</span>
               </span>
             </div>
-
-            <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tight leading-tight">
+            <h1 className="text-2xl sm:text-3xl font-black text-stone-900">
               أقوى العروض والخصومات في إربد
             </h1>
-            
-            <p className="text-orange-50 text-sm sm:text-base leading-relaxed max-w-xl font-medium">
-              وفر دراهمك واستمتع بأفضل وجبات المطاعم، القهوة المختصة، اشتراكات النوادي، والملابس بأسعار مخفضة وكوبونات فورية لأهالي وطلبة إربد.
+            <p className="text-stone-600 text-xs sm:text-sm font-medium">
+              وفر دراهمك واستمتع بأفضل وجبات المطاعم، القهوة المختصة، اشتراكات النوادي، والملابس بأسعار مخفضة.
             </p>
           </div>
 
-          <div className="flex flex-col sm:flex-row md:flex-col gap-3 shrink-0">
-            <button
-              onClick={() => setIsAddModalOpen(true)}
-              className="inline-flex items-center justify-center gap-2 bg-white hover:bg-yellow-50 text-red-600 px-6 py-3.5 rounded-2xl font-black text-sm sm:text-base transition-all shadow-lg hover:scale-105 active:scale-95 cursor-pointer"
-            >
-              <Plus className="h-5 w-5" />
-              <span>أعلن عن خصم لمشروعك</span>
-            </button>
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            {hasBusiness && (
+              <button
+                onClick={() => setIsAddModalOpen(true)}
+                className="inline-flex items-center justify-center gap-2 bg-[#1a4d2e] hover:bg-[#143e25] text-white px-5 py-3 rounded-xl font-black text-xs sm:text-sm transition-all shadow-xs hover:scale-105 active:scale-95 cursor-pointer"
+              >
+                <Plus className="h-4 w-4" />
+                <span>أعلن عن خصم لمشروعك</span>
+              </button>
+            )}
             <Link
               to="/contact"
-              className="inline-flex items-center justify-center gap-2 bg-white/15 hover:bg-white/25 text-white px-4 py-2.5 rounded-xl font-bold text-xs transition-colors border border-white/20"
+              className="inline-flex items-center justify-center gap-2 bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-300 px-4 py-3 rounded-xl font-bold text-xs transition-colors"
             >
-              <Sparkles className="h-4 w-4 text-yellow-300" />
-              <span>باقات الترويج والإعلانات المميزة</span>
+              <Sparkles className="h-3.5 w-3.5 text-[#ff9f1c]" />
+              <span>باقات الترويج</span>
             </Link>
           </div>
         </div>
 
-        {/* Search Input in Banner */}
-        <div className="pt-6 relative z-10 max-w-2xl">
-          <div className="relative">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="ابحث عن عرض، اسم مطعم، محل ملابس، أو منطقة..."
-              className="w-full bg-white/15 backdrop-blur-md text-white placeholder:text-orange-100 border border-white/30 rounded-2xl px-5 py-3.5 pr-11 text-sm focus:outline-none focus:bg-white/25 focus:border-white transition-colors"
-            />
-            <Search className="h-5 w-5 text-orange-200 absolute right-3.5 top-1/2 -translate-y-1/2" />
-            {searchQuery && (
-              <button 
-                onClick={() => setSearchQuery('')}
-                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-orange-200 hover:text-white p-1"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
-          </div>
+        {/* Search Input */}
+        <div className="relative">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="ابحث عن عرض، اسم مطعم، كافيه، محل أزياء، أو منطقة..."
+            className="w-full bg-[#fdfcfb] text-stone-900 placeholder:text-stone-400 border border-[#e5e1da] rounded-xl sm:rounded-2xl px-4 py-3.5 pr-11 text-sm focus:outline-none focus:border-[#1a4d2e] focus:bg-white transition-all shadow-inner"
+          />
+          <Search className="h-5 w-5 text-stone-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          {searchQuery && (
+            <button 
+              onClick={() => setSearchQuery('')}
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 p-1"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -228,16 +240,18 @@ export function Offers() {
           <p className="text-stone-500 text-sm max-w-md mx-auto">
             لم يتم إدراج عروض أو خصومات نشطة في الوقت الحالي. إذا كنت تملك محلاً تجارياً، يمكنك أن تكون أول من يضيف عرضاً لزبائنك!
           </p>
-          <button
-            onClick={() => setIsAddModalOpen(true)}
-            className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-red-600 to-orange-500 text-white px-6 py-3 rounded-2xl font-black text-sm shadow-md hover:shadow-lg transition-all"
-          >
-            <Plus className="h-4 w-4" />
-            <span>أعلن عن عرض محلك الآن</span>
-          </button>
+          {hasBusiness && (
+            <button
+              onClick={() => setIsAddModalOpen(true)}
+              className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-red-600 to-orange-500 text-white px-6 py-3 rounded-2xl font-black text-sm shadow-md hover:shadow-lg transition-all"
+            >
+              <Plus className="h-4 w-4" />
+              <span>أعلن عن عرض محلك الآن</span>
+            </button>
+          )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
+        <div id="offers-grid" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
           {filteredOffers.map((offer) => (
             <div 
               key={offer.id}

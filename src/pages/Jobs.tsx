@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { collection, getDocs, doc, deleteDoc, query, orderBy } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { JobOffer, Business } from '../types';
+import { JobOffer, Business, HomepageBanner } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { Link } from 'react-router';
 import { JobFormModal } from '../components/jobs/JobFormModal';
@@ -18,13 +18,18 @@ import { ShareButton } from '../components/ShareButton';
 import { getWhatsAppUrl, formatJobWhatsAppMessage } from '../lib/contactHelper';
 import { WhatsApp3DIcon, Phone3DIcon } from '../components/common/PremiumContactButtons';
 import { SEO } from '../components/common/SEO';
+import { BannerSlideshow } from '../components/BannerSlideshow';
+import { fetchPageBanners, DEFAULT_JOBS_BANNERS } from '../lib/pageBanners';
 
 const CATEGORIES = ['الكل', 'مطاعم ومقاهي', 'تسويق وتكنولوجيا', 'مبيعات وتجزئة', 'تعليم وتدريب', 'صحة وخدمات', 'محاسبة وإدارة', 'صناعة وحرف', 'زراعة ومزارع'];
 const JOB_TYPES = ['الكل', 'دوام كامل', 'دوام جزئي', 'مناسب للطلاب', 'عمل عن بعد'];
 
 export function Jobs() {
-  const { currentUser, isAdmin } = useAuth();
+  const { currentUser, isAdmin, isStaff, isMerchant, ownedBusinesses } = useAuth();
+  const hasBusiness = Boolean(currentUser && (isAdmin || isStaff || isMerchant || (ownedBusinesses && ownedBusinesses.length > 0)));
+
   const [jobs, setJobs] = useState<JobOffer[]>([]);
+  const [banners, setBanners] = useState<HomepageBanner[]>(DEFAULT_JOBS_BANNERS);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('الكل');
@@ -45,9 +50,13 @@ export function Jobs() {
   };
 
   useEffect(() => {
-    async function fetchJobs() {
+    async function fetchJobsAndBanners() {
       setLoading(true);
       try {
+        fetchPageBanners(['وظائف', 'شواغر', 'توظيف', 'شركات', 'عمل'], DEFAULT_JOBS_BANNERS, 'jobs')
+          .then(res => setBanners(res))
+          .catch(() => setBanners(DEFAULT_JOBS_BANNERS));
+
         if (!db) {
           setJobs([]);
           setLoading(false);
@@ -76,7 +85,7 @@ export function Jobs() {
       }
     }
 
-    fetchJobs();
+    fetchJobsAndBanners();
   }, []);
 
   const openAddModal = () => {
@@ -158,65 +167,65 @@ export function Jobs() {
         </div>
       )}
 
-      {/* Hero Header */}
-      <div className="bg-gradient-to-l from-[#1a4d2e] via-[#143e25] to-[#0c2617] rounded-3xl p-6 sm:p-10 text-white relative overflow-hidden shadow-lg border border-[#1a4d2e]/40">
-        <div className="absolute top-0 right-0 w-80 h-80 bg-white/5 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
-        <div className="absolute bottom-0 left-0 w-60 h-60 bg-[#ff9f1c]/15 rounded-full blur-2xl pointer-events-none -ml-10 -mb-10"></div>
-        
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-4 max-w-2xl">
+      {/* Banner Slideshow */}
+      <BannerSlideshow banners={banners} />
+
+      {/* Page Header & Search Bar */}
+      <div className="bg-white rounded-2xl md:rounded-3xl p-5 sm:p-7 border border-[#e5e1da] shadow-xs space-y-5">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1.5">
             <div className="flex flex-wrap items-center gap-2">
-              <div className="inline-flex items-center gap-2 bg-[#ff9f1c] text-white px-3.5 py-1.5 rounded-full text-xs font-black shadow-xs">
-                <Briefcase className="h-4 w-4" />
+              <div className="inline-flex items-center gap-1.5 bg-emerald-50 text-[#1a4d2e] border border-emerald-200 px-3 py-1 rounded-full text-xs font-black">
+                <Briefcase className="h-3.5 w-3.5 text-[#1a4d2e]" />
                 <span>سوق العمل والوظائف في إربد</span>
               </div>
-              <div className="inline-flex items-center gap-1.5 bg-white/15 backdrop-blur-md text-emerald-300 px-3 py-1.5 rounded-full text-xs font-bold">
-                <GraduationCap className="h-3.5 w-3.5" />
-                <span>شواغر مخصصة للمحلات، الشركات والطلاب</span>
+              <div className="inline-flex items-center gap-1 bg-stone-100 text-stone-700 border border-stone-200 px-2.5 py-1 rounded-full text-xs font-bold">
+                <GraduationCap className="h-3.5 w-3.5 text-stone-600" />
+                <span>شواغر للمحلات، الشركات والطلاب</span>
               </div>
             </div>
 
-            <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tight leading-tight">
+            <h1 className="text-2xl sm:text-3xl font-black text-stone-900">
               وظائف وشواغر إربد
             </h1>
 
-            <p className="text-stone-200 text-sm sm:text-base leading-relaxed max-w-xl font-normal">
-              منصة التوظيف الأولى في محافظة إربد؛ يمكن لكل صاحب محل أو منشأة نشر شواغره بتفاصيل شاملة وسهلة، وتتيح للباحثين عن عمل التقديم والتواصل المباشر.
+            <p className="text-stone-600 text-xs sm:text-sm font-medium">
+              منصة التوظيف الأولى في محافظة إربد؛ تصفح أحدث الشواغر المتاحة أو انشر فرصة عمل لمحلك واستقطب أفضل الكفاءات.
             </p>
           </div>
 
           {/* Quick Actions */}
-          <div className="flex flex-col sm:flex-row md:flex-col gap-3 shrink-0">
-            <button
-              onClick={openAddModal}
-              className="inline-flex items-center justify-center gap-2.5 bg-[#ff9f1c] hover:bg-[#f39209] text-white px-6 py-3.5 rounded-2xl font-black text-sm sm:text-base transition-all shadow-lg hover:scale-105 active:scale-95 cursor-pointer"
-            >
-              <Plus className="h-5 w-5" />
-              <span>انشر وظيفة لمحلك الآن</span>
-            </button>
-          </div>
+          {hasBusiness && (
+            <div className="shrink-0">
+              <button
+                onClick={openAddModal}
+                className="inline-flex items-center justify-center gap-2 bg-[#1a4d2e] hover:bg-[#143e25] text-white px-5 py-3 rounded-xl font-black text-xs sm:text-sm transition-all shadow-xs hover:scale-105 active:scale-95 cursor-pointer"
+              >
+                <Plus className="h-4 w-4" />
+                <span>انشر وظيفة لمحلك الآن</span>
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* Search Bar inside Header */}
-        <div className="pt-6 relative z-10 max-w-2xl">
-          <div className="relative">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="ابحث بمسمى الوظيفة (باريستا، كاشير، مسوق، معلم)، اسم المحل، أو المنطقة..."
-              className="w-full bg-white/10 backdrop-blur-md text-white placeholder:text-stone-300 border border-white/20 rounded-2xl px-5 py-3.5 pr-11 text-sm focus:outline-none focus:bg-white/20 focus:border-white transition-colors"
-            />
-            <Search className="h-5 w-5 text-stone-300 absolute right-3.5 top-1/2 -translate-y-1/2" />
-            {searchQuery && (
-              <button 
-                onClick={() => setSearchQuery('')}
-                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-300 hover:text-white p-1"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
-          </div>
+        {/* Search Bar */}
+        <div className="relative">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="ابحث بمسمى الوظيفة (باريستا، كاشير، مسوق، معلم)، اسم المحل، أو المنطقة..."
+            className="w-full bg-[#fdfcfb] text-stone-900 placeholder:text-stone-400 border border-[#e5e1da] rounded-xl sm:rounded-2xl px-4 py-3.5 pr-11 text-sm focus:outline-none focus:border-[#1a4d2e] focus:bg-white transition-all shadow-inner"
+          />
+          <Search className="h-5 w-5 text-stone-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          {searchQuery && (
+            <button 
+              onClick={() => setSearchQuery('')}
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 p-1"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -295,16 +304,18 @@ export function Jobs() {
           <p className="text-stone-500 text-sm max-w-md mx-auto">
             جرّب تغيير كلمات البحث أو تصفح جميع التصنيفات، أو أعلن عن وظيفة جديدة لمستفيدي إربد.
           </p>
-          <button
-            onClick={openAddModal}
-            className="inline-flex items-center gap-2 px-6 py-2.5 bg-[#1a4d2e] text-white rounded-xl font-bold text-sm hover:bg-[#133b22] transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            <span>نشر وظيفة جديدة</span>
-          </button>
+          {hasBusiness && (
+            <button
+              onClick={openAddModal}
+              className="inline-flex items-center gap-2 px-6 py-2.5 bg-[#1a4d2e] text-white rounded-xl font-bold text-sm hover:bg-[#133b22] transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              <span>نشر وظيفة جديدة</span>
+            </button>
+          )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
+        <div id="jobs-grid" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
           {filteredJobs.map((job) => (
             <div
               key={job.id}

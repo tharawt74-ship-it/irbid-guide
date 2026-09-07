@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Bus, 
   MapPin, 
@@ -19,10 +19,14 @@ import {
   Check, 
   Building2,
   AlertTriangle,
-  ExternalLink
+  ExternalLink,
+  X
 } from 'lucide-react';
 import { Link } from 'react-router';
 import { SEO } from '../components/common/SEO';
+import { BannerSlideshow } from '../components/BannerSlideshow';
+import { HomepageBanner } from '../types';
+import { fetchPageBanners, DEFAULT_TRANSPORT_BANNERS } from '../lib/pageBanners';
 
 interface Terminal {
   id: string;
@@ -43,9 +47,16 @@ interface TaxiApp {
 
 export function Transportation() {
   const [activeTab, setActiveTab] = useState<'terminals' | 'routes' | 'taxis' | 'tips'>('terminals');
+  const [banners, setBanners] = useState<HomepageBanner[]>(DEFAULT_TRANSPORT_BANNERS);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTerminal, setSelectedTerminal] = useState<string>('all');
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    fetchPageBanners(['مواصلات', 'باصات', 'مجمع', 'سرفيس', 'تكاسي'], DEFAULT_TRANSPORT_BANNERS, 'transportation')
+      .then(res => setBanners(res))
+      .catch(() => setBanners(DEFAULT_TRANSPORT_BANNERS));
+  }, []);
 
   const terminalsData: Terminal[] = [
     {
@@ -201,65 +212,59 @@ export function Transportation() {
         keywords={['مواصلات إربد', 'باصات إربد', 'مجمع عمان الجديد', 'مجمع الشمال إربد', 'مجمع الأغوار إربد', 'تكاسي إربد', 'سرفيس إربد', 'جامعة اليرموك مواصلات', 'تكنولوجيا مواصلات']}
         canonicalUrl="https://shofierbid.com/transportation"
       />
-      {/* Header Banner */}
-      <div className="bg-gradient-to-br from-[#1a4d2e] via-[#143e25] to-[#0a2314] text-white pt-8 pb-16 px-4 sm:px-6 lg:px-8 relative overflow-hidden shadow-md">
-        <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#ff9f1c_1px,transparent_1px)] [background-size:16px_16px] pointer-events-none" />
-        <div className="absolute -bottom-10 -left-10 w-64 h-64 bg-[#ff9f1c]/15 rounded-full blur-3xl pointer-events-none" />
+      {/* Banner Slideshow */}
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+        <BannerSlideshow banners={banners} />
+      </div>
 
-        <div className="max-w-5xl mx-auto relative z-10 space-y-6">
-          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-white/10 border border-white/20 backdrop-blur-md flex items-center justify-center text-[#ff9f1c] shadow-inner">
-                <Bus className="h-6 w-6" />
+      {/* Main Container */}
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 space-y-6">
+        
+        {/* Page Header & Search Bar */}
+        <div className="bg-white rounded-2xl md:rounded-3xl p-5 sm:p-7 border border-[#e5e1da] shadow-xs space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1.5">
+              <div className="inline-flex items-center gap-2 bg-emerald-50 text-[#1a4d2e] border border-emerald-200 px-3 py-1 rounded-full text-xs font-black">
+                <Bus className="h-3.5 w-3.5 text-[#1a4d2e]" />
+                <span>دليل التنقل والمجمعات • إربد</span>
               </div>
-              <div>
-                <div className="inline-flex items-center gap-2 bg-emerald-500/25 border border-emerald-400/30 text-emerald-200 px-3 py-0.5 rounded-full text-xs font-bold mb-1">
-                  <MapPin className="h-3.5 w-3.5 text-[#ff9f1c]" />
-                  <span>دليل التنقل والمجمعات • إربد</span>
-                </div>
-                <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-white">
-                  دليل وسائل النقل والموصلات في إربد
-                </h1>
-              </div>
+              <h1 className="text-2xl sm:text-3xl font-black text-stone-900">
+                دليل وسائل النقل والمواصلات في إربد
+              </h1>
+              <p className="text-stone-600 text-xs sm:text-sm font-medium">
+                دليلك الشامل لمعرفة مجمعات إربد الرئيسية، خطوط الباصات والسرفيس للجامعات والأحياء، والتكلفة والتردد.
+              </p>
             </div>
 
             <button
               onClick={handleCopyGuide}
-              className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white border border-white/20 px-3.5 py-2 rounded-xl text-xs font-bold transition-all backdrop-blur-md cursor-pointer"
+              className="inline-flex items-center justify-center gap-2 bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-200 px-4 py-2.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer"
             >
-              {copied ? <CheckCircle2 className="h-4 w-4 text-emerald-400" /> : <Share2 className="h-4 w-4" />}
+              {copied ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <Share2 className="h-4 w-4" />}
               <span>{copied ? 'تم نسخ الدليل!' : 'مشاركة الدليل'}</span>
             </button>
           </div>
 
-          <p className="text-stone-200 text-xs sm:text-sm max-w-2xl leading-relaxed">
-            دليلك الشامل لمعرفة مجمعات إربد الرئيسية (مجمع عمان الجديد، مجمع الشمال، مجمع الأغوار)، خطوط باصات والسرفيس للجامعات والأحياء، والتكلفة المتوقعة وأوقات التردد.
-          </p>
-
           {/* Search bar */}
-          <div className="relative max-w-xl">
+          <div className="relative">
             <input
               type="text"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               placeholder="ابحث عن منطقتك أو وجهتك (مثال: عمان، الرمثا، التكنولوجيا، الحصن)..."
-              className="w-full bg-white text-stone-900 pr-11 pl-4 py-3.5 rounded-2xl text-xs sm:text-sm font-bold shadow-lg focus:outline-none focus:ring-2 focus:ring-[#ff9f1c]"
+              className="w-full bg-[#fdfcfb] text-stone-900 placeholder:text-stone-400 border border-[#e5e1da] rounded-xl sm:rounded-2xl px-4 py-3.5 pr-11 text-sm focus:outline-none focus:border-[#1a4d2e] focus:bg-white transition-all shadow-inner"
             />
-            <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-stone-400" />
+            <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-stone-400 pointer-events-none" />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-stone-400 hover:text-stone-600 bg-stone-100 px-2 py-1 rounded-md"
+                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 p-1"
               >
-                مسح
+                <X className="h-4 w-4" />
               </button>
             )}
           </div>
         </div>
-      </div>
-
-      {/* Main Container */}
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 relative z-20 space-y-8">
         
         {/* Navigation Tabs */}
         <div className="flex items-center gap-2 border-b border-stone-200 pb-2 overflow-x-auto bg-white/80 backdrop-blur-md p-2 rounded-2xl shadow-sm border border-stone-200/60">

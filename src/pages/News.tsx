@@ -7,11 +7,13 @@ import {
 } from 'lucide-react';
 import { collection, getDocs, doc, setDoc, deleteDoc, addDoc, query, orderBy } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { NewsArticle } from '../types';
+import { NewsArticle, HomepageBanner } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { getAppConfig } from '../lib/demoDataHelper';
 import { SEO } from '../components/common/SEO';
 import { ImageUploader } from '../components/ui/ImageUploader';
+import { BannerSlideshow } from '../components/BannerSlideshow';
+import { fetchPageBanners, DEFAULT_NEWS_BANNERS } from '../lib/pageBanners';
 
 const CATEGORIES = ['الكل', 'أخبار المدينة', 'تعليم وجامعات', 'فعاليات وثقافة', 'سياحة وبيئة', 'تجارة ومحلات', 'طقس وخدمات'];
 
@@ -29,6 +31,7 @@ const LOCAL_STORAGE_KEY = 'irbid_news_articles_v1';
 export function News() {
   const { currentUser, isAdmin } = useAuth();
   const [news, setNews] = useState<NewsArticle[]>([]);
+  const [banners, setBanners] = useState<HomepageBanner[]>(DEFAULT_NEWS_BANNERS);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState('الكل');
   const [searchQuery, setSearchQuery] = useState('');
@@ -59,6 +62,10 @@ export function News() {
 
   // Load news from Firestore purely
   useEffect(() => {
+    fetchPageBanners(['أخبار', 'فعاليات', 'مستجدات', 'إربد', 'ثقافة'], DEFAULT_NEWS_BANNERS, 'news')
+      .then(res => setBanners(res))
+      .catch(() => setBanners(DEFAULT_NEWS_BANNERS));
+
     async function loadNewsData() {
       setLoading(true);
       try {
@@ -258,76 +265,74 @@ export function News() {
         </div>
       )}
 
-      {/* Header Banner */}
-      <div className="bg-gradient-to-l from-[#1a4d2e] to-[#0f311c] rounded-3xl p-6 sm:p-10 text-white relative overflow-hidden shadow-lg border border-[#1a4d2e]/40">
-        <div className="absolute top-0 right-0 w-80 h-80 bg-white/5 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
-        <div className="absolute bottom-0 left-0 w-60 h-60 bg-[#ff9f1c]/10 rounded-full blur-2xl pointer-events-none -ml-10 -mb-10"></div>
-        
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-4 max-w-2xl">
+      {/* Banner Slideshow */}
+      <BannerSlideshow banners={banners} />
+
+      {/* Page Header & Search Bar */}
+      <div className="bg-white rounded-2xl md:rounded-3xl p-5 sm:p-7 border border-[#e5e1da] shadow-xs space-y-5">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1.5">
             <div className="flex flex-wrap items-center gap-2">
-              <div className="inline-flex items-center gap-2 bg-[#ff9f1c] text-white px-3.5 py-1.5 rounded-full text-xs font-bold shadow-xs">
-                <Newspaper className="h-4 w-4" />
+              <div className="inline-flex items-center gap-2 bg-emerald-50 text-[#1a4d2e] border border-emerald-200 px-3 py-1 rounded-full text-xs font-bold">
+                <Newspaper className="h-3.5 w-3.5 text-[#1a4d2e]" />
                 <span>نشرة يومية حية لعروس الشمال</span>
               </div>
               {isAdmin ? (
-                <div className="inline-flex items-center gap-1.5 bg-emerald-500/30 border border-emerald-400/40 text-emerald-100 px-3 py-1.5 rounded-full text-xs font-bold shadow-xs">
-                  <ShieldCheck className="h-3.5 w-3.5 text-emerald-300" />
+                <div className="inline-flex items-center gap-1.5 bg-emerald-100 text-emerald-800 border border-emerald-200 px-2.5 py-1 rounded-full text-xs font-bold">
+                  <ShieldCheck className="h-3.5 w-3.5 text-emerald-700" />
                   <span>لوحة إدارة ونشر الأخبار (مدير الموقع)</span>
                 </div>
               ) : (
-                <div className="inline-flex items-center gap-1.5 bg-white/15 backdrop-blur-md text-white px-3 py-1.5 rounded-full text-xs font-semibold">
-                  <Sparkles className="h-3.5 w-3.5 text-amber-300" />
-                  <span>أحدث المستجدات والفعاليات في إربد</span>
+                <div className="inline-flex items-center gap-1 bg-stone-100 text-stone-700 border border-stone-200 px-2.5 py-1 rounded-full text-xs font-semibold">
+                  <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+                  <span>أحدث المستجدات والفعاليات</span>
                 </div>
               )}
             </div>
 
-            <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tight leading-tight">
+            <h1 className="text-2xl sm:text-3xl font-black text-stone-900">
               آخر أخبار إربد والمستجدات
             </h1>
 
-            <p className="text-stone-200 text-sm sm:text-base leading-relaxed max-w-xl font-normal">
+            <p className="text-stone-600 text-xs sm:text-sm font-medium">
               {isAdmin 
-                ? 'تابع وأضف وعدّل أهم الأخبار المحلية، فعاليات الجامعات، مشاريع البلدية، والأنشطة والافتتاحات في محافظة إربد بكل دقة وسهولة.'
+                ? 'تابع وأضف وعدّل أهم الأخبار المحلية، فعاليات الجامعات، مشاريع البلدية، والأنشطة والافتتاحات في محافظة إربد.'
                 : 'تابع أهم الأخبار المحلية، فعاليات الجامعات، مشاريع البلدية، والأنشطة والافتتاحات في محافظة إربد أولاً بأول.'}
             </p>
           </div>
 
           {/* Quick Actions in Banner - Only for Admin */}
           {isAdmin && (
-            <div className="flex flex-col sm:flex-row md:flex-col gap-3 shrink-0">
+            <div className="shrink-0">
               <button
                 onClick={openAddModal}
-                className="inline-flex items-center justify-center gap-2.5 bg-[#ff9f1c] hover:bg-[#f39209] text-white px-6 py-3.5 rounded-2xl font-black text-sm sm:text-base transition-all shadow-lg hover:scale-105 active:scale-95 cursor-pointer"
+                className="inline-flex items-center justify-center gap-2 bg-[#1a4d2e] hover:bg-[#143e25] text-white px-5 py-3 rounded-xl font-black text-xs sm:text-sm transition-all shadow-xs hover:scale-105 active:scale-95 cursor-pointer"
               >
-                <Plus className="h-5 w-5" />
+                <Plus className="h-4 w-4" />
                 <span>إضافة خبر جديد</span>
               </button>
             </div>
           )}
         </div>
 
-        {/* Search Bar inside header */}
-        <div className="pt-6 relative z-10 max-w-xl">
-          <div className="relative">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="ابحث في عناوين الأخبار، المواقع، أو المصادر..."
-              className="w-full bg-white/10 backdrop-blur-md text-white placeholder:text-stone-300 border border-white/20 rounded-2xl px-5 py-3.5 pr-11 text-sm focus:outline-none focus:bg-white/20 focus:border-white transition-colors"
-            />
-            <Search className="h-5 w-5 text-stone-300 absolute right-3.5 top-1/2 -translate-y-1/2" />
-            {searchQuery && (
-              <button 
-                onClick={() => setSearchQuery('')}
-                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-300 hover:text-white p-1"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
-          </div>
+        {/* Search Bar */}
+        <div className="relative">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="ابحث في عناوين الأخبار، المواقع، أو المصادر..."
+            className="w-full bg-[#fdfcfb] text-stone-900 placeholder:text-stone-400 border border-[#e5e1da] rounded-xl sm:rounded-2xl px-4 py-3.5 pr-11 text-sm focus:outline-none focus:border-[#1a4d2e] focus:bg-white transition-all shadow-inner"
+          />
+          <Search className="h-5 w-5 text-stone-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          {searchQuery && (
+            <button 
+              onClick={() => setSearchQuery('')}
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 p-1"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
         </div>
       </div>
 

@@ -6,13 +6,25 @@ import { invalidateCache } from '../../lib/dataCache';
 import { 
   Plus, Edit2, Trash2, Image, Link, Sparkles, 
   Eye, EyeOff, Save, CheckCircle2, Building2, 
-  PlayCircle, Megaphone, FileText, X, Star, MapPin
+  PlayCircle, Megaphone, FileText, X, Star, MapPin,
+  Globe, Home, Flame, Briefcase, Bus, Newspaper, Compass, Filter, Layers
 } from 'lucide-react';
 import { ImageUploader } from '../ui/ImageUploader';
 
 interface BannersManagerProps {
   showToast: (msg: string, type?: 'success' | 'info' | 'error') => void;
 }
+
+const PAGE_TARGETS = [
+  { id: 'all', name: 'جميع الصفحات (عام)', icon: Globe, color: 'bg-stone-800 text-white' },
+  { id: 'home', name: 'الصفحة الرئيسية', icon: Home, color: 'bg-emerald-700 text-white' },
+  { id: 'offers', name: 'صفحة العروض والخصومات', icon: Flame, color: 'bg-amber-600 text-white' },
+  { id: 'jobs', name: 'صفحة الوظائف والشواغر', icon: Briefcase, color: 'bg-blue-600 text-white' },
+  { id: 'housing', name: 'صفحة السكنات والعقارات', icon: Building2, color: 'bg-purple-600 text-white' },
+  { id: 'transportation', name: 'صفحة النقل والمواصلات', icon: Bus, color: 'bg-indigo-600 text-white' },
+  { id: 'news', name: 'صفحة الأخبار والمستجدات', icon: Newspaper, color: 'bg-rose-600 text-white' },
+  { id: 'tourism', name: 'صفحة السياحة والمعالم', icon: Compass, color: 'bg-teal-600 text-white' }
+];
 
 export function BannersManager({ showToast }: BannersManagerProps) {
   const [banners, setBanners] = useState<HomepageBanner[]>([]);
@@ -21,8 +33,12 @@ export function BannersManager({ showToast }: BannersManagerProps) {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingBanner, setEditingBanner] = useState<HomepageBanner | null>(null);
 
+  // Page filter state
+  const [selectedPageFilter, setSelectedPageFilter] = useState<string>('all');
+
   // Form Fields
   const [type, setType] = useState<HomepageBanner['type']>('business');
+  const [pageTarget, setPageTarget] = useState<string>('all');
   const [title, setTitle] = useState('');
   const [subtitle, setSubtitle] = useState('');
   const [imageUrl, setImageUrl] = useState('');
@@ -77,6 +93,7 @@ export function BannersManager({ showToast }: BannersManagerProps) {
   const handleOpenAdd = () => {
     setEditingBanner(null);
     setType('business');
+    setPageTarget(selectedPageFilter !== 'all' ? selectedPageFilter : 'all');
     setTitle('');
     setSubtitle('');
     setImageUrl('');
@@ -92,6 +109,7 @@ export function BannersManager({ showToast }: BannersManagerProps) {
   const handleOpenEdit = (banner: HomepageBanner) => {
     setEditingBanner(banner);
     setType(banner.type);
+    setPageTarget(banner.pageTarget || 'all');
     setTitle(banner.title);
     setSubtitle(banner.subtitle || '');
     setImageUrl(banner.imageUrl);
@@ -172,6 +190,7 @@ export function BannersManager({ showToast }: BannersManagerProps) {
 
       const rawPayload: any = {
         type,
+        pageTarget: pageTarget || 'all',
         title: title.trim(),
         subtitle: subtitle.trim() || '',
         imageUrl: imageUrl.trim(),
@@ -257,6 +276,11 @@ export function BannersManager({ showToast }: BannersManagerProps) {
     }
   };
 
+  const filteredBanners = banners.filter(b => {
+    if (selectedPageFilter === 'all') return true;
+    return (b.pageTarget || 'all') === selectedPageFilter || b.pageTarget === 'all';
+  });
+
   return (
     <div className="bg-white rounded-3xl p-6 border border-[#e5e1da] shadow-xs space-y-6" dir="rtl">
       {/* Header bar with controls */}
@@ -266,8 +290,8 @@ export function BannersManager({ showToast }: BannersManagerProps) {
             <Image className="h-6 w-6" />
           </div>
           <div>
-            <h2 className="text-xl font-black text-stone-900">إدارة البانرات الإعلانية (Homepage Carousel)</h2>
-            <p className="text-stone-500 text-xs">تحكم كامل بالصور المتحركة والمقالات والروابط المميزة أعلى واجهة التطبيق الرئيسية</p>
+            <h2 className="text-xl font-black text-stone-900">إدارة البانرات الإعلانية في جميع الصفحات</h2>
+            <p className="text-stone-500 text-xs">تحكم كامل بالبانرات والعروض الترويجية المخصصة لكل صفحة من صفحات المنصة</p>
           </div>
         </div>
 
@@ -291,30 +315,70 @@ export function BannersManager({ showToast }: BannersManagerProps) {
         </div>
       </div>
 
+      {/* Page Target Filter Navigation Tabs */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 text-xs font-black text-stone-700">
+          <Filter className="h-4 w-4 text-[#1a4d2e]" />
+          <span>تصفية البانرات حسب الصفحة المستهدفة:</span>
+        </div>
+        <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+          {PAGE_TARGETS.map(pt => {
+            const Icon = pt.icon;
+            const count = banners.filter(b => pt.id === 'all' ? true : (b.pageTarget || 'all') === pt.id).length;
+            const isSelected = selectedPageFilter === pt.id;
+
+            return (
+              <button
+                key={pt.id}
+                type="button"
+                onClick={() => setSelectedPageFilter(pt.id)}
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer border ${
+                  isSelected
+                    ? 'bg-[#1a4d2e] text-white border-[#1a4d2e] shadow-xs'
+                    : 'bg-stone-50 hover:bg-stone-100 text-stone-700 border-stone-200'
+                }`}
+              >
+                <Icon className={`h-4 w-4 ${isSelected ? 'text-[#ff9f1c]' : 'text-stone-500'}`} />
+                <span>{pt.name}</span>
+                <span className={`px-1.5 py-0.2 text-[10px] rounded-full font-black ${
+                  isSelected ? 'bg-white/20 text-white' : 'bg-stone-200 text-stone-700'
+                }`}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20 text-stone-500">
           <div className="w-8 h-8 border-4 border-[#1a4d2e] border-t-transparent rounded-full animate-spin mb-3"></div>
           <span className="text-xs font-medium">جاري تحميل البانرات الإعلانية...</span>
         </div>
-      ) : banners.length === 0 ? (
+      ) : filteredBanners.length === 0 ? (
         <div className="text-center py-16 border border-dashed border-stone-200 rounded-3xl bg-stone-50/50">
           <Megaphone className="h-12 w-12 text-stone-300 mx-auto mb-3" />
-          <p className="text-sm font-black text-stone-700">لا يوجد بانرات معروضة حالياً</p>
+          <p className="text-sm font-black text-stone-700">لا يوجد بانرات في {PAGE_TARGETS.find(p => p.id === selectedPageFilter)?.name || 'هذه الصفحة'}</p>
           <p className="text-xs text-stone-500 mt-1 max-w-sm mx-auto">
-            قم بإضافة أول بانر إعلاني الآن! يمكنك إضافة إعلان موجه لصفحة محل، إعلان صورة متحركة GIF، أو إعلان ذكي بنصوص وأزرار تفاعلية مخصصة.
+            قم بإضافة بانر جديد وموجه مباشرة لصفحة {PAGE_TARGETS.find(p => p.id === selectedPageFilter)?.name}!
           </p>
           <button
             onClick={handleOpenAdd}
-            className="mt-4 inline-flex items-center gap-1.5 bg-[#1a4d2e] text-white px-4 py-2 rounded-xl text-xs font-bold"
+            className="mt-4 inline-flex items-center gap-1.5 bg-[#1a4d2e] text-white px-4 py-2 rounded-xl text-xs font-bold cursor-pointer"
           >
             <Plus className="h-3.5 w-3.5" />
-            <span>أضف البانر الأول</span>
+            <span>أضف بانر لهذه الصفحة</span>
           </button>
         </div>
       ) : (
         /* List of Banners */
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {banners.map((banner) => (
+          {filteredBanners.map((banner) => {
+            const targetPageInfo = PAGE_TARGETS.find(p => p.id === (banner.pageTarget || 'all')) || PAGE_TARGETS[0];
+            const PageIcon = targetPageInfo.icon;
+
+            return (
             <div 
               key={banner.id}
               className={`p-4 rounded-2xl border transition-all flex flex-col justify-between gap-4 bg-stone-50/45 ${
@@ -338,6 +402,14 @@ export function BannersManager({ showToast }: BannersManagerProps) {
                     <Image className="h-8 w-8" />
                   </div>
                 )}
+
+                {/* Targeted Page Badge Top Right */}
+                <div className="absolute top-2.5 right-2.5 z-20 flex items-center gap-1">
+                  <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black flex items-center gap-1 text-white shadow-xs ${targetPageInfo.color}`}>
+                    <PageIcon className="h-3 w-3" />
+                    <span>{targetPageInfo.name}</span>
+                  </span>
+                </div>
 
                 {/* Badge top corner info */}
                 <div className="absolute top-2.5 left-2.5 z-20 flex items-center gap-1.5">
@@ -449,7 +521,8 @@ export function BannersManager({ showToast }: BannersManagerProps) {
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -480,6 +553,38 @@ export function BannersManager({ showToast }: BannersManagerProps) {
 
             {/* Modal Body */}
             <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+              {/* Page Target Selector */}
+              <div className="bg-stone-50/80 p-3.5 rounded-2xl border border-stone-200/80 space-y-2">
+                <label className="block text-xs font-black text-stone-900 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Globe className="h-4 w-4 text-[#1a4d2e]" />
+                    <span>الصفحة المستهدفة لعرض هذا البانر الإعلاني</span>
+                  </span>
+                  <span className="text-[10px] text-stone-500 font-normal">حدد وين راح يظهر الإعلان</span>
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {PAGE_TARGETS.map((pt) => {
+                    const Icon = pt.icon;
+                    const isSelected = pageTarget === pt.id;
+                    return (
+                      <button
+                        key={pt.id}
+                        type="button"
+                        onClick={() => setPageTarget(pt.id)}
+                        className={`p-2.5 rounded-xl border text-right transition-all cursor-pointer flex items-center gap-2 ${
+                          isSelected
+                            ? 'border-[#1a4d2e] bg-[#1a4d2e] text-white font-bold shadow-xs'
+                            : 'border-stone-200 bg-white hover:border-stone-300 text-stone-700'
+                        }`}
+                      >
+                        <Icon className={`h-4 w-4 shrink-0 ${isSelected ? 'text-[#ff9f1c]' : 'text-stone-500'}`} />
+                        <span className="text-xs truncate font-bold">{pt.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* Type Selection */}
               <div>
                 <label className="block text-xs font-black text-stone-700 mb-2">نوع ومحتوى الإعلان الترويجي</label>

@@ -40,11 +40,45 @@ interface HijriDate {
   designation: string;
 }
 
+/**
+ * Helper function to retrieve current Date and Time strictly in Jordan timezone (Asia/Amman - UTC+3)
+ * regardless of the user's phone or device local timezone settings.
+ */
+export const getJordanNow = (): Date => {
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Amman',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: 'numeric',
+    second: 'numeric',
+    hour12: false
+  }).formatToParts(now);
+
+  const getPart = (type: string) => {
+    const p = parts.find(p => p.type === type);
+    return p ? parseInt(p.value, 10) : 0;
+  };
+
+  const year = getPart('year');
+  const month = getPart('month') - 1; // 0-indexed
+  const day = getPart('day');
+  let hour = getPart('hour');
+  if (hour === 24) hour = 0;
+  const minute = getPart('minute');
+  const second = getPart('second');
+
+  return new Date(year, month, day, hour, minute, second);
+};
+
 export function PrayerTimes() {
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date>(getJordanNow());
   const [timings, setTimings] = useState<PrayerTiming[]>([]);
   const [hijriDate, setHijriDate] = useState<HijriDate | null>(null);
   const [nextPrayer, setNextPrayer] = useState<{ prayer: PrayerTiming; timeRemaining: string; progressPercent: number } | null>(null);
+  const [jordanTimeDisplay, setJordanTimeDisplay] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(true);
   const [audioEnabled, setAudioEnabled] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'timings' | 'athkar' | 'mosques'>('timings');
@@ -105,14 +139,17 @@ export function PrayerTimes() {
     ];
   };
 
-  // Fetch Prayer Times from Aladhan API for Irbid
+  // Fetch Prayer Times from Aladhan API for Irbid (Official Ministry of Awqaf Method = 23)
   const fetchPrayerTimes = async (date: Date) => {
     setLoading(true);
     const dateStr = formatDateForApi(date);
     
     try {
-      // Method 4: Umm Al-Qura / Egyptian Authority for Jordan
-      const res = await fetch(`https://api.aladhan.com/v1/timingsByCity/${dateStr}?city=Irbid&country=Jordan&method=4`);
+      // Method 23: Ministry of Awqaf, Islamic Affairs and Holy Places, Jordan
+      let res = await fetch(`https://api.aladhan.com/v1/timings/${dateStr}?latitude=32.5568&longitude=35.8469&method=23`);
+      if (!res.ok) {
+        res = await fetch(`https://api.aladhan.com/v1/timingsByCity/${dateStr}?city=Irbid&country=Jordan&method=23`);
+      }
       if (!res.ok) throw new Error('API Response not ok');
       const data = await res.json();
       
@@ -153,17 +190,24 @@ export function PrayerTimes() {
     fetchPrayerTimes(selectedDate);
   }, [selectedDate]);
 
-  // Calculate Next Prayer Countdown
+  // Calculate Next Prayer Countdown & Live Jordan Clock (Asia/Amman - UTC+3)
   useEffect(() => {
     if (timings.length === 0) return;
 
     const interval = setInterval(() => {
-      const now = new Date();
+      // Always compute current date/time in Jordan timezone (Asia/Amman)
+      const now = getJordanNow();
       const currentMinutes = now.getHours() * 60 + now.getMinutes();
       const currentSeconds = now.getSeconds();
       const nowTotalSeconds = currentMinutes * 60 + currentSeconds;
 
-      // Exclude Sunrise from Next Prayer countdown if we only count mandatory prayers, or include all
+      // Update Live Jordan Time Display
+      const liveHours24 = String(now.getHours()).padStart(2, '0');
+      const liveMins = String(now.getMinutes()).padStart(2, '0');
+      const liveSecs = String(now.getSeconds()).padStart(2, '0');
+      setJordanTimeDisplay(format12hTime(`${liveHours24}:${liveMins}:${liveSecs}`));
+
+      // Exclude Sunrise from Next Prayer countdown
       const prayersToCalculate = timings.filter(t => t.id !== 'sunrise');
 
       let foundNext: PrayerTiming | null = null;
@@ -225,7 +269,7 @@ export function PrayerTimes() {
   };
 
   const isToday = (d: Date) => {
-    const today = new Date();
+    const today = getJordanNow();
     return d.getDate() === today.getDate() &&
            d.getMonth() === today.getMonth() &&
            d.getFullYear() === today.getFullYear();
@@ -280,9 +324,21 @@ export function PrayerTimes() {
                 <Clock className="h-6 w-6" />
               </div>
               <div>
-                <div className="inline-flex items-center gap-2 bg-emerald-500/25 border border-emerald-400/30 text-emerald-200 px-3 py-0.5 rounded-full text-xs font-bold mb-1">
-                  <MapPin className="h-3.5 w-3.5 text-[#ff9f1c]" />
-                  <span>إربد، الأردن (توقيت عروس الشمال)</span>
+                <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                  <div className="inline-flex items-center gap-2 bg-emerald-500/25 border border-emerald-400/30 text-emerald-200 px-3 py-0.5 rounded-full text-xs font-bold">
+                    <MapPin className="h-3.5 w-3.5 text-[#ff9f1c]" />
+                    <span>إربد، الأردن (Asia/Amman - UTC+3)</span>
+                  </div>
+                  <div className="inline-flex items-center gap-1.5 bg-amber-500/20 border border-amber-400/30 text-amber-200 px-3 py-0.5 rounded-full text-xs font-bold">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-[#ff9f1c]" />
+                    <span>تقويم وزارة الأوقاف الشؤون والمقدسات الإسلامية</span>
+                  </div>
+                  {jordanTimeDisplay && (
+                    <div className="inline-flex items-center gap-1.5 bg-white/15 border border-white/20 text-white px-3 py-0.5 rounded-full text-xs font-mono font-bold">
+                      <Clock className="h-3.5 w-3.5 text-emerald-400 animate-pulse" />
+                      <span>ساعة الأردن الآن: {jordanTimeDisplay}</span>
+                    </div>
+                  )}
                 </div>
                 <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-white">
                   مواقيت الصلاة في إربد
@@ -335,7 +391,7 @@ export function PrayerTimes() {
 
               {!isToday(selectedDate) && (
                 <button
-                  onClick={() => setSelectedDate(new Date())}
+                  onClick={() => setSelectedDate(getJordanNow())}
                   className="bg-[#ff9f1c] hover:bg-[#e88e13] text-stone-950 px-3 py-2 rounded-xl text-xs font-black transition-colors cursor-pointer"
                 >
                   العودة لليوم

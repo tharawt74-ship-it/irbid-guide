@@ -3,15 +3,19 @@ export function normalizeArabic(text: string): string {
   if (!text) return '';
   return text
     .toLowerCase()
-    // Normalize Alef, Hamza, etc.
-    .replace(/[أإآ]/g, 'ا')
+    // Normalize Alef variations and Hamza
+    .replace(/[أإآء]/g, 'ا')
     // Normalize Taa Marbouta to Haa
     .replace(/ة/g, 'ه')
-    // Normalize Yaa / Alif Maqsurah to Yaa
-    .replace(/[ىي]/g, 'ي')
-    // Strip Arabic diacritics (harakat)
-    .replace(/[\u064B-\u065F]/g, '')
-    // Strip common punctuation
-    .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"']/g, '')
+    // Normalize Yaa / Alif Maqsurah / Nabrah to Yaa
+    .replace(/[ىيئ]/g, 'ي')
+    // Normalize Waw with Hamza to Waw
+    .replace(/ؤ/g, 'و')
+    // Remove Tatweel
+    .replace(/ـ/g, '')
+    // Strip Arabic diacritics (harakat & tanween)
+    .replace(/[\u064B-\u065F\u0670]/g, '')
+    // Strip common Latin and Arabic punctuation
+    .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"'؟،؛]/g, '')
     .trim();
 }

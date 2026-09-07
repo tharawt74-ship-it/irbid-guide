@@ -31,7 +31,8 @@ const DEFAULT_GLOBAL_SETTINGS: GlobalSiteSettings = {
   instagramUrl: 'https://instagram.com/shoof.irbid',
   tiktokUrl: 'https://tiktok.com/@shoof.irbid',
   xUrl: 'https://x.com/shoof_irbid',
-  footerDescription: 'المنصة والمحرك الإعلاني التفاعلي الأول في إربد للبحث واكتشاف أفضل المطاعم، الكافيهات، الخدمات، والفعاليات.'
+  footerDescription: 'المنصة والمحرك الإعلاني التفاعلي الأول في إربد للبحث واكتشاف أفضل المطاعم، الكافيهات، الخدمات، والفعاليات.',
+  enableAiAssistant: true
 };
 
 
@@ -195,7 +196,27 @@ export function SystemSettingsProvider({ children }: { children: React.ReactNode
             const sanitizedCats = (data.categories as CategoryConfig[]).filter(
               c => !c.name.includes('عقارات وسكنات') && c.name !== '🏠 عقارات وسكنات'
             );
-            setCategories(sanitizedCats.length > 0 ? sanitizedCats : categories);
+            
+            // Ensure newly added default categories (like teachers and home projects) exist
+            const defaultCatEntries = Object.entries(BUSINESS_CATEGORIES);
+            const existingCatNames = new Set(sanitizedCats.map(c => c.name));
+            
+            const missingDefaults: CategoryConfig[] = [];
+            defaultCatEntries.forEach(([catName, subcats], idx) => {
+              if (!existingCatNames.has(catName)) {
+                missingDefaults.push({
+                  id: `cat_def_${idx + 1}_${Date.now()}`,
+                  name: catName,
+                  iconName: catName.includes('معلمات') ? 'GraduationCap' : catName.includes('منزلية') ? 'Home' : 'Folder',
+                  description: `جميع ${catName} في إربد`,
+                  subcategories: subcats,
+                  active: true
+                });
+              }
+            });
+
+            const mergedCats = [...sanitizedCats, ...missingDefaults];
+            setCategories(mergedCats.length > 0 ? mergedCats : categories);
           }
           if (data.neighborhoods) setNeighborhoods(data.neighborhoods);
           if (data.vipPlans) setVipPlans(data.vipPlans);

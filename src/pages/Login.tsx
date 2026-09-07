@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router';
 import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, sendPasswordResetEmail, sendEmailVerification, signOut as firebaseSignOut } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
-import { sendCustomVerificationEmail, sendCustomPasswordResetEmail } from '../lib/email';
+import { sendCustomVerificationEmail } from '../lib/email';
 import { useAuth } from '../contexts/AuthContext';
 import { Store, KeyRound, Mail, CheckCircle2, ArrowRight, X, AlertCircle, Eye, EyeOff, ShieldCheck, RefreshCw, Copy, Check } from 'lucide-react';
 
@@ -264,23 +264,27 @@ export function Login() {
     }
 
     try {
-      await sendCustomPasswordResetEmail(targetEmail);
+      // Direct Firebase Client-Side Password Reset (works 100% on Vercel without serverless dependencies)
+      try {
+        await sendPasswordResetEmail(auth, targetEmail, {
+          url: `${window.location.origin}/reset-password`,
+          handleCodeInApp: true,
+        });
+      } catch (actionErr: any) {
+        // If custom domain isn't added to Firebase action URL whitelist, send standard reset
+        await sendPasswordResetEmail(auth, targetEmail);
+      }
       setResetSuccess(true);
     } catch (err: any) {
-      console.error("Custom reset email failed:", err);
-      const msg = err.message || '';
-      if (msg.includes('user-not-found') || msg.includes('USER_NOT_FOUND') || msg.includes('لم نجد')) {
+      console.error("Firebase reset email failed:", err);
+      const code = err?.code || '';
+      const msg = err?.message || '';
+      if (code === 'auth/user-not-found' || msg.includes('user-not-found') || msg.includes('USER_NOT_FOUND')) {
         setResetError('لم نجد حساباً مسجلاً بهذا البريد الإلكتروني في المنصة');
-      } else if (msg.includes('invalid-email') || msg.includes('INVALID_EMAIL')) {
+      } else if (code === 'auth/invalid-email' || msg.includes('invalid-email')) {
         setResetError('البريد الإلكتروني المدخل غير صالح');
-      } else if (msg.includes('too-many-requests') || msg.includes('TOO_MANY_ATTEMPTS_TRY_LATER')) {
-        setResetError('تم إرسال طلبات كثيرة مؤخراً. يرجى الانتظار قليلاً ثم المحاولة');
-      } else if (msg.includes('FIREBASE_PRIVATE_KEY') || msg.includes('INSUFFICIENT_PERMISSION') || msg.includes('صلاحيات الإدارة')) {
-        setResetError('الرجاء التأكد من صحة ضبط مفتاح FIREBASE_PRIVATE_KEY في إعدادات Vercel ثم إعادة النشر (Redeploy).');
-      } else if (msg.includes('RESEND_API_KEY')) {
-        setResetError('الرجاء التأكد من إضافة متغير RESEND_API_KEY في إعدادات Vercel.');
-      } else if (msg && !msg.includes('Failed to send password reset email') && !msg.includes('Internal server error')) {
-        setResetError(msg);
+      } else if (code === 'auth/too-many-requests') {
+        setResetError('تم إرسال طلبات كثيرة مؤخراً. يرجى الانتظار بضع دقائق ثم المحاولة');
       } else {
         setResetError('حدث خطأ أثناء إرسال رابط إعادة ضبط كلمة المرور. يرجى التأكد من صحة البريد المدخل والمحاولة مجدداً');
       }

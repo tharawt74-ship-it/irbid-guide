@@ -7,6 +7,9 @@ import { collection, getDocs, setDoc, doc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { getAppConfig } from '../lib/demoDataHelper';
 import { SEO } from '../components/common/SEO';
+import { BannerSlideshow } from '../components/BannerSlideshow';
+import { HomepageBanner } from '../types';
+import { fetchPageBanners, DEFAULT_TOURISM_BANNERS } from '../lib/pageBanners';
 
 export interface TourismSpot {
   id: string;
@@ -154,12 +157,17 @@ const TOURISM_SPOTS: TourismSpot[] = [
 
 export function Tourism() {
   const [spots, setSpots] = useState<TourismSpot[]>([]);
+  const [banners, setBanners] = useState<HomepageBanner[]>(DEFAULT_TOURISM_BANNERS);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('الكل');
   const [selectedSpot, setSelectedSpot] = useState<TourismSpot | null>(null);
 
   useEffect(() => {
+    fetchPageBanners(['سياحة', 'آثار', 'معالم', 'أم قيس', 'طبيعة'], DEFAULT_TOURISM_BANNERS, 'tourism')
+      .then(res => setBanners(res))
+      .catch(() => setBanners(DEFAULT_TOURISM_BANNERS));
+
     async function loadTourismSpots() {
       setLoading(true);
       try {
@@ -219,50 +227,46 @@ export function Tourism() {
         keywords={['سياحة إربد', 'معالم إربد', 'أم قيس', 'طبقة فحل', 'غابات برقش', 'سد وادي العرب', 'بيت عرار', 'آثار إربد']}
         canonicalUrl="https://shofierbid.com/tourism"
       />
-      {/* Tourism Banner Header */}
-      <div className="bg-gradient-to-l from-[#1a4d2e] via-[#153e25] to-[#0c2617] rounded-3xl p-6 sm:p-10 text-white relative overflow-hidden shadow-lg border border-[#1a4d2e]/40">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-white/5 rounded-full blur-3xl pointer-events-none -mr-24 -mt-24"></div>
-        <div className="absolute bottom-0 left-0 w-72 h-72 bg-[#ff9f1c]/15 rounded-full blur-2xl pointer-events-none -ml-12 -mb-12"></div>
-        
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-4 max-w-2xl">
-            <div className="inline-flex items-center gap-2 bg-[#ff9f1c] text-white px-3.5 py-1.5 rounded-full text-xs font-black shadow-xs">
-              <Compass className="h-4 w-4 animate-spin-slow" />
+      {/* Banner Slideshow */}
+      <BannerSlideshow banners={banners} />
+
+      {/* Page Header & Search Bar */}
+      <div className="bg-white rounded-2xl md:rounded-3xl p-5 sm:p-7 border border-[#e5e1da] shadow-xs space-y-5">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1.5">
+            <div className="inline-flex items-center gap-2 bg-emerald-50 text-[#1a4d2e] border border-emerald-200 px-3 py-1 rounded-full text-xs font-black">
+              <Compass className="h-3.5 w-3.5 text-[#1a4d2e]" />
               <span>اكتشف إربد التراث والطبيعة</span>
             </div>
             
-            <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tight leading-tight">
+            <h1 className="text-2xl sm:text-3xl font-black text-stone-900">
               أماكن سياحية ومعالم إربد
             </h1>
             
-            <p className="text-stone-200 text-sm sm:text-base leading-relaxed font-normal">
-              دليلك السياحي الموثق لاستكشاف "عروس الشمال" الأردنية؛ من الآثار اليونانية الرومانية القديمة في أم قيس وبيلا، إلى أحضان غابات برقش الخلابة والمنازل الثقافية العريقة في قلب المدينة.
+            <p className="text-stone-600 text-xs sm:text-sm font-medium">
+              دليلك السياحي الموثق لاستكشاف "عروس الشمال"؛ من آثار أم قيس وبيلا إلى أحضان غابات برقش والمتاحف العريقة.
             </p>
           </div>
-
-
         </div>
 
-        {/* Search Bar inside Header */}
-        <div className="pt-6 relative z-10 max-w-xl">
-          <div className="relative">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="ابحث عن معلّم (أم قيس، غابة، متحف، سد)..."
-              className="w-full bg-white/10 backdrop-blur-md text-white placeholder:text-stone-300 border border-white/20 rounded-2xl px-5 py-3.5 pr-11 text-sm focus:outline-none focus:bg-white/20 focus:border-white transition-colors"
-            />
-            <Search className="h-5 w-5 text-stone-300 absolute right-3.5 top-1/2 -translate-y-1/2" />
-            {searchQuery && (
-              <button 
-                onClick={() => setSearchQuery('')}
-                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-300 hover:text-white p-1"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
-          </div>
+        {/* Search Bar */}
+        <div className="relative">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="ابحث عن معلّم (أم قيس، غابة، متحف، سد)..."
+            className="w-full bg-[#fdfcfb] text-stone-900 placeholder:text-stone-400 border border-[#e5e1da] rounded-xl sm:rounded-2xl px-4 py-3.5 pr-11 text-sm focus:outline-none focus:border-[#1a4d2e] focus:bg-white transition-all shadow-inner"
+          />
+          <Search className="h-5 w-5 text-stone-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          {searchQuery && (
+            <button 
+              onClick={() => setSearchQuery('')}
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 p-1"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
         </div>
       </div>
 

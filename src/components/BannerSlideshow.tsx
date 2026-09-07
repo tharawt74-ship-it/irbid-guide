@@ -197,6 +197,7 @@ export function BannerSlideshow({ banners }: BannerSlideshowProps) {
         );
 
       case 'text_and_button':
+        const isInternalLink = banner.buttonLink && (banner.buttonLink.startsWith('/') || banner.buttonLink.startsWith('#'));
         return (
           <div className="w-full h-full relative">
             {defaultOverlay}
@@ -229,16 +230,34 @@ export function BannerSlideshow({ banners }: BannerSlideshowProps) {
               )}
 
               {banner.buttonText && banner.buttonLink && (
-                <a
-                  href={banner.buttonLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="bg-[#ff9f1c] hover:bg-[#f39209] text-white px-3 py-1 md:px-6 md:py-2.5 rounded-lg sm:rounded-xl font-black transition-all text-[8px] sm:text-xs md:text-sm shadow-md flex items-center gap-1 sm:gap-1.5 md:gap-2 cursor-pointer hover:scale-105 active:scale-95 w-fit"
-                  id={`banner-action-btn-${banner.id}`}
-                >
-                  <span>{banner.buttonText}</span>
-                  <ExternalLink className="h-2.5 w-2.5 sm:h-3.5 sm:w-3.5 md:h-4 md:w-4" />
-                </a>
+                isInternalLink ? (
+                  <a
+                    href={banner.buttonLink}
+                    onClick={(e) => {
+                      if (banner.buttonLink?.startsWith('#')) {
+                        e.preventDefault();
+                        const el = document.querySelector(banner.buttonLink);
+                        if (el) el.scrollIntoView({ behavior: 'smooth' });
+                      }
+                    }}
+                    className="bg-[#ff9f1c] hover:bg-[#f39209] text-white px-3 py-1 md:px-6 md:py-2.5 rounded-lg sm:rounded-xl font-black transition-all text-[8px] sm:text-xs md:text-sm shadow-md flex items-center gap-1 sm:gap-1.5 md:gap-2 cursor-pointer hover:scale-105 active:scale-95 w-fit"
+                    id={`banner-action-btn-${banner.id}`}
+                  >
+                    <span>{banner.buttonText}</span>
+                    <ChevronLeft className="h-2.5 w-2.5 sm:h-3.5 sm:w-3.5 md:h-4 md:w-4" />
+                  </a>
+                ) : (
+                  <a
+                    href={banner.buttonLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="bg-[#ff9f1c] hover:bg-[#f39209] text-white px-3 py-1 md:px-6 md:py-2.5 rounded-lg sm:rounded-xl font-black transition-all text-[8px] sm:text-xs md:text-sm shadow-md flex items-center gap-1 sm:gap-1.5 md:gap-2 cursor-pointer hover:scale-105 active:scale-95 w-fit"
+                    id={`banner-action-btn-${banner.id}`}
+                  >
+                    <span>{banner.buttonText}</span>
+                    <ExternalLink className="h-2.5 w-2.5 sm:h-3.5 sm:w-3.5 md:h-4 md:w-4" />
+                  </a>
+                )
               )}
             </div>
           </div>

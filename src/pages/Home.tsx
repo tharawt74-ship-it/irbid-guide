@@ -21,7 +21,7 @@ import {
   BookOpen, Building2, Landmark, HeartPulse, 
   Shirt, Smartphone, ShoppingCart, Scissors, Dumbbell, Car, Sparkles,
   Heart, Compass, Crown, TrendingUp, Clock, SlidersHorizontal,
-  Hammer, Sprout
+  Hammer, Sprout, GraduationCap, Laptop
 } from 'lucide-react';
 
 
@@ -29,6 +29,12 @@ export function getCategoryMeta(cat: string) {
   const c = (cat || '').toLowerCase().trim();
   if (!cat || c === 'الكل') {
     return { icon: LayoutGrid, bg: 'bg-emerald-50 text-[#1a4d2e]' };
+  }
+  if (c.includes('معلم') || c.includes('معلمات') || c.includes('دروس خصوصية') || c.includes('تدريس')) {
+    return { icon: GraduationCap, bg: 'bg-indigo-50 text-indigo-700' };
+  }
+  if (c.includes('منزلية') || c.includes('أونلاين') || c.includes('من المنزل') || c.includes('أون لاين')) {
+    return { icon: Laptop, bg: 'bg-[#1a4d2e]/10 text-[#1a4d2e]' };
   }
   if (c.includes('مطاعم') || c.includes('أكل') || c.includes('وجبات') || c.includes('طعام') || c.includes('شاورما') || c.includes('برغر') || c.includes('مشاوي') || c.includes('بيتزا')) {
     return { icon: UtensilsCrossed, bg: 'bg-amber-50 text-amber-700' };
@@ -219,6 +225,11 @@ export function Home() {
               const now = Date.now();
               const startsOk = !data.bannerStartDate || data.bannerStartDate <= now;
               const endsOk = !data.bannerExpiryDate || data.bannerExpiryDate > now;
+              const pageOk = !data.pageTarget || data.pageTarget === 'home' || data.pageTarget === 'all';
+              
+              if (!pageOk) {
+                return;
+              }
               
               // Skip banner if its associated business has been deleted or hidden
               if (data.businessId && !validBusinessIds.has(data.businessId)) {

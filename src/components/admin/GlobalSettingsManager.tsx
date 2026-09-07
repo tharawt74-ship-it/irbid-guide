@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useSystemSettings } from '../../contexts/SystemSettingsContext';
-import { Globe, Save, Phone, Mail, MessageSquare, Facebook, Instagram, Share2, Image as ImageIcon, LayoutGrid, CheckCircle2 } from 'lucide-react';
+import { Globe, Save, Phone, Mail, MessageSquare, Facebook, Instagram, Share2, Image as ImageIcon, LayoutGrid, CheckCircle2, Bot, Sparkles, Power, Zap, AlertCircle } from 'lucide-react';
 import { ImageUploader } from '../ui/ImageUploader';
 
 interface GlobalSettingsManagerProps {
@@ -36,6 +36,62 @@ export function GlobalSettingsManager({ showToast }: GlobalSettingsManagerProps)
           <Save className="h-4 w-4 text-[#ff9f1c]" />
           <span>حفظ التغييرات</span>
         </button>
+      </div>
+
+      {/* AI Assistant Site-Wide Toggle Box */}
+      <div className={`p-5 rounded-2xl border transition-all ${
+        formData.enableAiAssistant !== false
+          ? 'bg-emerald-50/60 border-emerald-200 shadow-2xs'
+          : 'bg-amber-50/60 border-amber-200'
+      }`}>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-3.5">
+            <div className={`p-3 rounded-2xl shrink-0 ${
+              formData.enableAiAssistant !== false
+                ? 'bg-[#1a4d2e] text-white'
+                : 'bg-stone-200 text-stone-600'
+            }`}>
+              <Bot className="h-6 w-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-black text-stone-900 text-base">التحكم بالذكاء الاصطناعي (ربداوي AI)</h3>
+                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black ${
+                  formData.enableAiAssistant !== false
+                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                    : 'bg-amber-100 text-amber-800 border border-amber-300'
+                }`}>
+                  {formData.enableAiAssistant !== false ? '● مفعّل ويعمل' : '○ معطل ومخفي'}
+                </span>
+              </div>
+              <p className="text-stone-600 text-xs mt-1 leading-relaxed">
+                {formData.enableAiAssistant !== false 
+                  ? 'المساعد الذكي ينشط كأيقونة عائمة في جميع صفحات المنصة لتوجيه الزوار، البحث، ومقارنة العروض.'
+                  : 'تم إيقاف المساعد الذكي كلياً من المنصة، ولن تظهر أيقونة المحادثة الذكية لأي مستخدم حتى إعادة تفعيله.'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 shrink-0 self-end sm:self-center">
+            <button
+              type="button"
+              onClick={() => setFormData(prev => ({ ...prev, enableAiAssistant: !(prev.enableAiAssistant !== false) }))}
+              className={`relative inline-flex h-7 w-14 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                formData.enableAiAssistant !== false ? 'bg-[#1a4d2e]' : 'bg-stone-300'
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                  formData.enableAiAssistant !== false ? '-translate-x-7' : 'translate-x-0'
+                }`}
+              />
+            </button>
+
+            <span className="text-xs font-black text-stone-800 min-w-[65px]">
+              {formData.enableAiAssistant !== false ? 'مفعّل الآن' : 'معطّل الآن'}
+            </span>
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

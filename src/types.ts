@@ -566,6 +566,7 @@ export interface GlobalSiteSettings {
   tiktokUrl: string;
   xUrl: string;
   footerDescription: string;
+  enableAiAssistant?: boolean;
 }
 
 export interface EmergencyNumber {
@@ -624,10 +625,11 @@ export interface HomepageBanner {
   buttonLink?: string;
   badgeText?: string;
   // Status:
-  active: boolean;
-  createdAt: number;
+  active?: boolean;
+  createdAt?: number;
   bannerStartDate?: number;
   bannerExpiryDate?: number;
+  pageTarget?: 'all' | 'home' | 'offers' | 'jobs' | 'housing' | 'transportation' | 'news' | 'tourism' | string;
 }
 
 

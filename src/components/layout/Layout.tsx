@@ -29,7 +29,8 @@ import {
   Search,
   Clock,
   Bus,
-  Settings
+  Settings,
+  Bot
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -48,6 +49,7 @@ import { useSystemSettings } from '../../contexts/SystemSettingsContext';
 import { useCart } from '../../contexts/CartContext';
 import { FloatingCartWidget } from '../cart/FloatingCartWidget';
 import { CartConflictModal } from '../cart/CartConflictModal';
+import { AiSiteAssistant } from '../ai/AiSiteAssistant';
 import { ShoppingBag } from 'lucide-react';
 
 export function Layout() {
@@ -307,7 +309,7 @@ export function Layout() {
   return (
     <div className="min-h-screen bg-[#fdfcfb] flex flex-col font-sans text-[#2d2a26] overflow-x-clip" dir="rtl">
       {/* Top Navigation Bar - Sticky at all scroll depths */}
-      <header className="h-[62px] sm:h-[68px] md:h-[72px] px-2.5 sm:px-4 lg:px-6 2xl:px-8 border-b border-stone-200/90 bg-white/95 backdrop-blur-md sticky top-0 z-50 transition-all duration-200 shadow-2xs w-full max-w-full flex items-center">
+      <header className="h-[62px] sm:h-[68px] md:h-[72px] px-2.5 sm:px-4 lg:px-6 2xl:px-8 border-b border-stone-200/90 bg-white/95 backdrop-blur-md sticky top-0 z-[70] transition-all duration-200 shadow-2xs w-full max-w-full flex items-center">
         {/* Desktop Header Layout */}
         <div className="hidden lg:flex w-full max-w-7xl mx-auto h-full items-center justify-between gap-1.5 sm:gap-2 lg:gap-3 flex-nowrap min-w-0 py-1">
           
@@ -677,7 +679,7 @@ export function Layout() {
             </Link>
           </div>
 
-          {/* Cart & Notification Buttons on the Left */}
+          {/* Mobile Right Actions: Cart & Notification */}
           <div className="relative z-10 flex items-center gap-1.5">
             {totalCount > 0 && (
               <Link
@@ -707,11 +709,11 @@ export function Layout() {
             transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
             onTouchStart={handleTouchStart}
             onTouchEnd={handleTouchEnd}
-            className="lg:hidden fixed top-[62px] sm:top-[68px] md:top-[72px] inset-x-0 bottom-0 z-40 bg-[#faf9f6] flex flex-col overflow-hidden border-t border-stone-200/60" 
+            className="lg:hidden fixed top-[62px] sm:top-[68px] md:top-[72px] inset-x-0 bottom-0 z-[65] bg-[#faf9f6] flex flex-col overflow-hidden border-t border-stone-200/60" 
             dir="rtl"
           >
             {/* Scrollable Content Wrapper */}
-            <div className="flex-1 overflow-y-auto px-5 py-6 space-y-6 pb-24">
+            <div className="flex-1 overflow-y-auto px-5 py-6 space-y-6 pb-32">
               {/* User Account / Welcome Header Bar */}
               {currentUser ? (
                 <div className="bg-white p-4 rounded-2xl border border-stone-200/90 shadow-2xs flex items-center justify-between gap-3 hover:border-[#1a4d2e]/40 transition-colors">
@@ -1211,6 +1213,9 @@ export function Layout() {
       {/* Floating Cart & Cart Conflict Resolution Modal */}
       <FloatingCartWidget />
       <CartConflictModal />
+
+      {/* 100% Free AI Smart Site Assistant */}
+      <AiSiteAssistant />
 
       {/* Mobile Fixed Bottom Navigation Bar */}
       <BottomNavigation 

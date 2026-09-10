@@ -234,6 +234,11 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // 13. Homepage Banners Collection
     match /banners/{bannerId} {
       allow read: if true;

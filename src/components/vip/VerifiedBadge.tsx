@@ -32,16 +32,10 @@ export function VerifiedBadge({
 }: VerifiedBadgeProps) {
   const [showModal, setShowModal] = useState(false);
 
-  const sizeClasses = {
-    sm: 'p-1',
-    md: 'p-1.5',
-    lg: 'p-2'
-  };
-
   const iconSizes = {
-    sm: 'h-3.5 w-3.5',
-    md: 'h-4 w-4',
-    lg: 'h-5 w-5'
+    sm: 'h-4 w-4',
+    md: 'h-5 w-5',
+    lg: 'h-6 w-6'
   };
 
   return (
@@ -54,10 +48,10 @@ export function VerifiedBadge({
           setShowModal(true);
         }}
         title="حساب موثّق بالشارة الزرقاء المعتمدة في منصة شو في بإربد (مثل فيسبوك وX)"
-        className={`inline-flex items-center font-black rounded-full bg-sky-500/10 hover:bg-sky-500/20 text-[#0c7abf] border border-sky-300/60 shadow-xs hover:scale-105 transition-all cursor-pointer select-none backdrop-blur-xs ${sizeClasses[size]} ${className}`}
+        className={`inline-flex items-center gap-1 hover:scale-110 active:scale-95 transition-transform cursor-pointer select-none shrink-0 ${className}`}
       >
         <BlueCheckIcon className={iconSizes[size]} />
-        {showText && <span>موثّق</span>}
+        {showText && <span className="text-xs font-bold text-[#1d9bf0]">موثّق</span>}
       </button>
 
       {/* Verification Trust Modal */}

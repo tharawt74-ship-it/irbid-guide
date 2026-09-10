@@ -1,6 +1,6 @@
 import { Link, useNavigate } from 'react-router';
 import { Business } from '../types';
-import { Star, MapPin, Store, Clock, Heart, Crown } from 'lucide-react';
+import { Star, MapPin, Store, Clock, Heart, Crown, Tag } from 'lucide-react';
 import { VerifiedBadge } from './vip/VerifiedBadge';
 import { ShareButton } from './ShareButton';
 import { getLiveWorkingStatus } from '../lib/businessHoursHelper';
@@ -63,11 +63,6 @@ export function BusinessCard({ business, featured = false, searchReasons }: Busi
                   <span>ممول</span>
                 </span>
               )}
-              {business.district && (
-                <span className="bg-black/50 backdrop-blur-md text-white text-[10px] sm:text-xs font-bold px-2.5 py-0.5 rounded-full border border-white/20">
-                  📍 {business.district}
-                </span>
-              )}
             </div>
 
             <div className="flex items-center gap-1.5 ml-auto">
@@ -79,9 +74,6 @@ export function BusinessCard({ business, featured = false, searchReasons }: Busi
                 <Heart className={`h-4.5 w-4.5 transition-transform duration-300 active:scale-125 ${isFavorited ? 'fill-red-500 text-red-500' : 'text-white'}`} />
               </button>
               <ShareButton title={business.name} url={businessLink} size="sm" variant="pill" />
-              <span className='bg-[#ff9f1c] text-white text-[10px] sm:text-xs font-bold px-3 py-1 rounded-full uppercase tracking-widest shadow-sm'>
-                {business.category}
-              </span>
             </div>
           </div>
 
@@ -92,7 +84,7 @@ export function BusinessCard({ business, featured = false, searchReasons }: Busi
               <span>{liveStatus.statusText}</span>
             </div>
 
-            <div className="flex items-center gap-2 flex-wrap mt-1 mb-2">
+            <div className="flex items-center gap-2 flex-wrap mt-1 mb-1.5">
               <h2 className={`text-xl sm:text-2xl font-black line-clamp-1 ${
                 isLuxuryFeatured 
                   ? 'text-amber-300 drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-400 bg-clip-text text-transparent' 
@@ -104,6 +96,17 @@ export function BusinessCard({ business, featured = false, searchReasons }: Busi
                 <VerifiedBadge size="sm" businessName={business.name} />
               )}
             </div>
+
+            {/* Category & Department Tag */}
+            {business.category && (
+              <div className="flex items-center gap-1.5 mb-2.5">
+                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-white/20 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-white/20 shadow-xs">
+                  <Tag className="w-3 h-3 text-[#ff9f1c]" />
+                  <span>{business.category}</span>
+                </span>
+              </div>
+            )}
+
             <p className='text-white/80 max-w-md text-xs sm:text-sm leading-relaxed mb-4 line-clamp-2'>{stripHtml(business.description)}</p>
             
             {searchReasons && searchReasons.length > 0 && (
@@ -159,24 +162,21 @@ export function BusinessCard({ business, featured = false, searchReasons }: Busi
           </div>
         )}
 
-        {/* Top Badges */}
-        <div className="absolute top-4 right-4 flex flex-wrap gap-1.5">
-          <div className="bg-white/70 backdrop-blur-xl border border-white/40 px-3 py-1 rounded-full text-[11px] font-black text-[#1a4d2e] shadow-[0_4px_12px_rgba(0,0,0,0.08)]">
-            {business.category}
-          </div>
+        {/* Top Badges & Actions */}
+        <div className="absolute top-3.5 right-3.5 flex items-center gap-1.5 z-20">
           {isCurrentlyFeatured && (
-            <div className="bg-gradient-to-r from-amber-400 to-yellow-500 backdrop-blur-xl border border-amber-300/60 px-3 py-1 rounded-full text-[11px] font-black text-yellow-950 shadow-md flex items-center gap-1 w-fit">
-              <Crown className="h-3 w-3 sm:h-3.5 sm:w-3.5 fill-current shrink-0 text-amber-950" />
+            <div className="bg-gradient-to-r from-amber-400 to-yellow-500 backdrop-blur-xl border border-amber-300/60 px-2.5 py-0.5 rounded-full text-[10px] font-black text-yellow-950 shadow-md flex items-center gap-1 w-fit">
+              <Crown className="h-3 w-3 fill-current shrink-0 text-amber-950" />
               <span>ممول</span>
             </div>
           )}
         </div>
 
-        {/* Share Button Top Left */}
-        <div className="absolute top-4 left-4 flex items-center gap-1.5 z-20">
+        {/* Share & Favorite Top Left */}
+        <div className="absolute top-3.5 left-3.5 flex items-center gap-1.5 z-20">
           <button
             onClick={handleToggleFavorite}
-            className="w-8 h-8 rounded-full bg-white/70 backdrop-blur-xl hover:bg-white flex items-center justify-center transition-all shadow-[0_4px_12px_rgba(0,0,0,0.08)] border border-white/40"
+            className="w-8 h-8 rounded-full bg-white/70 backdrop-blur-xl hover:bg-white flex items-center justify-center transition-all shadow-[0_4px_12px_rgba(0,0,0,0.08)] border border-white/40 cursor-pointer"
             title={isFavorited ? "إزالة من المفضلة" : "إضافة للمفضلة"}
           >
             <Heart className={`h-4 w-4 transition-transform duration-300 active:scale-125 ${isFavorited ? 'fill-red-500 text-red-500' : 'text-stone-600'}`} />
@@ -185,12 +185,7 @@ export function BusinessCard({ business, featured = false, searchReasons }: Busi
         </div>
 
         {/* Live Working Status Bottom Right of Image */}
-        <div className="absolute bottom-3 right-3 flex items-center gap-1.5">
-          {business.district && (
-            <span className="bg-black/40 backdrop-blur-xl border border-white/20 text-white font-bold text-[10px] px-2.5 py-1 rounded-full shadow-[0_4px_12px_rgba(0,0,0,0.1)]">
-              📍 {business.district}
-            </span>
-          )}
+        <div className="absolute bottom-3 right-3 flex items-center gap-1.5 z-10">
           <div className={`px-2.5 py-1 rounded-full text-[10px] font-black backdrop-blur-xl flex items-center gap-1.5 shadow-[0_4px_12px_rgba(0,0,0,0.1)] border border-white/20 ${liveStatus.badgeBg.replace("bg-", "bg-opacity-80 bg-")}`}>
             <span className={`w-2 h-2 rounded-full ${liveStatus.dotColor}`}></span>
             <span>{liveStatus.statusText}</span>
@@ -223,6 +218,16 @@ export function BusinessCard({ business, featured = false, searchReasons }: Busi
             </div>
           )}
         </div>
+
+        {/* Category & Department Tag */}
+        {business.category && (
+          <div className="flex items-center gap-1.5 mb-2.5">
+            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#1a4d2e] bg-[#1a4d2e]/7 hover:bg-[#1a4d2e]/12 px-2.5 py-0.5 rounded-full border border-[#1a4d2e]/15 transition-colors">
+              <Tag className="w-3 h-3 text-[#1a4d2e]" />
+              <span>{business.category}</span>
+            </span>
+          </div>
+        )}
 
         <p className="text-stone-500 text-sm line-clamp-2 mb-4 flex-1 leading-relaxed">
           {stripHtml(business.description)}

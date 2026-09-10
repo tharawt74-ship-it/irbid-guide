@@ -4,7 +4,7 @@ import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { Business, HomepageBanner } from '../types';
 import { Link, useSearchParams, useNavigate } from 'react-router';
-import { getAppConfig } from '../lib/demoDataHelper';
+import { getAppConfig, DEMO_SEED_DATA } from '../lib/demoDataHelper';
 import { BusinessCard } from '../components/BusinessCard';
 import { BannerSlideshow } from '../components/BannerSlideshow';
 import { BUSINESS_CATEGORIES } from '../lib/categories';
@@ -274,8 +274,24 @@ export function Home() {
           setBanners([BOOK_YOUR_AD_BANNER]);
         }
       } catch (err: any) {
-        console.warn("Could not fetch businesses:", err);
-        setError(`حدث خطأ أثناء جلب البيانات: ${err?.message || 'مشكلة غير معروفة'}. يرجى التأكد من إعداد Firebase.`);
+        console.warn("Could not fetch businesses from Firestore:", err);
+        const cached = getCachedBusinesses();
+        if (cached && cached.length > 0) {
+          setBusinesses(cached);
+        } else if (DEMO_SEED_DATA?.businesses) {
+          const fallbackBiz = DEMO_SEED_DATA.businesses.map((b, idx) => ({
+            id: `biz-demo-${idx + 1}`,
+            ...b
+          })) as Business[];
+          setBusinesses(fallbackBiz);
+        }
+        if (!cached || cached.length === 0) {
+          if (err?.message?.includes('Missing or insufficient permissions')) {
+            console.info("Firestore Rules Note: Make sure the rules in firestore.rules are published to Firebase Console and App Check allows this domain.");
+          } else {
+            setError(`حدث خطأ أثناء جلب البيانات: ${err?.message || 'مشكلة غير معروفة'}.`);
+          }
+        }
       } finally {
         setLoading(false);
       }

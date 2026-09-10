@@ -70,6 +70,44 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  // 🛡️ Security Headers & Server Hardening 🛡️
+  app.disable('x-powered-by');
+
+  app.use((req, res, next) => {
+    // Prevent MIME-type sniffing
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    // Prevent clickjacking by allowing framing only from the same origin
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    // Enable XSS filtering in browsers that support it
+    res.setHeader('X-XSS-Protection', '1; mode=block');
+    // Control referrer information leakage
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    // Enforce HTTPS transmission via HSTS (1 year)
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    // Restrict browser features and sensors
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(self)');
+    next();
+  });
+
+  // Helper function for strict HTML & string sanitization
+  const sanitizeInput = (str: unknown, maxLength = 200): string => {
+    if (typeof str !== 'string') return '';
+    return str
+      .trim()
+      .slice(0, maxLength)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#x27;');
+  };
+
+  const isValidEmail = (email: unknown): boolean => {
+    if (typeof email !== 'string') return false;
+    const trimmed = email.trim();
+    return trimmed.length <= 100 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed);
+  };
+
   // 🛡️ Rate Limiting Configuration 🛡️
   const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
@@ -110,10 +148,21 @@ async function startServer() {
   // API Route for custom Resend verification email
   app.post("/api/auth/send-verification", async (req, res) => {
     try {
-      const { email, token, displayName } = req.body;
-      if (!email || !token) {
-        return res.status(400).json({ error: "Email and token are required" });
+      const rawEmail = req.body?.email;
+      const rawToken = req.body?.token;
+      const rawDisplayName = req.body?.displayName;
+
+      if (!isValidEmail(rawEmail)) {
+        return res.status(400).json({ error: "عنوان بريد إلكتروني غير صالح" });
       }
+
+      if (typeof rawToken !== 'string' || !rawToken.trim() || rawToken.length > 256) {
+        return res.status(400).json({ error: "رمز التحقق غير صالح أو مفقود" });
+      }
+
+      const email = rawEmail.trim().toLowerCase();
+      const token = encodeURIComponent(rawToken.trim());
+      const safeDisplayName = sanitizeInput(rawDisplayName || 'المستخدم الكريم', 60);
 
       const resendApiKey = process.env.RESEND_API_KEY;
       if (!resendApiKey) {
@@ -260,7 +309,7 @@ async function startServer() {
       </div>
 
       <div class="content">
-        <h2>أهلاً بك يا ${displayName}، 👋</h2>
+        <h2>أهلاً بك يا ${safeDisplayName}، 👋</h2>
         <p>
           لقد قمت بإنشاء حسابك الجديد بنجاح في <strong>منصة شو في بإربد؟</strong>. لتأكيد ملكيتك للبريد الإلكتروني وتنشيط حسابك بالكامل، يرجى الضغط على رابط التفعيل المباشر والآمن أدناه:
         </p>
@@ -320,10 +369,12 @@ async function startServer() {
   // API Route for custom Resend password reset email
   app.post("/api/auth/send-password-reset", async (req, res) => {
     try {
-      const { email } = req.body;
-      if (!email) {
-        return res.status(400).json({ error: "Email is required" });
+      const rawEmail = req.body?.email;
+      if (!isValidEmail(rawEmail)) {
+        return res.status(400).json({ error: "عنوان بريد إلكتروني غير صالح" });
       }
+
+      const email = rawEmail.trim().toLowerCase();
 
       const resendApiKey = process.env.RESEND_API_KEY;
       if (!resendApiKey) {
@@ -580,10 +631,13 @@ async function startServer() {
   // API Route for AI Site Assistant (Gemini 2.5 Flash - 100% Free Tier)
   app.post("/api/ai/chat", async (req, res) => {
     try {
-      const { message } = req.body || {};
-      if (!message) {
+      const rawMessage = req.body?.message;
+      if (typeof rawMessage !== 'string' || !rawMessage.trim()) {
         return res.status(400).json({ error: "Message is required" });
       }
+
+      // Limit message length to 1000 characters to prevent buffer overflow & token exhaustion attacks
+      const message = rawMessage.trim().slice(0, 1000);
 
       const client = getGeminiClient();
       if (!client) {
@@ -702,8 +756,9 @@ async function startServer() {
   });
 
   // Vite middleware for development
+  let vite: any = null;
   if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
+    vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
@@ -716,9 +771,34 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  const server = app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on port ${PORT}`);
   });
+
+  server.on('error', (err: any) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`Port ${PORT} is already in use.`);
+    } else {
+      console.error('Server error:', err);
+    }
+    process.exit(1);
+  });
+
+  const cleanup = async () => {
+    if (vite) {
+      try {
+        await vite.close();
+      } catch {
+        // ignore
+      }
+    }
+    server.close(() => {
+      process.exit(0);
+    });
+  };
+
+  process.on('SIGTERM', cleanup);
+  process.on('SIGINT', cleanup);
 }
 
 startServer();

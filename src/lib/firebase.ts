@@ -32,16 +32,9 @@ try {
     const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
     if (siteKey) {
       try {
-        // Enable debug token for AI Studio, localhost, and the user's explicit Vercel domains
-        const hostname = window.location.hostname;
-        if (
-          hostname === 'localhost' || 
-          hostname.includes('run.app') || 
-          hostname.includes('shofibirbid.site') || 
-          hostname.includes('vercel.app')
-        ) {
+        // Enable debug token ONLY for local development and AI Studio environment
+        if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.includes('run.app'))) {
           (window as any).FIREBASE_APPCHECK_DEBUG_TOKEN = true;
-          console.log("AppCheck Debug Mode Enabled for hostname:", hostname);
         }
 
         initializeAppCheck(app, {

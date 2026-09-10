@@ -20,6 +20,7 @@ import { SearchableSelect } from '../ui/SearchableSelect';
 import { WorkingHoursEditor } from '../ui/WorkingHoursEditor';
 import { SocialLinksEditor } from '../ui/SocialLinksEditor';
 import { ImageUploader } from '../ui/ImageUploader';
+import { RichTextEditor } from '../common/RichTextEditor';
 
 interface BusinessAddModalProps {
   isOpen: boolean;
@@ -49,8 +50,7 @@ export function BusinessAddModal({
     isFeatured: false,
     packagePlan: 'golden',
     isVerified: true,
-    hideSiteReviews: false,
-    hideGoogleReviews: false
+    hideSiteReviews: false
   });
 
   const [workingHours, setWorkingHours] = useState<WorkingHours>({
@@ -102,7 +102,6 @@ export function BusinessAddModal({
         isVerified: formData.isVerified,
         packagePlan: formData.packagePlan as any,
         hideSiteReviews: formData.hideSiteReviews,
-        hideGoogleReviews: formData.hideGoogleReviews,
         workingHours: {
           isOpen24Hours: !!workingHours.isOpen24Hours,
           openTime: workingHours.openTime || '09:00',
@@ -141,8 +140,7 @@ export function BusinessAddModal({
         isFeatured: false,
         packagePlan: 'golden',
         isVerified: true,
-        hideSiteReviews: false,
-        hideGoogleReviews: false
+        hideSiteReviews: false
       });
     } catch (error) {
       console.error('Error adding business:', error);
@@ -227,13 +225,11 @@ export function BusinessAddModal({
           {/* Description */}
           <div>
             <label className="block text-xs font-black text-stone-700 mb-1.5">الوصف والخدمات المقدمة</label>
-            <textarea
-              rows={3}
+            <RichTextEditor
               value={formData.description}
-              onChange={e => setFormData({ ...formData, description: e.target.value })}
-              className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#1a4d2e] focus:bg-white transition-all text-stone-800 resize-none"
+              onChange={val => setFormData(prev => ({ ...prev, description: val }))}
               placeholder="اكتب نبذة تعريفية بالمنشأة، المميزات، وقائمة الطعام أو المنتجات..."
-            ></textarea>
+            />
           </div>
 
           {/* Address & District & Phone */}
@@ -266,7 +262,7 @@ export function BusinessAddModal({
                 type="tel"
                 dir="ltr"
                 value={formData.phone}
-                onChange={e => setFormData({ ...formData, phone: e.target.value })}
+                onChange={e => setFormData({ ...formData, phone: e.target.value.replace(/\s+/g, '') })}
                 placeholder="079XXXXXXX"
                 className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1a4d2e] focus:bg-white transition-all text-left text-stone-800"
               />

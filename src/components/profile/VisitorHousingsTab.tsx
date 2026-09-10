@@ -3,7 +3,7 @@ import {
   Building2, Plus, Home, MapPin, DollarSign, Clock, 
   CheckCircle2, AlertCircle, Trash2, Edit3, Eye, Phone, Sparkles, 
   ExternalLink, Copy, Crown, BarChart3, MessageSquare, TrendingUp,
-  Filter, Info, ShieldCheck, Key, Check, ArrowRight
+  Filter, Info, ShieldCheck, Key, Check, ArrowRight, Search, Share2
 } from 'lucide-react';
 import { HousingItem } from '../../types';
 import { doc, deleteDoc, updateDoc } from 'firebase/firestore';
@@ -21,20 +21,28 @@ export function VisitorHousingsTab({ housings, onRefresh }: VisitorHousingsTabPr
   const { currentUser, isAdmin } = useAuth();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingHousing, setEditingHousing] = useState<HousingItem | null>(null);
+  const [itemToDelete, setItemToDelete] = useState<HousingItem | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   
-  // Filter state for Housing Status Pills
+  // Filter & Search states
   const [statusFilter, setStatusFilter] = useState<'all' | 'available' | 'rented' | 'pending' | 'vip'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedType, setSelectedType] = useState<string>('الكل');
   
   // VIP Upgrade Modal State
   const [showVipModal, setShowVipModal] = useState<HousingItem | null>(null);
 
-  // Toggle Housing Occupied / Available status (متاح للإيجار ↔ تم التأجير)
+  const isForSale = (type?: string) => type === 'شقق للبيع' || type === 'للبيع' || type?.includes('للبيع');
+
+  // Toggle Housing Occupied / Available status (متاح للإيجار/للبيع ↔ تم التأجير/البيع)
   const handleToggleOccupied = async (item: HousingItem) => {
     setTogglingId(item.id);
     const newOccupiedState = !item.isOccupied;
+    const saleMode = isForSale(item.type);
+    
     try {
       if (db && item.id) {
         await updateDoc(doc(db, 'housings', item.id), {
@@ -44,8 +52,8 @@ export function VisitorHousingsTab({ housings, onRefresh }: VisitorHousingsTabPr
       }
       setSuccessMsg(
         newOccupiedState 
-          ? `تم تحديث حالة العقار (${item.title}) إلى "تم التأجير"` 
-          : `تم تحديث حالة العقار (${item.title}) إلى "متاح للإيجار"`
+          ? `تم تحديث حالة العقار (${item.title}) إلى "${saleMode ? 'مباع' : 'تم التأجير'}"` 
+          : `تم تحديث حالة العقار (${item.title}) إلى "${saleMode ? 'متاح للبيع' : 'متاح للإيجار'}"`
       );
       setTimeout(() => setSuccessMsg(null), 4000);
       onRefresh();
@@ -68,12 +76,25 @@ export function VisitorHousingsTab({ housings, onRefresh }: VisitorHousingsTabPr
     setIsModalOpen(true);
   };
 
+  // Copy share link
+  const handleCopyLink = (id: string) => {
+    const link = `${window.location.origin}/housing/${id}`;
+    navigator.clipboard.writeText(link);
+    setCopiedId(id);
+    setSuccessMsg('تم نسخ رابط إعلان العقار بنجاح!');
+    setTimeout(() => {
+      setCopiedId(null);
+      setSuccessMsg(null);
+    }, 3000);
+  };
+
   // Delete Housing Listing
-  const handleDelete = async (id: string) => {
-    if (!window.confirm('هل أنت متأكد من رغبتك في حذف هذا الإعلان العقاري؟')) return;
+  const handleConfirmDelete = async () => {
+    if (!itemToDelete) return;
+    const id = itemToDelete.id;
     setDeletingId(id);
     try {
-      if (db) {
+      if (db && id) {
         await deleteDoc(doc(db, 'housings', id));
       }
       setSuccessMsg('تم حذف الإعلان العقاري بنجاح.');
@@ -84,6 +105,7 @@ export function VisitorHousingsTab({ housings, onRefresh }: VisitorHousingsTabPr
       alert('حدث خطأ أثناء حذف الإعلان.');
     } finally {
       setDeletingId(null);
+      setItemToDelete(null);
     }
   };
 
@@ -93,33 +115,68 @@ export function VisitorHousingsTab({ housings, onRefresh }: VisitorHousingsTabPr
     setTimeout(() => setSuccessMsg(null), 5000);
   };
 
-  // Filtering calculations
+  // Key metrics
   const availableCount = useMemo(() => housings.filter(h => !h.isOccupied && (h.status === 'approved' || !h.status)).length, [housings]);
   const rentedCount = useMemo(() => housings.filter(h => !!h.isOccupied).length, [housings]);
   const pendingCount = useMemo(() => housings.filter(h => h.status === 'pending').length, [housings]);
   const vipCount = useMemo(() => housings.filter(h => !!h.isVip || !!h.isFeatured).length, [housings]);
 
+  const totalViews = useMemo(() => {
+    return housings.reduce((sum, h) => sum + (h.viewsCount || 0), 0);
+  }, [housings]);
+
   const filteredHousings = useMemo(() => {
     return housings.filter(item => {
-      if (statusFilter === 'available') return !item.isOccupied && (item.status === 'approved' || !item.status);
-      if (statusFilter === 'rented') return !!item.isOccupied;
-      if (statusFilter === 'pending') return item.status === 'pending';
-      if (statusFilter === 'vip') return !!item.isVip || !!item.isFeatured;
+      // Status filter
+      if (statusFilter === 'available' && (item.isOccupied || (item.status && item.status !== 'approved'))) return false;
+      if (statusFilter === 'rented' && !item.isOccupied) return false;
+      if (statusFilter === 'pending' && item.status !== 'pending') return false;
+      if (statusFilter === 'vip' && !item.isVip && !item.isFeatured) return false;
+
+      // Type filter
+      if (selectedType !== 'الكل') {
+        if (selectedType === 'شقق للإيجار') {
+          const isRent = item.type === 'شقق للإيجار' || item.type === 'للإيجار' || item.type === 'أستوديو مفروش' || item.type === 'شقق عائلية';
+          if (!isRent) return false;
+        } else if (selectedType === 'شقق للبيع') {
+          const isSale = item.type === 'شقق للبيع' || item.type === 'للبيع';
+          if (!isSale) return false;
+        } else if (selectedType === 'سكنات الطلاب') {
+          const isStudent = item.type === 'سكنات الطلاب' || item.type === 'سكن طالبات' || item.type === 'سكن طلاب' || item.type === 'شقة طالبات' || item.type === 'سكن شباب' || item.type === 'غرفة مفردة';
+          if (!isStudent) return false;
+        } else if (selectedType === 'رفيق سكن') {
+          const isRoommate = item.type === 'رفيق سكن' || item.type === 'رفقاء السكن' || item.type === 'شريك سكن' || item.type === 'سكن مشترك';
+          if (!isRoommate) return false;
+        } else {
+          if (item.type !== selectedType) return false;
+        }
+      }
+
+      // Search Query
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchesTitle = item.title?.toLowerCase().includes(q);
+        const matchesLoc = item.location?.toLowerCase().includes(q);
+        const matchesDistrict = item.district?.toLowerCase().includes(q);
+        const matchesDesc = item.description?.toLowerCase().includes(q);
+        if (!matchesTitle && !matchesLoc && !matchesDistrict && !matchesDesc) return false;
+      }
+
       return true;
     });
-  }, [housings, statusFilter]);
+  }, [housings, statusFilter, selectedType, searchQuery]);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       
       {/* 1. Header & Identity Section: Landlord / Property Owner Workspace */}
-      <div className="bg-gradient-to-l from-[#1a4d2e] via-[#154126] to-[#0e2c1a] rounded-3xl p-6 sm:p-8 text-white space-y-5 shadow-sm border border-emerald-900/40 relative overflow-hidden">
+      <div className="bg-gradient-to-l from-[#1a4d2e] via-[#154126] to-[#0e2c1a] rounded-3xl p-6 sm:p-8 text-white space-y-6 shadow-md border border-emerald-900/40 relative overflow-hidden">
         <div className="absolute top-0 left-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
         
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
           <div className="space-y-1.5">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/10 rounded-full text-xs font-black text-emerald-300 backdrop-blur-md">
-              <Home className="h-3.5 w-3.5" />
+              <Home className="h-3.5 w-3.5 text-amber-400" />
               <span>مساحة عمل أصحاب العقارات والمؤجرين</span>
             </div>
             <h3 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
@@ -143,30 +200,29 @@ export function VisitorHousingsTab({ housings, onRefresh }: VisitorHousingsTabPr
           </button>
         </div>
 
-        {/* 2. Action Center Banner (تجميع التنبيهات الذكية للمالك) */}
-        <div className="bg-white/10 backdrop-blur-md border border-white/15 rounded-2xl p-4 text-xs space-y-2 relative z-10">
-          <div className="flex items-center justify-between font-black text-amber-300">
-            <span className="flex items-center gap-1.5">
-              <Info className="h-4 w-4 text-amber-400" />
-              مركز إشعارات المالك والتنبيهات المباشرة:
-            </span>
-            <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full text-white">تحديث حي</span>
+        {/* 2. Key Business Metrics Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 relative z-10">
+          <div className="bg-black/25 backdrop-blur-md p-3.5 rounded-2xl border border-white/10 space-y-1">
+            <span className="text-[10px] text-emerald-200 font-bold block">إجمالي العقارات</span>
+            <div className="text-lg font-black text-white flex items-center gap-1.5">
+              <Building2 className="h-4 w-4 text-emerald-400" />
+              <span>{housings.length}</span>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1 text-emerald-50">
-            <div className="flex items-center gap-2 bg-black/20 p-2.5 rounded-xl border border-white/5">
-              <div className="w-2 h-2 rounded-full bg-emerald-400 animate-ping shrink-0" />
-              <span>لديك <b>{availableCount}</b> عقارات متاحة للإيجار حالياً</span>
+          <div className="bg-black/25 backdrop-blur-md p-3.5 rounded-2xl border border-white/10 space-y-1">
+            <span className="text-[10px] text-emerald-200 font-bold block">عقارات متاحة</span>
+            <div className="text-lg font-black text-emerald-300 flex items-center gap-1.5">
+              <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span>{availableCount}</span>
             </div>
+          </div>
 
-            <div className="flex items-center gap-2 bg-black/20 p-2.5 rounded-xl border border-white/5">
-              <Key className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-              <span><b>{rentedCount}</b> عقار مؤجر (يمكنك إتاحته بضغطة زر)</span>
-            </div>
-
-            <div className="flex items-center gap-2 bg-black/20 p-2.5 rounded-xl border border-white/5">
-              <Clock className="h-3.5 w-3.5 text-sky-400 shrink-0" />
-              <span><b>{pendingCount}</b> طلب قيد مراجعة وتأكيد الإدارة</span>
+          <div className="bg-black/25 backdrop-blur-md p-3.5 rounded-2xl border border-white/10 space-y-1">
+            <span className="text-[10px] text-amber-200 font-bold block">مباعة / مؤجرة</span>
+            <div className="text-lg font-black text-amber-300 flex items-center gap-1.5">
+              <Key className="h-4 w-4 text-amber-400" />
+              <span>{rentedCount}</span>
             </div>
           </div>
         </div>
@@ -174,80 +230,120 @@ export function VisitorHousingsTab({ housings, onRefresh }: VisitorHousingsTabPr
 
       {/* Success Notification */}
       {successMsg && (
-        <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl text-xs font-bold flex items-center justify-between gap-2 animate-in fade-in">
+        <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl text-xs font-bold flex items-center justify-between gap-2 animate-in fade-in shadow-2xs">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
             <span>{successMsg}</span>
           </div>
-          <button onClick={() => setSuccessMsg(null)} className="text-emerald-600 hover:text-emerald-900 font-bold text-xs">إغلاق</button>
+          <button onClick={() => setSuccessMsg(null)} className="text-emerald-600 hover:text-emerald-900 font-bold text-xs cursor-pointer">إغلاق</button>
         </div>
       )}
 
-      {/* 3. Housing Status Pills (شريط الحالات السريعة للعقارات) */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar text-xs font-bold">
-        <span className="text-stone-400 text-[11px] shrink-0 ml-1 flex items-center gap-1">
-          <Filter className="h-3.5 w-3.5" />
-          تصفية حسب الحالة:
-        </span>
+      {/* 3. Search & Filter Toolbar */}
+      <div className="bg-white rounded-2xl p-4 border border-stone-200 shadow-2xs space-y-3">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+          {/* Search Box */}
+          <div className="relative flex-1">
+            <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="بحث باسم العقار، المنطقة، أو الحي..."
+              className="w-full pl-3 pr-10 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e] transition-all"
+            />
+            {searchQuery && (
+              <button 
+                onClick={() => setSearchQuery('')}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 text-xs font-bold cursor-pointer"
+              >
+                مسح
+              </button>
+            )}
+          </div>
 
-        <button
-          onClick={() => setStatusFilter('all')}
-          className={`px-4 py-2.5 rounded-2xl transition-all whitespace-nowrap cursor-pointer min-h-[44px] flex items-center gap-1.5 ${
-            statusFilter === 'all'
-              ? 'bg-[#1a4d2e] text-white font-black shadow-xs'
-              : 'bg-white text-stone-700 border border-stone-200 hover:bg-stone-50'
-          }`}
-        >
-          <span>الكل ({housings.length})</span>
-        </button>
+          {/* Quick Property Type Selector */}
+          <div className="sm:w-64 shrink-0">
+            <select
+              value={selectedType}
+              onChange={(e) => setSelectedType(e.target.value)}
+              className="w-full py-2.5 px-3 bg-stone-50 border border-stone-200 rounded-xl text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+            >
+              <option value="الكل">جميع الأقسام والأصناف</option>
+              <option value="شقق للإيجار">🏠 للإيجار (شقق / أستوديو)</option>
+              <option value="شقق للبيع">🔑 للبيع (شقق / أراضي)</option>
+              <option value="سكنات الطلاب">🎓 سكن طلاب (طالبات / شباب)</option>
+              <option value="رفيق سكن">🤝 رفيق سكن (سكن مشترك)</option>
+            </select>
+          </div>
+        </div>
 
-        <button
-          onClick={() => setStatusFilter('available')}
-          className={`px-4 py-2.5 rounded-2xl transition-all whitespace-nowrap cursor-pointer min-h-[44px] flex items-center gap-1.5 ${
-            statusFilter === 'available'
-              ? 'bg-emerald-600 text-white font-black shadow-xs'
-              : 'bg-white text-stone-700 border border-stone-200 hover:bg-emerald-50 hover:text-emerald-700'
-          }`}
-        >
-          <div className="w-2 h-2 rounded-full bg-emerald-500" />
-          <span>متاحة للإيجار ({availableCount})</span>
-        </button>
+        {/* Housing Status Filter Pills */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar text-xs font-bold pt-1 border-t border-stone-100">
+          <span className="text-stone-400 text-[11px] shrink-0 ml-1 flex items-center gap-1">
+            <Filter className="h-3.5 w-3.5" />
+            الحالة:
+          </span>
 
-        <button
-          onClick={() => setStatusFilter('rented')}
-          className={`px-4 py-2.5 rounded-2xl transition-all whitespace-nowrap cursor-pointer min-h-[44px] flex items-center gap-1.5 ${
-            statusFilter === 'rented'
-              ? 'bg-amber-600 text-white font-black shadow-xs'
-              : 'bg-white text-stone-700 border border-stone-200 hover:bg-amber-50 hover:text-amber-700'
-          }`}
-        >
-          <Key className="h-3.5 w-3.5 text-amber-500" />
-          <span>تم التأجير ({rentedCount})</span>
-        </button>
+          <button
+            onClick={() => setStatusFilter('all')}
+            className={`px-3.5 py-2 rounded-xl transition-all whitespace-nowrap cursor-pointer min-h-[38px] flex items-center gap-1.5 text-xs ${
+              statusFilter === 'all'
+                ? 'bg-[#1a4d2e] text-white font-black shadow-xs'
+                : 'bg-stone-50 text-stone-700 border border-stone-200 hover:bg-stone-100'
+            }`}
+          >
+            <span>الكل ({housings.length})</span>
+          </button>
 
-        <button
-          onClick={() => setStatusFilter('pending')}
-          className={`px-4 py-2.5 rounded-2xl transition-all whitespace-nowrap cursor-pointer min-h-[44px] flex items-center gap-1.5 ${
-            statusFilter === 'pending'
-              ? 'bg-sky-700 text-white font-black shadow-xs'
-              : 'bg-white text-stone-700 border border-stone-200 hover:bg-sky-50 hover:text-sky-700'
-          }`}
-        >
-          <Clock className="h-3.5 w-3.5 text-sky-500" />
-          <span>قيد المراجعة ({pendingCount})</span>
-        </button>
+          <button
+            onClick={() => setStatusFilter('available')}
+            className={`px-3.5 py-2 rounded-xl transition-all whitespace-nowrap cursor-pointer min-h-[38px] flex items-center gap-1.5 text-xs ${
+              statusFilter === 'available'
+                ? 'bg-emerald-600 text-white font-black shadow-xs'
+                : 'bg-stone-50 text-stone-700 border border-stone-200 hover:bg-emerald-50 hover:text-emerald-700'
+            }`}
+          >
+            <div className="w-2 h-2 rounded-full bg-emerald-500" />
+            <span>متاح ({availableCount})</span>
+          </button>
 
-        <button
-          onClick={() => setStatusFilter('vip')}
-          className={`px-4 py-2.5 rounded-2xl transition-all whitespace-nowrap cursor-pointer min-h-[44px] flex items-center gap-1.5 ${
-            statusFilter === 'vip'
-              ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white font-black shadow-xs'
-              : 'bg-white text-stone-700 border border-stone-200 hover:bg-amber-50 hover:text-amber-700'
-          }`}
-        >
-          <Crown className="h-3.5 w-3.5 text-amber-500 fill-amber-500" />
-          <span>مميزة VIP ({vipCount})</span>
-        </button>
+          <button
+            onClick={() => setStatusFilter('rented')}
+            className={`px-3.5 py-2 rounded-xl transition-all whitespace-nowrap cursor-pointer min-h-[38px] flex items-center gap-1.5 text-xs ${
+              statusFilter === 'rented'
+                ? 'bg-amber-600 text-white font-black shadow-xs'
+                : 'bg-stone-50 text-stone-700 border border-stone-200 hover:bg-amber-50 hover:text-amber-700'
+            }`}
+          >
+            <Key className="h-3.5 w-3.5 text-amber-500" />
+            <span>مباع / مؤجر ({rentedCount})</span>
+          </button>
+
+          <button
+            onClick={() => setStatusFilter('pending')}
+            className={`px-3.5 py-2 rounded-xl transition-all whitespace-nowrap cursor-pointer min-h-[38px] flex items-center gap-1.5 text-xs ${
+              statusFilter === 'pending'
+                ? 'bg-sky-700 text-white font-black shadow-xs'
+                : 'bg-stone-50 text-stone-700 border border-stone-200 hover:bg-sky-50 hover:text-sky-700'
+            }`}
+          >
+            <Clock className="h-3.5 w-3.5 text-sky-500" />
+            <span>قيد المراجعة ({pendingCount})</span>
+          </button>
+
+          <button
+            onClick={() => setStatusFilter('vip')}
+            className={`px-3.5 py-2 rounded-xl transition-all whitespace-nowrap cursor-pointer min-h-[38px] flex items-center gap-1.5 text-xs ${
+              statusFilter === 'vip'
+                ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white font-black shadow-xs'
+                : 'bg-stone-50 text-stone-700 border border-stone-200 hover:bg-amber-50 hover:text-amber-700'
+            }`}
+          >
+            <Crown className="h-3.5 w-3.5 text-amber-500 fill-amber-500" />
+            <span>مميزة VIP ({vipCount})</span>
+          </button>
+        </div>
       </div>
 
       {/* 4. List of Clean Glassmorphic Property Cards */}
@@ -257,9 +353,9 @@ export function VisitorHousingsTab({ housings, onRefresh }: VisitorHousingsTabPr
             <Home className="h-8 w-8" />
           </div>
           <div className="space-y-1">
-            <h4 className="font-black text-stone-800 text-base">لا توجد عقارات مطابقة لهذا التصنيف</h4>
+            <h4 className="font-black text-stone-800 text-base">لا توجد عقارات مطابقة لهذا البحث والتصنيف</h4>
             <p className="text-xs text-stone-500 max-w-sm mx-auto">
-              تأكد من اختيار تصنيف آخر أو اضغط على الزر أدناه لإضافة عقار جديد.
+              تأكد من إلغاء خيارات البحث أو قم بإضافة عقار جديد بالنقر على الزر أدناه.
             </p>
           </div>
           <button
@@ -285,14 +381,16 @@ export function VisitorHousingsTab({ housings, onRefresh }: VisitorHousingsTabPr
             return (
               <div 
                 key={item.id}
-                className={`bg-white/95 backdrop-blur-md rounded-[28px] p-5 sm:p-6 border transition-all flex flex-col justify-between gap-4 shadow-2xs hover:shadow-md relative overflow-hidden ${
-                  isOccupied
-                    ? 'border-amber-200/90 bg-amber-50/10'
+                className={`bg-white/95 backdrop-blur-md rounded-[28px] p-5 sm:p-6 border transition-all flex flex-col justify-between gap-4 relative overflow-hidden ${
+                  isVip
+                    ? 'border-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.25)] hover:shadow-[0_0_28px_rgba(245,158,11,0.35)]'
+                    : isOccupied
+                    ? 'border-amber-200/90 bg-amber-50/10 shadow-2xs'
                     : isPending 
-                    ? 'border-sky-200/80 bg-sky-50/10' 
+                    ? 'border-sky-200/80 bg-sky-50/10 shadow-2xs' 
                     : isRejected 
-                    ? 'border-rose-200/80 bg-rose-50/10' 
-                    : 'border-stone-200/90 hover:border-emerald-400/80'
+                    ? 'border-rose-200/80 bg-rose-50/10 shadow-2xs' 
+                    : 'border-stone-200/90 hover:border-emerald-400/80 shadow-2xs hover:shadow-md'
                 }`}
               >
                 <div className="space-y-3.5">
@@ -307,6 +405,16 @@ export function VisitorHousingsTab({ housings, onRefresh }: VisitorHousingsTabPr
                         <span className="text-[10px] font-bold px-2 py-1 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200/50">
                           جامعة {item.university}
                         </span>
+                        {item.gender && (
+                          <span className="text-[10px] font-bold px-2 py-1 rounded-xl bg-indigo-50 text-indigo-800 border border-indigo-200/50">
+                            {item.gender}
+                          </span>
+                        )}
+                        {item.isFurnished && (
+                          <span className="text-[10px] font-bold px-2 py-1 rounded-xl bg-amber-50 text-amber-800 border border-amber-200/50">
+                            {item.isFurnished}
+                          </span>
+                        )}
                         {isVip && (
                           <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-500 to-amber-600 text-white flex items-center gap-1 shadow-3xs">
                             <Crown className="h-3 w-3 fill-white" />
@@ -314,7 +422,15 @@ export function VisitorHousingsTab({ housings, onRefresh }: VisitorHousingsTabPr
                           </span>
                         )}
                       </div>
-                      <h4 className="text-base font-black text-stone-900 mt-1 line-clamp-1">{item.title}</h4>
+
+                      {/* Title with Gold Gradient for VIP */}
+                      <h4 className={`text-base font-black mt-1 line-clamp-1 ${
+                        isVip 
+                          ? 'bg-gradient-to-r from-amber-700 via-amber-600 to-amber-800 bg-clip-text text-transparent font-black' 
+                          : 'text-stone-900'
+                      }`}>
+                        {item.title}
+                      </h4>
                     </div>
 
                     {/* Status Pill */}
@@ -338,21 +454,30 @@ export function VisitorHousingsTab({ housings, onRefresh }: VisitorHousingsTabPr
                     )}
                   </div>
 
-                  {/* Pricing and Location Box */}
-                  <div className="p-3.5 bg-stone-50/80 rounded-2xl flex items-center justify-between text-xs border border-stone-100">
-                    <div className="flex items-center gap-1.5 text-[#1a4d2e] font-black">
-                      <DollarSign className="h-4 w-4 text-[#ff9f1c]" />
-                      <span className="text-sm">{item.price} د.أ</span>
-                      <span className="text-stone-400 text-[11px] font-bold">/ {item.pricePeriod}</span>
+                  {/* Pricing, Location and Rooms Box */}
+                  <div className="p-3.5 bg-stone-50/80 rounded-2xl space-y-2 border border-stone-100 text-xs">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 text-[#1a4d2e] font-black">
+                        <DollarSign className="h-4 w-4 text-[#ff9f1c]" />
+                        <span className="text-sm">{item.price} د.أ</span>
+                        <span className="text-stone-400 text-[11px] font-bold">/ {item.pricePeriod}</span>
+                      </div>
+
+                      <div className="flex items-center gap-1 text-stone-600 text-[11px] font-bold">
+                        <MapPin className="h-3.5 w-3.5 text-stone-400 shrink-0" />
+                        <span className="line-clamp-1">{item.district || item.location}</span>
+                      </div>
                     </div>
 
-                    <div className="flex items-center gap-1 text-stone-600 text-[11px] font-bold">
-                      <MapPin className="h-3.5 w-3.5 text-stone-400" />
-                      <span className="line-clamp-1">{item.distanceToCampus || item.location}</span>
-                    </div>
+                    {item.distanceToCampus && (
+                      <div className="text-[11px] text-stone-500 font-medium flex items-center gap-1 pt-1 border-t border-stone-200/50">
+                        <Building2 className="h-3 w-3 text-emerald-600 shrink-0" />
+                        <span>{item.distanceToCampus}</span>
+                      </div>
+                    )}
                   </div>
 
-                  {/* 5. زر التغيير السريع لحالة العقار ("متاح للإيجار" ↔ "تم التأجير") */}
+                  {/* Quick Toggle for Occupancy */}
                   <div className="pt-1">
                     <button
                       type="button"
@@ -368,29 +493,29 @@ export function VisitorHousingsTab({ housings, onRefresh }: VisitorHousingsTabPr
                         {isOccupied ? (
                           <>
                             <Key className="h-4 w-4 text-amber-600 shrink-0" />
-                            <span>الحالة الحالية: <b>مؤجر حالياً 🔑</b></span>
+                            <span>الحالة الحالية: <b>{isForSale(item.type) ? 'مباع 🔑' : 'مؤجر حالياً 🔑'}</b></span>
                           </>
                         ) : (
                           <>
                             <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-                            <span>الحالة الحالية: <b>متاح للإيجار 🟢</b></span>
+                            <span>الحالة الحالية: <b>{isForSale(item.type) ? 'متاح للبيع 🟢' : 'متاح للإيجار 🟢'}</b></span>
                           </>
                         )}
                       </div>
 
                       <span className="text-[10px] font-bold bg-white/80 px-2 py-1 rounded-xl shadow-3xs underline">
-                        {togglingId === item.id ? 'جاري التحديث...' : (isOccupied ? 'تحويل إلى متاح للإيجار' : 'تحويل إلى تم التأجير')}
+                        {togglingId === item.id ? 'جاري التحديث...' : (isOccupied ? (isForSale(item.type) ? 'تحويل إلى متاح للبيع' : 'تحويل إلى متاح للإيجار') : (isForSale(item.type) ? 'تحويل إلى مباع' : 'تحويل إلى تم التأجير'))}
                       </span>
                     </button>
                   </div>
 
-                  {/* 6. إحصائيات التفاعل الحية (Real Analytics) (لمشتركي VIP) */}
+                  {/* Real Analytics (For VIP / Admin) */}
                   {(isVip || isAdmin) ? (
                     <div className="p-3 bg-gradient-to-r from-emerald-900/5 to-emerald-900/10 border border-emerald-200/80 rounded-2xl space-y-2">
                       <div className="flex items-center justify-between text-xs font-black text-[#1a4d2e]">
                         <span className="flex items-center gap-1">
                           <BarChart3 className="h-4 w-4 text-emerald-600" />
-                          إحصائيات الزوار الحية (ميزة VIP)
+                          إحصائيات تفاعل الباحثين (VIP)
                         </span>
                         <span className="text-[10px] bg-emerald-600 text-white px-2 py-0.5 rounded-full font-bold">محدث فورياً</span>
                       </div>
@@ -454,16 +579,36 @@ export function VisitorHousingsTab({ housings, onRefresh }: VisitorHousingsTabPr
                   )}
                 </div>
 
-                {/* 7. Card Toolbar & Actions (Mobile Touch Optimized) */}
+                {/* Card Toolbar & Actions */}
                 <div className="flex flex-wrap items-center justify-between pt-3 border-t border-stone-100 gap-2 text-xs font-bold">
-                  <Link
-                    to="/housing"
-                    target="_blank"
-                    className="text-stone-600 hover:text-stone-900 flex items-center gap-1 cursor-pointer py-1.5 px-2 hover:bg-stone-100 rounded-xl transition-colors text-[11px]"
-                  >
-                    <ExternalLink className="h-3.5 w-3.5" />
-                    <span>معاينة الإعلان</span>
-                  </Link>
+                  <div className="flex items-center gap-2">
+                    <Link
+                      to={`/housing/${item.id}`}
+                      target="_blank"
+                      className="text-stone-600 hover:text-stone-900 flex items-center gap-1 cursor-pointer py-1.5 px-2 hover:bg-stone-100 rounded-xl transition-colors text-[11px]"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5 text-emerald-600" />
+                      <span>معاينة الإعلان</span>
+                    </Link>
+
+                    <button
+                      onClick={() => handleCopyLink(item.id)}
+                      className="text-stone-600 hover:text-stone-900 flex items-center gap-1 cursor-pointer py-1.5 px-2 hover:bg-stone-100 rounded-xl transition-colors text-[11px]"
+                      title="نسخ رابط الإعلان للمشاركة"
+                    >
+                      {copiedId === item.id ? (
+                        <>
+                          <Check className="h-3.5 w-3.5 text-emerald-600" />
+                          <span className="text-emerald-600 font-bold">تم النسخ</span>
+                        </>
+                      ) : (
+                        <>
+                          <Share2 className="h-3.5 w-3.5 text-sky-600" />
+                          <span>مشاركة</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
 
                   <div className="flex items-center gap-1.5 flex-wrap">
                     {/* Duplicate Feature Button */}
@@ -489,7 +634,7 @@ export function VisitorHousingsTab({ housings, onRefresh }: VisitorHousingsTabPr
 
                     <button
                       disabled={deletingId === item.id}
-                      onClick={() => handleDelete(item.id)}
+                      onClick={() => setItemToDelete(item)}
                       className="px-3 py-2 bg-rose-50 hover:bg-rose-600 hover:text-white rounded-xl text-rose-600 flex items-center gap-1 transition-all cursor-pointer disabled:opacity-50 min-h-[38px] text-[11px]"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -503,6 +648,44 @@ export function VisitorHousingsTab({ housings, onRefresh }: VisitorHousingsTabPr
         </div>
       )}
 
+      {/* Custom Delete Confirmation Modal */}
+      {itemToDelete && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs" dir="rtl">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-rose-100 animate-in fade-in zoom-in-95">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center font-black shrink-0">
+                <Trash2 className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="font-black text-stone-900 text-base">تأكيد حذف الإعلان العقاري</h3>
+                <p className="text-xs text-stone-500 line-clamp-1">{itemToDelete.title}</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-stone-600 leading-relaxed font-bold bg-stone-50 p-3.5 rounded-2xl border border-stone-100">
+              هل أنت متأكد من رغبتك في حذف هذا الإعلان العقاري نهائياً؟ لا يمكن التراجع عن هذا الإجراء بعد التأكيد.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                disabled={!!deletingId}
+                onClick={() => setItemToDelete(null)}
+                className="px-4 py-2.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              >
+                إلغاء
+              </button>
+              <button
+                disabled={!!deletingId}
+                onClick={handleConfirmDelete}
+                className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black transition-colors cursor-pointer flex items-center gap-1.5"
+              >
+                {deletingId ? 'جاري الحذف...' : 'تأكيد الحذف نهائياً'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* VIP Upgrade Info Modal */}
       {showVipModal && (
         <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs" dir="rtl">
@@ -513,7 +696,7 @@ export function VisitorHousingsTab({ housings, onRefresh }: VisitorHousingsTabPr
               </div>
               <div>
                 <h3 className="font-black text-stone-900 text-base">ترقية الإعلان لباقة VIP المميزة 👑</h3>
-                <p className="text-xs text-stone-500">إظهار إعلانك في الأعلى مع إحصائيات التفاعل الحية</p>
+                <p className="text-xs text-stone-500">إظهار إعلانك في الأعلى مع الهالة الذهبية وإحصائيات التفاعل الحية</p>
               </div>
             </div>
 
@@ -524,7 +707,7 @@ export function VisitorHousingsTab({ housings, onRefresh }: VisitorHousingsTabPr
               </p>
               <p className="flex items-center gap-2">
                 <Check className="h-4 w-4 text-emerald-600 shrink-0" />
-                <span>إظهار شارة التوثيق والـ VIP الذهبية المميزة</span>
+                <span>إظهار شارة التوثيق والـ VIP والبريق الذهبي المتميز</span>
               </p>
               <p className="flex items-center gap-2">
                 <Check className="h-4 w-4 text-emerald-600 shrink-0" />

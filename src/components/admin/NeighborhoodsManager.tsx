@@ -1,3 +1,4 @@
+import { useConfirm } from '../../contexts/ConfirmContext';
 import React, { useState } from 'react';
 import { useSystemSettings } from '../../contexts/SystemSettingsContext';
 import { MapPin, Plus, Trash2, Edit2, Check, X, Layers } from 'lucide-react';
@@ -8,6 +9,7 @@ interface NeighborhoodsManagerProps {
 }
 
 export function NeighborhoodsManager({ showToast }: NeighborhoodsManagerProps) {
+  const { confirm } = useConfirm();
   const { neighborhoods, updateNeighborhoods } = useSystemSettings();
   const [editingGroupIdx, setEditingGroupIdx] = useState<number | null>(null);
   const [editingGroupName, setEditingGroupName] = useState('');
@@ -27,7 +29,7 @@ export function NeighborhoodsManager({ showToast }: NeighborhoodsManagerProps) {
   };
 
   const handleDeleteGroup = async (idx: number) => {
-    if (confirm('هل أنت متأكد من حذف هذه المجموعة بالكامل؟')) {
+    if ((await confirm({ message: 'هل أنت متأكد من حذف هذه المجموعة بالكامل؟' }))) {
       const updated = neighborhoods.filter((_, i) => i !== idx);
       await updateNeighborhoods(updated);
       showToast('تم حذف المجموعة', 'info');
@@ -59,7 +61,7 @@ export function NeighborhoodsManager({ showToast }: NeighborhoodsManagerProps) {
   };
 
   const handleDeleteArea = async (groupIdx: number, areaIdx: number) => {
-    if (confirm('هل أنت متأكد من حذف هذه المنطقة؟')) {
+    if ((await confirm({ message: 'هل أنت متأكد من حذف هذه المنطقة؟' }))) {
       const updated = [...neighborhoods];
       updated[groupIdx].areas = updated[groupIdx].areas.filter((_, i) => i !== areaIdx);
       await updateNeighborhoods(updated);

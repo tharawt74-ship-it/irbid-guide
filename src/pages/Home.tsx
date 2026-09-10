@@ -14,7 +14,10 @@ import { getLiveWorkingStatus } from '../lib/businessHoursHelper';
 import { DynamicSmartSuggestions } from '../components/DynamicSmartSuggestions';
 import { SEO } from '../components/common/SEO';
 import { CategoriesModal } from '../components/CategoriesModal';
+import { Pagination } from '../components/common/Pagination';
+import { CategoryButtonLabel } from '../components/CategoryButtonLabel';
 import { getCachedBusinesses, setCachedBusinesses, getCachedBanners, setCachedBanners } from '../lib/dataCache';
+import { BOOK_YOUR_AD_BANNER } from '../lib/pageBanners';
 import { 
   MapPin, Star, Search, Store, Filter, X,
   LayoutGrid, UtensilsCrossed, Coffee, CakeSlice, 
@@ -25,67 +28,8 @@ import {
 } from 'lucide-react';
 
 
-export function getCategoryMeta(cat: string) {
-  const c = (cat || '').toLowerCase().trim();
-  if (!cat || c === 'الكل') {
-    return { icon: LayoutGrid, bg: 'bg-emerald-50 text-[#1a4d2e]' };
-  }
-  if (c.includes('معلم') || c.includes('معلمات') || c.includes('دروس خصوصية') || c.includes('تدريس')) {
-    return { icon: GraduationCap, bg: 'bg-indigo-50 text-indigo-700' };
-  }
-  if (c.includes('منزلية') || c.includes('أونلاين') || c.includes('من المنزل') || c.includes('أون لاين')) {
-    return { icon: Laptop, bg: 'bg-[#1a4d2e]/10 text-[#1a4d2e]' };
-  }
-  if (c.includes('مطاعم') || c.includes('أكل') || c.includes('وجبات') || c.includes('طعام') || c.includes('شاورما') || c.includes('برغر') || c.includes('مشاوي') || c.includes('بيتزا')) {
-    return { icon: UtensilsCrossed, bg: 'bg-amber-50 text-amber-700' };
-  }
-  if (c.includes('مقاهي') || c.includes('كافيه') || c.includes('قهوة') || c.includes('مشروبات') || c.includes('شاي') || c.includes('عصائر')) {
-    return { icon: Coffee, bg: 'bg-orange-50 text-orange-700' };
-  }
-  if (c.includes('حلويات') || c.includes('حلو') || c.includes('كيك') || c.includes('مخبز') || c.includes('معجنات') || c.includes('آيس كريم')) {
-    return { icon: CakeSlice, bg: 'bg-pink-50 text-pink-700' };
-  }
-  if (c.includes('مكتب') || c.includes('قرطاس') || c.includes('كتب') || c.includes('طباعة') || c.includes('دراسة') || c.includes('جامع') || c.includes('مدرس') || c.includes('تعليم') || c.includes('تدريب')) {
-    return { icon: BookOpen, bg: 'bg-blue-50 text-blue-700' };
-  }
-  if (c.includes('سكن') || c.includes('شقق') || c.includes('عقار') || c.includes('إسكان') || c.includes('استوديو') || c.includes('فنادق')) {
-    return { icon: Building2, bg: 'bg-indigo-50 text-indigo-700' };
-  }
-  if (c.includes('سياح') || c.includes('معالم') || c.includes('حدائق') || c.includes('منتزه') || c.includes('آثار') || c.includes('ترفيه') || c.includes('ملاهي')) {
-    return { icon: Landmark, bg: 'bg-emerald-50 text-emerald-700' };
-  }
-  if (c.includes('صيدل') || c.includes('طب') || c.includes('صحة') || c.includes('عياد') || c.includes('مستشفى') || c.includes('مختبر') || c.includes('علاج')) {
-    return { icon: HeartPulse, bg: 'bg-rose-50 text-rose-700' };
-  }
-  if (c.includes('ملابس') || c.includes('أزياء') || c.includes('بوتيك') || c.includes('أقمشة') || c.includes('أحذية') || c.includes('حقائب')) {
-    return { icon: Shirt, bg: 'bg-purple-50 text-purple-700' };
-  }
-  if (c.includes('إلكترون') || c.includes('هواتف') || c.includes('موبايل') || c.includes('كمبيوتر') || c.includes('صيانة') || c.includes('كهربائ')) {
-    return { icon: Smartphone, bg: 'bg-cyan-50 text-cyan-700' };
-  }
-  if (c.includes('سوبر') || c.includes('بقال') || c.includes('ماركت') || c.includes('تموين') || c.includes('دكان') || c.includes('خضار') || c.includes('ملاحم')) {
-    return { icon: ShoppingCart, bg: 'bg-green-50 text-green-700' };
-  }
-  if (c.includes('صالون') || c.includes('حلاق') || c.includes('تجميل') || c.includes('ميك اب') || c.includes('عطور') || c.includes('بشرة')) {
-    return { icon: Scissors, bg: 'bg-fuchsia-50 text-fuchsia-700' };
-  }
-  if (c.includes('رياض') || c.includes('جيم') || c.includes('نوادي') || c.includes('لياقة') || c.includes('أكاديمي')) {
-    return { icon: Dumbbell, bg: 'bg-red-50 text-red-700' };
-  }
-  if (c.includes('سيار') || c.includes('كراج') || c.includes('ميكانيك') || c.includes('غسيل') || c.includes('مركبات')) {
-    return { icon: Car, bg: 'bg-slate-50 text-slate-700' };
-  }
-  if (c.includes('ذهب') || c.includes('مجوهرات') || c.includes('إكسسوار') || c.includes('هدايا') || c.includes('أفراح') || c.includes('زفاف')) {
-    return { icon: Sparkles, bg: 'bg-yellow-50 text-yellow-700' };
-  }
-  if (c.includes('صناع') || c.includes('حرف') || c.includes('انشاءات') || c.includes('نجار') || c.includes('حداد') || c.includes('حجر') || c.includes('سيراميك') || c.includes('طوب') || c.includes('بناء') || c.includes('المنيوم')) {
-    return { icon: Hammer, bg: 'bg-orange-50 text-orange-800' };
-  }
-  if (c.includes('زراع') || c.includes('حدائق') || c.includes('نبات') || c.includes('مستلزمات زراعية') || c.includes('زيتون')) {
-    return { icon: Sprout, bg: 'bg-emerald-50 text-emerald-800' };
-  }
-  return { icon: Store, bg: 'bg-stone-50 text-stone-700' };
-}
+import { getCategoryMeta } from '../lib/categoryMeta';
+export { getCategoryMeta };
 
 // Arabic Text Normalization helper for advanced NLP search
 export function normalizeArabic(text: string): string {
@@ -159,6 +103,11 @@ export function Home() {
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [activeTab, setActiveTab] = useState<'all' | 'featured' | 'popular' | 'recent'>('all');
   const [isCategoriesModalOpen, setIsCategoriesModalOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [categoryFilter, subCategoryFilter, regionFilter, ratingFilter, openNowFilter, favoritesOnly, activeTab, searchTerm]);
 
   useEffect(() => {
     const qParam = searchParams.get('search');
@@ -317,15 +266,16 @@ export function Home() {
           // Sort custom banners by newest first
           activeBanners.sort((a, b) => b.createdAt - a.createdAt);
 
-          setBanners(activeBanners);
-          setCachedBanners(activeBanners);
+          const finalBanners = activeBanners.length > 0 ? activeBanners : [BOOK_YOUR_AD_BANNER];
+          setBanners(finalBanners);
+          setCachedBanners(finalBanners);
         } catch (bannersErr) {
           console.error("Error fetching homepage banners:", bannersErr);
-          setBanners([]);
+          setBanners([BOOK_YOUR_AD_BANNER]);
         }
-      } catch (err) {
-        console.error("Error fetching businesses:", err);
-        setError('حدث خطأ أثناء جلب البيانات. يرجى التأكد من إعداد Firebase وصلاحيات Firestore.');
+      } catch (err: any) {
+        console.warn("Could not fetch businesses:", err);
+        setError(`حدث خطأ أثناء جلب البيانات: ${err?.message || 'مشكلة غير معروفة'}. يرجى التأكد من إعداد Firebase.`);
       } finally {
         setLoading(false);
       }
@@ -453,6 +403,13 @@ export function Home() {
       const scoreB = searchScoreMap[b.id]?.score || 0;
       return scoreB - scoreA;
     });
+    // Float active sponsored/featured to the top within search results!
+    const now = Date.now();
+    displayedBusinesses = displayedBusinesses.sort((a, b) => {
+      const aFeatured = a.isFeatured && (!a.featuredStartDate || a.featuredStartDate <= now) && (!a.featuredExpiryDate || a.featuredExpiryDate > now) ? 1 : 0;
+      const bFeatured = b.isFeatured && (!b.featuredStartDate || b.featuredStartDate <= now) && (!b.featuredExpiryDate || b.featuredExpiryDate > now) ? 1 : 0;
+      return bFeatured - aFeatured;
+    });
   } else {
     // Regular tabs sorting if no active search
     if (activeTab === 'featured') {
@@ -466,6 +423,16 @@ export function Home() {
       displayedBusinesses = displayedBusinesses.sort((a, b) => (b.views || 0) - (a.views || 0));
     } else if (activeTab === 'recent') {
       displayedBusinesses = displayedBusinesses.sort((a, b) => b.createdAt - a.createdAt);
+    }
+
+    // For tabs other than 'featured', we should still float sponsored/featured businesses to the very top!
+    if (activeTab !== 'featured') {
+      const now = Date.now();
+      displayedBusinesses = displayedBusinesses.sort((a, b) => {
+        const aFeatured = a.isFeatured && (!a.featuredStartDate || a.featuredStartDate <= now) && (!a.featuredExpiryDate || a.featuredExpiryDate > now) ? 1 : 0;
+        const bFeatured = b.isFeatured && (!b.featuredStartDate || b.featuredStartDate <= now) && (!b.featuredExpiryDate || b.featuredExpiryDate > now) ? 1 : 0;
+        return bFeatured - aFeatured;
+      });
     }
   }
 
@@ -514,15 +481,9 @@ export function Home() {
         </div>
         
         <div className="relative z-10 w-full max-w-3xl mx-auto space-y-4 md:space-y-6">
-          {/* Eyebrow Badge */}
-          <span className="inline-flex items-center gap-1.5 py-1 px-3 md:py-1.5 md:px-5 rounded-full bg-white/10 border border-white/20 text-white/90 text-[10px] md:text-sm font-bold backdrop-blur-md mb-2 shadow-lg">
-            <Sparkles className="h-3 w-3 md:h-4 md:w-4 text-[#ff9f1c]" />
-            اكتشف أفضل ما في إربد
-          </span>
-          
           {/* Gradient Typography Heading */}
           <h1 className="text-3xl sm:text-5xl md:text-7xl font-black text-white tracking-tight leading-tight drop-shadow-lg">
-            شو في بـ <span className="text-transparent bg-clip-text bg-gradient-to-l from-[#ff9f1c] to-amber-300">إربد؟</span>
+            شو في بـ <span className="text-[#ff9f1c] inline-block pb-1">إربد؟</span>
           </h1>
           
           <p className="text-sm sm:text-base md:text-xl text-emerald-50/80 max-w-2xl mx-auto leading-relaxed px-4 font-medium">
@@ -594,39 +555,12 @@ export function Home() {
         <RegionDropdownFilter 
           selectedRegion={regionFilter} 
           onSelectRegion={setRegionFilter} 
+          openNowFilter={openNowFilter}
+          onToggleOpenNow={() => setOpenNowFilter(!openNowFilter)}
+          favoritesOnly={favoritesOnly}
+          onToggleFavorites={() => setFavoritesOnly(!favoritesOnly)}
+          userFavoritesCount={userFavorites.length}
         />
-        
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white border border-[#e5e1da] p-3 rounded-2xl shadow-2xs">
-          <div className="flex items-center gap-2 px-1">
-            <SlidersHorizontal className="h-4 w-4 text-[#1a4d2e]" />
-            <span className="text-xs font-black text-[#2d2a26]">فلترة سريعة وحالة العمل:</span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => setOpenNowFilter(!openNowFilter)}
-              className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2 md:py-1.5 rounded-xl text-xs font-black transition-all border cursor-pointer ${
-                openNowFilter 
-                  ? 'bg-[#1a4d2e] border-[#1a4d2e] text-white shadow-xs' 
-                  : 'bg-[#fdfcfb] border-stone-200 text-stone-600 hover:bg-stone-100'
-              }`}
-            >
-              <span className={`w-1.5 h-1.5 rounded-full ${openNowFilter ? 'bg-white animate-pulse' : 'bg-emerald-500'}`}></span>
-              <span>مفتوح الآن</span>
-            </button>
-
-            <button
-              onClick={() => setFavoritesOnly(!favoritesOnly)}
-              className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2 md:py-1.5 rounded-xl text-xs font-black transition-all border cursor-pointer ${
-                favoritesOnly 
-                  ? 'bg-red-600 border-red-600 text-white shadow-xs' 
-                  : 'bg-[#fdfcfb] border-stone-200 text-stone-600 hover:bg-[#fff5f5] hover:text-red-600 hover:border-red-200'
-              }`}
-            >
-              <Heart className={`h-3.5 w-3.5 md:h-3 md:w-3 ${favoritesOnly ? 'fill-white text-white' : 'text-red-500 fill-red-500'}`} />
-              <span>المفضلة ({userFavorites.length})</span>
-            </button>
-          </div>
-        </div>
       </div>
 
       {banners.length > 0 && (
@@ -646,11 +580,6 @@ export function Home() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <h2 className="text-lg sm:text-xl font-black text-[#2d2a26]">تصفح الأقسام الرئيسية</h2>
-              {categoryFilter && (
-                <span className="text-xs bg-[#1a4d2e]/10 text-[#1a4d2e] font-black px-2.5 py-1 rounded-full">
-                  {categoryFilter}
-                </span>
-              )}
             </div>
             <div className="flex items-center gap-2">
               {categoryFilter && (
@@ -700,9 +629,7 @@ export function Home() {
                   }`}>
                     <Icon className="h-5 w-5 sm:h-6 sm:w-6" />
                   </div>
-                  <span className="text-[11px] sm:text-sm font-bold truncate max-w-full px-1">
-                    الكل
-                  </span>
+                  <CategoryButtonLabel name="الكل" isSelected={isSelected} />
                 </button>
               );
             })()}
@@ -729,9 +656,7 @@ export function Home() {
                   }`}>
                     <Icon className="h-5 w-5 sm:h-6 sm:w-6" />
                   </div>
-                  <span className="text-[11px] sm:text-sm font-bold truncate max-w-full px-1" title={cat.replace(/^.*?\s/, '')}>
-                    {cat.replace(/^.*?\s/, '')}
-                  </span>
+                  <CategoryButtonLabel name={cat} isSelected={isSelected} />
                 </button>
               );
             })}
@@ -785,64 +710,6 @@ export function Home() {
         </div>
       ) : (
         <div className="space-y-6">
-          {isFiltering && (
-            <div className="bg-[#fcfbfa] border border-[#e5e1da] rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in slide-in-from-top-2 duration-200">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs font-black text-[#2d2a26] bg-stone-100 px-2.5 py-1 rounded-lg">التصفية النشطة حالياً:</span>
-                {searchTerm && (
-                  <span className="text-xs font-bold bg-[#1a4d2e]/10 text-[#1a4d2e] border border-[#1a4d2e]/10 px-2.5 py-1 rounded-full flex items-center gap-1.5">
-                    <span>بحث: "{searchTerm}"</span>
-                    <button onClick={() => setSearchTerm('')} className="text-stone-400 hover:text-red-500 font-bold cursor-pointer">✕</button>
-                  </span>
-                )}
-                {categoryFilter && (
-                  <span className="text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200 px-2.5 py-1 rounded-full flex items-center gap-1.5">
-                    <span>القسم: {categoryFilter.replace(/^.*?\s/, '')}</span>
-                    <button onClick={() => { setCategoryFilter(''); setSubCategoryFilter(''); }} className="text-stone-400 hover:text-red-500 font-bold cursor-pointer">✕</button>
-                  </span>
-                )}
-                {subCategoryFilter && (
-                  <span className="text-xs font-bold bg-pink-50 text-pink-800 border border-pink-200 px-2.5 py-1 rounded-full flex items-center gap-1.5">
-                    <span>الفرعي: {subCategoryFilter}</span>
-                    <button onClick={() => setSubCategoryFilter('')} className="text-stone-400 hover:text-red-500 font-bold cursor-pointer">✕</button>
-                  </span>
-                )}
-                {regionFilter && regionFilter !== 'الكل' && (
-                  <span className="text-xs font-bold bg-blue-50 text-blue-800 border border-blue-200 px-2.5 py-1 rounded-full flex items-center gap-1.5">
-                    <span>المنطقة: {regionFilter}</span>
-                    <button onClick={() => setRegionFilter('')} className="text-stone-400 hover:text-red-500 font-bold cursor-pointer">✕</button>
-                  </span>
-                )}
-                {openNowFilter && (
-                  <span className="text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 px-2.5 py-1 rounded-full flex items-center gap-1.5">
-                    <span>مفتوح الآن 🟢</span>
-                    <button onClick={() => setOpenNowFilter(false)} className="text-[#1a4d2e]/50 hover:text-red-500 font-bold cursor-pointer">✕</button>
-                  </span>
-                )}
-                {favoritesOnly && (
-                  <span className="text-xs font-bold bg-red-50 text-red-800 border border-red-200 px-2.5 py-1 rounded-full flex items-center gap-1.5">
-                    <span>المفضلة فقط ❤️</span>
-                    <button onClick={() => setFavoritesOnly(false)} className="text-red-400 hover:text-red-500 font-bold cursor-pointer">✕</button>
-                  </span>
-                )}
-              </div>
-              <button
-                onClick={() => {
-                  setSearchTerm('');
-                  setCategoryFilter('');
-                  setSubCategoryFilter('');
-                  setRegionFilter('');
-                  setOpenNowFilter(false);
-                  setFavoritesOnly(false);
-                  setActiveTab('all');
-                }}
-                className="text-xs font-black text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100/80 border border-red-200 px-3.5 py-2 rounded-xl transition-all shrink-0 cursor-pointer text-center"
-              >
-                إعادة تعيين الفلاتر
-              </button>
-            </div>
-          )}
-          
           {/* Elite Tabs Filter & Header */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-4 border-b border-[#e5e1da] pb-3 md:pb-4">
             <div className="flex items-center gap-2">
@@ -911,10 +778,25 @@ export function Home() {
 
           {/* Unified Business Grid */}
           {displayedBusinesses.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {displayedBusinesses.map((business) => (
-                <BusinessCard key={business.id} business={business} />
-              ))}
+            <div className="space-y-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {displayedBusinesses
+                  .slice((currentPage - 1) * 15, currentPage * 15)
+                  .map((business) => (
+                  <BusinessCard key={business.id} business={business} />
+                ))}
+              </div>
+
+              <Pagination
+                currentPage={currentPage}
+                totalPages={Math.ceil(displayedBusinesses.length / 15)}
+                onPageChange={(p) => {
+                  setCurrentPage(p);
+                  window.scrollTo({ top: 750, behavior: 'smooth' });
+                }}
+                totalItems={displayedBusinesses.length}
+                itemsPerPage={15}
+              />
             </div>
           ) : (
             <div className="text-center py-20 text-stone-500 bg-white rounded-[32px] border border-[#e5e1da] flex flex-col items-center justify-center">
@@ -935,9 +817,9 @@ export function Home() {
         onClose={() => setIsCategoriesModalOpen(false)}
         categories={categories}
         selectedCategory={categoryFilter}
-        onSelectCategory={(catName) => {
+        onSelectCategory={(catName, subcatName) => {
           setCategoryFilter(catName);
-          setSubCategoryFilter('');
+          setSubCategoryFilter(subcatName || '');
         }}
       />
     </div>

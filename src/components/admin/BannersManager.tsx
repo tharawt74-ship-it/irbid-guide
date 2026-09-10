@@ -1,8 +1,10 @@
+import { useConfirm } from '../../contexts/ConfirmContext';
 import React, { useState, useEffect } from 'react';
 import { db } from '../../lib/firebase';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, orderBy } from 'firebase/firestore';
 import { HomepageBanner, Business } from '../../types';
 import { invalidateCache } from '../../lib/dataCache';
+import { clearAllBannersInFirestore } from '../../lib/pageBanners';
 import { 
   Plus, Edit2, Trash2, Image, Link, Sparkles, 
   Eye, EyeOff, Save, CheckCircle2, Building2, 
@@ -27,6 +29,7 @@ const PAGE_TARGETS = [
 ];
 
 export function BannersManager({ showToast }: BannersManagerProps) {
+  const { confirm } = useConfirm();
   const [banners, setBanners] = useState<HomepageBanner[]>([]);
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [loading, setLoading] = useState(true);
@@ -86,7 +89,7 @@ export function BannersManager({ showToast }: BannersManagerProps) {
       });
       setBusinesses(list);
     } catch (err) {
-      console.error("Error fetching businesses:", err);
+      console.warn("Could not fetch businesses (requires Firestore rules update):", err);
     }
   };
 
@@ -143,7 +146,7 @@ export function BannersManager({ showToast }: BannersManagerProps) {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm("هل أنت متأكد من رغبتك في حذف هذا البانر نهائياً؟")) return;
+    if (!(await confirm({ message: "هل أنت متأكد من رغبتك في حذف هذا البانر نهائياً؟" }))) return;
     try {
       if (!db) return;
       await deleteDoc(doc(db, 'banners', id));
@@ -231,50 +234,24 @@ export function BannersManager({ showToast }: BannersManagerProps) {
     }
   };
 
-  const filteredBusinesses = searchQuery.trim() === ''
-    ? businesses.slice(0, 5)
-    : businesses.filter(b => b.name.toLowerCase().includes(searchQuery.toLowerCase())).slice(0, 10);
-
-  // Helper to generate template banners if empty
-  const handleSeedDefaults = async () => {
-    if (!db || businesses.length === 0) {
-      showToast("لا يوجد محلات في الدليل لزراعة البانرات منها!", "error");
-      return;
-    }
+  const handleClearAllBanners = async () => {
+    if (!(await confirm({ message: "هل أنت متأكد من حذف جميع البانرات الإعلانية الحالية من الموقع وقاعدة البيانات بالكامل؟" }))) return;
     setLoading(true);
     try {
-      const featuredList = businesses.filter(b => b.isFeatured).slice(0, 3);
-      const pool = featuredList.length > 0 ? featuredList : businesses.slice(0, 3);
-      
-      for (const biz of pool) {
-        const rawDocPayload: any = {
-          type: 'business',
-          title: biz.name || '',
-          subtitle: biz.description || '',
-          imageUrl: biz.imageUrl || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1200&q=80',
-          businessId: biz.id,
-          businessName: biz.name || '',
-          category: biz.category || '',
-          rating: (biz.rating && biz.rating > 0) ? biz.rating : 0,
-          reviewCount: biz.reviewCount || 0,
-          address: biz.address || '',
-          active: true,
-          createdAt: Date.now()
-        };
-        const docPayload = Object.fromEntries(
-          Object.entries(rawDocPayload).filter(([_, v]) => v !== undefined)
-        );
-        await addDoc(collection(db, 'banners'), docPayload);
-      }
-      showToast("تمت زراعة البانرات التلقائية من محلات الدليل بنجاح!", "success");
-      fetchBanners();
+      await clearAllBannersInFirestore();
+      setBanners([]);
+      showToast("تم حذف جميع البانرات من قاعدة البيانات بنجاح! ✨", "success");
     } catch (err) {
-      console.error("Error seeding banners:", err);
-      showToast("فشل زراعة البانرات الافتراضية", "error");
+      console.error("Error clearing banners:", err);
+      showToast("حدث خطأ أثناء مسح البانرات", "error");
     } finally {
       setLoading(false);
     }
   };
+
+  const filteredBusinesses = searchQuery.trim() === ''
+    ? businesses.slice(0, 5)
+    : businesses.filter(b => b.name.toLowerCase().includes(searchQuery.toLowerCase())).slice(0, 10);
 
   const filteredBanners = banners.filter(b => {
     if (selectedPageFilter === 'all') return true;
@@ -295,19 +272,20 @@ export function BannersManager({ showToast }: BannersManagerProps) {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {banners.length === 0 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          {banners.length > 0 && (
             <button
-              onClick={handleSeedDefaults}
-              className="inline-flex items-center justify-center gap-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer"
+              onClick={handleClearAllBanners}
+              className="inline-flex items-center justify-center gap-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer"
+              title="حذف جميع البانرات الحالية من قاعدة البيانات"
             >
-              <Sparkles className="h-3.5 w-3.5 text-amber-600 animate-pulse" />
-              <span>زراعة بانرات تلقائية</span>
+              <Trash2 className="h-3.5 w-3.5" />
+              <span>حذف جميع البانرات ({banners.length})</span>
             </button>
           )}
           <button
             onClick={handleOpenAdd}
-            className="inline-flex items-center justify-center gap-2 bg-[#1a4d2e] hover:bg-[#133b22] text-white px-5 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer shadow-xs"
+            className="inline-flex items-center justify-center gap-2 bg-[#1a4d2e] hover:bg-[#133b22] text-white px-5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer shadow-xs"
           >
             <Plus className="h-4 w-4" />
             <span>إضافة بانر إعلاني جديد</span>
@@ -357,19 +335,21 @@ export function BannersManager({ showToast }: BannersManagerProps) {
           <span className="text-xs font-medium">جاري تحميل البانرات الإعلانية...</span>
         </div>
       ) : filteredBanners.length === 0 ? (
-        <div className="text-center py-16 border border-dashed border-stone-200 rounded-3xl bg-stone-50/50">
-          <Megaphone className="h-12 w-12 text-stone-300 mx-auto mb-3" />
-          <p className="text-sm font-black text-stone-700">لا يوجد بانرات في {PAGE_TARGETS.find(p => p.id === selectedPageFilter)?.name || 'هذه الصفحة'}</p>
-          <p className="text-xs text-stone-500 mt-1 max-w-sm mx-auto">
-            قم بإضافة بانر جديد وموجه مباشرة لصفحة {PAGE_TARGETS.find(p => p.id === selectedPageFilter)?.name}!
+        <div className="text-center py-16 border border-dashed border-stone-200 rounded-3xl bg-stone-50/50 space-y-3">
+          <Megaphone className="h-12 w-12 text-stone-300 mx-auto" />
+          <p className="text-sm font-black text-stone-700">لا يوجد بانرات مخصصة مضافة في {PAGE_TARGETS.find(p => p.id === selectedPageFilter)?.name || 'هذه الصفحة'}</p>
+          <p className="text-xs text-stone-500 max-w-sm mx-auto">
+            تُظهر المنصة حالياً بانر "احجز إعلانك" التلقائي للمستخدمين حتى تقوم بإضافة بانر جديد هنا.
           </p>
-          <button
-            onClick={handleOpenAdd}
-            className="mt-4 inline-flex items-center gap-1.5 bg-[#1a4d2e] text-white px-4 py-2 rounded-xl text-xs font-bold cursor-pointer"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            <span>أضف بانر لهذه الصفحة</span>
-          </button>
+          <div className="flex items-center justify-center gap-2 pt-2">
+            <button
+              onClick={handleOpenAdd}
+              className="inline-flex items-center gap-1.5 bg-[#1a4d2e] text-white px-5 py-2.5 rounded-xl text-xs font-bold cursor-pointer hover:bg-[#133b22] transition-all shadow-xs"
+            >
+              <Plus className="h-4 w-4" />
+              <span>إضافة بانر جديد لهذه الصفحة</span>
+            </button>
+          </div>
         </div>
       ) : (
         /* List of Banners */

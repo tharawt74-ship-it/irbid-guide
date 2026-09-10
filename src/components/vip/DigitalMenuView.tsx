@@ -221,14 +221,11 @@ export function DigitalMenuView({
               {getSectionIcon()}
             </div>
             <h2 className="text-xl sm:text-2xl font-black text-stone-900 flex items-center gap-1.5">
-              <span>{theme.title}</span>
-              <span className="text-xs bg-gradient-to-r from-amber-500 to-amber-600 text-white font-black px-2 py-0.5 rounded-md shadow-xs animate-pulse">
-                VIP ✨
-              </span>
+              <span>{business.menuTitle || theme.title}</span>
             </h2>
           </div>
-          <p className="text-xs sm:text-sm text-stone-500 mt-1">
-            {theme.subtitle}
+          <p className="text-xs sm:text-sm text-stone-500 mt-1 leading-relaxed">
+            {business.menuDescription || theme.subtitle}
           </p>
         </div>
 

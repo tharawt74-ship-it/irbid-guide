@@ -3,6 +3,7 @@ import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { getMessaging, isSupported } from 'firebase/messaging';
+import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyDDswaCceyey9mjAC7ERlkPQ0dIkNsbquw",
@@ -26,6 +27,27 @@ try {
   db = getFirestore(app);
   storage = getStorage(app);
   
+  // Initialize App Check if site key is provided
+  if (typeof window !== 'undefined') {
+    const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
+    if (siteKey) {
+      try {
+        // Enable debug token for AI Studio and localhost environments
+        if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.includes('run.app'))) {
+          (window as any).FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+        }
+
+        initializeAppCheck(app, {
+          provider: new ReCaptchaEnterpriseProvider(siteKey),
+          isTokenAutoRefreshEnabled: true,
+        });
+        console.log("Firebase App Check with reCAPTCHA Enterprise initialized successfully.");
+      } catch (appCheckError) {
+        console.warn("App Check initialization failed:", appCheckError);
+      }
+    }
+  }
+
   // Check if messaging is supported in the current environment
   if (typeof window !== 'undefined') {
     isSupported().then((supported) => {

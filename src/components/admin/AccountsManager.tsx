@@ -19,6 +19,9 @@ export function AccountsManager() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [toastMsg, setToastMsg] = useState<{ text: string; type?: 'success' | 'error' | 'info' } | null>(null);
 
+  // Selection states
+  const [selectedUids, setSelectedUids] = useState<string[]>([]);
+
   // Modals state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [selectedUserForEdit, setSelectedUserForEdit] = useState<UserProfile | null>(null);
@@ -44,6 +47,94 @@ export function AccountsManager() {
   const showToast = (text: string, type: 'success' | 'error' | 'info' = 'success') => {
     setToastMsg({ text, type });
     setTimeout(() => setToastMsg(null), 3500);
+  };
+
+  const handleBulkChangeStatus = async (status: 'active' | 'suspended') => {
+    if (selectedUids.length === 0) return;
+    const reason = status === 'suspended' ? window.prompt('أدخل سبب إيقاف الحسابات المحدد جماعياً:', 'مخالفة معايير النشر') : '';
+    if (status === 'suspended' && reason === null) return;
+
+    try {
+      setLoading(true);
+      for (const uid of selectedUids) {
+        if (uid === currentUser?.uid) continue;
+        await updateDoc(doc(db, 'users', uid), {
+          status,
+          statusReason: reason || ''
+        });
+      }
+      showToast(status === 'suspended' ? 'تم إيقاف الحسابات المحددة بنجاح' : 'تم تنشيط الحسابات المحددة بنجاح', 'success');
+      setSelectedUids([]);
+      await fetchUsers();
+    } catch (err) {
+      console.error(err);
+      showToast('حدث خطأ أثناء تحديث حالة الحسابات جماعياً', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBulkChangeRole = async (newRole: UserRole) => {
+    if (selectedUids.length === 0) return;
+    try {
+      setLoading(true);
+      for (const uid of selectedUids) {
+        if (uid === currentUser?.uid) continue;
+        const isMerch = newRole === 'merchant';
+        await updateDoc(doc(db, 'users', uid), {
+          role: newRole,
+          isMerchant: isMerch
+        });
+        
+        if (newRole === 'supervisor') {
+          const userObj = users.find(u => u.uid === uid);
+          if (userObj) {
+            await setDoc(doc(db, 'supervisors', uid), {
+              uid,
+              email: userObj.email,
+              displayName: userObj.displayName,
+              role: 'supervisor',
+              createdAt: Date.now(),
+              permissions: {
+                canApproveShops: true,
+                canModerateJobs: true,
+                canModerateReviews: true,
+                canManageBanners: true
+              }
+            }, { merge: true });
+          }
+        }
+      }
+      showToast(`تم تعديل رتب الحسابات المحددة إلى (${getRoleLabel(newRole)}) بنجاح`, 'success');
+      setSelectedUids([]);
+      await fetchUsers();
+    } catch (err) {
+      console.error(err);
+      showToast('حدث خطأ أثناء تعديل رتب الحسابات جماعياً', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBulkDeleteUsers = async () => {
+    if (selectedUids.length === 0) return;
+    if (!window.confirm(`تحذير هام جداً: هل أنت متأكد من حذف الحسابات المحددة (${selectedUids.length} حساب) نهائياً من النظام؟ لا يمكن التراجع عن هذا الإجراء!`)) return;
+
+    try {
+      setLoading(true);
+      for (const uid of selectedUids) {
+        if (uid === currentUser?.uid) continue;
+        await deleteDoc(doc(db, 'users', uid));
+      }
+      showToast(`تم حذف الحسابات المحددة (${selectedUids.length} حساب) نهائياً بنجاح`, 'info');
+      setSelectedUids([]);
+      await fetchUsers();
+    } catch (err) {
+      console.error(err);
+      showToast('حدث خطأ أثناء الحذف الجماعي للحسابات', 'error');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const ADMIN_BOOTSTRAP_EMAILS = [
@@ -493,6 +584,61 @@ export function AccountsManager() {
         </div>
       </div>
 
+      {/* Bulk actions for selected users */}
+      {selectedUids.length > 0 && (
+        <div className="bg-emerald-50/50 p-4 rounded-3xl border border-emerald-200 flex flex-col sm:flex-row items-center justify-between gap-3 animate-fade-in shadow-2xs">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-black text-[#1a4d2e]">تم تحديد {selectedUids.length} حسابات لإجراء عملية جماعية:</span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => handleBulkChangeStatus('active')}
+              className="bg-white text-emerald-800 hover:bg-emerald-100 border border-emerald-300 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+            >
+              <Unlock className="h-3.5 w-3.5 text-emerald-600" />
+              تنشيط الحسابات
+            </button>
+            <button
+              onClick={() => handleBulkChangeStatus('suspended')}
+              className="bg-white text-rose-800 hover:bg-rose-100 border border-rose-300 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+            >
+              <Lock className="h-3.5 w-3.5 text-rose-600" />
+              إيقاف الحسابات
+            </button>
+            <button
+              onClick={() => {
+                const roleInput = window.prompt("اختر الرتبة الجديدة (user, merchant, supervisor):", "merchant");
+                if (roleInput && ['user', 'merchant', 'supervisor'].includes(roleInput)) {
+                  handleBulkChangeRole(roleInput as any);
+                } else if (roleInput) {
+                  alert("الرتبة غير صالحة. يرجى إدخال: user, merchant, supervisor");
+                }
+              }}
+              className="bg-white text-amber-800 hover:bg-amber-100 border border-amber-300 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+            >
+              <Shield className="h-3.5 w-3.5 text-amber-600" />
+              تعديل الرتبة جماعياً
+            </button>
+            {isAdmin && (
+              <button
+                onClick={handleBulkDeleteUsers}
+                className="bg-[#1a4d2e] hover:bg-[#133b22] text-white px-3.5 py-1.5 rounded-xl text-xs font-black flex items-center gap-1 transition-colors cursor-pointer shadow-3xs"
+              >
+                <Trash2 className="h-3.5 w-3.5 text-[#ff9f1c]" />
+                حذف الحسابات نهائياً
+              </button>
+            )}
+            <button
+              onClick={() => setSelectedUids([])}
+              className="text-stone-500 hover:text-stone-700 text-xs font-bold px-2 py-1 cursor-pointer"
+            >
+              إلغاء التحديد
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Users Table / List */}
       {loading ? (
         <div className="text-center py-20 bg-white rounded-3xl border border-stone-200 space-y-3">
@@ -511,6 +657,20 @@ export function AccountsManager() {
             <table className="w-full text-right text-xs">
               <thead className="bg-stone-50 border-b border-stone-200 text-stone-500 font-bold">
                 <tr>
+                  <th className="py-3.5 px-4 w-10 text-center">
+                    <input
+                      type="checkbox"
+                      checked={filteredUsers.length > 0 && filteredUsers.every(u => selectedUids.includes(u.uid))}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedUids(filteredUsers.map(u => u.uid));
+                        } else {
+                          setSelectedUids([]);
+                        }
+                      }}
+                      className="h-4.5 w-4.5 rounded text-[#1a4d2e] focus:ring-[#1a4d2e] border-stone-300 cursor-pointer"
+                    />
+                  </th>
                   <th className="py-3.5 px-4">المستخدم والبريد</th>
                   <th className="py-3.5 px-4">الهاتف</th>
                   <th className="py-3.5 px-4">الرتبة</th>
@@ -522,8 +682,28 @@ export function AccountsManager() {
               <tbody className="divide-y divide-stone-100">
                 {filteredUsers.map(user => {
                   const isSuspended = user.status === 'suspended';
+                  const isSelected = selectedUids.includes(user.uid);
                   return (
-                    <tr key={user.uid} className={`hover:bg-stone-50/80 transition-colors ${isSuspended ? 'bg-rose-50/30' : ''}`}>
+                    <tr key={user.uid} className={`hover:bg-stone-50/80 transition-colors ${
+                      isSelected ? 'bg-emerald-50/10' : isSuspended ? 'bg-rose-50/30' : ''
+                    }`}>
+                      {/* Select Checkbox */}
+                      <td className="py-3.5 px-4 w-10 text-center">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          disabled={user.uid === currentUser?.uid}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedUids(prev => [...prev, user.uid]);
+                            } else {
+                              setSelectedUids(prev => prev.filter(uid => uid !== user.uid));
+                            }
+                          }}
+                          className="h-4.5 w-4.5 rounded text-[#1a4d2e] focus:ring-[#1a4d2e] border-stone-300 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                        />
+                      </td>
+
                       {/* Name & Email */}
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-3">

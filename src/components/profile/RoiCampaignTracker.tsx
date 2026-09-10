@@ -1,3 +1,4 @@
+import { useConfirm } from '../../contexts/ConfirmContext';
 import React, { useState, useEffect } from 'react';
 import { db } from '../../lib/firebase';
 import { collection, query, getDocs, doc, addDoc, deleteDoc, updateDoc } from 'firebase/firestore';
@@ -26,6 +27,7 @@ interface RoiCampaignTrackerProps {
 }
 
 export function RoiCampaignTracker({ businessId, isVip }: RoiCampaignTrackerProps) {
+  const { confirm } = useConfirm();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -134,7 +136,7 @@ export function RoiCampaignTracker({ businessId, isVip }: RoiCampaignTrackerProp
   };
 
   const handleDeleteCampaign = async (id: string) => {
-    if (!window.confirm('هل أنت متأكد من حذف سجل هذه الحملة؟')) return;
+    if (!(await confirm({ message: 'هل أنت متأكد من حذف سجل هذه الحملة؟' }))) return;
     try {
       await deleteDoc(doc(db, 'businesses', businessId, 'campaigns', id));
       setCampaigns(prev => prev.filter(c => c.id !== id));

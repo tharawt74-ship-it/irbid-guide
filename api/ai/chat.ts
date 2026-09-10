@@ -2,6 +2,26 @@ import { GoogleGenAI } from '@google/genai';
 
 let geminiClient: GoogleGenAI | null = null;
 
+// In-memory rate limiting map for serverless execution
+const ipRateLimit = new Map<string, { count: number; resetAt: number }>();
+
+function isRateLimited(key: string, maxRequests: number, windowMs: number): boolean {
+  const now = Date.now();
+  const record = ipRateLimit.get(key);
+
+  if (!record || now > record.resetAt) {
+    ipRateLimit.set(key, { count: 1, resetAt: now + windowMs });
+    return false;
+  }
+
+  if (record.count >= maxRequests) {
+    return true;
+  }
+
+  record.count += 1;
+  return false;
+}
+
 function getGeminiClient(): GoogleGenAI | null {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return null;
@@ -25,6 +45,18 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
+    const clientIp = (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown')
+      .toString()
+      .split(',')[0]
+      .trim();
+
+    // Limit to 20 AI requests per 5 minutes per IP
+    if (isRateLimited(clientIp, 20, 5 * 60 * 1000)) {
+      return res.status(429).json({ 
+        error: 'تم تجاوز الحد المسموح به لطلبات المساعد الذكي مؤقتاً. يرجى الانتظار بضع دقائق.' 
+      });
+    }
+
     let body = req.body;
     if (typeof body === 'string') {
       try {
@@ -35,8 +67,12 @@ export default async function handler(req: any, res: any) {
     }
 
     const { message } = body || {};
-    if (!message) {
+    if (!message || typeof message !== 'string' || message.trim().length === 0) {
       return res.status(400).json({ error: 'Message is required' });
+    }
+
+    if (message.length > 1000) {
+      return res.status(400).json({ error: 'Message exceeds maximum allowed length (1000 characters)' });
     }
 
     const ai = getGeminiClient();

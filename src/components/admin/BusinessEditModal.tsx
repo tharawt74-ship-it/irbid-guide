@@ -25,6 +25,7 @@ import { SearchableSelect } from '../ui/SearchableSelect';
 import { WorkingHoursEditor } from '../ui/WorkingHoursEditor';
 import { SocialLinksEditor } from '../ui/SocialLinksEditor';
 import { ImageUploader } from '../ui/ImageUploader';
+import { RichTextEditor } from '../common/RichTextEditor';
 
 interface BusinessEditModalProps {
   isOpen: boolean;
@@ -62,7 +63,6 @@ export function BusinessEditModal({
       setFormData({
         ...business,
         hideSiteReviews: !!business.hideSiteReviews,
-        hideGoogleReviews: !!business.hideGoogleReviews,
         isFeatured: !!business.isFeatured,
         isVerified: !!business.isVerified || business.packagePlan === 'golden' || business.packagePlan === 'vip',
         packagePlan: business.packagePlan || (business.isVerified ? 'golden' : 'basic'),
@@ -209,7 +209,6 @@ export function BusinessEditModal({
         isVipScheduled: isScheduled,
         vipNotes: formData.vipNotes || undefined,
         hideSiteReviews: !!formData.hideSiteReviews,
-        hideGoogleReviews: !!formData.hideGoogleReviews,
         workingHours: {
           isOpen24Hours: !!workingHours.isOpen24Hours,
           openTime: workingHours.openTime || '09:00',
@@ -299,13 +298,11 @@ export function BusinessEditModal({
           {/* Description */}
           <div>
             <label className="block text-xs font-black text-stone-700 mb-1.5">الوصف والخدمات المقدمة</label>
-            <textarea
-              rows={3}
+            <RichTextEditor
               value={formData.description || ''}
-              onChange={e => setFormData({ ...formData, description: e.target.value })}
-              className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#1a4d2e] focus:bg-white transition-all text-stone-800 resize-none"
-              placeholder="اكتب نبذة تعريفية شاملة عن المحل..."
-            ></textarea>
+              onChange={val => setFormData({ ...formData, description: val })}
+              placeholder="اكتب نبذة تعريفية شاملة ومُنسقة عن المحل..."
+            />
           </div>
 
           {/* Address & District & Phone */}
@@ -338,7 +335,7 @@ export function BusinessEditModal({
                 type="tel"
                 dir="ltr"
                 value={formData.phone || ''}
-                onChange={e => setFormData({ ...formData, phone: e.target.value })}
+                onChange={e => setFormData({ ...formData, phone: e.target.value.replace(/\s+/g, '') })}
                 placeholder="07XXXXXXXX"
                 className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1a4d2e] focus:bg-white transition-all text-left text-stone-800"
               />

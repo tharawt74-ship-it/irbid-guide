@@ -10,6 +10,8 @@ import { HousingItem } from '../../types';
 import { sanitizeInput, checkSubmissionRateLimit, recordSubmissionTime, executeReCaptcha } from '../../lib/security';
 import { getWhatsAppUrl } from '../../lib/contactHelper';
 import { ImageUploader } from '../ui/ImageUploader';
+import { SearchableSelect } from '../ui/SearchableSelect';
+import { IRBID_REGIONS_CATEGORIZED } from '../../lib/categories';
 
 interface HousingFormModalProps {
   isOpen: boolean;
@@ -30,17 +32,22 @@ export function HousingFormModal({
 }: HousingFormModalProps) {
   const [formData, setFormData] = useState({
     title: '',
-    type: 'سكن طالبات' as any,
+    type: 'شقق للإيجار' as any,
     university: 'اليرموك' as any,
+    gender: 'الكل' as any,
     price: '',
     pricePeriod: 'شهري' as any,
     location: '',
+    district: '',
     distanceToCampus: '',
-    roomsCount: '',
-    servicesString: '',
+    roomsCount: 'استوديو',
+    services: [] as string[],
+    isFurnished: 'غير مفروش (فارغ)' as string,
+    buildYear: '',
     description: '',
     contactPhone: '',
     contactWhatsapp: '',
+    contactMode: 'both' as 'both' | 'phone_only' | 'whatsapp_only',
     ownerName: '',
     image: '',
     extraWeeks: 0,
@@ -55,17 +62,22 @@ export function HousingFormModal({
     if (initialListing) {
       setFormData({
         title: initialListing.title || '',
-        type: initialListing.type || 'سكن طالبات',
+        type: initialListing.type || 'شقق للإيجار',
         university: initialListing.university || 'اليرموك',
+        gender: initialListing.gender || 'الكل',
         price: initialListing.price ? String(initialListing.price) : '',
         pricePeriod: initialListing.pricePeriod || 'شهري',
         location: initialListing.location || '',
+        district: initialListing.district || '',
         distanceToCampus: initialListing.distanceToCampus || '',
-        roomsCount: initialListing.roomsCount || '',
-        servicesString: initialListing.services ? initialListing.services.join('، ') : '',
+        roomsCount: initialListing.roomsCount || 'استوديو',
+        services: initialListing.services || [],
+        isFurnished: initialListing.isFurnished || (initialListing.services?.includes('مفروش بالكامل') ? 'مفروش بالكامل' : 'غير مفروش (فارغ)'),
+        buildYear: initialListing.buildYear || '',
         description: initialListing.description || '',
         contactPhone: initialListing.contactPhone || '',
         contactWhatsapp: initialListing.contactWhatsapp || '',
+        contactMode: initialListing.contactMode || 'both',
         ownerName: initialListing.ownerName || '',
         image: initialListing.image || '',
         extraWeeks: initialListing.extraWeeks || 0,
@@ -74,17 +86,22 @@ export function HousingFormModal({
     } else {
       setFormData({
         title: '',
-        type: 'سكن طالبات',
+        type: 'شقق للإيجار',
         university: 'اليرموك',
+        gender: 'الكل',
         price: '',
         pricePeriod: 'شهري',
         location: '',
+        district: '',
         distanceToCampus: '',
-        roomsCount: '',
-        servicesString: '',
+        roomsCount: 'استوديو',
+        services: [],
+        isFurnished: 'غير مفروش (فارغ)',
+        buildYear: '',
         description: '',
         contactPhone: currentUser?.phone || '',
         contactWhatsapp: currentUser?.phone || '',
+        contactMode: 'both',
         ownerName: currentUser?.displayName || '',
         image: '',
         extraWeeks: 0,
@@ -110,8 +127,26 @@ export function HousingFormModal({
     if (hpValue) return; // Honeypot bot protection
     setErrorMsg(null);
 
-    if (!formData.title || !formData.price || !formData.location || !formData.contactPhone) {
-      setErrorMsg('يرجى ملء جميع الحقول المطلوبة التي تحمل إشارة (*)');
+    const hasPhone = !!formData.contactPhone.trim();
+    const hasWhatsapp = !!formData.contactWhatsapp.trim();
+
+    if (!formData.title || !formData.price || !formData.location || !formData.district) {
+      setErrorMsg('يرجى ملء جميع الحقول المطلوبة بما في ذلك تحديد المنطقة/الحي (*)');
+      return;
+    }
+
+    if (formData.contactMode === 'phone_only' && !hasPhone) {
+      setErrorMsg('يرجى كتابة رقم الاتصال الهاتفي الخاص بك.');
+      return;
+    }
+
+    if (formData.contactMode === 'whatsapp_only' && !hasWhatsapp && !hasPhone) {
+      setErrorMsg('يرجى كتابة رقم الواتساب الخاص بك للتواصل.');
+      return;
+    }
+
+    if (formData.contactMode === 'both' && !hasPhone) {
+      setErrorMsg('يرجى كتابة رقم الاتصال الهاتفي الخاص بك.');
       return;
     }
 
@@ -130,9 +165,18 @@ export function HousingFormModal({
 
     setSubmitting(true);
     try {
-      const services = formData.servicesString
-        ? formData.servicesString.split('،').map(s => sanitizeInput(s.trim())).filter(Boolean)
-        : ['ماء وكهرباء', 'إنترنت سريع'];
+      let services = [...formData.services];
+      if (formData.isFurnished === 'مفروش بالكامل') {
+        if (!services.includes('مفروش بالكامل')) {
+          services.push('مفروش بالكامل');
+        }
+      } else {
+        services = services.filter(s => s !== 'مفروش بالكامل');
+      }
+
+      if (services.length === 0) {
+        services = ['إنترنت فايبر', 'تكييف'];
+      }
 
       const image = formData.image || 'https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=800&q=80';
 
@@ -143,15 +187,20 @@ export function HousingFormModal({
       const payload = {
         title: sanitizeInput(formData.title),
         type: formData.type,
-        university: formData.university,
+        university: formData.type === 'سكنات الطلاب' ? formData.university : 'أخرى / وسط المدينة',
+        gender: formData.type === 'سكنات الطلاب' ? formData.gender : 'الكل',
+        contactMode: formData.contactMode,
+        isFurnished: formData.isFurnished,
+        buildYear: sanitizeInput(formData.buildYear),
         price: Number(formData.price),
-        pricePeriod: formData.pricePeriod,
+        pricePeriod: formData.type === 'شقق للبيع' ? 'سعر إجمالي (للبيع)' : formData.pricePeriod,
         location: sanitizeInput(formData.location),
-        distanceToCampus: sanitizeInput(formData.distanceToCampus) || 'قريب من الخدمات والمواصلات',
-        roomsCount: sanitizeInput(formData.roomsCount) || 'أستوديو / شقة مفروشة',
+        district: formData.district,
+        distanceToCampus: sanitizeInput(formData.distanceToCampus) || '',
+        roomsCount: formData.roomsCount || 'استوديو',
         services,
         description: sanitizeInput(formData.description) || 'لا يوجد وصف إضافي مكتوب حالياً من المالك.',
-        contactPhone: sanitizeInput(formData.contactPhone),
+        contactPhone: sanitizeInput(formData.contactPhone || formData.contactWhatsapp),
         contactWhatsapp: formData.contactWhatsapp ? sanitizeInput(formData.contactWhatsapp) : sanitizeInput(formData.contactPhone),
         ownerName: sanitizeInput(formData.ownerName) || 'مالك العقار',
         image,
@@ -197,8 +246,8 @@ export function HousingFormModal({
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto" dir="rtl">
-      <div className="bg-white w-full max-w-xl rounded-3xl shadow-2xl overflow-hidden my-8 border border-stone-200 animate-in fade-in zoom-in-95">
+    <div className="fixed inset-0 z-[99999] bg-white sm:bg-black/60 sm:backdrop-blur-sm flex flex-col sm:items-center sm:justify-center sm:p-4 overflow-y-auto" dir="rtl">
+      <div className="bg-white w-full min-h-screen sm:min-h-0 sm:max-w-xl sm:rounded-3xl sm:shadow-2xl overflow-hidden sm:my-8 border-t sm:border border-stone-200 animate-in fade-in sm:zoom-in-95 flex flex-col">
         
         {/* Header */}
         <div className="bg-gradient-to-l from-[#1a4d2e] to-[#133b22] text-white p-5 flex items-center justify-between">
@@ -224,7 +273,7 @@ export function HousingFormModal({
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-5 space-y-4 max-h-[80vh] overflow-y-auto text-xs font-bold text-stone-700">
+        <form onSubmit={handleSubmit} className="p-5 sm:p-6 space-y-4 flex-1 overflow-y-auto sm:max-h-[80vh] text-xs font-bold text-stone-700">
           
           {/* Honeypot for bots */}
           <div className="absolute opacity-0 -z-50 pointer-events-none" style={{ width: 0, height: 0, overflow: 'hidden' }}>
@@ -264,108 +313,247 @@ export function HousingFormModal({
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className={`grid ${(formData.type === 'سكنات الطلاب' || formData.type === 'رفيق سكن') ? 'grid-cols-2' : 'grid-cols-1'} gap-3`}>
               <div className="space-y-1">
                 <label className="block text-stone-600">نوع العقار/السكن *</label>
                 <select
                   value={formData.type}
-                  onChange={(e) => setFormData({ ...formData, type: e.target.value as any })}
+                  onChange={(e) => {
+                    const selectedVal = e.target.value;
+                    let defaultPeriod = formData.pricePeriod;
+                    if (selectedVal === 'شقق للبيع') {
+                      defaultPeriod = 'سعر إجمالي (للبيع)';
+                    } else if (formData.pricePeriod === 'سعر إجمالي (للبيع)') {
+                      defaultPeriod = 'شهري';
+                    }
+                    setFormData({ ...formData, type: selectedVal as any, pricePeriod: defaultPeriod });
+                  }}
                   className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2 text-stone-800 font-bold focus:outline-none focus:ring-1 focus:ring-[#1a4d2e]"
                 >
-                  <option value="سكن طالبات">سكن طالبات</option>
-                  <option value="سكن طلاب">سكن طلاب</option>
-                  <option value="أستوديو مفروش">أستوديو مفروش</option>
-                  <option value="شقق عائلية">شقق عائلية</option>
+                  <option value="شقق للإيجار">🏠 شقق للإيجار</option>
+                  <option value="شقق للبيع">🔑 شقق للبيع</option>
+                  <option value="سكنات الطلاب">🎓 سكن طلاب (جامعي / طالبات / شباب)</option>
+                  <option value="رفيق سكن">🤝 رفيق سكن / سكن مشترك</option>
                 </select>
               </div>
-
-              <div className="space-y-1">
-                <label className="block text-stone-600">الجامعة الأقرب *</label>
-                <select
-                  value={formData.university}
-                  onChange={(e) => setFormData({ ...formData, university: e.target.value as any })}
-                  className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2 text-stone-800 font-bold focus:outline-none focus:ring-1 focus:ring-[#1a4d2e]"
-                >
-                  <option value="اليرموك">جامعة اليرموك</option>
-                  <option value="العلوم والتكنولوجيا">جامعة العلوم والتكنولوجيا (JUST)</option>
-                  <option value="أخرى / وسط المدينة">أخرى / وسط إربد</option>
-                </select>
-              </div>
+ 
+              {(formData.type === 'سكنات الطلاب' || formData.type === 'رفيق سكن') && (
+                <div className="space-y-1">
+                  <label className="block text-stone-600">الجامعة الأقرب *</label>
+                  <select
+                    value={formData.university}
+                    onChange={(e) => setFormData({ ...formData, university: e.target.value as any })}
+                    className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2 text-stone-800 font-bold focus:outline-none focus:ring-1 focus:ring-[#1a4d2e]"
+                  >
+                    <option value="اليرموك">جامعة اليرموك</option>
+                    <option value="العلوم والتكنولوجيا">جامعة العلوم والتكنولوجيا (JUST)</option>
+                    <option value="أخرى / وسط المدينة">أخرى / وسط إربد</option>
+                  </select>
+                </div>
+              )}
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            {(formData.type === 'سكنات الطلاب' || formData.type === 'رفيق سكن') && (
+              <div className="space-y-1.5 bg-emerald-50/40 p-3.5 rounded-2xl border border-emerald-100/60 transition-all">
+                <label className="block text-stone-600 font-bold">الفئة المستهدفة *</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { value: 'طالب', label: '👨‍🎓 طلاب (ذكور)' },
+                    { value: 'طالبة', label: '👩‍🎓 طالبات (إناث)' },
+                    { value: 'الكل', label: '👥 كلاهما / للجميع' }
+                  ].map((g) => (
+                    <button
+                      key={g.value}
+                      type="button"
+                      onClick={() => setFormData({ ...formData, gender: g.value })}
+                      className={`py-2 px-2.5 rounded-xl border text-center transition-all cursor-pointer text-xs ${
+                        formData.gender === g.value
+                          ? 'bg-[#1a4d2e] border-[#1a4d2e] text-white font-black shadow-xs'
+                          : 'bg-white border-stone-200 hover:border-stone-300 text-stone-700 font-bold'
+                      }`}
+                    >
+                      {g.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className={`grid ${formData.type === 'شقق للبيع' ? 'grid-cols-1' : 'grid-cols-2'} gap-3`}>
               <div className="space-y-1">
-                <label className="block text-stone-600 font-bold">الأجرة المطلوبة (بالدينار الأردني) *</label>
+                <label className="block text-stone-600 font-bold">
+                  {formData.type === 'شقق للبيع' ? 'السعر المطلوب الإجمالي (بالدينار) *' : 'السعر المطلوب (بالدينار) *'}
+                </label>
                 <input
                   type="number"
                   required
                   value={formData.price}
                   onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                  placeholder="مثال: 130"
+                  placeholder={formData.type === 'شقق للبيع' ? "مثال: 45000" : "مثال: 130"}
                   className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2 text-stone-800 font-bold focus:outline-none focus:ring-1 focus:ring-[#1a4d2e]"
                 />
               </div>
 
-              <div className="space-y-1">
-                <label className="block text-stone-600 font-bold">فترة الأجرة *</label>
-                <select
-                  value={formData.pricePeriod}
-                  onChange={(e) => setFormData({ ...formData, pricePeriod: e.target.value as any })}
-                  className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2 text-stone-800 font-bold focus:outline-none focus:ring-1 focus:ring-[#1a4d2e]"
-                >
-                  <option value="شهري">شهري</option>
-                  <option value="فصلي">فصلي</option>
-                  <option value="سنوي">سنوي</option>
-                  <option value="يومي">يومي</option>
-                </select>
-              </div>
+              {formData.type !== 'شقق للبيع' && (
+                <div className="space-y-1">
+                  <label className="block text-stone-600 font-bold">مدة الإيجار *</label>
+                  <select
+                    value={formData.pricePeriod}
+                    onChange={(e) => setFormData({ ...formData, pricePeriod: e.target.value as any })}
+                    className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2 text-stone-800 font-bold focus:outline-none focus:ring-1 focus:ring-[#1a4d2e]"
+                  >
+                    <option value="شهري">شهري</option>
+                    <option value="فصلي">فصلي</option>
+                    <option value="سنوي">سنوي</option>
+                    <option value="يومي">يومي</option>
+                  </select>
+                </div>
+              )}
             </div>
 
             <div className="space-y-1">
-              <label className="block text-stone-600">الموقع والتفاصيل الجغرافية *</label>
+              <label className="block text-stone-600">المنطقة / الحي / القرية في إربد *</label>
+              <SearchableSelect
+                options={IRBID_REGIONS_CATEGORIZED.flatMap(g => g.areas)}
+                value={formData.district}
+                onChange={(val) => setFormData({ ...formData, district: val })}
+                className="bg-[#fdfcfb] border-stone-200"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="block text-stone-600">العنوان بالتفصيل *</label>
               <input
                 type="text"
                 required
                 value={formData.location}
                 onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                placeholder="مثال: إربد، شارع الجامعة، خلف الدوار السداسي"
+                placeholder="مثال: شارع الجامعة، خلف الدوار السداسي، عمارة رقم 14"
                 className="w-full bg-white border border-stone-200 rounded-xl px-3.5 py-2 text-stone-800 font-bold focus:outline-none focus:ring-1 focus:ring-[#1a4d2e]"
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="block text-stone-600">القرب من الجامعة</label>
-                <input
-                  type="text"
-                  value={formData.distanceToCampus}
-                  onChange={(e) => setFormData({ ...formData, distanceToCampus: e.target.value })}
-                  placeholder="مثال: 3 دقائق مشياً من البوابة"
-                  className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2 text-stone-800 font-bold focus:outline-none focus:ring-1 focus:ring-[#1a4d2e]"
-                />
-              </div>
+            <div className={`grid ${formData.type === 'سكنات الطلاب' ? 'grid-cols-2' : 'grid-cols-1'} gap-3`}>
+              {formData.type === 'سكنات الطلاب' && (
+                <div className="space-y-1">
+                  <label className="block text-stone-600 font-bold">القرب من الجامعة *</label>
+                  <input
+                    type="text"
+                    required={formData.type === 'سكنات الطلاب'}
+                    value={formData.distanceToCampus}
+                    onChange={(e) => setFormData({ ...formData, distanceToCampus: e.target.value })}
+                    placeholder="مثال: 3 دقائق مشياً من البوابة"
+                    className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2 text-stone-800 font-bold focus:outline-none focus:ring-1 focus:ring-[#1a4d2e]"
+                  />
+                </div>
+              )}
 
               <div className="space-y-1">
-                <label className="block text-stone-600 font-bold">تقسيم الغرف</label>
-                <input
-                  type="text"
+                <label className="block text-stone-600 font-bold">عدد الغرف / تقسيم السكن *</label>
+                <select
                   value={formData.roomsCount}
                   onChange={(e) => setFormData({ ...formData, roomsCount: e.target.value })}
-                  placeholder="مثال: أستوديو مفرد أو غرفة ثنائية"
                   className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2 text-stone-800 font-bold focus:outline-none focus:ring-1 focus:ring-[#1a4d2e]"
+                >
+                  <option value="استوديو">استوديو</option>
+                  <option value="غرفة">غرفة واحدة</option>
+                  <option value="غرفتين">غرفتين</option>
+                  <option value="3 غرف">3 غرف</option>
+                  <option value="4+ غرف">4+ غرف</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 bg-slate-50/70 p-4 rounded-2xl border border-stone-200/50">
+              {/* Furnishing Selection */}
+              <div className="space-y-1.5">
+                <label className="block text-stone-600 font-bold text-xs">حالة التأثيث (الفرش) *</label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {[
+                    { value: 'مفروش بالكامل', label: '🛋️ مفروش بالكامل' },
+                    { value: 'شبه مفروش', label: '🪑 شبه مفروش' },
+                    { value: 'غير مفروش (فارغ)', label: '📦 غير مفروش' }
+                  ].map((furnish) => (
+                    <button
+                      key={furnish.value}
+                      type="button"
+                      onClick={() => setFormData({ ...formData, isFurnished: furnish.value })}
+                      className={`py-2 px-1 rounded-xl border text-center transition-all cursor-pointer text-[10px] ${
+                        formData.isFurnished === furnish.value
+                          ? 'bg-[#1a4d2e] border-[#1a4d2e] text-white font-black shadow-xs'
+                          : 'bg-white border-stone-200 hover:border-stone-300 text-stone-700 font-bold'
+                      }`}
+                    >
+                      {furnish.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Build Year (Optional) */}
+              <div className="space-y-1.5">
+                <label className="block text-stone-600 font-bold text-xs">سنة بناء العقار (اختياري)</label>
+                <input
+                  type="number"
+                  value={formData.buildYear}
+                  onChange={(e) => setFormData({ ...formData, buildYear: e.target.value })}
+                  placeholder="مثال: 2023"
+                  min="1950"
+                  max={new Date().getFullYear() + 2}
+                  className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2 text-stone-800 font-bold text-xs focus:outline-none focus:ring-1 focus:ring-[#1a4d2e]"
                 />
               </div>
             </div>
 
-            <div className="space-y-1">
-              <label className="block text-stone-600 font-bold">المرافق والخدمات (افصل بـ "،")</label>
-              <input
-                type="text"
-                value={formData.servicesString}
-                onChange={(e) => setFormData({ ...formData, servicesString: e.target.value })}
-                placeholder="مثال: حراسة، إنترنت فايبر، تكييف، كهرباء مشمولة"
-                className="w-full bg-white border border-stone-200 rounded-xl px-3.5 py-2 text-stone-800 font-bold focus:outline-none focus:ring-1 focus:ring-[#1a4d2e]"
-              />
+            <div className="space-y-1.5 bg-slate-50/50 p-4 rounded-2xl border border-stone-200/80">
+              <label className="block text-stone-600 font-bold">المرافق والخدمات المتوفرة *</label>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 max-h-48 overflow-y-auto pr-1">
+                {[
+                  'مصعد',
+                  'تكييف',
+                  'حارس',
+                  'إنترنت فايبر',
+                  'كراج سيارات',
+                  'تدفئة',
+                  'قريب من المواصلات',
+                  'شرفة / بلكونة',
+                  'غسالة',
+                  'ثلاجة',
+                  'خزان ماء إضافي',
+                  'سخان شمسي / كيزر',
+                  'تلفزيون ذكي',
+                  'ميكروويف',
+                  'غاز وطباخ',
+                  'مكتب للدراسة',
+                  'قريب من سوبرماركت',
+                  'كاميرات حماية'
+                ].map((srv) => {
+                  const isChecked = formData.services.includes(srv);
+                  return (
+                    <label key={srv} className="flex items-center gap-2 text-xs font-bold text-stone-600 cursor-pointer hover:text-[#1a4d2e] select-none p-1.5 bg-white rounded-lg border border-stone-100 hover:border-stone-200 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => {
+                          if (isChecked) {
+                            setFormData({
+                              ...formData,
+                              services: formData.services.filter(s => s !== srv)
+                            });
+                          } else {
+                            setFormData({
+                              ...formData,
+                              services: [...formData.services, srv]
+                            });
+                          }
+                        }}
+                        className="rounded border-stone-300 text-[#1a4d2e] focus:ring-[#1a4d2e] h-4 w-4"
+                      />
+                      <span>{srv}</span>
+                    </label>
+                  );
+                })}
+              </div>
             </div>
 
             <div className="space-y-1">
@@ -377,6 +565,30 @@ export function HousingFormModal({
                 placeholder="اكتب تفاصيل إضافية تهم المستأجر (نوع الأثاث، المطبخ، النظافة...)"
                 className="w-full bg-white border border-stone-200 rounded-xl px-3.5 py-2 text-stone-800 font-bold focus:outline-none focus:ring-1 focus:ring-[#1a4d2e]"
               />
+            </div>
+
+            <div className="space-y-2 bg-slate-100/60 p-3.5 rounded-2xl border border-stone-200/60">
+              <label className="block text-stone-600 font-bold text-xs">طريقة التواصل المفضلة مع المهتمين بالعقار *</label>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { value: 'both', label: '📞 + 💬 كلاهما (اتصال وواتساب)' },
+                  { value: 'phone_only', label: '📞 اتصال هاتفي فقط' },
+                  { value: 'whatsapp_only', label: '💬 واتساب فقط' }
+                ].map((mode) => (
+                  <button
+                    key={mode.value}
+                    type="button"
+                    onClick={() => setFormData({ ...formData, contactMode: mode.value as any })}
+                    className={`py-2 px-1.5 rounded-xl border text-center transition-all cursor-pointer text-[11px] ${
+                      formData.contactMode === mode.value
+                        ? 'bg-[#1a4d2e] border-[#1a4d2e] text-white font-black shadow-xs'
+                        : 'bg-white border-stone-200 hover:border-stone-300 text-stone-700 font-bold'
+                    }`}
+                  >
+                    {mode.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="grid grid-cols-3 gap-2">
@@ -393,10 +605,12 @@ export function HousingFormModal({
               </div>
 
               <div className="space-y-1">
-                <label className="block text-stone-600 font-bold">رقم الاتصال *</label>
+                <label className="block text-stone-600 font-bold">
+                  رقم الاتصال {formData.contactMode === 'whatsapp_only' ? '(اختياري)' : '*'}
+                </label>
                 <input
                   type="tel"
-                  required
+                  required={formData.contactMode !== 'whatsapp_only'}
                   value={formData.contactPhone}
                   onChange={(e) => setFormData({ ...formData, contactPhone: e.target.value })}
                   placeholder="07XXXXXXXX"
@@ -406,9 +620,12 @@ export function HousingFormModal({
               </div>
 
               <div className="space-y-1">
-                <label className="block text-stone-600 font-bold">الواتساب</label>
+                <label className="block text-stone-600 font-bold">
+                  الواتساب {formData.contactMode === 'phone_only' ? '(اختياري)' : '*'}
+                </label>
                 <input
                   type="tel"
+                  required={formData.contactMode === 'whatsapp_only'}
                   value={formData.contactWhatsapp}
                   onChange={(e) => setFormData({ ...formData, contactWhatsapp: e.target.value })}
                   placeholder="07XXXXXXXX"

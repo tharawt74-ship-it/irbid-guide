@@ -1,3 +1,25 @@
+// In-memory rate limiting map for serverless execution
+const ipRateLimit = new Map<string, { count: number; resetAt: number }>();
+const emailRateLimit = new Map<string, { count: number; resetAt: number }>();
+
+function isRateLimited(map: Map<string, { count: number; resetAt: number }>, key: string, maxRequests: number, windowMs: number): boolean {
+  const now = Date.now();
+  const record = map.get(key);
+
+  // Clean expired
+  if (!record || now > record.resetAt) {
+    map.set(key, { count: 1, resetAt: now + windowMs });
+    return false;
+  }
+
+  if (record.count >= maxRequests) {
+    return true;
+  }
+
+  record.count += 1;
+  return false;
+}
+
 export default async function handler(req: any, res: any) {
   // Allow OPTIONS preflight request for CORS if needed
   if (req.method === 'OPTIONS') {
@@ -16,6 +38,19 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
+    // 1. IP & Email rate limiting check (Vercel & Container)
+    const clientIp = (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown')
+      .toString()
+      .split(',')[0]
+      .trim();
+
+    // Max 5 requests per 15 minutes per IP
+    if (isRateLimited(ipRateLimit, clientIp, 5, 15 * 60 * 1000)) {
+      return res.status(429).json({ 
+        error: "تم إرسال عدد كبير من طلبات التحقق من هذا الجهاز. يرجى الانتظار 15 دقيقة قبل المحاولة مجدداً." 
+      });
+    }
+
     let body = req.body;
     if (typeof body === 'string') {
       try {
@@ -29,6 +64,27 @@ export default async function handler(req: any, res: any) {
     if (!email || !token) {
       return res.status(400).json({ error: "Email and token are required" });
     }
+
+    const cleanEmail = String(email).trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail) || cleanEmail.length > 100) {
+      return res.status(400).json({ error: "Invalid email format" });
+    }
+
+    // Token format check: hexadecimal string (20-64 chars)
+    const cleanToken = String(token).trim();
+    if (!/^[a-f0-9]{20,64}$/i.test(cleanToken)) {
+      return res.status(400).json({ error: "Invalid token format" });
+    }
+
+    // Max 3 requests per 15 minutes per recipient email address
+    if (isRateLimited(emailRateLimit, cleanEmail, 3, 15 * 60 * 1000)) {
+      return res.status(429).json({ 
+        error: "تم إرسال رابط التفعيل إلى هذا البريد مؤخراً. يرجى مراجعة صندوق الوارد والبريد غير الهام (Spam) أو الانتظار قليلاً." 
+      });
+    }
+
+    const safeDisplayName = displayName ? String(displayName).slice(0, 60).replace(/[<>]/g, '') : cleanEmail.split('@')[0];
 
     const resendApiKey = process.env.RESEND_API_KEY;
     if (!resendApiKey) {

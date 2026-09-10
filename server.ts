@@ -5,6 +5,7 @@ import dotenv from "dotenv";
 import { initializeApp, getApps, getApp, cert } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { GoogleGenAI } from "@google/genai";
+import rateLimit from "express-rate-limit";
 
 dotenv.config();
 
@@ -68,6 +69,41 @@ function getAdminApp() {
 async function startServer() {
   const app = express();
   const PORT = 3000;
+
+  // 🛡️ Rate Limiting Configuration 🛡️
+  const apiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // Limit each IP to 100 requests per `window`
+    message: { error: 'تم تجاوز الحد المسموح به للطلبات، يرجى المحاولة لاحقاً.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+
+  const authLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000, // 1 hour
+    max: 10, // Limit each IP to 10 auth-related requests per hour
+    message: { error: 'تم تجاوز الحد المسموح به من الطلبات. يرجى المحاولة لاحقاً.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+
+  const aiLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000, // 1 hour
+    max: 20, // Limit each IP to 20 AI requests per hour
+    message: { error: 'تم تجاوز الحد المسموح به للرسائل. يرجى المحاولة بعد قليل.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+
+  // Trust proxy if running behind a load balancer/reverse proxy (Cloud Run environment)
+  app.set('trust proxy', 1);
+
+  // Apply general API rate limiter to all API routes
+  app.use("/api/", apiLimiter);
+
+  // Apply specific rate limiters to sensitive endpoints
+  app.use("/api/auth/", authLimiter);
+  app.use("/api/ai/", aiLimiter);
 
   app.use(express.json());
 

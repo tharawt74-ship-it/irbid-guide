@@ -1,6 +1,8 @@
+import { useConfirm } from '../contexts/ConfirmContext';
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, Link, useLocation, useNavigate } from 'react-router';
+import DOMPurify from 'dompurify';
 import { doc, getDoc, collection, query, where, getDocs, addDoc, updateDoc, limit } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Business, Review, WorkingHours, JobOffer } from '../types';
@@ -141,6 +143,7 @@ function getLiveWorkingStatus(hours?: WorkingHours) {
 }
 
 export function BusinessDetail() {
+  const { confirm } = useConfirm();
   const { id } = useParams<{ id: string }>();
   const { currentUser, isAdmin } = useAuth();
   const location = useLocation();
@@ -180,11 +183,18 @@ export function BusinessDetail() {
   const [isOfferModalOpen, setIsOfferModalOpen] = useState(false);
   const [newOfferForm, setNewOfferForm] = useState({
     title: '',
+    discountType: 'percentage', // 'percentage' | 'fixed'
     discountPercentage: '',
     oldPrice: '',
     newPrice: '',
     code: '',
-    expiresIn: '',
+    durationMode: 'days', // 'hours' | 'days' | 'date_range' | 'recurring_weekly'
+    durationHours: '24',
+    durationDays: '7',
+    startDate: '',
+    endDate: '',
+    recurringDays: [] as string[],
+    expiresIn: 'لفترة محدودة',
     description: '',
     phone: '',
     whatsapp: '',
@@ -192,6 +202,34 @@ export function BusinessDetail() {
     isHot: false,
     isStudent: false
   });
+
+  useEffect(() => {
+    // Attempt parsing of numeric prices
+    const cleanNumber = (val: string) => {
+      if (!val) return NaN;
+      const parsed = parseFloat(val.replace(/[^\d.]/g, ''));
+      return parsed;
+    };
+
+    const oldVal = cleanNumber(newOfferForm.oldPrice);
+    const newVal = cleanNumber(newOfferForm.newPrice);
+
+    if (!isNaN(oldVal) && !isNaN(newVal) && oldVal > newVal && oldVal > 0) {
+      if (newOfferForm.discountType === 'percentage') {
+        const pct = Math.round(((oldVal - newVal) / oldVal) * 100);
+        setNewOfferForm(prev => ({
+          ...prev,
+          discountPercentage: `${pct}%`
+        }));
+      } else {
+        const diff = (oldVal - newVal).toFixed(1).replace(/\.0$/, '');
+        setNewOfferForm(prev => ({
+          ...prev,
+          discountPercentage: `${diff} د.أ`
+        }));
+      }
+    }
+  }, [newOfferForm.oldPrice, newOfferForm.newPrice, newOfferForm.discountType]);
   const [submittingOffer, setSubmittingOffer] = useState(false);
 
   // VIP Reels states
@@ -809,7 +847,7 @@ export function BusinessDetail() {
 
   const handleDeleteReel = async (reelId: string) => {
     if (!business || !db) return;
-    if (!window.confirm("هل أنت متأكد من حذف هذا الفيديو؟")) return;
+    if (!(await confirm({ message: "هل أنت متأكد من حذف هذا الفيديو؟" }))) return;
 
     try {
       const docRef = doc(db, 'businesses', business.id);
@@ -863,7 +901,7 @@ export function BusinessDetail() {
 
   const handleDeleteGalleryImage = async (imageUrlToDelete: string) => {
     if (!business || !db) return;
-    if (!window.confirm("هل أنت متأكد من حذف هذه الصورة من معرض المحل؟")) return;
+    if (!(await confirm({ message: "هل أنت متأكد من حذف هذه الصورة من معرض المحل؟" }))) return;
 
     try {
       const docRef = doc(db, 'businesses', business.id);
@@ -977,16 +1015,50 @@ export function BusinessDetail() {
 
     setSubmittingOffer(true);
     try {
+      let computedExpiresIn = newOfferForm.expiresIn || 'لفترة محدودة';
+      let expiresAt = null;
+
+      if (newOfferForm.durationMode === 'hours') {
+        const hours = parseFloat(newOfferForm.durationHours) || 24;
+        computedExpiresIn = `لمدة ${hours} ساعة`;
+        expiresAt = Date.now() + hours * 3600 * 1000;
+      } else if (newOfferForm.durationMode === 'days') {
+        const days = parseFloat(newOfferForm.durationDays) || 7;
+        computedExpiresIn = `لمدة ${days} يوم/أيام`;
+        expiresAt = Date.now() + days * 24 * 3600 * 1000;
+      } else if (newOfferForm.durationMode === 'date_range') {
+        if (newOfferForm.startDate && newOfferForm.endDate) {
+          computedExpiresIn = `من ${newOfferForm.startDate} إلى ${newOfferForm.endDate}`;
+          expiresAt = new Date(newOfferForm.endDate).getTime() + 24 * 3600 * 1000 - 1;
+        } else {
+          computedExpiresIn = 'لفترة محدودة';
+        }
+      } else if (newOfferForm.durationMode === 'recurring_weekly') {
+        if (newOfferForm.recurringDays && newOfferForm.recurringDays.length > 0) {
+          computedExpiresIn = `متكرر كل: ${newOfferForm.recurringDays.join('، ')}`;
+        } else {
+          computedExpiresIn = 'متكرر أيام الأسبوع';
+        }
+      }
+
       const offerData = {
         title: sanitizeInput(newOfferForm.title),
         businessName: business.name,
         businessId: business.id,
         category: business.category,
+        discountType: newOfferForm.discountType,
         discountPercentage: sanitizeInput(newOfferForm.discountPercentage) || '10%',
         oldPrice: newOfferForm.oldPrice ? sanitizeInput(newOfferForm.oldPrice) : undefined,
         newPrice: newOfferForm.newPrice ? sanitizeInput(newOfferForm.newPrice) : undefined,
         code: newOfferForm.code ? sanitizeInput(newOfferForm.code) : undefined,
-        expiresIn: sanitizeInput(newOfferForm.expiresIn) || 'لفترة محدودة',
+        expiresIn: computedExpiresIn,
+        durationMode: newOfferForm.durationMode,
+        durationHours: newOfferForm.durationHours,
+        durationDays: newOfferForm.durationDays,
+        startDate: newOfferForm.startDate,
+        endDate: newOfferForm.endDate,
+        recurringDays: newOfferForm.recurringDays,
+        expiresAt: expiresAt,
         description: sanitizeInput(newOfferForm.description),
         location: business.district ? `${business.district} - ${business.address}` : business.address,
         phone: sanitizeInput(newOfferForm.phone || business.phone || ''),
@@ -1005,11 +1077,18 @@ export function BusinessDetail() {
       setIsOfferModalOpen(false);
       setNewOfferForm({
         title: '',
+        discountType: 'percentage',
         discountPercentage: '',
         oldPrice: '',
         newPrice: '',
         code: '',
-        expiresIn: '',
+        durationMode: 'days',
+        durationHours: '24',
+        durationDays: '7',
+        startDate: '',
+        endDate: '',
+        recurringDays: [],
+        expiresIn: 'لفترة محدودة',
         description: '',
         phone: '',
         whatsapp: '',
@@ -1483,20 +1562,49 @@ export function BusinessDetail() {
               {/* Profile Picture & Badges/Ratings (overlaps Cover Image) */}
               <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 -mt-12 sm:-mt-16 mb-4 relative z-20">
                 <div className="flex items-end gap-3 sm:gap-4">
-                  {/* Circular Profile Picture / Logo */}
-                  <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-2xl border-4 border-white shadow-md bg-white flex items-center justify-center overflow-hidden shrink-0">
-                    {business.logoUrl ? (
-                      <img 
-                        src={business.logoUrl} 
-                        alt={`${business.name} Logo`} 
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-gradient-to-br from-[#1a4d2e] to-emerald-600 flex items-center justify-center text-white font-black text-2xl sm:text-4xl shadow-inner">
-                        {business.name.charAt(0)}
+                  {/* Circular Profile Picture / Logo with Instagram/Facebook Story ring for Vip Welcome Popup */}
+                  {business.vipPopup?.enabled ? (
+                    <div 
+                      onClick={() => setIsVipWelcomePopupOpen(true)}
+                      className="relative group cursor-pointer shrink-0 z-30"
+                      title="انقر لمشاهدة ستوري العرض الترحيبي والتفاعلي للمحل 🎁"
+                    >
+                      {/* Premium Story Ring Gradient Wrapper */}
+                      <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-3xl p-[3px] bg-gradient-to-tr from-amber-400 via-rose-500 to-[#1a4d2e] shadow-md hover:shadow-lg transition-all duration-300 transform group-hover:scale-105 active:scale-95 flex items-center justify-center">
+                        {/* Inner Spacing / Gap like Instagram */}
+                        <div className="w-full h-full rounded-[21px] bg-white p-[3px] flex items-center justify-center overflow-hidden">
+                          <div className="w-full h-full rounded-2xl overflow-hidden bg-white flex items-center justify-center">
+                            {business.logoUrl ? (
+                              <img 
+                                src={business.logoUrl} 
+                                alt={`${business.name} Logo`} 
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <div className="w-full h-full bg-gradient-to-br from-[#1a4d2e] to-emerald-600 flex items-center justify-center text-white font-black text-2xl sm:text-4xl shadow-inner">
+                                {business.name.charAt(0)}
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  ) : (
+                    /* Default Regular Profile Picture */
+                    <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-2xl border-4 border-white shadow-md bg-white flex items-center justify-center overflow-hidden shrink-0">
+                      {business.logoUrl ? (
+                        <img 
+                          src={business.logoUrl} 
+                          alt={`${business.name} Logo`} 
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-gradient-to-br from-[#1a4d2e] to-emerald-600 flex items-center justify-center text-white font-black text-2xl sm:text-4xl shadow-inner">
+                          {business.name.charAt(0)}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Badges/Category for desktop/large screens (beside profile picture) */}
                   <div className="hidden sm:block pb-1">
@@ -1620,18 +1728,6 @@ export function BusinessDetail() {
                         <span className={`h-1.5 w-1.5 rounded-full ${liveStatus.isOpen ? 'bg-emerald-500' : 'bg-red-500'} animate-pulse`}></span>
                         <span>{liveStatus.isOpen ? 'مفتوح الآن' : 'مغلق حالياً'}</span>
                       </span>
-
-                      {business.vipPopup?.enabled && (
-                        <button
-                          type="button"
-                          onClick={() => setIsVipWelcomePopupOpen(true)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 hover:from-amber-600 hover:to-amber-800 text-white rounded-xl text-xs font-black transition-all shadow-xs cursor-pointer border border-amber-300/40"
-                          title="انقر لمشاهدة الترحيب الخاص والعروض التفصيلية"
-                        >
-                          <Sparkles className="h-3.5 w-3.5 text-amber-200 fill-amber-200 animate-spin" style={{ animationDuration: '3s' }} />
-                          <span>{business.vipPopup.title ? `عرض خاص: ${business.vipPopup.title}` : 'عرض خاص من المحل 🎁'}</span>
-                        </button>
-                      )}
                     </div>
 
                     {/* Social Media Links in Hero Header */}
@@ -1976,9 +2072,16 @@ export function BusinessDetail() {
                         <Info className="h-5 w-5 text-[#1a4d2e]" />
                         نبذة عن المحل والخدمات
                       </h2>
-                      <div className="text-stone-600 text-base sm:text-lg leading-relaxed whitespace-pre-line break-words">
-                        {business.description || "لا يوجد وصف متوفر حالياً لهذا المحل."}
-                      </div>
+                      {business.description && /<[a-z][\s\S]*>/i.test(business.description) ? (
+                        <div 
+                          className="text-stone-600 text-base sm:text-lg leading-relaxed break-words space-y-3 font-medium select-text [&_strong]:font-black [&_strong]:text-stone-900 [&_em]:italic [&_ul]:list-disc [&_ul]:list-inside [&_ul]:mr-4 [&_ul]:space-y-1.5 [&_ul]:my-2 [&_ol]:list-decimal [&_ol]:list-inside [&_ol]:mr-4 [&_ol]:space-y-1.5 [&_ol]:my-2 [&_li]:text-stone-700 [&_li]:font-medium [&_span]:inline-block [&_u]:underline"
+                          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(business.description) }}
+                        />
+                      ) : (
+                        <div className="text-stone-600 text-base sm:text-lg leading-relaxed whitespace-pre-line break-words select-text font-medium">
+                          {business.description || "لا يوجد وصف متوفر حالياً لهذا المحل."}
+                        </div>
+                      )}
                     </div>
 
                     {/* About Media (Video or Image for all accounts) */}
@@ -3286,7 +3389,7 @@ export function BusinessDetail() {
                       className="w-full flex items-center justify-center gap-2 bg-[#1a4d2e] hover:bg-[#133c23] text-white py-3 px-4 rounded-xl font-bold text-sm transition-colors shadow-xs"
                     >
                       <Phone3DIcon className="h-5 w-5 text-white" />
-                      <span>اتصال موصول ({business.phone})</span>
+                      <span>اتصال موصول (<span dir="ltr" className="font-mono font-bold">{business.phone.replace(/\s+/g, '')}</span>)</span>
                     </a>
                     
                     <button
@@ -3686,8 +3789,13 @@ export function BusinessDetail() {
               isOpen={isMenuManagerOpen}
               onClose={() => setIsMenuManagerOpen(false)}
               business={business}
-              onMenuUpdated={(updatedItems) => {
-                setBusiness(prev => prev ? { ...prev, menuItems: updatedItems } : null);
+              onMenuUpdated={(updatedItems, updatedTitle, updatedDescription) => {
+                setBusiness(prev => prev ? { 
+                  ...prev, 
+                  menuItems: updatedItems,
+                  menuTitle: updatedTitle,
+                  menuDescription: updatedDescription
+                } : null);
               }}
             />
           )}
@@ -3792,56 +3900,78 @@ export function BusinessDetail() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-stone-700 mb-1">عنوان العرض *</label>
+                    <label className="block text-xs font-bold text-stone-700 mb-1">عنوان العرض الترويجي الجذاب *</label>
                     <input
                       type="text"
                       required
-                      placeholder="مثال: خصم 25% على كافة الوجبات العائلية"
+                      placeholder="مثال: خصم 30% على وجبة الشاورما العائلية"
                       value={newOfferForm.title}
                       onChange={(e) => setNewOfferForm(prev => ({ ...prev, title: e.target.value }))}
                       className="w-full px-3.5 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-xs font-medium"
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-bold text-stone-700 mb-1">نسبة الخصم (اختياري)</label>
-                      <input
-                        type="text"
-                        placeholder="مثال: 20%"
-                        value={newOfferForm.discountPercentage}
-                        onChange={(e) => setNewOfferForm(prev => ({ ...prev, discountPercentage: e.target.value }))}
-                        className="w-full px-3.5 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-xs font-medium"
-                      />
+                      <label className="block text-xs font-bold text-stone-700 mb-1">نوع شارة الخصم</label>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setNewOfferForm(prev => ({ ...prev, discountType: 'percentage' }))}
+                          className={cn(
+                            "flex-1 py-1.5 px-3 rounded-xl border text-[11px] font-bold transition-all cursor-pointer",
+                            newOfferForm.discountType === 'percentage'
+                              ? "bg-amber-100 border-amber-300 text-amber-800 shadow-xs font-black"
+                              : "bg-white border-stone-200 text-stone-600 hover:bg-stone-50"
+                          )}
+                        >
+                          نسبة مئوية (%)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setNewOfferForm(prev => ({ ...prev, discountType: 'fixed' }))}
+                          className={cn(
+                            "flex-1 py-1.5 px-3 rounded-xl border text-[11px] font-bold transition-all cursor-pointer",
+                            newOfferForm.discountType === 'fixed'
+                              ? "bg-amber-100 border-amber-300 text-amber-800 shadow-xs font-black"
+                              : "bg-white border-stone-200 text-stone-600 hover:bg-stone-50"
+                          )}
+                        >
+                          مبلغ ثابت (د.أ)
+                        </button>
+                      </div>
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-stone-700 mb-1">صلاحية العرض</label>
+                      <label className="block text-xs font-bold text-stone-700 mb-1">شارة الخصم المحسوبة</label>
                       <input
                         type="text"
-                        placeholder="مثال: ينتهي خلال 3 أيام"
-                        value={newOfferForm.expiresIn}
-                        onChange={(e) => setNewOfferForm(prev => ({ ...prev, expiresIn: e.target.value }))}
-                        className="w-full px-3.5 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-xs font-medium"
+                        required
+                        placeholder="توليد تلقائي للشارة"
+                        value={newOfferForm.discountPercentage}
+                        onChange={(e) => setNewOfferForm(prev => ({ ...prev, discountPercentage: e.target.value }))}
+                        className="w-full px-3.5 py-2 rounded-xl bg-amber-50 border border-amber-200 font-black text-amber-800 focus:ring-2 focus:ring-amber-500/20 outline-none text-xs"
                       />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-bold text-stone-700 mb-1">السعر الأصلي (اختياري)</label>
+                      <label className="block text-xs font-bold text-stone-700 mb-1">السعر الأصلي قبل الخصم</label>
                       <input
                         type="text"
-                        placeholder="مثال: 15 دينار"
+                        required
+                        placeholder="مثال: 12 دينار"
                         value={newOfferForm.oldPrice}
                         onChange={(e) => setNewOfferForm(prev => ({ ...prev, oldPrice: e.target.value }))}
                         className="w-full px-3.5 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-xs font-medium"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-stone-700 mb-1">السعر بعد الخصم (اختياري)</label>
+                      <label className="block text-xs font-bold text-stone-700 mb-1">السعر الجديد بعد الخصم</label>
                       <input
                         type="text"
-                        placeholder="مثال: 12 دينار"
+                        required
+                        placeholder="مثال: 8.5 دينار"
                         value={newOfferForm.newPrice}
                         onChange={(e) => setNewOfferForm(prev => ({ ...prev, newPrice: e.target.value }))}
                         className="w-full px-3.5 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-xs font-medium"
@@ -3851,7 +3981,7 @@ export function BusinessDetail() {
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-bold text-stone-700 mb-1">كود الخصم (إن وجد)</label>
+                      <label className="block text-xs font-bold text-stone-700 mb-1">كود الخصم (اختياري)</label>
                       <input
                         type="text"
                         placeholder="مثال: IRBID20"
@@ -3861,15 +3991,129 @@ export function BusinessDetail() {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-stone-700 mb-1">صورة العرض (رابط ويب)</label>
+                      <label className="block text-xs font-bold text-stone-700 mb-1">رقم واتساب لإرسال العرض</label>
                       <input
-                        type="url"
-                        placeholder="رابط صورة ترويجية (اختياري)"
-                        value={newOfferForm.image}
-                        onChange={(e) => setNewOfferForm(prev => ({ ...prev, image: e.target.value }))}
-                        className="w-full px-3.5 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-xs font-medium"
+                        type="tel"
+                        dir="ltr"
+                        placeholder="رقم الهاتف للتواصل"
+                        value={newOfferForm.whatsapp}
+                        onChange={(e) => setNewOfferForm(prev => ({ ...prev, whatsapp: e.target.value }))}
+                        className="w-full px-3.5 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-xs font-medium text-right"
                       />
                     </div>
+                  </div>
+
+                  {/* Dynamic Duration Settings */}
+                  <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200/60 space-y-3">
+                    <label className="block text-xs font-black text-stone-800">تحديد مدة صلاحية العرض ⏰</label>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {[
+                        { id: 'hours', label: 'بالساعات ⏳' },
+                        { id: 'days', label: 'بالأيام 📅' },
+                        { id: 'date_range', label: 'من / إلى تاريخ 📆' },
+                        { id: 'recurring_weekly', label: 'متكرر أسبوعياً 🔁' }
+                      ].map(mode => (
+                        <button
+                          key={mode.id}
+                          type="button"
+                          onClick={() => setNewOfferForm(prev => ({ ...prev, durationMode: mode.id as any }))}
+                          className={cn(
+                            "py-2 px-2.5 rounded-xl border text-[11px] font-bold transition-all text-center cursor-pointer",
+                            newOfferForm.durationMode === mode.id
+                              ? "bg-amber-500 border-transparent text-white shadow-xs font-black"
+                              : "bg-white border-stone-200 text-stone-600 hover:bg-stone-50"
+                          )}
+                        >
+                          {mode.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {newOfferForm.durationMode === 'hours' && (
+                      <div className="space-y-1 animate-in fade-in duration-200">
+                        <label className="block text-[11px] font-bold text-stone-600">صلاحية العرض بالساعات</label>
+                        <input 
+                          type="number"
+                          min="1"
+                          required
+                          value={newOfferForm.durationHours}
+                          onChange={e => setNewOfferForm(prev => ({ ...prev, durationHours: e.target.value }))}
+                          placeholder="مثال: 12"
+                          className="w-full max-w-xs bg-white border border-stone-200 rounded-xl px-3.5 py-2 text-xs focus:outline-none"
+                        />
+                      </div>
+                    )}
+
+                    {newOfferForm.durationMode === 'days' && (
+                      <div className="space-y-1 animate-in fade-in duration-200">
+                        <label className="block text-[11px] font-bold text-stone-600">صلاحية العرض بالأيام</label>
+                        <input 
+                          type="number"
+                          min="1"
+                          required
+                          value={newOfferForm.durationDays}
+                          onChange={e => setNewOfferForm(prev => ({ ...prev, durationDays: e.target.value }))}
+                          placeholder="مثال: 3"
+                          className="w-full max-w-xs bg-white border border-stone-200 rounded-xl px-3.5 py-2 text-xs focus:outline-none"
+                        />
+                      </div>
+                    )}
+
+                    {newOfferForm.durationMode === 'date_range' && (
+                      <div className="grid grid-cols-2 gap-3 max-w-md animate-in fade-in duration-200">
+                        <div>
+                          <label className="block text-[11px] font-bold text-stone-600">من تاريخ</label>
+                          <input 
+                            type="date"
+                            required
+                            value={newOfferForm.startDate}
+                            onChange={e => setNewOfferForm(prev => ({ ...prev, startDate: e.target.value }))}
+                            className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2 text-xs focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-stone-600">إلى تاريخ</label>
+                          <input 
+                            type="date"
+                            required
+                            value={newOfferForm.endDate}
+                            onChange={e => setNewOfferForm(prev => ({ ...prev, endDate: e.target.value }))}
+                            className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2 text-xs focus:outline-none"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {newOfferForm.durationMode === 'recurring_weekly' && (
+                      <div className="space-y-1.5 animate-in fade-in duration-200">
+                        <label className="block text-[11px] font-bold text-stone-600">حدد أيام الأسبوع التي يتكرر فيها هذا العرض</label>
+                        <div className="flex flex-wrap gap-2 pt-1">
+                          {['السبت', 'الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'].map(day => {
+                            const isChecked = newOfferForm.recurringDays.includes(day);
+                            return (
+                              <button
+                                key={day}
+                                type="button"
+                                onClick={() => {
+                                  const updated = isChecked
+                                    ? newOfferForm.recurringDays.filter(d => d !== day)
+                                    : [...newOfferForm.recurringDays, day];
+                                  setNewOfferForm(prev => ({ ...prev, recurringDays: updated }));
+                                }}
+                                className={cn(
+                                  "py-1.5 px-3 rounded-lg border text-xs font-medium transition-all cursor-pointer",
+                                  isChecked
+                                    ? "bg-amber-100 border-amber-400 text-amber-800 font-bold"
+                                    : "bg-white border-stone-200 text-stone-500 hover:bg-stone-50"
+                                )}
+                              >
+                                {day}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-2 gap-3 pt-2">
@@ -3897,12 +4141,23 @@ export function BusinessDetail() {
                   <div>
                     <label className="block text-xs font-bold text-stone-700 mb-1">تفاصيل وشروط العرض *</label>
                     <textarea
-                      rows={3}
+                      rows={2}
                       required
                       placeholder="اكتب بالتفصيل ما الذي يتضمنه العرض وكيف يمكن الاستفادة منه..."
                       value={newOfferForm.description}
                       onChange={(e) => setNewOfferForm(prev => ({ ...prev, description: e.target.value }))}
                       className="w-full px-3.5 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-xs font-medium resize-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-stone-700 mb-1.5">تحميل صورة العرض</label>
+                    <ImageUploader 
+                      value={newOfferForm.image}
+                      onChange={(url) => setNewOfferForm(prev => ({ ...prev, image: url }))}
+                      folder="offers"
+                      aspectRatio="cover"
+                      placeholder="اختر صورة للعرض من جهازك لتصميم بطاقة متميزة"
                     />
                   </div>
 

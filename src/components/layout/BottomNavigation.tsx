@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router';
 import { Store, Flame, Bot, Menu, X, PlusCircle } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -34,8 +34,36 @@ export function BottomNavigation({
   const { globalSettings } = useSystemSettings();
   const isAiEnabled = globalSettings?.enableAiAssistant !== false;
 
-  // Hide global bottom navigation on business details page
-  if (location.pathname.startsWith('/business/') || location.pathname.startsWith('/b/') || location.pathname.includes('/@')) {
+  const [isAiOpen, setIsAiOpen] = useState(false);
+  const [hasSeenAiDot, setHasSeenAiDot] = useState(() => {
+    return localStorage.getItem('shofi_ai_opened_once') === 'true';
+  });
+
+  useEffect(() => {
+    const handleStateChange = (e: any) => {
+      if (typeof e.detail?.isOpen === 'boolean') {
+        setIsAiOpen(e.detail.isOpen);
+        if (e.detail.isOpen) {
+          setHasSeenAiDot(true);
+          localStorage.setItem('shofi_ai_opened_once', 'true');
+        }
+      }
+    };
+
+    window.addEventListener('ai-assistant-state-changed', handleStateChange);
+    return () => {
+      window.removeEventListener('ai-assistant-state-changed', handleStateChange);
+    };
+  }, []);
+
+  // Hide global bottom navigation on business details page or messages pages
+  if (
+    location.pathname === '/messages' ||
+    location.pathname.startsWith('/messages/') ||
+    location.pathname.startsWith('/business/') || 
+    location.pathname.startsWith('/b/') || 
+    location.pathname.includes('/@')
+  ) {
     return null;
   }
 
@@ -70,15 +98,17 @@ export function BottomNavigation({
 
   const handleAiClick = () => {
     if (onCloseMenu) onCloseMenu();
+    setHasSeenAiDot(true);
+    localStorage.setItem('shofi_ai_opened_once', 'true');
     window.dispatchEvent(new CustomEvent('toggle-ai-assistant'));
   };
 
   return (
     <div 
-      className="md:hidden fixed bottom-4 left-3 right-3 z-[70] flex items-center justify-center gap-2 max-w-[420px] mx-auto pointer-events-none"
+      className="md:hidden fixed bottom-4 left-3 right-3 z-[100] flex items-center justify-center gap-2 max-w-[420px] mx-auto pointer-events-none"
       dir="rtl"
     >
-      {/* Standalone Circular AI Assistant Button - Exact matching height/diameter as navbar (h-14 = 56px) in 2D flat style */}
+      {/* Standalone Circular AI Assistant Button */}
       {isAiEnabled && (
         <motion.button
           type="button"
@@ -89,19 +119,25 @@ export function BottomNavigation({
             handleAiClick();
           }}
           id="mobile-bottom-ai-btn"
-          className="pointer-events-auto relative shrink-0 w-14 h-14 rounded-full bg-[#1a4d2e] hover:bg-[#143e24] active:bg-[#0f2e1b] text-white flex flex-col items-center justify-center border border-[#143e24] shadow-sm active:scale-95 transition-all cursor-pointer group"
-          title="ربداوي AI"
-          aria-label="ربداوي AI"
+          className="pointer-events-auto relative shrink-0 w-14 h-14 rounded-full bg-[#1a4d2e] hover:bg-[#143e24] active:bg-[#0f2e1b] text-white flex flex-col items-center justify-center border border-[#143e24] shadow-md active:scale-95 transition-all cursor-pointer group"
+          title={isAiOpen ? "إغلاق المساعد" : "ربداوي AI"}
+          aria-label={isAiOpen ? "إغلاق المساعد" : "ربداوي AI"}
         >
           <div className="relative flex items-center justify-center">
-            <Bot className="w-5.5 h-5.5 text-emerald-300 group-hover:scale-105 transition-transform duration-150" />
-            <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
-            </span>
+            {isAiOpen ? (
+              <X className="w-5.5 h-5.5 text-emerald-300 group-hover:scale-105 transition-transform duration-150" />
+            ) : (
+              <Bot className="w-5.5 h-5.5 text-emerald-300 group-hover:scale-105 transition-transform duration-150" />
+            )}
+            {!hasSeenAiDot && !isAiOpen && (
+              <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500 border border-white"></span>
+              </span>
+            )}
           </div>
           <span className="text-[10px] font-bold text-emerald-100 mt-0.5 leading-none">
-            ربداوي
+            {isAiOpen ? 'إغلاق' : 'ربداوي'}
           </span>
         </motion.button>
       )}

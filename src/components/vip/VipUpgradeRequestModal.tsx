@@ -244,7 +244,7 @@ export function VipUpgradeRequestModal({
                   </div>
                   <div className="flex items-center gap-1.5 font-medium">
                     <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                    <span>شارة التوثيق الذهبية ⭐ وأولوية الظهور في البحث</span>
+                    <span>شارة التوثيق الزرقاء الرسمية ✓ وأولوية الظهور</span>
                   </div>
                 </div>
 

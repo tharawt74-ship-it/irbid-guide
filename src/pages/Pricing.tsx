@@ -41,26 +41,6 @@ const MARKETING_SERVICES_DATA = [
     whatsappText: 'أرغب في إرسال إشعار ترويجي جماعي فوري لجميع مستخدمي المنصة للإعلان عن محلي.',
     colorClass: 'bg-amber-50 text-amber-700 border-amber-200',
     iconColor: 'text-amber-600'
-  },
-  {
-    id: 'video',
-    title: 'تغطية فيديو ريلز (Reels) وتصوير احترافي',
-    price: '69 د.أ / تغطية',
-    description: 'فريقنا الاحترافي يزور محلك مجهزاً بأحدث الكاميرات والمعدات لتصوير ومونتاج فيديو ريلز تسويقي إبداعي لنشره على منصاتنا الاجتماعية.',
-    icon: Video,
-    whatsappText: 'أرغب في حجز موعد لتغطية فيديو ريلز وتصوير احترافي لمحلي.',
-    colorClass: 'bg-indigo-50 text-indigo-700 border-indigo-200',
-    iconColor: 'text-indigo-600'
-  },
-  {
-    id: 'nfc',
-    title: 'طاولات ستاندات التقييم الذكي NFC',
-    price: '12 د.أ / ستاند مبرمج',
-    description: 'ستاند ذكي أنيق ومبرمج يوضع على طاولات ومحاسبة محلك، يتيح للزبائن تقييم محلك على جوجل مابس أو فتح منيو الطعام بمجرد لمسة هاتف فوري.',
-    icon: Smartphone,
-    whatsappText: 'أرغب في طلب وبرمجة ستاندات طاولات التقييم الذكي NFC لمحلي.',
-    colorClass: 'bg-purple-50 text-purple-700 border-purple-200',
-    iconColor: 'text-purple-600'
   }
 ];
 
@@ -85,24 +65,20 @@ export function Pricing() {
   const subscriptionPlans = activePlans.filter(p => p.id !== 'pay_per_use');
 
   const handlePlanAction = (planId: string) => {
-    if (!currentUser) {
-      navigate('/register');
+    if (!currentUser || ownedBusinesses.length === 0) {
+      navigate(`/contact?package=${planId}`);
       return;
     }
     
     if (planId === 'basic') {
-      navigate('/add-business');
+      navigate(`/contact?package=${planId}`);
       return;
     }
     
     // For VIP
-    if (ownedBusinesses.length === 0) {
-      navigate('/add-business');
-    } else {
-      setSelectedPlanId(planId);
-      setSelectedServiceWhatsapp(null);
-      setShowBusinessSelectModal(true);
-    }
+    setSelectedPlanId(planId);
+    setSelectedServiceWhatsapp(null);
+    setShowBusinessSelectModal(true);
   };
 
   const handleMarketingServiceAction = (whatsappText: string) => {
@@ -250,13 +226,13 @@ export function Pricing() {
                   ) : (
                     <div className="space-y-1">
                       <div className="flex items-baseline gap-1 text-[#2d2a26]">
-                        <span className="text-4xl font-black">119</span>
+                        <span className="text-4xl font-black">9.9</span>
                         <span className="text-lg font-bold">د.أ</span>
-                        <span className="text-sm font-medium text-stone-500 mr-1">/ سنوياً</span>
+                        <span className="text-xs font-bold text-stone-500 mr-1">/ شهرياً (بالدفع السنوي)</span>
                       </div>
                       <div className="flex flex-col gap-1">
                         <p className="text-[11px] text-emerald-600 font-extrabold bg-emerald-50 px-2 py-0.5 rounded-lg inline-block self-start">
-                          🔥 ما يعادل 9.9 د.أ فقط شهرياً!
+                          🔥 ما يعادل بالسنة 119 د.أ فقط كاملة
                         </p>
                         <p className="text-[10px] text-stone-400 font-bold">لقد وفرت 109 د.أ سنوياً مقارنة بالدفع الشهري!</p>
                       </div>

@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router';
 import { ArrowUp } from 'lucide-react';
 
 export function FloatingScrollToTop() {
   const [visible, setVisible] = useState(false);
+  const location = useLocation();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -24,7 +26,7 @@ export function FloatingScrollToTop() {
     });
   };
 
-  if (!visible) return null;
+  if (!visible || location.pathname === '/messages' || location.pathname.startsWith('/messages/')) return null;
 
   return (
     <button

@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Download, X, Smartphone, Sparkles, Check, Share, Monitor, ShieldCheck } from 'lucide-react';
+import { useSystemSettings } from '../../contexts/SystemSettingsContext';
 
 export function triggerPwaInstallModal() {
   window.dispatchEvent(new CustomEvent('openPwaInstallModal'));
 }
 
 export function PwaInstallBanner() {
+  const { globalSettings } = useSystemSettings();
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isStandalone, setIsStandalone] = useState(false);
   const [isIos, setIsIos] = useState(false);
@@ -189,21 +191,29 @@ export function PwaInstallBanner() {
   if (!deferredPrompt && !isIos) return null;
 
   return (
-    <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-6 md:max-w-md z-50 animate-in slide-in-from-bottom-5 duration-300" dir="rtl">
-      <div className="bg-stone-900/95 backdrop-blur-md text-white rounded-2xl p-4 shadow-2xl border border-stone-800 flex flex-col gap-3">
+    <div className="fixed bottom-[84px] left-3.5 right-3.5 md:left-auto md:right-6 md:bottom-6 md:max-w-md z-[110] animate-in slide-in-from-bottom-5 duration-300" dir="rtl">
+      <div className="bg-white/95 backdrop-blur-md text-stone-800 rounded-2xl p-4.5 shadow-[0_12px_40px_rgba(0,0,0,0.12)] border border-stone-200/80 flex flex-col gap-3.5">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-[#1a4d2e] flex items-center justify-center shrink-0 border border-emerald-500/30 shadow-inner">
-              <Smartphone className="h-6 w-6 text-emerald-400" />
-            </div>
+            {globalSettings?.logoUrl ? (
+              <img 
+                src={globalSettings.logoUrl} 
+                alt={globalSettings.siteName || "شو في بإربد؟"} 
+                className="w-12 h-12 object-contain bg-stone-50 border border-stone-100 p-1.5 rounded-xl shrink-0"
+              />
+            ) : (
+              <div className="w-12 h-12 rounded-xl bg-[#1a4d2e]/10 flex items-center justify-center shrink-0 border border-[#1a4d2e]/20 shadow-sm">
+                <Smartphone className="h-6 w-6 text-[#1a4d2e]" />
+              </div>
+            )}
             <div>
               <div className="flex items-center gap-1.5">
-                <h4 className="text-sm font-black text-white">ثبّت تطبيق "شو في بإربد؟"</h4>
-                <span className="bg-emerald-500/20 text-emerald-400 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-emerald-500/30">
+                <h4 className="text-sm font-black text-stone-900">ثبّت تطبيق "{globalSettings?.siteName || 'شو في بإربد؟'}"</h4>
+                <span className="bg-emerald-50 text-emerald-700 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-emerald-200/60">
                   تطبيق مجاني
                 </span>
               </div>
-              <p className="text-xs text-stone-300 mt-0.5 leading-tight">
+              <p className="text-xs text-stone-500 mt-0.5 leading-relaxed font-medium">
                 تصفح أسرع وإشعارات فورية بالعروض والوظائف على هاتفك.
               </p>
             </div>
@@ -211,7 +221,7 @@ export function PwaInstallBanner() {
 
           <button
             onClick={handleDismiss}
-            className="text-stone-400 hover:text-white p-1 rounded-lg hover:bg-stone-800 transition-colors"
+            className="text-stone-400 hover:text-stone-600 p-1.5 rounded-lg hover:bg-stone-50 transition-colors"
             title="إغلاق"
           >
             <X className="h-4 w-4" />
@@ -219,17 +229,17 @@ export function PwaInstallBanner() {
         </div>
 
         {/* Action Button */}
-        <div className="flex items-center gap-2 pt-1 border-t border-stone-800">
+        <div className="flex items-center gap-2 pt-2 border-t border-stone-100">
           <button
             onClick={handleInstallClick}
             className="flex-1 bg-[#1a4d2e] hover:bg-[#143d24] text-white text-xs font-black py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-md active:scale-98 cursor-pointer"
           >
-            <Download className="h-4 w-4 text-emerald-400 animate-bounce" />
+            <Download className="h-4 w-4 text-emerald-300 animate-bounce" />
             <span>{isIos ? 'طريقة تثبيت التطبيق للـ iPhone' : 'تثبيت التطبيق على الجهاز الآن'}</span>
           </button>
           <button
             onClick={handleDismiss}
-            className="px-3 py-2.5 text-xs font-bold text-stone-400 hover:text-white rounded-xl hover:bg-stone-800 transition-colors cursor-pointer"
+            className="px-3.5 py-2.5 text-xs font-bold text-stone-400 hover:text-stone-700 hover:bg-stone-50 rounded-xl transition-colors cursor-pointer"
           >
             لاحقاً
           </button>
@@ -237,17 +247,17 @@ export function PwaInstallBanner() {
 
         {/* iOS Instruction Modal / Accordion */}
         {showIosGuide && (
-          <div className="mt-2 p-3 bg-stone-800 rounded-xl text-xs space-y-2 border border-stone-700 animate-in fade-in">
-            <div className="flex items-center justify-between text-emerald-400 font-bold">
+          <div className="mt-2 p-3.5 bg-emerald-50/50 rounded-xl text-xs space-y-2 border border-emerald-100/60 animate-in fade-in text-right">
+            <div className="flex items-center justify-between text-[#1a4d2e] font-black">
               <span>خطوات التثبيت على الآيفون (iOS):</span>
-              <button onClick={() => setShowIosGuide(false)} className="text-stone-400 hover:text-white">
+              <button onClick={() => setShowIosGuide(false)} className="text-stone-400 hover:text-stone-600">
                 <X className="h-3.5 w-3.5" />
               </button>
             </div>
-            <ol className="list-decimal list-inside space-y-1 text-stone-300 text-[11px] leading-relaxed">
-              <li>اضغط على زر المشاركة <Share className="inline h-3 w-3 text-sky-400 mx-0.5" /> في أسفل شاشة Safari.</li>
-              <li>اختر <span className="font-bold text-white">"إضافة إلى الشاشة الرئيسية" (Add to Home Screen)</span>.</li>
-              <li>اضغط <span className="font-bold text-emerald-400">"إضافة"</span> للوصول للتطبيق كأي تطبيق أساسي!</li>
+            <ol className="list-decimal list-inside space-y-1.5 text-stone-600 text-[11px] leading-relaxed font-bold">
+              <li>اضغط على زر المشاركة <Share className="inline h-3 w-3 text-sky-500 mx-0.5" /> في أسفل شاشة Safari.</li>
+              <li>اختر <span className="font-bold text-stone-800">"إضافة إلى الشاشة الرئيسية" (Add to Home Screen)</span>.</li>
+              <li>اضغط <span className="font-bold text-[#1a4d2e]">"إضافة"</span> للوصول للتطبيق كأي تطبيق أساسي!</li>
             </ol>
           </div>
         )}

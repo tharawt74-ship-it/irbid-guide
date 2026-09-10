@@ -65,7 +65,7 @@ const DEFAULT_VIP_PLANS: VipPlanConfig[] = [
     popular: true,
     badgeColor: 'bg-amber-100 text-amber-800 border-amber-300',
     features: [
-      'شارة التوثيق الذهبية ⭐ لتمييز المحل',
+      'شارة التوثيق الزرقاء الرسمية ✓ للموثوقية العالية',
       'نافذة ترحيبية منبثقة تفاعلية 🎬 (صورة أو فيديو عند فتح صفحة المحل)',
       'كتالوج المنتجات والمنيو الرقمي التفاعلي بالكامل',
       'لوحة الإحصائيات الشاملة والتحليلات ونقرات الزوار',
@@ -85,9 +85,7 @@ const DEFAULT_VIP_PLANS: VipPlanConfig[] = [
     features: [
       'إعلان بانر متحرك أعلى الصفحة الرئيسية (29 د.أ / أسبوع)',
       'صدارة نتائج البحث للمحل Sponsored (19 د.أ / أسبوع)',
-      'إشعار ترويجي فوري موجه لجميع مستخدمي المنصة (15 د.أ / إشعار)',
-      'تغطية فيديو سوشيال ميديا وتصوير ومونتاج ريلز احترافي (69 د.أ / تغطية)',
-      'توفير ستاندات وطاولات تقييم NFC الذكية (12 د.أ / ستاند مبرمج)'
+      'إشعار ترويجي فوري موجه لجميع مستخدمي المنصة (15 د.أ / إشعار)'
     ]
   }
 ];
@@ -193,7 +191,15 @@ export function SystemSettingsProvider({ children }: { children: React.ReactNode
         if (snap.exists()) {
           const data = snap.data();
           if (data.categories) {
-            const sanitizedCats = (data.categories as CategoryConfig[]).filter(
+            const sanitizedCats = (data.categories as CategoryConfig[]).map(c => {
+              if (c.name.includes('تعليم وتدريب') || c.name === '🎓 تعليم وتدريب') {
+                return {
+                  ...c,
+                  subcategories: c.subcategories.filter(sc => sc !== 'معلمون ومعلمات ودروس خصوصية')
+                };
+              }
+              return c;
+            }).filter(
               c => !c.name.includes('عقارات وسكنات') && c.name !== '🏠 عقارات وسكنات'
             );
             
@@ -219,7 +225,27 @@ export function SystemSettingsProvider({ children }: { children: React.ReactNode
             setCategories(mergedCats.length > 0 ? mergedCats : categories);
           }
           if (data.neighborhoods) setNeighborhoods(data.neighborhoods);
-          if (data.vipPlans) setVipPlans(data.vipPlans);
+          if (data.vipPlans) {
+            const sanitizedPlans = (data.vipPlans as VipPlanConfig[]).map(plan => {
+              if (plan.id === 'golden') {
+                return {
+                  ...plan,
+                  features: plan.features.map(f => 
+                    f.includes('توثيق ذهبية') || f.includes('كرت المحل')
+                      ? 'شارة التوثيق الزرقاء الرسمية ✓ للموثوقية العالية'
+                      : f
+                  )
+                };
+              }
+              return plan;
+            });
+            setVipPlans(sanitizedPlans);
+            try {
+              await updateDoc(doc(db, 'systemConfig', 'settings'), { vipPlans: sanitizedPlans });
+            } catch (fsErr) {
+              console.warn('Failed to auto-migrate vipPlans in Firestore:', fsErr);
+            }
+          }
           if (data.globalSettings) {
             setGlobalSettings(data.globalSettings);
             try {

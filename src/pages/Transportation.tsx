@@ -220,28 +220,28 @@ export function Transportation() {
       {/* Main Container */}
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 space-y-6">
         
-        {/* Page Header & Search Bar */}
-        <div className="bg-white rounded-2xl md:rounded-3xl p-5 sm:p-7 border border-[#e5e1da] shadow-xs space-y-5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="space-y-1.5">
-              <div className="inline-flex items-center gap-2 bg-emerald-50 text-[#1a4d2e] border border-emerald-200 px-3 py-1 rounded-full text-xs font-black">
-                <Bus className="h-3.5 w-3.5 text-[#1a4d2e]" />
-                <span>دليل التنقل والمجمعات • إربد</span>
+        {/* Page Header & Search Bar (Compact & Sleek) */}
+        <div className="bg-white rounded-2xl md:rounded-3xl p-3.5 sm:p-5 border border-[#e5e1da] shadow-xs space-y-3 sm:space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="space-y-1">
+              <div className="inline-flex items-center gap-1 bg-emerald-50 text-[#1a4d2e] border border-emerald-200 px-2.5 py-0.5 rounded-full text-[11px] font-black">
+                <Bus className="h-3 w-3 text-[#1a4d2e]" />
+                <span>دليل التنقل • إربد</span>
               </div>
-              <h1 className="text-2xl sm:text-3xl font-black text-stone-900">
-                دليل وسائل النقل والمواصلات في إربد
+              <h1 className="text-xl sm:text-2xl font-black text-stone-900 tracking-tight">
+                دليل النقل والمواصلات في إربد
               </h1>
-              <p className="text-stone-600 text-xs sm:text-sm font-medium">
-                دليلك الشامل لمعرفة مجمعات إربد الرئيسية، خطوط الباصات والسرفيس للجامعات والأحياء، والتكلفة والتردد.
+              <p className="hidden sm:block text-stone-500 text-xs font-medium leading-relaxed">
+                دليلك الشامل لمجمعات إربد الرئيسية، خطوط الباصات والسرفيس للجامعات والأحياء.
               </p>
             </div>
 
             <button
               onClick={handleCopyGuide}
-              className="inline-flex items-center justify-center gap-2 bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-200 px-4 py-2.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer"
+              className="inline-flex items-center justify-center gap-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-200 px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer"
             >
-              {copied ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <Share2 className="h-4 w-4" />}
-              <span>{copied ? 'تم نسخ الدليل!' : 'مشاركة الدليل'}</span>
+              {copied ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> : <Share2 className="h-3.5 w-3.5" />}
+              <span>{copied ? 'تم النسخ!' : 'مشاركة الدليل'}</span>
             </button>
           </div>
 
@@ -252,15 +252,15 @@ export function Transportation() {
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               placeholder="ابحث عن منطقتك أو وجهتك (مثال: عمان، الرمثا، التكنولوجيا، الحصن)..."
-              className="w-full bg-[#fdfcfb] text-stone-900 placeholder:text-stone-400 border border-[#e5e1da] rounded-xl sm:rounded-2xl px-4 py-3.5 pr-11 text-sm focus:outline-none focus:border-[#1a4d2e] focus:bg-white transition-all shadow-inner"
+              className="w-full bg-[#fdfcfb] text-stone-900 placeholder:text-stone-400 border border-[#e5e1da] rounded-xl px-3.5 py-2.5 pr-10 text-xs sm:text-sm focus:outline-none focus:border-[#1a4d2e] focus:bg-white transition-all shadow-inner"
             />
-            <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-stone-400 pointer-events-none" />
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400 pointer-events-none" />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 p-1"
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 p-1"
               >
-                <X className="h-4 w-4" />
+                <X className="h-3.5 w-3.5" />
               </button>
             )}
           </div>

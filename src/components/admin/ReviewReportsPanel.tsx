@@ -1,3 +1,4 @@
+import { useConfirm } from '../../contexts/ConfirmContext';
 import React, { useEffect, useState } from 'react';
 import { db } from '../../lib/firebase';
 import { collection, getDocs, doc, updateDoc, deleteDoc, query, orderBy } from 'firebase/firestore';
@@ -12,6 +13,7 @@ interface ReviewReportsPanelProps {
 }
 
 export function ReviewReportsPanel({ onShowToast, onRefreshTrigger }: ReviewReportsPanelProps) {
+  const { confirm } = useConfirm();
   const { currentUser } = useAuth();
   const [reports, setReports] = useState<ReviewReport[]>([]);
   const [loading, setLoading] = useState(true);
@@ -54,7 +56,7 @@ export function ReviewReportsPanel({ onShowToast, onRefreshTrigger }: ReviewRepo
   };
 
   const handleDeleteReview = async (report: ReviewReport) => {
-    if (!window.confirm('هل أنت متأكد من حذف هذا التقييم نهائياً من دليل المحل؟')) return;
+    if (!(await confirm({ message: 'هل أنت متأكد من حذف هذا التقييم نهائياً من دليل المحل؟' }))) return;
     try {
       // 1. Delete the review from the global reviews collection
       const reviewRef = doc(db, 'reviews', report.reviewId);
@@ -83,7 +85,7 @@ export function ReviewReportsPanel({ onShowToast, onRefreshTrigger }: ReviewRepo
   };
 
   const handleDeleteRecord = async (id: string) => {
-    if (!window.confirm('هل أنت متأكد من مسح سجل البلاغ هذا نهائياً؟')) return;
+    if (!(await confirm({ message: 'هل أنت متأكد من مسح سجل البلاغ هذا نهائياً؟' }))) return;
     try {
       await deleteDoc(doc(db, 'review_reports', id));
       onShowToast('تم حذف البلاغ');

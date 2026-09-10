@@ -197,6 +197,67 @@ export function BannerSlideshow({ banners }: BannerSlideshowProps) {
         );
 
       case 'text_and_button':
+        if (banner.id === 'book-your-ad-banner') {
+          const isInternalLink = banner.buttonLink && (banner.buttonLink.startsWith('/') || banner.buttonLink.startsWith('#'));
+          return (
+            <div className="w-full h-full bg-[#1a4d2e] relative flex flex-col items-center justify-center text-center p-5 sm:p-10 md:p-14" dir="rtl">
+              {/* Subtle design ornament: elegant ultra-thin border stroke inside */}
+              <div className="absolute inset-3 border border-emerald-500/15 rounded-xl md:rounded-[24px] pointer-events-none" />
+              
+              <div className="z-20 flex flex-col items-center max-w-3xl space-y-3 sm:space-y-4">
+                {banner.badgeText && (
+                  <span className="bg-amber-500 text-white text-[9px] sm:text-xs font-extrabold px-3 py-1 rounded-full uppercase tracking-wider shadow-sm select-none">
+                    ✨ {banner.badgeText}
+                  </span>
+                )}
+                
+                <h2 className="text-sm sm:text-3xl md:text-5xl font-black text-white tracking-tight leading-tight">
+                  {banner.title}
+                </h2>
+                
+                {banner.subtitle && (
+                  <p className="text-emerald-100/95 line-clamp-2 max-w-2xl text-[10px] sm:text-base md:text-lg font-medium leading-relaxed">
+                    {banner.subtitle}
+                  </p>
+                )}
+
+                <div className="pt-2 sm:pt-4">
+                  {banner.buttonText && banner.buttonLink && (
+                    isInternalLink ? (
+                      <a
+                        href={banner.buttonLink}
+                        onClick={(e) => {
+                          if (banner.buttonLink?.startsWith('#')) {
+                            e.preventDefault();
+                            const el = document.querySelector(banner.buttonLink);
+                            if (el) el.scrollIntoView({ behavior: 'smooth' });
+                          }
+                        }}
+                        className="bg-amber-500 hover:bg-amber-600 text-white px-5 py-2.5 sm:px-8 sm:py-3.5 rounded-xl sm:rounded-2xl font-black transition-all text-xs sm:text-sm md:text-base shadow-lg shadow-black/10 flex items-center gap-2 cursor-pointer hover:scale-103 active:scale-97"
+                        id={`banner-action-btn-${banner.id}`}
+                      >
+                        <span>{banner.buttonText}</span>
+                        <ChevronLeft className="h-4 w-4" />
+                      </a>
+                    ) : (
+                      <a
+                        href={banner.buttonLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="bg-amber-500 hover:bg-amber-600 text-white px-5 py-2.5 sm:px-8 sm:py-3.5 rounded-xl sm:rounded-2xl font-black transition-all text-xs sm:text-sm md:text-base shadow-lg shadow-black/10 flex items-center gap-2 cursor-pointer hover:scale-103 active:scale-97"
+                        id={`banner-action-btn-${banner.id}`}
+                      >
+                        <span>{banner.buttonText}</span>
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    )
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        }
+
         const isInternalLink = banner.buttonLink && (banner.buttonLink.startsWith('/') || banner.buttonLink.startsWith('#'));
         return (
           <div className="w-full h-full relative">

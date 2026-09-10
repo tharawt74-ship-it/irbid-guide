@@ -3,8 +3,10 @@ import { ShoppingBag, Trash2, MessageCircle, Phone, ArrowRight, Store, Plus, Min
 import { useCart } from '../contexts/CartContext';
 import { Link, useNavigate } from 'react-router';
 import { SEO } from '../components/common/SEO';
+import { useConfirm } from '../contexts/ConfirmContext';
 
 export function CartPage() {
+  const { confirm } = useConfirm();
   const { 
     items, 
     businessId, 
@@ -168,7 +170,11 @@ export function CartPage() {
                         </div>
 
                         <button
-                          onClick={() => removeItem(cartItem.id)}
+                          onClick={async () => {
+                            if (await confirm({ message: 'هل أنت متأكد من حذف هذا العنصر من سلتك؟' })) {
+                              removeItem(cartItem.id);
+                            }
+                          }}
                           className="text-[10px] font-bold text-red-500 hover:text-red-700 hover:underline cursor-pointer"
                         >
                           حذف

@@ -20,12 +20,22 @@ import { WhatsApp3DIcon, Phone3DIcon } from '../components/common/PremiumContact
 import { SEO } from '../components/common/SEO';
 import { BannerSlideshow } from '../components/BannerSlideshow';
 import { fetchPageBanners, DEFAULT_JOBS_BANNERS } from '../lib/pageBanners';
+import { useSystemSettings } from '../contexts/SystemSettingsContext';
+import { getCategoryMeta } from '../lib/categoryMeta';
+import { CategoryButtonLabel } from '../components/CategoryButtonLabel';
+import { CategoriesModal } from '../components/CategoriesModal';
+import { Pagination } from '../components/common/Pagination';
+import { useConfirm } from '../contexts/ConfirmContext';
 
-const CATEGORIES = ['الكل', 'مطاعم ومقاهي', 'تسويق وتكنولوجيا', 'مبيعات وتجزئة', 'تعليم وتدريب', 'صحة وخدمات', 'محاسبة وإدارة', 'صناعة وحرف', 'زراعة ومزارع'];
 const JOB_TYPES = ['الكل', 'دوام كامل', 'دوام جزئي', 'مناسب للطلاب', 'عمل عن بعد'];
 
 export function Jobs() {
+  const { confirm } = useConfirm();
   const { currentUser, isAdmin, isStaff, isMerchant, ownedBusinesses } = useAuth();
+  const { categories } = useSystemSettings();
+  const mainCategories = categories.map(c => c.name);
+  const getSubCats = (catName: string) => categories.find(c => c.name === catName)?.subcategories || [];
+
   const hasBusiness = Boolean(currentUser && (isAdmin || isStaff || isMerchant || (ownedBusinesses && ownedBusinesses.length > 0)));
 
   const [jobs, setJobs] = useState<JobOffer[]>([]);
@@ -33,13 +43,19 @@ export function Jobs() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('الكل');
+  const [selectedSubCategory, setSelectedSubCategory] = useState('');
   const [selectedJobType, setSelectedJobType] = useState('الكل');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedCategory, selectedSubCategory, selectedJobType]);
 
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isCategoriesModalOpen, setIsCategoriesModalOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<JobOffer | null>(null);
-  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [selectedDetailJob, setSelectedDetailJob] = useState<JobOffer | null>(null);
 
   const showToast = (msg: string) => {
@@ -116,6 +132,7 @@ export function Jobs() {
 
   const handleDeleteJob = async (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+    if (!(await confirm({ message: 'هل أنت متأكد من حذف هذه الوظيفة؟' }))) return;
     try {
       if (db) {
         try {
@@ -127,7 +144,6 @@ export function Jobs() {
 
       const updatedList = jobs.filter(j => j.id !== id);
       setJobs(updatedList);
-      setDeleteConfirmId(null);
       if (selectedDetailJob?.id === id) {
         setSelectedDetailJob(null);
       }
@@ -140,13 +156,30 @@ export function Jobs() {
 
   // Filter jobs
   const filteredJobs = jobs.filter(job => {
-    const matchesCategory = selectedCategory === 'الكل' || job.category === selectedCategory;
+    let matchesCategory = true;
+    if (selectedCategory && selectedCategory !== 'الكل') {
+      const validSubCats = getSubCats(selectedCategory);
+      if (selectedSubCategory) {
+        matchesCategory = 
+          job.category === selectedSubCategory || 
+          job.category.includes(selectedSubCategory) ||
+          selectedSubCategory.includes(job.category);
+      } else {
+        matchesCategory = 
+          job.category === selectedCategory || 
+          job.category.includes(selectedCategory) ||
+          selectedCategory.includes(job.category) ||
+          validSubCats.some(s => job.category === s || job.category.includes(s) || s.includes(job.category));
+      }
+    }
+
     const matchesType = selectedJobType === 'الكل' || job.jobType === selectedJobType;
     const matchesSearch = 
       job.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       job.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
       job.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      job.description.toLowerCase().includes(searchQuery.toLowerCase());
+      job.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (job.category && job.category.toLowerCase().includes(searchQuery.toLowerCase()));
 
     return matchesCategory && matchesType && matchesSearch;
   });
@@ -170,27 +203,27 @@ export function Jobs() {
       {/* Banner Slideshow */}
       <BannerSlideshow banners={banners} />
 
-      {/* Page Header & Search Bar */}
-      <div className="bg-white rounded-2xl md:rounded-3xl p-5 sm:p-7 border border-[#e5e1da] shadow-xs space-y-5">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="space-y-1.5">
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="inline-flex items-center gap-1.5 bg-emerald-50 text-[#1a4d2e] border border-emerald-200 px-3 py-1 rounded-full text-xs font-black">
-                <Briefcase className="h-3.5 w-3.5 text-[#1a4d2e]" />
-                <span>سوق العمل والوظائف في إربد</span>
+      {/* Page Header & Search Bar (Compact & Sleek) */}
+      <div className="bg-white rounded-2xl md:rounded-3xl p-3.5 sm:p-5 border border-[#e5e1da] shadow-xs space-y-3 sm:space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <div className="inline-flex items-center gap-1 bg-emerald-50 text-[#1a4d2e] border border-emerald-200 px-2.5 py-0.5 rounded-full text-[11px] font-black">
+                <Briefcase className="h-3 w-3 text-[#1a4d2e]" />
+                <span>سوق عمل إربد</span>
               </div>
-              <div className="inline-flex items-center gap-1 bg-stone-100 text-stone-700 border border-stone-200 px-2.5 py-1 rounded-full text-xs font-bold">
-                <GraduationCap className="h-3.5 w-3.5 text-stone-600" />
-                <span>شواغر للمحلات، الشركات والطلاب</span>
+              <div className="hidden sm:inline-flex items-center gap-1 bg-stone-100 text-stone-700 border border-stone-200 px-2.5 py-0.5 rounded-full text-[11px] font-bold">
+                <GraduationCap className="h-3 w-3 text-stone-600" />
+                <span>شواغر المحلات والشركات والطلاب</span>
               </div>
             </div>
 
-            <h1 className="text-2xl sm:text-3xl font-black text-stone-900">
+            <h1 className="text-xl sm:text-2xl font-black text-stone-900 tracking-tight">
               وظائف وشواغر إربد
             </h1>
 
-            <p className="text-stone-600 text-xs sm:text-sm font-medium">
-              منصة التوظيف الأولى في محافظة إربد؛ تصفح أحدث الشواغر المتاحة أو انشر فرصة عمل لمحلك واستقطب أفضل الكفاءات.
+            <p className="hidden sm:block text-stone-500 text-xs font-medium leading-relaxed">
+              تصفح أحدث الفرص الشاغرة في محافظة إربد أو انشر إعلان توظيف لمحلك واستقطب أصحاب الكفاءات.
             </p>
           </div>
 
@@ -199,10 +232,10 @@ export function Jobs() {
             <div className="shrink-0">
               <button
                 onClick={openAddModal}
-                className="inline-flex items-center justify-center gap-2 bg-[#1a4d2e] hover:bg-[#143e25] text-white px-5 py-3 rounded-xl font-black text-xs sm:text-sm transition-all shadow-xs hover:scale-105 active:scale-95 cursor-pointer"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 bg-[#1a4d2e] hover:bg-[#143e25] text-white px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-xs cursor-pointer"
               >
                 <Plus className="h-4 w-4" />
-                <span>انشر وظيفة لمحلك الآن</span>
+                <span>انشر وظيفة لمحلك</span>
               </button>
             </div>
           )}
@@ -214,73 +247,174 @@ export function Jobs() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="ابحث بمسمى الوظيفة (باريستا، كاشير، مسوق، معلم)، اسم المحل، أو المنطقة..."
-            className="w-full bg-[#fdfcfb] text-stone-900 placeholder:text-stone-400 border border-[#e5e1da] rounded-xl sm:rounded-2xl px-4 py-3.5 pr-11 text-sm focus:outline-none focus:border-[#1a4d2e] focus:bg-white transition-all shadow-inner"
+            placeholder="ابحث بمسمى الوظيفة (باريستا، كاشير، مسوق)، اسم المحل، أو المنطقة..."
+            className="w-full bg-[#fdfcfb] text-stone-900 placeholder:text-stone-400 border border-[#e5e1da] rounded-xl px-3.5 py-2.5 pr-10 text-xs sm:text-sm focus:outline-none focus:border-[#1a4d2e] focus:bg-white transition-all shadow-inner"
           />
-          <Search className="h-5 w-5 text-stone-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <Search className="h-4 w-4 text-stone-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           {searchQuery && (
             <button 
               onClick={() => setSearchQuery('')}
-              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 p-1"
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 p-1"
             >
-              <X className="h-4 w-4" />
+              <X className="h-3.5 w-3.5" />
             </button>
           )}
         </div>
       </div>
 
-      {/* Filter Tabs */}
-      <div className="space-y-4">
-        
-        {/* Categories Bar */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
-          <span className="text-xs font-black text-stone-400 shrink-0 ml-1">التصنيف:</span>
-          {CATEGORIES.map(cat => (
-            <button
-              key={cat}
-              onClick={() => setSelectedCategory(cat)}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
-                selectedCategory === cat
-                  ? 'bg-[#1a4d2e] text-white shadow-xs'
-                  : 'bg-white text-stone-600 border border-[#e5e1da] hover:bg-stone-50'
-              }`}
-            >
-              {cat}
-            </button>
-          ))}
-        </div>
+      {/* Dynamic Main and Sub Categories Section */}
+      {mainCategories.length > 0 && (
+        <div className="flex flex-col space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg sm:text-xl font-black text-[#2d2a26]">تصفح أقسام الوظائف حسب اختصاص المحلات</h2>
+            </div>
+            <div className="flex items-center gap-2">
+              {selectedCategory && selectedCategory !== 'الكل' && (
+                <button 
+                  onClick={() => {
+                    setSelectedCategory('الكل');
+                    setSelectedSubCategory('');
+                  }}
+                  className="text-xs font-bold text-stone-500 hover:text-red-600 hover:underline cursor-pointer"
+                >
+                  إعادة تعيين
+                </button>
+              )}
+              <button
+                onClick={() => setIsCategoriesModalOpen(true)}
+                className="text-xs sm:text-sm font-black text-[#1a4d2e] hover:text-[#133b22] flex items-center gap-1 bg-[#1a4d2e]/5 hover:bg-[#1a4d2e]/10 px-3 py-1.5 rounded-full transition-colors cursor-pointer"
+              >
+                <span>عرض الكل</span>
+                <span className="text-[10px] sm:text-xs">←</span>
+              </button>
+            </div>
+          </div>
 
-        {/* Job Types Bar */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
-          <span className="text-xs font-black text-stone-400 shrink-0 ml-1">نوع الدوام:</span>
-          {JOB_TYPES.map(type => (
-            <button
-              key={type}
-              onClick={() => setSelectedJobType(type)}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
-                selectedJobType === type
-                  ? 'bg-[#ff9f1c] text-white shadow-xs'
-                  : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-              }`}
-            >
-              {type}
-            </button>
-          ))}
-        </div>
+          <div className="relative">
+            {/* Left Edge Gradient Affordance for Mobile Scroll */}
+            <div className="pointer-events-none absolute left-0 top-0 bottom-4 w-8 bg-gradient-to-r from-[#fdfcfb] to-transparent z-10 sm:hidden" />
 
+            <div className="flex overflow-x-auto pb-4 pt-1 gap-3.5 sm:gap-4 snap-x scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+              {/* All Button */}
+              {(() => {
+                const isSelected = selectedCategory === 'الكل';
+                const { icon: Icon } = getCategoryMeta('الكل');
+                return (
+                  <button
+                    onClick={() => {
+                      setSelectedCategory('الكل');
+                      setSelectedSubCategory('');
+                    }}
+                    className={`snap-start shrink-0 aspect-square w-[88px] sm:w-28 md:w-32 flex flex-col items-center justify-center p-2 sm:p-3 rounded-2xl md:rounded-[24px] transition-all duration-200 border text-center group cursor-pointer ${
+                      isSelected 
+                        ? 'bg-gradient-to-r from-[#1a4d2e] to-[#276e43] text-white border-transparent shadow-lg shadow-emerald-900/20 -translate-y-1' 
+                        : 'bg-white text-[#2d2a26] border-[#e5e1da] hover:border-emerald-500/40 hover:bg-[#fcfbfa] hover:-translate-y-0.5 hover:shadow-md'
+                    }`}
+                  >
+                    <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl flex items-center justify-center mb-2 sm:mb-2.5 transition-transform group-hover:scale-110 ${
+                      isSelected ? 'bg-white/20 text-white' : 'bg-emerald-50 text-[#1a4d2e]'
+                    }`}>
+                      <Icon className="h-5 w-5 sm:h-6 sm:w-6" />
+                    </div>
+                    <CategoryButtonLabel name="الكل" isSelected={isSelected} />
+                  </button>
+                );
+              })()}
+
+              {/* Main Category buttons */}
+              {mainCategories.map((cat) => {
+                const isSelected = selectedCategory === cat;
+                const { icon: Icon, bg } = getCategoryMeta(cat);
+                return (
+                  <button
+                    key={cat}
+                    onClick={() => {
+                      setSelectedCategory(isSelected ? 'الكل' : cat);
+                      setSelectedSubCategory('');
+                    }}
+                    className={`snap-start shrink-0 aspect-square w-[88px] sm:w-28 md:w-32 flex flex-col items-center justify-center p-2 sm:p-3 rounded-2xl md:rounded-[24px] transition-all duration-200 border text-center group cursor-pointer ${
+                      isSelected 
+                        ? 'bg-gradient-to-r from-[#1a4d2e] to-[#276e43] text-white border-transparent shadow-lg shadow-emerald-900/20 -translate-y-1' 
+                        : 'bg-white text-[#2d2a26] border-[#e5e1da] hover:border-emerald-500/40 hover:bg-[#fcfbfa] hover:-translate-y-0.5 hover:shadow-md'
+                    }`}
+                  >
+                    <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl flex items-center justify-center mb-2 sm:mb-2.5 transition-transform group-hover:scale-110 ${
+                      isSelected ? 'bg-white/20 text-white' : bg
+                    }`}>
+                      <Icon className="h-5 w-5 sm:h-6 sm:w-6" />
+                    </div>
+                    <CategoryButtonLabel name={cat} isSelected={isSelected} />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          
+          {/* Sub Categories (Shows only when a main category is selected) */}
+          {selectedCategory && selectedCategory !== 'الكل' && getSubCats(selectedCategory).length > 0 && (
+            <div className="relative">
+              <div className="pointer-events-none absolute left-0 top-0 bottom-3 w-8 bg-gradient-to-r from-[#fdfcfb] to-transparent z-10 sm:hidden" />
+              <div className="flex overflow-x-auto gap-2.5 pb-3 mt-2 -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-hide snap-x" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                <button
+                  onClick={() => setSelectedSubCategory('')}
+                  className={`snap-start shrink-0 whitespace-nowrap px-5 py-2.5 rounded-full text-sm font-bold transition-all duration-200 border cursor-pointer ${
+                    selectedSubCategory === ''
+                      ? 'bg-gradient-to-r from-[#1a4d2e] to-[#276e43] text-white border-transparent shadow-md shadow-emerald-900/10'
+                      : 'bg-white text-stone-600 border-[#e5e1da] hover:border-emerald-300 hover:bg-stone-50'
+                  }`}
+                >
+                  عرض الكل الفرعي
+                </button>
+                {getSubCats(selectedCategory).map((subCat) => (
+                  <button
+                    key={subCat}
+                    onClick={() => setSelectedSubCategory(selectedSubCategory === subCat ? '' : subCat)}
+                    className={`snap-start shrink-0 whitespace-nowrap px-5 py-2.5 rounded-full text-sm font-bold transition-all duration-200 border cursor-pointer ${
+                      selectedSubCategory === subCat
+                        ? 'bg-gradient-to-r from-[#1a4d2e] to-[#276e43] text-white border-transparent shadow-md shadow-emerald-900/10'
+                        : 'bg-white text-stone-600 border-[#e5e1da] hover:border-emerald-300 hover:bg-stone-50'
+                    }`}
+                  >
+                    {subCat}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Job Types Bar */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+        <span className="text-xs font-black text-stone-400 shrink-0 ml-1">نوع الدوام:</span>
+        {JOB_TYPES.map(type => (
+          <button
+            key={type}
+            onClick={() => setSelectedJobType(type)}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+              selectedJobType === type
+                ? 'bg-[#ff9f1c] text-white shadow-xs'
+                : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+            }`}
+          >
+            {type}
+          </button>
+        ))}
       </div>
 
       {/* Results Header Count */}
       <div className="flex items-center justify-between text-xs text-stone-500 font-bold px-1">
         <span>عرض ({filteredJobs.length}) شاغر وظيفي متاح في إربد</span>
-        {(selectedCategory !== 'الكل' || selectedJobType !== 'الكل' || searchQuery) && (
+        {(selectedCategory !== 'الكل' || selectedSubCategory !== '' || selectedJobType !== 'الكل' || searchQuery) && (
           <button
             onClick={() => {
               setSelectedCategory('الكل');
+              setSelectedSubCategory('');
               setSelectedJobType('الكل');
               setSearchQuery('');
             }}
-            className="text-[#1a4d2e] hover:underline"
+            className="text-[#1a4d2e] hover:underline cursor-pointer"
           >
             إعادة تعيين الفلاتر
           </button>
@@ -315,13 +449,16 @@ export function Jobs() {
           )}
         </div>
       ) : (
-        <div id="jobs-grid" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
-          {filteredJobs.map((job) => (
-            <div
-              key={job.id}
-              onClick={() => setSelectedDetailJob(job)}
-              className="bg-white rounded-3xl p-5 sm:p-6 border border-[#e5e1da] hover:border-[#1a4d2e]/40 hover:shadow-lg transition-all flex flex-col justify-between group relative cursor-pointer"
-            >
+        <div>
+          <div id="jobs-grid" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
+            {filteredJobs
+              .slice((currentPage - 1) * 15, currentPage * 15)
+              .map((job) => (
+              <div
+                key={job.id}
+                onClick={() => setSelectedDetailJob(job)}
+                className="bg-white rounded-3xl p-5 sm:p-6 border border-[#e5e1da] hover:border-[#1a4d2e]/40 hover:shadow-lg transition-all flex flex-col justify-between group relative cursor-pointer"
+              >
               <div className="space-y-3.5">
                 
                 {/* Top Badges */}
@@ -453,7 +590,7 @@ export function Jobs() {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          setDeleteConfirmId(job.id);
+                          handleDeleteJob(job.id);
                         }}
                         className="p-1.5 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors shrink-0"
                         title="حذف الشاغر"
@@ -472,6 +609,18 @@ export function Jobs() {
               </div>
             </div>
           ))}
+          </div>
+
+          <Pagination
+            currentPage={currentPage}
+            totalPages={Math.ceil(filteredJobs.length / 15)}
+            onPageChange={(p) => {
+              setCurrentPage(p);
+              window.scrollTo({ top: 300, behavior: 'smooth' });
+            }}
+            totalItems={filteredJobs.length}
+            itemsPerPage={15}
+          />
         </div>
       )}
 
@@ -675,40 +824,19 @@ export function Jobs() {
         editingJob={editingJob}
       />
 
-      {/* Delete Confirmation Modal */}
-      {deleteConfirmId && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto" dir="rtl">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-red-100 space-y-4 my-auto animate-in fade-in zoom-in-95 text-center">
-            <div className="w-14 h-14 bg-red-100 text-red-600 rounded-2xl flex items-center justify-center mx-auto">
-              <Trash2 className="h-7 w-7" />
-            </div>
-            
-            <div className="space-y-1.5">
-              <h3 className="text-xl font-bold text-stone-900">هل أنت متأكد من حذف هذه الوظيفة؟</h3>
-              <p className="text-stone-500 text-sm">
-                سيتم إزالة الشاغر نهائياً من قائمة وظائف إربد.
-              </p>
-            </div>
-
-            <div className="flex items-center justify-center gap-3 pt-3">
-              <button
-                onClick={() => setDeleteConfirmId(null)}
-                className="px-5 py-2.5 rounded-xl border border-stone-200 font-bold text-sm text-stone-600 hover:bg-stone-50 transition-colors"
-              >
-                إلغاء
-              </button>
-              <button
-                onClick={() => handleDeleteJob(deleteConfirmId)}
-                className="px-6 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-sm transition-colors shadow-xs"
-              >
-                نعم، احذف الشاغر
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
-
+      {/* Categories Modal */}
+      <CategoriesModal
+        isOpen={isCategoriesModalOpen}
+        onClose={() => setIsCategoriesModalOpen(false)}
+        categories={categories}
+        selectedCategory={selectedCategory === 'الكل' ? '' : selectedCategory}
+        onSelectCategory={(catName) => {
+          setSelectedCategory(catName || 'الكل');
+          setSelectedSubCategory('');
+        }}
+      />
     </div>
   );
 }
+
+export default Jobs;

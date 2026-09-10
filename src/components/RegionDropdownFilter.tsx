@@ -1,13 +1,26 @@
 import { useState, useRef, useEffect } from 'react';
-import { MapPin, ChevronDown, Search, X, Check, Sparkles } from 'lucide-react';
+import { MapPin, ChevronDown, Search, X, Check, Sparkles, Heart, Clock } from 'lucide-react';
 import { useSystemSettings } from '../contexts/SystemSettingsContext';
 
 interface RegionDropdownFilterProps {
   selectedRegion: string;
   onSelectRegion: (region: string) => void;
+  openNowFilter: boolean;
+  onToggleOpenNow: () => void;
+  favoritesOnly: boolean;
+  onToggleFavorites: () => void;
+  userFavoritesCount: number;
 }
 
-export function RegionDropdownFilter({ selectedRegion, onSelectRegion }: RegionDropdownFilterProps) {
+export function RegionDropdownFilter({ 
+  selectedRegion, 
+  onSelectRegion,
+  openNowFilter,
+  onToggleOpenNow,
+  favoritesOnly,
+  onToggleFavorites,
+  userFavoritesCount
+}: RegionDropdownFilterProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -342,27 +355,36 @@ export function RegionDropdownFilter({ selectedRegion, onSelectRegion }: RegionD
           )}
         </div>
 
-        {/* Native Select Option for Ultra-Fast Mobile Accessibility */}
-        <div className="hidden md:block md:col-span-4">
-          <div className="relative">
-            <select
-              value={selectedRegion || 'الكل'}
-              onChange={(e) => onSelectRegion(e.target.value === 'الكل' ? '' : e.target.value)}
-              className="w-full bg-stone-50 border border-stone-200 rounded-2xl px-3.5 py-3 text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e] appearance-none pr-3 pl-8 cursor-pointer shadow-2xs"
-            >
-              <option value="الكل">🌐 القائمة السريعة (جميع المناطق)</option>
-              {filteredGroups.map((group, i) => (
-                <optgroup key={i} label={group.groupName} className="font-bold text-[#1a4d2e] bg-stone-50">
-                  {group.areas.map((area) => (
-                    <option key={area} value={area} className="text-stone-800 font-medium">
-                      📍 {area}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
-            <ChevronDown className="h-4 w-4 text-stone-400 absolute left-3 top-3.5 pointer-events-none" />
-          </div>
+        {/* Quick Filter Buttons: Open Now & Favorites */}
+        <div className="col-span-1 md:col-span-4 flex gap-2 w-full">
+          <button
+            type="button"
+            onClick={onToggleOpenNow}
+            className={`flex-1 flex items-center justify-center gap-1.5 px-4 py-3 rounded-2xl text-xs font-black transition-all border cursor-pointer select-none ${
+              openNowFilter 
+                ? 'bg-[#1a4d2e] border-[#1a4d2e] text-white shadow-xs' 
+                : 'bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100 hover:text-stone-800'
+            }`}
+          >
+            <Clock className={`h-4 w-4 shrink-0 ${openNowFilter ? 'text-amber-400 animate-spin' : 'text-stone-400'}`} style={{ animationDuration: '3s' }} />
+            <span>مفتوح الآن</span>
+            {openNowFilter && (
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={onToggleFavorites}
+            className={`flex-1 flex items-center justify-center gap-1.5 px-4 py-3 rounded-2xl text-xs font-black transition-all border cursor-pointer select-none ${
+              favoritesOnly 
+                ? 'bg-red-600 border-red-600 text-white shadow-xs' 
+                : 'bg-stone-50 border-stone-200 text-stone-600 hover:bg-red-50 hover:text-red-600 hover:border-red-200'
+            }`}
+          >
+            <Heart className={`h-4 w-4 shrink-0 ${favoritesOnly ? 'fill-white text-white animate-pulse' : 'text-red-500 fill-red-500'}`} />
+            <span>المفضلة ({userFavoritesCount})</span>
+          </button>
         </div>
 
       </div>

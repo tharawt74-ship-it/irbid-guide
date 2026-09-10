@@ -23,6 +23,10 @@
   }
 
   /* Custom Scrollbar */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #d6d3d1 transparent;
+  }
   ::-webkit-scrollbar {
     width: 8px;
     height: 8px;
@@ -41,6 +45,25 @@
   ::selection {
     @apply bg-[#1a4d2e]/20 text-[#1a4d2e];
   }
+}
+
+/* Category Square Button Marquee Ticker Loop (RTL Exact Math) */
+@keyframes marquee-exact-rtl {
+  0%, 25% {
+    transform: translateX(var(--marquee-start, 0px));
+  }
+  65%, 85% {
+    transform: translateX(var(--marquee-end, 0px));
+  }
+  100% {
+    transform: translateX(var(--marquee-start, 0px));
+  }
+}
+
+.animate-marquee-exact {
+  display: inline-block;
+  white-space: nowrap;
+  animation: marquee-exact-rtl 5s ease-in-out infinite;
 }
 
 

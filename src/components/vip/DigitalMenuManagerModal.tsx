@@ -1,3 +1,4 @@
+import { useConfirm } from '../../contexts/ConfirmContext';
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { 
@@ -19,7 +20,7 @@ interface DigitalMenuManagerModalProps {
   isOpen: boolean;
   onClose: () => void;
   business: Business;
-  onMenuUpdated: (updatedItems: MenuItem[]) => void;
+  onMenuUpdated: (updatedItems: MenuItem[], updatedTitle?: string, updatedDescription?: string) => void;
 }
 
 export interface CategoryTheme {
@@ -332,6 +333,7 @@ export function DigitalMenuManagerModal({
   business,
   onMenuUpdated
 }: DigitalMenuManagerModalProps) {
+  const { confirm } = useConfirm();
   const { currentUser, isAdmin } = useAuth();
   const [items, setItems] = useState<MenuItem[]>(business.menuItems || []);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
@@ -353,6 +355,9 @@ export function DigitalMenuManagerModal({
   const [options, setOptions] = useState<string[]>([]);
   const [newOptionInput, setNewOptionInput] = useState('');
   
+  const [customMenuTitle, setCustomMenuTitle] = useState(business.menuTitle || '');
+  const [customMenuDescription, setCustomMenuDescription] = useState(business.menuDescription || '');
+
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
@@ -363,6 +368,8 @@ export function DigitalMenuManagerModal({
     if (business.menuItems) {
       setItems(business.menuItems);
     }
+    setCustomMenuTitle(business.menuTitle || '');
+    setCustomMenuDescription(business.menuDescription || '');
   }, [business]);
 
   // Typewriter effect state for the subcategory/category field
@@ -492,8 +499,8 @@ export function DigitalMenuManagerModal({
     handleCancelEdit();
   };
 
-  const handleDeleteItem = (id: string) => {
-    if (confirm('هل أنت متأكد من رغبتك في حذف هذا الصنف نهائياً؟')) {
+  const handleDeleteItem = async (id: string) => {
+    if ((await confirm({ message: 'هل أنت متأكد من رغبتك في حذف هذا الصنف نهائياً؟' }))) {
       setItems(items.filter(it => it.id !== id));
       if (editingItem?.id === id) {
         handleCancelEdit();
@@ -530,10 +537,14 @@ export function DigitalMenuManagerModal({
     setIsSaving(true);
     try {
       const sanitizedItems = JSON.parse(JSON.stringify(items));
-      const payload = await compressAndSanitizeFirestorePayload({ menuItems: sanitizedItems }, true);
+      const payload = await compressAndSanitizeFirestorePayload({ 
+        menuItems: sanitizedItems,
+        menuTitle: customMenuTitle.trim(),
+        menuDescription: customMenuDescription.trim()
+      }, true);
       const docRef = doc(db, 'businesses', business.id);
       await updateDoc(docRef, payload);
-      onMenuUpdated(items);
+      onMenuUpdated(items, customMenuTitle.trim(), customMenuDescription.trim());
       setSaveSuccess(true);
       setTimeout(() => {
         setSaveSuccess(false);
@@ -639,6 +650,37 @@ export function DigitalMenuManagerModal({
           
           {/* Left Column: Form Builder (7 cols) */}
           <div className="lg:col-span-7 space-y-4">
+            
+            {/* Custom Menu Header Config */}
+            <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200 space-y-3">
+              <h3 className="text-xs font-black text-[#1a4d2e] tracking-wider flex items-center gap-1.5 pb-2 border-b border-stone-200">
+                <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+                <span>تخصيص هوية وعنوان المنيو الرقمي (اختياري)</span>
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-stone-600 mb-1">اسم/عنوان المنيو المخصص</label>
+                  <input
+                    type="text"
+                    value={customMenuTitle}
+                    onChange={(e) => setCustomMenuTitle(e.target.value)}
+                    placeholder={theme.title}
+                    className="w-full p-2.5 bg-white border border-stone-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]/20"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-stone-600 mb-1">وصف المنيو المخصص</label>
+                  <input
+                    type="text"
+                    value={customMenuDescription}
+                    onChange={(e) => setCustomMenuDescription(e.target.value)}
+                    placeholder={theme.subtitle}
+                    className="w-full p-2.5 bg-white border border-stone-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]/20"
+                  />
+                </div>
+              </div>
+            </div>
+
             <form onSubmit={handleSaveItem} className="bg-amber-50/20 p-4 sm:p-5 rounded-2xl border border-amber-200/60 space-y-4">
               <div className="flex items-center justify-between border-b border-amber-200/40 pb-2">
                 <h3 className="text-sm font-black text-[#2d2a26] flex items-center gap-1.5">

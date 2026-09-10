@@ -12,6 +12,7 @@ import { WorkingHoursEditor } from '../ui/WorkingHoursEditor';
 import { SocialLinksEditor } from '../ui/SocialLinksEditor';
 import { ImageUploader } from '../ui/ImageUploader';
 import { MediaRenderer } from '../common/MediaRenderer';
+import { RichTextEditor } from '../common/RichTextEditor';
 import { VipPopupManagerModal } from '../vip/VipPopupManagerModal';
 import { getBusinessVipStatus } from '../../lib/vipHelper';
 import { cn } from '../../lib/utils';
@@ -34,7 +35,6 @@ interface StoreEditFormProps {
     workingHours?: WorkingHours;
     socialLinks?: SocialLinks;
     hideSiteReviews?: boolean;
-    hideGoogleReviews?: boolean;
     aboutMedia?: AboutMediaConfig | null;
     aboutVideoUrl?: string | null;
     aboutImageUrl?: string | null;
@@ -65,7 +65,6 @@ export function StoreEditForm({
   const [logoUrl, setLogoUrl] = useState(business.logoUrl || '');
   const [googlePlaceUrl, setGooglePlaceUrl] = useState(business.googlePlaceUrl || '');
   const [hideSiteReviews, setHideSiteReviews] = useState(!!business.hideSiteReviews);
-  const [hideGoogleReviews, setHideGoogleReviews] = useState(!!business.hideGoogleReviews);
 
   // About Media state (Available to all accounts)
   const initialAboutType: 'video' | 'image' = 
@@ -127,7 +126,6 @@ export function StoreEditForm({
     setLogoUrl(business.logoUrl || '');
     setGooglePlaceUrl(business.googlePlaceUrl || '');
     setHideSiteReviews(!!business.hideSiteReviews);
-    setHideGoogleReviews(!!business.hideGoogleReviews);
 
     const bAboutType = business.aboutMedia?.type || (business.aboutVideoUrl ? 'video' : business.aboutImageUrl ? 'image' : 'video');
     const bAboutUrl = business.aboutMedia?.url || business.aboutVideoUrl || business.aboutImageUrl || '';
@@ -214,7 +212,6 @@ export function StoreEditForm({
       workingHours,
       socialLinks,
       hideSiteReviews,
-      hideGoogleReviews,
       aboutMedia: aboutMediaUrl.trim() ? {
         type: aboutMediaType,
         url: aboutMediaUrl.trim(),
@@ -463,7 +460,7 @@ export function StoreEditForm({
                 dir="ltr"
                 required
                 value={phone}
-                onChange={e => setPhone(e.target.value)}
+                onChange={e => setPhone(e.target.value.replace(/\s+/g, ''))}
                 placeholder="مثال: 0791234567"
                 className="w-full bg-[#fdfcfb] border border-stone-200 rounded-xl px-3.5 py-2.5 pl-9 text-xs text-left font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]/20 focus:border-[#1a4d2e] transition-colors"
               />
@@ -518,14 +515,12 @@ export function StoreEditForm({
             <label className="block text-xs font-black text-stone-700 mb-1.5">
               نبذة تعريفية ووصف المحل التجاري <span className="text-rose-500">*</span>
             </label>
-            <textarea
+            <RichTextEditor
               required
-              rows={4}
               value={description}
-              onChange={e => setDescription(e.target.value)}
+              onChange={setDescription}
               placeholder="اكتب وصفاً جذاباً يوضح ما يقدمه محلك، أهم الوجبات أو المنتجات، المزايا التنافسية، وما يجعلك مميزاً في إربد..."
-              className="w-full bg-[#fdfcfb] border border-stone-200 rounded-xl px-3.5 py-2.5 text-xs font-normal text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]/20 focus:border-[#1a4d2e] transition-colors resize-none leading-relaxed"
-            ></textarea>
+            />
           </div>
         </div>
 
@@ -547,33 +542,33 @@ export function StoreEditForm({
           </div>
 
           {/* Type selector */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="flex flex-col sm:flex-row gap-3">
             <button
               type="button"
               onClick={() => setAboutMediaType('video')}
               className={cn(
-                "p-3 rounded-xl border font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer",
+                "flex-1 p-3 rounded-xl border font-bold text-xs flex flex-col sm:flex-row items-center justify-center gap-2 transition-all cursor-pointer text-center",
                 aboutMediaType === 'video'
                   ? "border-[#1a4d2e] bg-[#1a4d2e]/10 text-[#1a4d2e] shadow-2xs"
                   : "border-stone-200 bg-stone-50 text-stone-600 hover:bg-white"
               )}
             >
-              <Video className="h-4 w-4" />
-              <span>رابط مقطع فيديو (YouTube / Reels / TikTok)</span>
+              <Video className="h-5 w-5 sm:h-4 sm:w-4 shrink-0" />
+              <span>مقطع فيديو (يوتيوب، ريلز، إلخ)</span>
             </button>
 
             <button
               type="button"
               onClick={() => setAboutMediaType('image')}
               className={cn(
-                "p-3 rounded-xl border font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer",
+                "flex-1 p-3 rounded-xl border font-bold text-xs flex flex-col sm:flex-row items-center justify-center gap-2 transition-all cursor-pointer text-center",
                 aboutMediaType === 'image'
                   ? "border-[#1a4d2e] bg-[#1a4d2e]/10 text-[#1a4d2e] shadow-2xs"
                   : "border-stone-200 bg-stone-50 text-stone-600 hover:bg-white"
               )}
             >
-              <ImageIcon className="h-4 w-4" />
-              <span>رفع صورة تعريفية مميزة</span>
+              <ImageIcon className="h-5 w-5 sm:h-4 sm:w-4 shrink-0" />
+              <span>صورة تعريفية مميزة</span>
             </button>
           </div>
 
@@ -710,33 +705,35 @@ export function StoreEditForm({
         {/* 8. Visibility & Privacy Controls (إخفاء المحل والتقييمات) */}
         <div className="bg-stone-50/80 border border-stone-200 rounded-2xl p-5 space-y-4">
           <div className="flex items-center gap-2">
-            <EyeOff className="h-5 w-5 text-amber-600" />
+            <EyeOff className="h-5 w-5 sm:h-6 sm:w-6 shrink-0 text-amber-600" />
             <div>
-              <h4 className="text-sm font-black text-stone-900">إعدادات الظهور والخصوصية للمحل</h4>
-              <p className="text-xs text-stone-500 mt-0.5">تحكم في حالة ظهور صفحة المحل وتقييمات العملاء في الموقع</p>
+              <h4 className="text-sm sm:text-base font-black text-stone-900">إعدادات الظهور والخصوصية للمحل</h4>
+              <p className="text-[11px] sm:text-xs text-stone-500 mt-0.5">تحكم في حالة ظهور صفحة المحل وتقييمات العملاء في الموقع</p>
             </div>
           </div>
 
           <div className="space-y-3 pt-2 border-t border-stone-200/70">
             {/* Toggle Hide Store Page */}
             <label className={cn(
-              "flex items-start gap-3 p-4 rounded-xl border cursor-pointer transition-all",
+              "flex items-start gap-3 p-4 rounded-xl border cursor-pointer transition-all flex-col sm:flex-row sm:items-center",
               isHidden 
                 ? "bg-amber-50/80 border-amber-300 shadow-2xs" 
                 : "bg-white border-stone-200 hover:bg-stone-50"
             )}>
-              <input
-                type="checkbox"
-                checked={isHidden}
-                onChange={e => setIsHidden(e.target.checked)}
-                className="mt-0.5 h-4.5 w-4.5 rounded text-amber-600 focus:ring-amber-500 border-stone-300"
-              />
-              <div className="text-xs space-y-1">
-                <span className="font-black text-stone-900 flex items-center gap-1.5">
-                  <EyeOff className="h-4 w-4 text-amber-600" />
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  checked={isHidden}
+                  onChange={e => setIsHidden(e.target.checked)}
+                  className="mt-0 sm:mt-0.5 h-5 w-5 sm:h-4.5 sm:w-4.5 rounded text-amber-600 focus:ring-amber-500 border-stone-300 shrink-0"
+                />
+                <span className="font-black text-stone-900 flex items-center gap-1.5 text-xs sm:text-sm">
+                  <EyeOff className="h-4 w-4 sm:h-5 sm:w-5 text-amber-600 shrink-0" />
                   إخفاء صفحة المحل من دليل الموقع والبحث
                 </span>
-                <p className="text-stone-600 text-[11px] leading-relaxed">
+              </div>
+              <div className="text-xs space-y-1 sm:mr-auto mt-2 sm:mt-0 w-full sm:w-auto">
+                <p className="text-stone-600 text-[11px] sm:text-xs leading-relaxed max-w-sm">
                   عند تفعيل هذا الخيار، يتم إخفاء المحل مؤقتاً عن زوار الموقع ولن يظهر في نتائج البحث أو القوائم العامة، بينما تظل بياناتك محفوظة بحسابك لإعادة تفعيلها متى تشاء.
                 </p>
                 {isHidden && (
@@ -748,39 +745,21 @@ export function StoreEditForm({
             </label>
 
             {/* Reviews Privacy Toggles */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-              <label className="flex items-start gap-3 p-3 bg-white rounded-xl border border-stone-200 cursor-pointer hover:bg-stone-50 transition-colors">
+            <div className="grid grid-cols-1 gap-3 pt-1">
+              <label className="flex items-start gap-3 p-3.5 sm:p-3 bg-white rounded-xl border border-stone-200 cursor-pointer hover:bg-stone-50 transition-colors">
                 <input
                   type="checkbox"
                   checked={hideSiteReviews}
                   onChange={e => setHideSiteReviews(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 rounded text-[#1a4d2e] focus:ring-[#1a4d2e] border-stone-300"
+                  className="mt-0.5 h-4 w-4 sm:h-5 sm:w-5 rounded text-[#1a4d2e] focus:ring-[#1a4d2e] border-stone-300 shrink-0"
                 />
                 <div className="text-xs">
                   <span className="font-bold text-stone-800 flex items-center gap-1.5">
-                    <MessageSquare className="h-3.5 w-3.5 text-[#1a4d2e]" />
+                    <MessageSquare className="h-4 w-4 sm:h-3.5 sm:w-3.5 text-[#1a4d2e] shrink-0" />
                     إخفاء تقييمات المنصة
                   </span>
-                  <p className="text-stone-500 mt-0.5 text-[11px] leading-normal">
+                  <p className="text-stone-500 mt-1 sm:mt-0.5 text-[11px] leading-relaxed">
                     تعطيل إمكانية كتابة وعرض التقييمات من زوار الموقع المباشرين
-                  </p>
-                </div>
-              </label>
-
-              <label className="flex items-start gap-3 p-3 bg-white rounded-xl border border-stone-200 cursor-pointer hover:bg-stone-50 transition-colors">
-                <input
-                  type="checkbox"
-                  checked={hideGoogleReviews}
-                  onChange={e => setHideGoogleReviews(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 rounded text-blue-600 focus:ring-blue-500 border-stone-300"
-                />
-                <div className="text-xs">
-                  <span className="font-bold text-stone-800 flex items-center gap-1.5">
-                    <Globe className="h-3.5 w-3.5 text-blue-600" />
-                    إخفاء تقييمات خرائط Google
-                  </span>
-                  <p className="text-stone-500 mt-0.5 text-[11px] leading-normal">
-                    عدم جلب أو عرض تقييمات ونجوم Google Maps على صفحتك
                   </p>
                 </div>
               </label>

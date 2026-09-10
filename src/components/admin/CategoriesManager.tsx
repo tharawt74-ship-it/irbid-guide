@@ -1,3 +1,4 @@
+import { useConfirm } from '../../contexts/ConfirmContext';
 import React, { useState } from 'react';
 import { useSystemSettings } from '../../contexts/SystemSettingsContext';
 import { CategoryConfig } from '../../types';
@@ -8,6 +9,7 @@ interface CategoriesManagerProps {
 }
 
 export function CategoriesManager({ showToast }: CategoriesManagerProps) {
+  const { confirm } = useConfirm();
   const { categories, addCategory, updateCategory, deleteCategory } = useSystemSettings();
 
   const [isAdding, setIsAdding] = useState(false);
@@ -67,9 +69,39 @@ export function CategoriesManager({ showToast }: CategoriesManagerProps) {
   };
 
   const handleDelete = async (cat: CategoryConfig) => {
-    if (confirm(`هل أنت تأكد من حذف تصنيف (${cat.name})؟`)) {
+    if ((await confirm({ message: `هل أنت تأكد من حذف تصنيف (${cat.name})؟` }))) {
       await deleteCategory(cat.id);
       showToast(`تم حذف تصنيف (${cat.name})`, 'info');
+    }
+  };
+
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    if (!(await confirm({ message: `هل أنت متأكد من حذف ${selectedIds.length} من التصنيفات المحددة مع كافة أقسامها الفرعية؟` }))) return;
+    
+    try {
+      for (const id of selectedIds) {
+        await deleteCategory(id);
+      }
+      showToast(`تم حذف ${selectedIds.length} تصنيف بنجاح`, 'info');
+      setSelectedIds([]);
+    } catch (err) {
+      showToast('حدث خطأ أثناء الحذف الجماعي', 'error');
+    }
+  };
+
+  const handleBulkToggleActive = async (active: boolean) => {
+    if (selectedIds.length === 0) return;
+    try {
+      for (const id of selectedIds) {
+        await updateCategory(id, { active });
+      }
+      showToast(active ? `تم تفعيل ${selectedIds.length} تصنيف` : `تم تعطيل ${selectedIds.length} تصنيف`, 'success');
+      setSelectedIds([]);
+    } catch (err) {
+      showToast('حدث خطأ أثناء تعديل الحالة الجماعية', 'error');
     }
   };
 
@@ -188,23 +220,85 @@ export function CategoriesManager({ showToast }: CategoriesManagerProps) {
         </div>
       )}
 
+      {/* Select All & Bulk Actions Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-stone-50 p-4 rounded-2xl border border-stone-200 shadow-3xs">
+        <label className="flex items-center gap-2.5 cursor-pointer text-xs font-bold text-stone-700 select-none">
+          <input
+            type="checkbox"
+            checked={categories.length > 0 && selectedIds.length === categories.length}
+            onChange={(e) => {
+              if (e.target.checked) {
+                setSelectedIds(categories.map(c => c.id));
+              } else {
+                setSelectedIds([]);
+              }
+            }}
+            className="h-4.5 w-4.5 rounded text-[#1a4d2e] focus:ring-[#1a4d2e] border-stone-300 cursor-pointer"
+          />
+          <span>تحديد الكل ({categories.length} تصنيف)</span>
+        </label>
+
+        {selectedIds.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 animate-fade-in">
+            <span className="text-xs font-black text-[#1a4d2e] ml-2">تم تحديد {selectedIds.length} عناصر</span>
+            <button
+              onClick={() => handleBulkToggleActive(true)}
+              className="bg-emerald-50 text-emerald-800 hover:bg-emerald-100 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+            >
+              <Check className="h-3.5 w-3.5 text-emerald-600" />
+              تفعيل المحدد
+            </button>
+            <button
+              onClick={() => handleBulkToggleActive(false)}
+              className="bg-stone-100 text-stone-700 hover:bg-stone-200 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+            >
+              <X className="h-3.5 w-3.5 text-stone-500" />
+              تعطيل المحدد
+            </button>
+            <button
+              onClick={handleBulkDelete}
+              className="bg-red-50 text-red-700 hover:bg-red-100 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+            >
+              <Trash2 className="h-3.5 w-3.5 text-red-600" />
+              حذف المحدد
+            </button>
+          </div>
+        )}
+      </div>
+
       {/* Categories List */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {categories.map((cat) => (
-          <div key={cat.id} className="border border-stone-200 rounded-2xl p-4 bg-white flex flex-col justify-between space-y-3">
+          <div key={cat.id} className={`border rounded-2xl p-4 bg-white flex flex-col justify-between space-y-3 transition-all ${
+            selectedIds.includes(cat.id) ? 'border-[#1a4d2e] ring-1 ring-[#1a4d2e] bg-emerald-50/5' : 'border-stone-200'
+          }`}>
             <div className="flex items-start justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-amber-50 rounded-xl text-amber-700 font-black text-sm">
-                  {cat.iconName.slice(0, 2)}
-                </div>
-                <div>
-                  <h3 className="font-black text-sm text-stone-900 flex items-center gap-2">
-                    <span>{cat.name}</span>
-                    {cat.active === false && (
-                      <span className="text-[10px] bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-bold">معطل</span>
-                    )}
-                  </h3>
-                  {cat.description && <p className="text-xs text-stone-500">{cat.description}</p>}
+              <div className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={selectedIds.includes(cat.id)}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedIds(prev => [...prev, cat.id]);
+                    } else {
+                      setSelectedIds(prev => prev.filter(id => id !== cat.id));
+                    }
+                  }}
+                  className="mt-1 h-4.5 w-4.5 rounded text-[#1a4d2e] focus:ring-[#1a4d2e] border-stone-300 cursor-pointer"
+                />
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-amber-50 rounded-xl text-amber-700 font-black text-sm">
+                    {cat.iconName.slice(0, 2)}
+                  </div>
+                  <div>
+                    <h3 className="font-black text-sm text-stone-900 flex items-center gap-2">
+                      <span>{cat.name}</span>
+                      {cat.active === false && (
+                        <span className="text-[10px] bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-bold">معطل</span>
+                      )}
+                    </h3>
+                    {cat.description && <p className="text-xs text-stone-500">{cat.description}</p>}
+                  </div>
                 </div>
               </div>
 

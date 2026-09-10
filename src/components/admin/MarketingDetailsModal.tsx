@@ -388,7 +388,7 @@ export function MarketingDetailsModal({
             {business?.phone && (
               <div className="flex items-center justify-between">
                 <span className="text-stone-500">رقم هاتف المحل:</span>
-                <span className="font-mono font-bold text-stone-800" dir="ltr">{business.phone}</span>
+                <span className="font-mono font-bold text-stone-800" dir="ltr">{business.phone.replace(/\s+/g, '')}</span>
               </div>
             )}
 

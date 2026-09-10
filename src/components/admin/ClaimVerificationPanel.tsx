@@ -1,6 +1,7 @@
+import { useConfirm } from '../../contexts/ConfirmContext';
 import React, { useState, useEffect } from 'react';
 import { db } from '../../lib/firebase';
-import { collection, query, getDocs, doc, updateDoc, orderBy } from 'firebase/firestore';
+import { collection, query, getDocs, doc, updateDoc, setDoc, orderBy } from 'firebase/firestore';
 import { OwnershipClaim } from '../../types';
 import { 
   ShieldCheck, CheckCircle2, XCircle, FileText, ExternalLink, 
@@ -8,6 +9,7 @@ import {
 } from 'lucide-react';
 
 export function ClaimVerificationPanel() {
+  const { confirm } = useConfirm();
   const [claims, setClaims] = useState<OwnershipClaim[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -55,22 +57,22 @@ export function ClaimVerificationPanel() {
   }, []);
 
   const handleApproveClaim = async (claim: OwnershipClaim) => {
-    if (!window.confirm(`هل أنت متأكد من الموافقة على نقل ملكية محل "${claim.businessName}" إلى المستخدم ${claim.applicantName}؟`)) return;
+    if (!(await confirm({ message: `هل أنت متأكد من الموافقة على نقل ملكية محل "${claim.businessName}" إلى المستخدم ${claim.applicantName}؟` }))) return;
 
     try {
       if (db) {
         // 1. Update claim status
-        await updateDoc(doc(db, 'ownership_claims', claim.id), {
+        await setDoc(doc(db, 'ownership_claims', claim.id), {
           status: 'approved',
           approvedAt: Date.now()
-        });
+        }, { merge: true });
 
         // 2. Transfer business ownership
-        await updateDoc(doc(db, 'businesses', claim.businessId), {
+        await setDoc(doc(db, 'businesses', claim.businessId), {
           userId: claim.applicantUid,
           ownerName: claim.applicantName,
           isVerified: true
-        });
+        }, { merge: true });
       }
 
       setClaims(prev => prev.map(c => c.id === claim.id ? { ...c, status: 'approved' } : c));
@@ -82,14 +84,14 @@ export function ClaimVerificationPanel() {
   };
 
   const handleRejectClaim = async (claimId: string) => {
-    if (!window.confirm('هل أنت متأكد من رفض طلب ملكية هذا المحل؟')) return;
+    if (!(await confirm({ message: 'هل أنت متأكد من رفض طلب ملكية هذا المحل؟' }))) return;
 
     try {
       if (db) {
-        await updateDoc(doc(db, 'ownership_claims', claimId), {
+        await setDoc(doc(db, 'ownership_claims', claimId), {
           status: 'rejected',
           rejectedAt: Date.now()
-        });
+        }, { merge: true });
       }
 
       setClaims(prev => prev.map(c => c.id === claimId ? { ...c, status: 'rejected' } : c));

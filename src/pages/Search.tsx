@@ -13,6 +13,8 @@ import { getBusinessVipStatus } from '../lib/vipHelper';
 import { getLiveWorkingStatus } from '../lib/businessHoursHelper';
 import { SEO } from '../components/common/SEO';
 import { BUSINESS_CATEGORIES, ALL_IRBID_DISTRICTS } from '../lib/categories';
+import { Pagination } from '../components/common/Pagination';
+import { cn } from '../lib/utils';
 
 // Matches OfferItem type structure from Offers.tsx
 interface OfferItem {
@@ -89,6 +91,11 @@ export function Search() {
   const [selectedLocation, setSelectedLocation] = useState<string>('الكل');
   const [selectedMainCategory, setSelectedMainCategory] = useState<string>('الكل');
   const [selectedSubCategory, setSelectedSubCategory] = useState<string>('الكل');
+  const [businessPage, setBusinessPage] = useState(1);
+
+  useEffect(() => {
+    setBusinessPage(1);
+  }, [inputVal, selectedLocation, selectedMainCategory, selectedSubCategory, activeTab]);
 
   // Load all datasets on mount
   useEffect(() => {
@@ -162,7 +169,7 @@ export function Search() {
   
   // 1. FILTERED BUSINESSES
   const filteredBusinesses = useMemo(() => {
-    return businesses.filter(b => {
+    const list = businesses.filter(b => {
       const isSearchMatch = queryTokens.length === 0 || queryTokens.every(token => 
         normalizeArabic(b.name || '').includes(token) ||
         normalizeArabic(b.category || '').includes(token) ||
@@ -183,6 +190,14 @@ export function Search() {
       }
 
       return isSearchMatch && isLocMatch && isCatMatch;
+    });
+
+    // Float active sponsored/featured to the top!
+    const now = Date.now();
+    return list.sort((a, b) => {
+      const aFeatured = a.isFeatured && (!a.featuredStartDate || a.featuredStartDate <= now) && (!a.featuredExpiryDate || a.featuredExpiryDate > now) ? 1 : 0;
+      const bFeatured = b.isFeatured && (!b.featuredStartDate || b.featuredStartDate <= now) && (!b.featuredExpiryDate || b.featuredExpiryDate > now) ? 1 : 0;
+      return bFeatured - aFeatured;
     });
   }, [businesses, queryTokens, selectedLocation, selectedMainCategory, selectedSubCategory]);
 
@@ -554,15 +569,28 @@ export function Search() {
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredBusinesses.map(b => {
+                {filteredBusinesses
+                  .slice((businessPage - 1) * 15, businessPage * 15)
+                  .map(b => {
                   const vipInfo = getBusinessVipStatus(b);
                   const liveStatus = getLiveWorkingStatus(b.workingHours);
                   const targetUrl = b.username && b.username.trim() ? `/@${b.username.trim()}` : `/business/${b.id}`;
 
+                  const isCurrentlyFeatured = b.isFeatured && (!b.featuredStartDate || b.featuredStartDate <= Date.now()) && (!b.featuredExpiryDate || b.featuredExpiryDate > Date.now());
+
                   return (
-                    <Link key={b.id} to={targetUrl} className="bg-white rounded-2xl p-4 border border-stone-200 hover:border-emerald-500/50 hover:shadow-md transition-all flex flex-col justify-between h-full group relative overflow-hidden">
-                      {/* Optional subtle background gradient for VIP */}
-                      {vipInfo.isVip && <div className="absolute inset-0 bg-gradient-to-tr from-amber-50/30 to-transparent pointer-events-none" />}
+                    <Link 
+                      key={b.id} 
+                      to={targetUrl} 
+                      className={cn(
+                        "bg-white rounded-2xl p-4 border transition-all flex flex-col justify-between h-full group relative overflow-hidden",
+                        isCurrentlyFeatured 
+                          ? "border-2 border-amber-400/90 ring-2 ring-amber-400/20 shadow-[0_0_15px_rgba(245,158,11,0.2)] hover:shadow-[0_0_25px_rgba(245,158,11,0.45)]" 
+                          : "border-stone-200 hover:border-emerald-500/50 hover:shadow-md"
+                      )}
+                    >
+                      {/* Subtle background gradient only for Sponsored */}
+                      {isCurrentlyFeatured && <div className="absolute inset-0 bg-gradient-to-tr from-amber-50/20 to-transparent pointer-events-none" />}
                       
                       <div className="flex gap-4 relative z-10">
                         {b.imageUrl ? (
@@ -571,9 +599,27 @@ export function Search() {
                           <div className="w-16 h-16 rounded-xl bg-stone-50 border border-stone-100 flex items-center justify-center text-stone-400 shrink-0 text-xl shadow-2xs">🏢</div>
                         )}
                         <div className="space-y-1 min-w-0 flex-1">
-                          <div className="flex justify-between items-start">
-                            <h4 className="font-black text-base text-stone-800 group-hover:text-emerald-700 transition-colors truncate pr-1">{b.name}</h4>
-                            {vipInfo.isVip && <span className="text-[9px] bg-gradient-to-r from-amber-400 to-amber-500 text-white font-black px-2 py-0.5 rounded-full shadow-xs shrink-0">VIP</span>}
+                          <div className="flex justify-between items-start gap-1">
+                            <h4 className={cn(
+                              "font-black text-base transition-colors truncate pr-1",
+                              isCurrentlyFeatured
+                                ? "text-amber-700 bg-gradient-to-r from-amber-600 via-amber-500 to-yellow-600 bg-clip-text text-transparent group-hover:from-amber-800 group-hover:to-amber-600 font-black"
+                                : "text-stone-800 group-hover:text-emerald-700"
+                            )}>
+                              {b.name}
+                            </h4>
+                            <div className="flex items-center gap-1 shrink-0 flex-wrap">
+                              {isCurrentlyFeatured && (
+                                <span className="text-[9px] bg-gradient-to-r from-amber-400 to-yellow-500 text-yellow-950 font-black px-2 py-0.5 rounded-full shadow-2xs border border-amber-300/40">
+                                  ⭐ ممول
+                                </span>
+                              )}
+                              {vipInfo.isVip && (
+                                <span className="text-[9px] bg-sky-50 text-sky-700 border border-sky-200/70 font-black px-2 py-0.5 rounded-full shadow-2xs">
+                                  ✓ موثّق
+                                </span>
+                              )}
+                            </div>
                           </div>
                           <p className="text-xs text-stone-500 line-clamp-1">{b.description}</p>
                           <div className="flex items-center gap-1.5 text-[10px] text-stone-500 flex-wrap pt-1 font-medium">
@@ -603,6 +649,14 @@ export function Search() {
                   );
                 })}
               </div>
+
+              <Pagination
+                currentPage={businessPage}
+                totalPages={Math.ceil(filteredBusinesses.length / 15)}
+                onPageChange={(p) => setBusinessPage(p)}
+                totalItems={filteredBusinesses.length}
+                itemsPerPage={15}
+              />
             </div>
           )}
 
@@ -699,7 +753,7 @@ export function Search() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
                 {filteredHousings.map(h => (
-                  <Link key={h.id} to="/housing" className="bg-white rounded-2xl overflow-hidden border border-stone-200 hover:border-blue-500/50 hover:shadow-md transition-all flex flex-col group">
+                  <Link key={h.id} to={`/housing/${h.id}`} className="bg-white rounded-2xl overflow-hidden border border-stone-200 hover:border-blue-500/50 hover:shadow-md transition-all flex flex-col group">
                     <div className="relative aspect-[4/3] w-full bg-stone-100 overflow-hidden shrink-0">
                       <img src={h.image} alt={h.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                       <div className="absolute bottom-3 right-3 bg-white/95 backdrop-blur-sm text-blue-700 font-black text-sm px-3 py-1.5 rounded-xl shadow-lg border border-blue-100/50">

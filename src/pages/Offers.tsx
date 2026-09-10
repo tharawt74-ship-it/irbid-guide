@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Link } from 'react-router';
+import { CategoryButtonLabel } from '../components/CategoryButtonLabel';
 import { collection, getDocs, query, orderBy, addDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { getAppConfig } from '../lib/demoDataHelper';
@@ -33,6 +34,10 @@ import { useAuth } from '../contexts/AuthContext';
 import { BannerSlideshow } from '../components/BannerSlideshow';
 import { HomepageBanner } from '../types';
 import { fetchPageBanners, DEFAULT_OFFERS_BANNERS } from '../lib/pageBanners';
+import { useSystemSettings } from '../contexts/SystemSettingsContext';
+import { getCategoryMeta } from '../lib/categoryMeta';
+import { CategoriesModal } from '../components/CategoriesModal';
+import { Pagination } from '../components/common/Pagination';
 
 interface OfferItem {
   id: string;
@@ -44,6 +49,13 @@ interface OfferItem {
   newPrice?: string;
   code?: string;
   expiresIn: string;
+  durationMode?: string;
+  durationHours?: string;
+  durationDays?: string;
+  startDate?: string;
+  endDate?: string;
+  recurringDays?: string[];
+  expiresAt?: number | null;
   description: string;
   location: string;
   phone: string;
@@ -55,19 +67,67 @@ interface OfferItem {
   createdAt?: number;
 }
 
-const CATEGORIES = ['الكل', 'مطاعم ومقاهي', 'أزياء وتسوق', 'صحة ورياضة', 'خدمات وصيانة', 'صناعة وحرف', 'زراعة ومستلزمات'];
-
 export function Offers() {
   const { currentUser, isAdmin, isStaff, isMerchant, ownedBusinesses } = useAuth();
+  const { categories } = useSystemSettings();
+  const mainCategories = categories.map(c => c.name);
+  const getSubCats = (catName: string) => categories.find(c => c.name === catName)?.subcategories || [];
+
+  const renderOfferDurationText = (offer: any) => {
+    if (!offer.durationMode) {
+      return offer.expiresIn || 'لفترة محدودة';
+    }
+
+    if (offer.durationMode === 'recurring_weekly') {
+      const days = offer.recurringDays || [];
+      if (days.length === 0) return 'متكرر أسبوعياً';
+      
+      const daysOfWeekArabic = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+      const todayArabic = daysOfWeekArabic[new Date().getDay()];
+      const isTodayActive = days.includes(todayArabic);
+
+      if (isTodayActive) {
+        return `فعال اليوم 🟢 (كل ${days.join('، ')})`;
+      }
+      return `نشط أيام: ${days.join('، ')}`;
+    }
+
+    if (offer.expiresAt) {
+      const timeLeftMs = offer.expiresAt - Date.now();
+      if (timeLeftMs <= 0) {
+        return 'منتهي الصلاحية 🔴';
+      }
+
+      const totalHoursLeft = timeLeftMs / (3600 * 1000);
+      if (totalHoursLeft < 1) {
+        return 'ينتهي خلال أقل من ساعة ⚡';
+      }
+      if (totalHoursLeft <= 24) {
+        return `متبقي ${Math.ceil(totalHoursLeft)} ساعة/ساعات ⏳`;
+      }
+      const daysLeft = Math.ceil(totalHoursLeft / 24);
+      return `متبقي ${daysLeft} يوم/أيام 📅`;
+    }
+
+    return offer.expiresIn || 'لفترة محدودة';
+  };
+
   const hasBusiness = Boolean(currentUser && (isAdmin || isStaff || isMerchant || (ownedBusinesses && ownedBusinesses.length > 0)));
 
   const [offers, setOffers] = useState<OfferItem[]>([]);
   const [banners, setBanners] = useState<HomepageBanner[]>(DEFAULT_OFFERS_BANNERS);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState('الكل');
+  const [selectedSubCategory, setSelectedSubCategory] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isCategoriesModalOpen, setIsCategoriesModalOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedCategory, selectedSubCategory, searchQuery]);
 
   useEffect(() => {
     async function loadOffersAndBanners() {
@@ -118,7 +178,16 @@ export function Offers() {
   };
 
   const filteredOffers = offers.filter(offer => {
-    const matchesCategory = selectedCategory === 'الكل' || offer.category === selectedCategory;
+    let matchesCategory = true;
+    if (selectedCategory && selectedCategory !== 'الكل') {
+      const validSubCats = getSubCats(selectedCategory);
+      if (selectedSubCategory) {
+        matchesCategory = offer.category === selectedSubCategory;
+      } else {
+        matchesCategory = offer.category === selectedCategory || validSubCats.includes(offer.category);
+      }
+    }
+
     const matchesSearch = 
       (offer.title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       (offer.businessName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -139,45 +208,38 @@ export function Offers() {
       {/* Banner Slideshow */}
       <BannerSlideshow banners={banners} />
 
-      {/* Page Header & Search Bar */}
-      <div className="bg-white rounded-2xl md:rounded-3xl p-5 sm:p-7 border border-[#e5e1da] shadow-xs space-y-5">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 bg-red-50 text-red-700 border border-red-200 px-3 py-1 rounded-full text-xs font-black">
-                <Flame className="h-3.5 w-3.5 text-red-600" />
-                <span>عروض وتخفيضات إربد الحصرية</span>
+      {/* Page Header & Search Bar (Compact & Sleek) */}
+      <div className="bg-white rounded-2xl md:rounded-3xl p-3.5 sm:p-5 border border-[#e5e1da] shadow-xs space-y-3 sm:space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5">
+              <span className="inline-flex items-center gap-1 bg-red-50 text-red-700 border border-red-200 px-2.5 py-0.5 rounded-full text-[11px] font-black">
+                <Flame className="h-3 w-3 text-red-600" />
+                <span>عروض إربد</span>
               </span>
-              <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-900 border border-amber-200 px-2.5 py-1 rounded-full text-xs font-bold">
+              <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-900 border border-amber-200 px-2.5 py-0.5 rounded-full text-[11px] font-bold">
                 <Percent className="h-3 w-3 text-amber-700" />
                 <span>خصومات حتى 50%</span>
               </span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-black text-stone-900">
+            <h1 className="text-xl sm:text-2xl font-black text-stone-900 tracking-tight">
               أقوى العروض والخصومات في إربد
             </h1>
-            <p className="text-stone-600 text-xs sm:text-sm font-medium">
-              وفر دراهمك واستمتع بأفضل وجبات المطاعم، القهوة المختصة، اشتراكات النوادي، والملابس بأسعار مخفضة.
+            <p className="hidden sm:block text-stone-500 text-xs font-medium leading-relaxed">
+              وفر دراهمك واستمتع بأفضل وجبات المطاعم، القهوة المختصة، اشتراكات النوادي والملابس.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
             {hasBusiness && (
               <button
                 onClick={() => setIsAddModalOpen(true)}
-                className="inline-flex items-center justify-center gap-2 bg-[#1a4d2e] hover:bg-[#143e25] text-white px-5 py-3 rounded-xl font-black text-xs sm:text-sm transition-all shadow-xs hover:scale-105 active:scale-95 cursor-pointer"
+                className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 bg-[#1a4d2e] hover:bg-[#143e25] text-white px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-xs cursor-pointer"
               >
                 <Plus className="h-4 w-4" />
-                <span>أعلن عن خصم لمشروعك</span>
+                <span>أعلن عن خصمك</span>
               </button>
             )}
-            <Link
-              to="/contact"
-              className="inline-flex items-center justify-center gap-2 bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-300 px-4 py-3 rounded-xl font-bold text-xs transition-colors"
-            >
-              <Sparkles className="h-3.5 w-3.5 text-[#ff9f1c]" />
-              <span>باقات الترويج</span>
-            </Link>
           </div>
         </div>
 
@@ -188,44 +250,142 @@ export function Offers() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="ابحث عن عرض، اسم مطعم، كافيه، محل أزياء، أو منطقة..."
-            className="w-full bg-[#fdfcfb] text-stone-900 placeholder:text-stone-400 border border-[#e5e1da] rounded-xl sm:rounded-2xl px-4 py-3.5 pr-11 text-sm focus:outline-none focus:border-[#1a4d2e] focus:bg-white transition-all shadow-inner"
+            className="w-full bg-[#fdfcfb] text-stone-900 placeholder:text-stone-400 border border-[#e5e1da] rounded-xl px-3.5 py-2.5 pr-10 text-xs sm:text-sm focus:outline-none focus:border-[#1a4d2e] focus:bg-white transition-all shadow-inner"
           />
-          <Search className="h-5 w-5 text-stone-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <Search className="h-4 w-4 text-stone-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           {searchQuery && (
             <button 
               onClick={() => setSearchQuery('')}
-              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 p-1"
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 p-1"
             >
-              <X className="h-4 w-4" />
+              <X className="h-3.5 w-3.5" />
             </button>
           )}
         </div>
       </div>
 
-      {/* Category Pills Bar */}
-      <div className="relative">
-        <div className="pointer-events-none absolute left-0 top-0 bottom-2 w-8 bg-gradient-to-r from-[#fdfcfb] to-transparent z-10 sm:hidden" />
-        <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide border-b border-[#e5e1da]" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-          <span className="text-xs font-black text-stone-400 shrink-0 ml-1">التصنيف:</span>
-          {CATEGORIES.map(cat => {
-            const isSelected = selectedCategory === cat;
-            return (
+      {/* Dynamic Main and Sub Categories Section */}
+      {mainCategories.length > 0 && (
+        <div className="flex flex-col space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg sm:text-xl font-black text-[#2d2a26]">تصفح أقسام العروض الرئيسية</h2>
+            </div>
+            <div className="flex items-center gap-2">
+              {selectedCategory && selectedCategory !== 'الكل' && (
+                <button 
+                  onClick={() => {
+                    setSelectedCategory('الكل');
+                    setSelectedSubCategory('');
+                  }}
+                  className="text-xs font-bold text-stone-500 hover:text-red-600 hover:underline cursor-pointer"
+                >
+                  إعادة تعيين
+                </button>
+              )}
               <button
-                key={cat}
-                onClick={() => setSelectedCategory(cat)}
-                className={cn(
-                  "whitespace-nowrap px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all cursor-pointer shrink-0",
-                  isSelected
-                    ? "bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-xs font-black scale-102"
-                    : "bg-white border border-[#e5e1da] text-stone-600 hover:border-orange-300 hover:bg-orange-50/50"
-                )}
+                onClick={() => setIsCategoriesModalOpen(true)}
+                className="text-xs sm:text-sm font-black text-[#1a4d2e] hover:text-[#133b22] flex items-center gap-1 bg-[#1a4d2e]/5 hover:bg-[#1a4d2e]/10 px-3 py-1.5 rounded-full transition-colors cursor-pointer"
               >
-                {cat}
+                <span>عرض الكل</span>
+                <span className="text-[10px] sm:text-xs">←</span>
               </button>
-            );
-          })}
+            </div>
+          </div>
+
+          <div className="relative">
+            {/* Left Edge Gradient Affordance for Mobile Scroll */}
+            <div className="pointer-events-none absolute left-0 top-0 bottom-4 w-8 bg-gradient-to-r from-[#fdfcfb] to-transparent z-10 sm:hidden" />
+
+            <div className="flex overflow-x-auto pb-4 pt-1 gap-3.5 sm:gap-4 snap-x scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+              {/* All Button */}
+              {(() => {
+                const isSelected = selectedCategory === 'الكل';
+                const { icon: Icon } = getCategoryMeta('الكل');
+                return (
+                  <button
+                    onClick={() => {
+                      setSelectedCategory('الكل');
+                      setSelectedSubCategory('');
+                    }}
+                    className={`snap-start shrink-0 aspect-square w-[88px] sm:w-28 md:w-32 flex flex-col items-center justify-center p-2 sm:p-3 rounded-2xl md:rounded-[24px] transition-all duration-200 border text-center group cursor-pointer ${
+                      isSelected 
+                        ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white border-transparent shadow-lg shadow-red-500/25 -translate-y-1' 
+                        : 'bg-white text-[#2d2a26] border-[#e5e1da] hover:border-red-500/40 hover:bg-[#fcfbfa] hover:-translate-y-0.5 hover:shadow-md'
+                    }`}
+                  >
+                    <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl flex items-center justify-center mb-2 sm:mb-2.5 transition-transform group-hover:scale-110 ${
+                      isSelected ? 'bg-white/20 text-white' : 'bg-red-50 text-red-600'
+                    }`}>
+                      <Icon className="h-5 w-5 sm:h-6 sm:w-6" />
+                    </div>
+                    <CategoryButtonLabel name="الكل" isSelected={isSelected} />
+                  </button>
+                );
+              })()}
+
+              {/* Main Category buttons */}
+              {mainCategories.map((cat) => {
+                const isSelected = selectedCategory === cat;
+                const { icon: Icon, bg } = getCategoryMeta(cat);
+                return (
+                  <button
+                    key={cat}
+                    onClick={() => {
+                      setSelectedCategory(isSelected ? 'الكل' : cat);
+                      setSelectedSubCategory('');
+                    }}
+                    className={`snap-start shrink-0 aspect-square w-[88px] sm:w-28 md:w-32 flex flex-col items-center justify-center p-2 sm:p-3 rounded-2xl md:rounded-[24px] transition-all duration-200 border text-center group cursor-pointer ${
+                      isSelected 
+                        ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white border-transparent shadow-lg shadow-red-500/25 -translate-y-1' 
+                        : 'bg-white text-[#2d2a26] border-[#e5e1da] hover:border-red-500/40 hover:bg-[#fcfbfa] hover:-translate-y-0.5 hover:shadow-md'
+                    }`}
+                  >
+                    <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl flex items-center justify-center mb-2 sm:mb-2.5 transition-transform group-hover:scale-110 ${
+                      isSelected ? 'bg-white/20 text-white' : bg
+                    }`}>
+                      <Icon className="h-5 w-5 sm:h-6 sm:w-6" />
+                    </div>
+                    <CategoryButtonLabel name={cat} isSelected={isSelected} />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          
+          {/* Sub Categories (Shows only when a main category is selected) */}
+          {selectedCategory && selectedCategory !== 'الكل' && getSubCats(selectedCategory).length > 0 && (
+            <div className="relative">
+              <div className="pointer-events-none absolute left-0 top-0 bottom-3 w-8 bg-gradient-to-r from-[#fdfcfb] to-transparent z-10 sm:hidden" />
+              <div className="flex overflow-x-auto gap-2.5 pb-3 mt-2 -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-hide snap-x" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                <button
+                  onClick={() => setSelectedSubCategory('')}
+                  className={`snap-start shrink-0 whitespace-nowrap px-5 py-2.5 rounded-full text-sm font-bold transition-all duration-200 border ${
+                    selectedSubCategory === ''
+                      ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white border-transparent shadow-md shadow-red-500/10'
+                      : 'bg-white text-stone-600 border-[#e5e1da] hover:border-red-300 hover:bg-stone-50'
+                  }`}
+                >
+                  عرض الكل الفرعي
+                </button>
+                {getSubCats(selectedCategory).map((subCat) => (
+                  <button
+                    key={subCat}
+                    onClick={() => setSelectedSubCategory(subCat)}
+                    className={`snap-start shrink-0 whitespace-nowrap px-5 py-2.5 rounded-full text-sm font-bold transition-all duration-200 border ${
+                      selectedSubCategory === subCat
+                        ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white border-transparent shadow-md shadow-red-500/10'
+                        : 'bg-white text-stone-600 border-[#e5e1da] hover:border-red-300 hover:bg-stone-50'
+                    }`}
+                  >
+                    {subCat}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
-      </div>
+      )}
 
       {loading ? (
         <div className="flex justify-center items-center py-20">
@@ -251,12 +411,15 @@ export function Offers() {
           )}
         </div>
       ) : (
-        <div id="offers-grid" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
-          {filteredOffers.map((offer) => (
-            <div 
-              key={offer.id}
-              className="bg-white rounded-3xl border border-stone-200/80 overflow-hidden shadow-xs hover:shadow-xl transition-all duration-300 flex flex-col group relative"
-            >
+        <div>
+          <div id="offers-grid" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
+            {filteredOffers
+              .slice((currentPage - 1) * 15, currentPage * 15)
+              .map((offer) => (
+              <div 
+                key={offer.id}
+                className="bg-white rounded-3xl border border-stone-200/80 overflow-hidden shadow-xs hover:shadow-xl transition-all duration-300 flex flex-col group relative"
+              >
               {/* Badges */}
               <div className="absolute top-3 right-3 z-10 flex flex-col gap-1.5 items-start">
                 {offer.isHot && (
@@ -281,7 +444,7 @@ export function Offers() {
               </div>
 
               {/* Offer Image */}
-              <div className="relative h-48 sm:h-52 w-full overflow-hidden bg-stone-100">
+              <Link to={`/offers/${offer.id}`} className="relative h-48 sm:h-52 w-full overflow-hidden bg-stone-100 block cursor-pointer">
                 <img 
                   src={offer.image || 'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&q=80&w=800'} 
                   alt={offer.title}
@@ -295,18 +458,18 @@ export function Offers() {
                     <span>{offer.location}</span>
                   </p>
                 </div>
-              </div>
+              </Link>
 
               {/* Content */}
               <div className="p-5 sm:p-6 flex-1 flex flex-col justify-between space-y-4">
-                <div className="space-y-2">
+                <Link to={`/offers/${offer.id}`} className="space-y-2 block cursor-pointer">
                   <h3 className="text-base sm:text-lg font-black text-stone-900 group-hover:text-red-600 transition-colors leading-snug">
                     {offer.title}
                   </h3>
                   <p className="text-xs sm:text-sm text-stone-600 line-clamp-2 leading-relaxed">
                     {offer.description}
                   </p>
-                </div>
+                </Link>
 
                 {/* Price and Coupon Code Box */}
                 <div className="space-y-3 pt-2">
@@ -319,12 +482,25 @@ export function Offers() {
                         <span className="text-xs text-stone-400 line-through">{offer.oldPrice}</span>
                       )}
                     </div>
-                    {offer.expiresIn && (
-                      <span className="text-[11px] font-bold text-orange-600 bg-orange-50 border border-orange-200/60 px-2.5 py-1 rounded-lg flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
-                        <span>{offer.expiresIn}</span>
-                      </span>
-                    )}
+                    {(() => {
+                      const durationText = renderOfferDurationText(offer);
+                      const isExpired = offer.expiresAt && offer.expiresAt <= Date.now() && offer.durationMode !== 'recurring_weekly';
+                      const isUrgent = offer.expiresAt && (offer.expiresAt - Date.now() < 24 * 3600 * 1000) && offer.durationMode !== 'recurring_weekly';
+                      
+                      return (
+                        <span className={cn(
+                          "text-[11px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 border",
+                          isExpired 
+                            ? "text-stone-400 bg-stone-50 border-stone-200"
+                            : isUrgent
+                              ? "text-red-600 bg-red-50 border-red-200 animate-pulse"
+                              : "text-orange-600 bg-orange-50 border-orange-200/60"
+                        )}>
+                          <Clock className="h-3 w-3" />
+                          <span>{durationText}</span>
+                        </span>
+                      );
+                    })()}
                   </div>
 
                   {/* Code box */}
@@ -390,6 +566,18 @@ export function Offers() {
 
             </div>
           ))}
+          </div>
+
+          <Pagination
+            currentPage={currentPage}
+            totalPages={Math.ceil(filteredOffers.length / 15)}
+            onPageChange={(p) => {
+              setCurrentPage(p);
+              window.scrollTo({ top: 300, behavior: 'smooth' });
+            }}
+            totalItems={filteredOffers.length}
+            itemsPerPage={15}
+          />
         </div>
       )}
 
@@ -443,6 +631,20 @@ export function Offers() {
         document.body
       )}
 
+      {/* Categories Modal */}
+      <CategoriesModal
+        isOpen={isCategoriesModalOpen}
+        onClose={() => setIsCategoriesModalOpen(false)}
+        categories={categories}
+        selectedCategory={selectedCategory === 'الكل' ? '' : selectedCategory}
+        onSelectCategory={(catName) => {
+          setSelectedCategory(catName || 'الكل');
+          setSelectedSubCategory('');
+        }}
+      />
+
     </div>
   );
 }
+
+export default Offers;

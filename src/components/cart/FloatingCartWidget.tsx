@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ShoppingBag, X, Trash2, ChevronDown, ChevronUp, MessageCircle, ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import { useCart } from '../../contexts/CartContext';
-import { Link, useNavigate } from 'react-router';
+import { Link, useNavigate, useLocation } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 
 export function FloatingCartWidget() {
@@ -19,9 +19,10 @@ export function FloatingCartWidget() {
   } = useCart();
 
   const navigate = useNavigate();
+  const location = useLocation();
 
-  // If no items in cart, do not show anything
-  if (totalCount === 0) return null;
+  // If no items in cart or on messages page, do not show anything
+  if (totalCount === 0 || location.pathname === '/messages' || location.pathname.startsWith('/messages/')) return null;
 
   return (
     <>

@@ -1,3 +1,4 @@
+import { useConfirm } from '../../contexts/ConfirmContext';
 import React, { useEffect, useState } from 'react';
 import { db } from '../../lib/firebase';
 import { collection, getDocs, doc, getDoc, updateDoc, deleteDoc, query, orderBy } from 'firebase/firestore';
@@ -12,6 +13,7 @@ interface EditSuggestionsPanelProps {
 }
 
 export function EditSuggestionsPanel({ onShowToast, onRefreshTrigger }: EditSuggestionsPanelProps) {
+  const { confirm } = useConfirm();
   const { currentUser } = useAuth();
   const [suggestions, setSuggestions] = useState<EditSuggestion[]>([]);
   const [loading, setLoading] = useState(true);
@@ -103,7 +105,7 @@ export function EditSuggestionsPanel({ onShowToast, onRefreshTrigger }: EditSugg
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('هل أنت متأكد من حذف هذا السجل نهائياً؟')) return;
+    if (!(await confirm({ message: 'هل أنت متأكد من حذف هذا السجل نهائياً؟' }))) return;
     try {
       await deleteDoc(doc(db, 'edit_suggestions', id));
       onShowToast('تم حذف السجل بنجاح');

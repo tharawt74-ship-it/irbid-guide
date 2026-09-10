@@ -1,4 +1,4 @@
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { Business } from '../types';
 import { Star, MapPin, Store, Clock, Heart, Crown } from 'lucide-react';
 import { VerifiedBadge } from './vip/VerifiedBadge';
@@ -6,7 +6,7 @@ import { ShareButton } from './ShareButton';
 import { getLiveWorkingStatus } from '../lib/businessHoursHelper';
 import { getBusinessVipStatus } from '../lib/vipHelper';
 import { useAuth } from '../contexts/AuthContext';
-import { getBusinessLink } from '../lib/utils';
+import { getBusinessLink, cn, stripHtml } from '../lib/utils';
 import { WhatsApp3DIcon, Phone3DIcon } from './common/PremiumContactButtons';
 
 interface BusinessCardProps {
@@ -16,11 +16,13 @@ interface BusinessCardProps {
 }
 
 export function BusinessCard({ business, featured = false, searchReasons }: BusinessCardProps) {
+  const navigate = useNavigate();
   const isVip = getBusinessVipStatus(business).isVip;
   const liveStatus = getLiveWorkingStatus(business.workingHours);
   const { isFavorite, toggleFavorite } = useAuth();
   const isFavorited = isFavorite(business.id);
   const isCurrentlyFeatured = business.isFeatured && (!business.featuredStartDate || business.featuredStartDate <= Date.now()) && (!business.featuredExpiryDate || business.featuredExpiryDate > Date.now());
+  const isLuxuryFeatured = isCurrentlyFeatured;
   const businessLink = getBusinessLink(business);
 
   const handleToggleFavorite = (e: React.MouseEvent) => {
@@ -31,9 +33,14 @@ export function BusinessCard({ business, featured = false, searchReasons }: Busi
 
   if (featured) {
     return (
-      <Link
-        to={businessLink}
-        className="bg-white border border-[#e5e1da] rounded-[24px] md:rounded-[32px] overflow-hidden hover:shadow-xl hover:border-[#1a4d2e]/30 transition-all duration-300 flex flex-col group relative min-h-[260px] md:min-h-[290px]"
+      <div
+        onClick={() => navigate(businessLink)}
+        className={cn(
+          "bg-white rounded-[24px] md:rounded-[32px] overflow-hidden hover:shadow-2xl transition-all duration-300 flex flex-col group relative min-h-[260px] md:min-h-[290px] cursor-pointer",
+          isLuxuryFeatured
+            ? "border-2 border-amber-400/90 ring-2 ring-amber-400/50 shadow-[0_0_25px_rgba(245,158,11,0.45)] hover:shadow-[0_0_35px_rgba(245,158,11,0.7)] hover:ring-amber-300"
+            : "border border-[#e5e1da] hover:border-[#1a4d2e]/30"
+        )}
       >
         <div className='absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent z-10'></div>
         {business.imageUrl ? (
@@ -51,9 +58,9 @@ export function BusinessCard({ business, featured = false, searchReasons }: Busi
           <div className="mb-auto flex flex-wrap items-center justify-between gap-2 w-full">
             <div className="flex items-center gap-1.5 flex-wrap">
               {isCurrentlyFeatured && (
-                <span className='bg-yellow-400 text-yellow-950 text-[10px] sm:text-xs font-black px-3 py-1 rounded-full uppercase tracking-widest shadow-sm flex items-center gap-1 w-fit'>
-                  <Crown className="h-3 w-3 sm:h-3.5 sm:w-3.5 fill-current shrink-0 text-amber-950" />
-                  <span>مميز</span>
+                <span className='bg-gradient-to-r from-amber-400 to-yellow-500 text-yellow-950 text-[10px] sm:text-xs font-black px-3 py-1 rounded-full uppercase tracking-widest shadow-md flex items-center gap-1 w-fit border border-amber-300/60'>
+                   <Crown className="h-3 w-3 sm:h-3.5 sm:w-3.5 fill-current shrink-0 text-amber-950" />
+                  <span>ممول</span>
                 </span>
               )}
               {business.district && (
@@ -86,12 +93,18 @@ export function BusinessCard({ business, featured = false, searchReasons }: Busi
             </div>
 
             <div className="flex items-center gap-2 flex-wrap mt-1 mb-2">
-              <h2 className='text-xl sm:text-2xl font-bold text-white line-clamp-1'>{business.name}</h2>
+              <h2 className={`text-xl sm:text-2xl font-black line-clamp-1 ${
+                isLuxuryFeatured 
+                  ? 'text-amber-300 drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-400 bg-clip-text text-transparent' 
+                  : 'text-white'
+              }`}>
+                {business.name}
+              </h2>
               {isVip && (
                 <VerifiedBadge size="sm" businessName={business.name} />
               )}
             </div>
-            <p className='text-white/80 max-w-md text-xs sm:text-sm leading-relaxed mb-4 line-clamp-2'>{business.description}</p>
+            <p className='text-white/80 max-w-md text-xs sm:text-sm leading-relaxed mb-4 line-clamp-2'>{stripHtml(business.description)}</p>
             
             {searchReasons && searchReasons.length > 0 && (
               <div className="mb-4 flex flex-wrap gap-1 items-center select-none">
@@ -119,14 +132,19 @@ export function BusinessCard({ business, featured = false, searchReasons }: Busi
             </div>
           </div>
         </div>
-      </Link>
+      </div>
     );
   }
 
   return (
-    <Link
-      to={businessLink}
-      className="bg-white border border-[#e5e1da] rounded-[24px] md:rounded-[32px] overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.03)] hover:shadow-[0_20px_40px_rgba(26,77,46,0.12)] hover:-translate-y-1 transition-all duration-500 flex flex-col group relative"
+    <div
+      onClick={() => navigate(businessLink)}
+      className={cn(
+        "bg-white rounded-[24px] md:rounded-[32px] overflow-hidden hover:-translate-y-1 transition-all duration-500 flex flex-col group relative cursor-pointer",
+        isLuxuryFeatured
+          ? "border-2 border-amber-400/90 ring-2 ring-amber-400/40 shadow-[0_0_22px_rgba(245,158,11,0.3)] hover:shadow-[0_0_35px_rgba(245,158,11,0.55)] hover:border-amber-400"
+          : "border border-[#e5e1da] shadow-[0_4px_20px_rgba(0,0,0,0.03)] hover:shadow-[0_20px_40px_rgba(26,77,46,0.12)]"
+      )}
     >
       <div className="h-48 md:h-52 bg-stone-100 relative overflow-hidden">
         {business.imageUrl ? (
@@ -147,9 +165,9 @@ export function BusinessCard({ business, featured = false, searchReasons }: Busi
             {business.category}
           </div>
           {isCurrentlyFeatured && (
-            <div className="bg-gradient-to-r from-amber-400/90 to-yellow-500/90 backdrop-blur-xl border border-white/30 px-3 py-1 rounded-full text-[11px] font-black text-yellow-950 shadow-[0_4px_12px_rgba(0,0,0,0.08)] flex items-center gap-1 w-fit">
+            <div className="bg-gradient-to-r from-amber-400 to-yellow-500 backdrop-blur-xl border border-amber-300/60 px-3 py-1 rounded-full text-[11px] font-black text-yellow-950 shadow-md flex items-center gap-1 w-fit">
               <Crown className="h-3 w-3 sm:h-3.5 sm:w-3.5 fill-current shrink-0 text-amber-950" />
-              <span>مميز</span>
+              <span>ممول</span>
             </div>
           )}
         </div>
@@ -183,7 +201,13 @@ export function BusinessCard({ business, featured = false, searchReasons }: Busi
       <div className="p-6 flex flex-col flex-1">
         <div className="flex justify-between items-start mb-2 gap-2">
           <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="text-xl font-bold text-[#2d2a26] line-clamp-1">{business.name}</h3>
+            <h3 className={`text-xl font-bold line-clamp-1 ${
+              isLuxuryFeatured
+                ? 'text-amber-700 bg-gradient-to-r from-amber-600 via-amber-500 to-yellow-600 bg-clip-text text-transparent font-black drop-shadow-2xs'
+                : 'text-[#2d2a26]'
+            }`}>
+              {business.name}
+            </h3>
             {isVip && (
               <VerifiedBadge size="sm" businessName={business.name} />
             )}
@@ -201,7 +225,7 @@ export function BusinessCard({ business, featured = false, searchReasons }: Busi
         </div>
 
         <p className="text-stone-500 text-sm line-clamp-2 mb-4 flex-1 leading-relaxed">
-          {business.description}
+          {stripHtml(business.description)}
         </p>
 
         {searchReasons && searchReasons.length > 0 && (
@@ -231,7 +255,7 @@ export function BusinessCard({ business, featured = false, searchReasons }: Busi
                 title="اتصال تلفوني مباشر"
               >
                 <Phone3DIcon className="w-3.5 h-3.5 text-white" />
-                <span className="text-[11px] dir-ltr font-mono font-bold tracking-tight">{business.phone}</span>
+                <span className="text-[11px] font-mono font-bold tracking-tight" dir="ltr">{business.phone.replace(/\s+/g, '')}</span>
               </button>
             )}
             {(business.socialLinks?.whatsapp || business.phone) && (
@@ -254,7 +278,7 @@ export function BusinessCard({ business, featured = false, searchReasons }: Busi
           </div>
         </div>
       </div>
-    </Link>
+    </div>
   );
 }
 

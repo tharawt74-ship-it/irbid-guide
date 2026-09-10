@@ -8,10 +8,12 @@ import { BrowserRouter, Routes, Route } from 'react-router';
 import { AuthProvider } from './contexts/AuthContext';
 import { NotificationsProvider } from './contexts/NotificationsContext';
 import { CartProvider } from './contexts/CartContext';
+import { ConfirmProvider } from './contexts/ConfirmContext';
 import { Layout } from './components/layout/Layout';
 import { ScrollToTop } from './components/ScrollToTop';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { SystemSettingsProvider } from './contexts/SystemSettingsContext';
+import { ProtectedRoute } from './components/common/ProtectedRoute';
 import { Loader2 } from 'lucide-react';
 
 // Eagerly load critical Home and Auth pages for instant loading
@@ -45,12 +47,14 @@ const Contact = lazyWithRetry(() => import('./pages/Contact').then(m => ({ defau
 const AdminDashboard = lazyWithRetry(() => import('./pages/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
 const Profile = lazyWithRetry(() => import('./pages/Profile').then(m => ({ default: m.Profile })));
 const ProfileSettings = lazyWithRetry(() => import('./pages/ProfileSettings').then(m => ({ default: m.ProfileSettings })));
-const Offers = lazyWithRetry(() => import('./pages/Offers').then(m => ({ default: m.Offers })));
+const Offers = lazyWithRetry(() => import('./pages/Offers').then(m => ({ default: m.default || m.Offers })));
+const OfferDetail = lazyWithRetry(() => import('./pages/OfferDetail').then(m => ({ default: m.OfferDetail })));
 const Housing = lazyWithRetry(() => import('./pages/Housing').then(m => ({ default: m.Housing })));
+const HousingDetail = lazyWithRetry(() => import('./pages/HousingDetail').then(m => ({ default: m.HousingDetail })));
 const Tourism = lazyWithRetry(() => import('./pages/Tourism').then(m => ({ default: m.Tourism })));
 const News = lazyWithRetry(() => import('./pages/News').then(m => ({ default: m.News })));
 const Pricing = lazyWithRetry(() => import('./pages/Pricing').then(m => ({ default: m.Pricing })));
-const Jobs = lazyWithRetry(() => import('./pages/Jobs').then(m => ({ default: m.Jobs })));
+const Jobs = lazyWithRetry(() => import('./pages/Jobs').then(m => ({ default: m.default || m.Jobs })));
 const NotificationsPage = lazyWithRetry(() => import('./pages/NotificationsPage').then(m => ({ default: m.NotificationsPage })));
 const Messages = lazyWithRetry(() => import('./pages/Messages').then(m => ({ default: m.Messages })));
 const PrayerTimes = lazyWithRetry(() => import('./pages/PrayerTimes').then(m => ({ default: m.PrayerTimes })));
@@ -68,28 +72,53 @@ export default function App() {
         <AuthProvider>
           <NotificationsProvider>
             <CartProvider>
-              <BrowserRouter>
-              <ScrollToTop />
-              <Suspense fallback={null}>
-                <Routes>
-                  <Route path="/" element={<Layout />}>
-                    <Route index element={<Home />} />
-                    <Route path="admin" element={<AdminDashboard />} />
-                    <Route path="profile" element={<Profile />} />
-                    <Route path="profile/settings" element={<ProfileSettings />} />
-                    <Route path="settings" element={<ProfileSettings />} />
+              <ConfirmProvider>
+                <BrowserRouter>
+                  <ScrollToTop />
+                  <Suspense fallback={null}>
+                    <Routes>
+                      <Route path="/" element={<Layout />}>
+                        <Route index element={<Home />} />
+                    <Route path="admin" element={
+                      <ProtectedRoute requireStaff={true}>
+                        <AdminDashboard />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="profile" element={
+                      <ProtectedRoute>
+                        <Profile />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="profile/settings" element={
+                      <ProtectedRoute>
+                        <ProfileSettings />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="settings" element={
+                      <ProtectedRoute>
+                        <ProfileSettings />
+                      </ProtectedRoute>
+                    } />
                     <Route path="notifications" element={<NotificationsPage />} />
-                    <Route path="messages" element={<Messages />} />
+                    <Route path="messages" element={
+                      <ProtectedRoute>
+                        <Messages />
+                      </ProtectedRoute>
+                    } />
                     <Route path="cart" element={<CartPage />} />
                     <Route path="search" element={<Search />} />
                     <Route path="business/:id" element={<BusinessDetail />} />
                   <Route path="b/:id" element={<BusinessDetail />} />
                   <Route path=":id" element={<BusinessDetail />} />
                   <Route path="news" element={<News />} />
+                  <Route path="news/:id" element={<News />} />
                   <Route path="jobs" element={<Jobs />} />
                   <Route path="offers" element={<Offers />} />
+                  <Route path="offers/:id" element={<OfferDetail />} />
                   <Route path="housing" element={<Housing />} />
+                  <Route path="housing/:id" element={<HousingDetail />} />
                   <Route path="tourism" element={<Tourism />} />
+                  <Route path="tourism/:id" element={<Tourism />} />
                   <Route path="transportation" element={<Transportation />} />
                   <Route path="prayer-times" element={<PrayerTimes />} />
                   <Route path="packages" element={<Pricing />} />
@@ -101,11 +130,12 @@ export default function App() {
                   <Route path="login" element={<Login />} />
                   <Route path="register" element={<Register />} />
                   <Route path="verify" element={<Verify />} />
-                  <Route path="reset-password" element={<ResetPassword />} />
-                </Route>
-              </Routes>
-            </Suspense>
-          </BrowserRouter>
+                    <Route path="reset-password" element={<ResetPassword />} />
+                  </Route>
+                </Routes>
+              </Suspense>
+            </BrowserRouter>
+          </ConfirmProvider>
         </CartProvider>
       </NotificationsProvider>
     </AuthProvider>

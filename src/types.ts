@@ -46,6 +46,7 @@ export interface HousingItem {
   price: number;
   pricePeriod: 'شهري' | 'سنوي' | 'فصلي' | string;
   location: string;
+  district?: string;
   distanceToCampus: string;
   roomsCount: string;
   services: string[];
@@ -79,6 +80,10 @@ export interface HousingItem {
   whatsappClicks?: number;
   phoneClicks?: number;
   isVip?: boolean;
+  gender?: string;
+  contactMode?: 'both' | 'phone_only' | 'whatsapp_only';
+  isFurnished?: string;
+  buildYear?: string;
 }
 
 export interface DayStatsRecord {
@@ -138,7 +143,6 @@ export interface Business {
   status?: 'active' | 'hidden' | 'pending' | 'rejected';
   googlePlaceUrl?: string;
   hideSiteReviews?: boolean;
-  hideGoogleReviews?: boolean;
   isFeatured?: boolean;
   featuredStartDate?: number;
   featuredExpiryDate?: number;
@@ -183,6 +187,8 @@ export interface Business {
   // VIP Digital Menu / Catalog
   menuItems?: MenuItem[];
   menuCategories?: string[];
+  menuTitle?: string;
+  menuDescription?: string;
   reels?: VipReel[];
   gallery?: (string | VipGalleryItem)[];
   staffEmails?: string[];
@@ -304,13 +310,17 @@ export interface NewsArticle {
   id: string;
   title: string;
   excerpt: string;
+  summary?: string;
+  content?: string;
   category: string;
   date: string;
   readTime: string;
   location: string;
   imageUrl: string;
+  image?: string;
   isHot?: boolean;
   source: string;
+  videoUrl?: string;
   createdAt?: number;
 }
 
@@ -387,6 +397,8 @@ export interface MarketingRequest {
   preferredFilmingDate?: string;
   highlightPoints?: string;
   // Homepage Banner Ad custom fields
+  pageTarget?: string;
+  targetEntityId?: string;
   bannerType?: 'business' | 'image_only' | 'animated_image' | 'text_and_button';
   bannerTitle?: string;
   bannerSubtitle?: string;
@@ -466,6 +478,9 @@ export interface ChatMessage {
   mediaType?: 'image' | 'file';
   createdAt: number;
   expiresAt: number;
+  isEdited?: boolean;
+  editedAt?: number;
+  deletedForUsers?: string[];
 }
 
 export interface ChatRoom {

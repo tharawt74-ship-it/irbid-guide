@@ -1,3 +1,4 @@
+import { useConfirm } from '../contexts/ConfirmContext';
 import React, { useState, useMemo, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { 
@@ -37,6 +38,7 @@ import { requestPushPermission, getNotificationPermission, showNativeNotificatio
 type CategoryFilter = 'all' | 'unread' | 'offer' | 'job' | 'marketing' | 'news' | 'system';
 
 export function NotificationsPage() {
+  const { confirm } = useConfirm();
   const { notifications, unreadCount, markAsRead, markAllAsRead, deleteNotification, clearAll } = useNotifications();
   const { currentUser } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
@@ -245,8 +247,8 @@ export function NotificationsPage() {
 
             {notifications.length > 0 && (
               <button
-                onClick={() => {
-                  if (window.confirm("هل أنت متأكد من مسح جميع الإشعارات؟")) {
+                onClick={async () => {
+                  if ((await confirm({ message: "هل أنت متأكد من مسح جميع الإشعارات؟" }))) {
                     clearAll();
                   }
                 }}

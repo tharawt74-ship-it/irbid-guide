@@ -20,9 +20,13 @@ service cloud.firestore {
     function isAdmin() {
       return isSignedIn() && (
         exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
-        request.auth.token.email == "princessofx2344@gmail.com" ||
-        request.auth.token.email == "admin@shoofiirbid.com" ||
-        request.auth.token.email == "irbid.admin@gmail.com"
+        (
+          request.auth.token.email_verified == true && (
+            request.auth.token.email == "princessofx2344@gmail.com" ||
+            request.auth.token.email == "admin@shoofiirbid.com" ||
+            request.auth.token.email == "irbid.admin@gmail.com"
+          )
+        )
       );
     }
 
@@ -41,60 +45,127 @@ service cloud.firestore {
     // 1. Users & User Profiles Collection
     match /users/{userId} {
       allow read: if isSignedIn();
-      allow create: if isOwner(userId) && incoming().keys().hasAll(['email']);
-      allow update: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && 
+        incoming().keys().hasAll(['email']) && 
+        (!incoming().keys().hasAny(['role']) || incoming().role in ['user', 'merchant']) &&
+        !incoming().keys().hasAny(['supervisorPermissions', 'customEmailVerified', 'isAdmin']);
+      allow update: if isAdmin() || (
+        isOwner(userId) && 
+        (!incoming().diff(existing()).affectedKeys().hasAny(['role']) || incoming().role in ['user', 'merchant']) &&
+        !incoming().diff(existing()).affectedKeys().hasAny(['supervisorPermissions', 'customEmailVerified', 'isAdmin', 'emailVerified'])
+      );
       allow delete: if isAdmin();
     }
 
     // 2. Businesses Collection
     match /businesses/{businessId} {
-      allow read: if isValidId(businessId);
-      allow create: if isSignedIn();
+      allow read: if true;
+      allow create: if isAdmin() || (
+        isSignedIn() && 
+        incoming().userId == request.auth.uid &&
+        !incoming().keys().hasAny([
+          'isVip', 'vip', 'vipStatus', 'isFeatured', 'featured', 
+          'rating', 'reviewCount', 'vipStartDate', 'vipEndDate',
+          'featuredStartDate', 'featuredExpiryDate', 'approved'
+        ])
+      );
       allow update: if isSignedIn() && (
         isAdmin() || 
-        (existing().ownerId != null && existing().ownerId == request.auth.uid) ||
+        (
+          (
+            (existing().userId != null && existing().userId == request.auth.uid) ||
+            (existing().ownerId != null && existing().ownerId == request.auth.uid)
+          ) &&
+          !incoming().diff(existing()).affectedKeys().hasAny([
+            'approved', 'vipStatus', 'isVip', 'vip', 'sponsored', 'isFeatured', 'featured', 
+            'ownerId', 'userId', 'rating', 'reviewCount', 'vipStartDate', 'vipEndDate',
+            'featuredStartDate', 'featuredExpiryDate'
+          ])
+        ) ||
         // Allow public view incrementing safely
         incoming().diff(existing()).affectedKeys().hasOnly(['views'])
       );
-      allow delete: if isAdmin() || (isSignedIn() && existing().ownerId == request.auth.uid);
+      allow delete: if isAdmin() || (
+        isSignedIn() && (
+          (existing().userId != null && existing().userId == request.auth.uid) ||
+          (existing().ownerId != null && existing().ownerId == request.auth.uid)
+        )
+      );
     }
 
     // 3. Business Requests Collection (Submission for verification/addition)
     match /businessRequests/{requestId} {
       allow read: if isSignedIn() && (isAdmin() || existing().userId == request.auth.uid);
-      allow create: if isSignedIn() && incoming().userId == request.auth.uid;
-      allow update, delete: if isAdmin() || (isSignedIn() && existing().userId == request.auth.uid);
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid && incoming().status == 'pending';
+      allow update: if isAdmin() || (
+        isSignedIn() && 
+        existing().userId == request.auth.uid && 
+        !incoming().diff(existing()).affectedKeys().hasAny(['status', 'userId'])
+      );
+      allow delete: if isAdmin() || (isSignedIn() && existing().userId == request.auth.uid);
     }
 
     // 4. Reviews Collection
     match /reviews/{reviewId} {
-      allow read: if isValidId(reviewId);
+      allow read: if true;
       allow create: if isSignedIn() && incoming().userId == request.auth.uid;
-      allow update, delete: if isAdmin() || (isSignedIn() && existing().userId == request.auth.uid);
+      allow update: if isAdmin() || (
+        isSignedIn() && 
+        existing().userId == request.auth.uid &&
+        !incoming().diff(existing()).affectedKeys().hasAny(['userId', 'businessId'])
+      );
+      allow delete: if isAdmin() || (isSignedIn() && existing().userId == request.auth.uid);
     }
 
     // 5. Job Offers Collection
     match /jobs/{jobId} {
-      allow read: if isValidId(jobId);
-      allow create: if isSignedIn();
-      allow update, delete: if isAdmin() || (isSignedIn() && existing().userId == request.auth.uid);
+      allow read: if true;
+      allow create: if isAdmin() || (
+        isSignedIn() && 
+        incoming().userId == request.auth.uid && 
+        incoming().status == 'pending'
+      );
+      allow update: if isAdmin() || (
+        isSignedIn() && 
+        existing().userId == request.auth.uid &&
+        !incoming().diff(existing()).affectedKeys().hasAny(['status', 'approvedAt', 'userId'])
+      );
+      allow delete: if isAdmin() || (isSignedIn() && existing().userId == request.auth.uid);
     }
 
     // 6. Offers & Discounts Collection
     match /offers/{offerId} {
-      allow read: if isValidId(offerId);
-      allow create: if isSignedIn();
-      allow update, delete: if isAdmin() || (isSignedIn() && existing().userId == request.auth.uid);
+      allow read: if true;
+      allow create: if isAdmin() || (
+        isSignedIn() && 
+        incoming().userId == request.auth.uid && 
+        incoming().status == 'pending'
+      );
+      allow update: if isAdmin() || (
+        isSignedIn() && 
+        existing().userId == request.auth.uid &&
+        !incoming().diff(existing()).affectedKeys().hasAny(['status', 'approvedAt', 'userId'])
+      );
+      allow delete: if isAdmin() || (isSignedIn() && existing().userId == request.auth.uid);
     }
 
     // 7. Housing & Real Estate Collection
-    match /housing/{housingId} {
-      allow read: if isValidId(housingId);
-      allow create: if isSignedIn();
-      allow update, delete: if isAdmin() || (isSignedIn() && existing().userId == request.auth.uid);
+    match /housings/{housingId} {
+      allow read: if true;
+      allow create: if isAdmin() || (
+        isSignedIn() && 
+        incoming().userId == request.auth.uid && 
+        incoming().status == 'pending'
+      );
+      allow update: if isAdmin() || (
+        isSignedIn() && 
+        existing().userId == request.auth.uid &&
+        !incoming().diff(existing()).affectedKeys().hasAny(['status', 'approvedAt', 'userId'])
+      );
+      allow delete: if isAdmin() || (isSignedIn() && existing().userId == request.auth.uid);
     }
 
-    // 8. Messages & Conversations Collection
+    // 8. Messages & Legacy Conversations Collection
     match /messages/{messageId} {
       allow read: if isSignedIn() && (
         isAdmin() || 
@@ -103,6 +174,36 @@ service cloud.firestore {
       );
       allow create: if isSignedIn() && incoming().senderId == request.auth.uid;
       allow update, delete: if isAdmin() || (isSignedIn() && existing().senderId == request.auth.uid);
+    }
+
+    // 8b. Chat Rooms and Nested Messages
+    match /chatRooms/{roomId} {
+      allow read: if isSignedIn() && (
+        isAdmin() || 
+        resource.data.userId == request.auth.uid || 
+        resource.data.businessOwnerId == request.auth.uid
+      );
+      allow create: if isSignedIn() && (
+        request.resource.data.userId == request.auth.uid || 
+        request.resource.data.businessOwnerId == request.auth.uid
+      );
+      allow update: if isSignedIn() && (
+        isAdmin() || 
+        resource.data.userId == request.auth.uid || 
+        resource.data.businessOwnerId == request.auth.uid
+      );
+      allow delete: if isAdmin() || (
+        isSignedIn() && (
+          resource.data.userId == request.auth.uid || 
+          resource.data.businessOwnerId == request.auth.uid
+        )
+      );
+
+      match /messages/{messageId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() && incoming().senderId == request.auth.uid;
+        allow update, delete: if isAdmin() || (isSignedIn() && existing().senderId == request.auth.uid);
+      }
     }
 
     // 9. Marketing Requests Collection
@@ -122,7 +223,9 @@ service cloud.firestore {
     // 11. App Notifications Collection
     match /notifications/{notificationId} {
       allow read: if true;
-      allow create, update, delete: if isSignedIn();
+      allow create: if isAdmin() || (isSignedIn() && incoming().userId == request.auth.uid);
+      allow update: if isAdmin() || (isSignedIn() && existing().userId == request.auth.uid && incoming().userId == request.auth.uid);
+      allow delete: if isAdmin() || (isSignedIn() && existing().userId == request.auth.uid);
     }
 
     // 12. App Configuration Collection
@@ -139,14 +242,97 @@ service cloud.firestore {
 
     // 14. Admin Registry
     match /admins/{adminId} {
-      allow read: if isSignedIn();
+      allow read: if isSignedIn() && (isAdmin() || request.auth.uid == adminId);
       allow write: if isAdmin();
     }
 
     // 15. Custom Verification Tokens Collection
     match /verification_tokens/{tokenId} {
-      allow read, create: if true;
+      allow get: if true;
+      allow list: if false;
+      allow create: if isSignedIn() && incoming().uid == request.auth.uid;
       allow delete: if true;
+    }
+
+    // 16. News Collection
+    match /news/{newsId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // 17. Tourism Collection
+    match /tourism/{tourismId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // 18. Supervisors Collection
+    match /supervisors/{supervisorId} {
+      allow read: if isSignedIn() && (isAdmin() || request.auth.uid == supervisorId);
+      allow create, update, delete: if isAdmin();
+    }
+
+    // 19. Edit Suggestions Collection
+    match /edit_suggestions/{suggestionId} {
+      allow read: if isSignedIn() && isAdmin();
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin();
+    }
+
+    // 20. Review Reports Collection
+    match /review_reports/{reportId} {
+      allow read: if isSignedIn() && isAdmin();
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin();
+    }
+
+    // 21. Audit Logs (Append-only security trail)
+    match /auditLogs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isSignedIn();
+      allow update, delete: if false;
+    }
+
+    // 22. VIP Upgrade Requests Collection
+    match /upgradeRequests/{reqId} {
+      allow read: if isSignedIn() && (isAdmin() || existing().userId == request.auth.uid);
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid && incoming().status == 'pending';
+      allow update, delete: if isAdmin();
+    }
+
+    // 23. Ownership Claims Collection
+    match /ownership_claims/{claimId} {
+      allow read: if isSignedIn() && (isAdmin() || existing().userId == request.auth.uid);
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // 24. Housing Bookings Collection
+    match /housing_bookings/{bookingId} {
+      allow read: if isSignedIn() && (isAdmin() || existing().userId == request.auth.uid || existing().ownerId == request.auth.uid);
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid;
+      allow update, delete: if isAdmin() || (isSignedIn() && existing().userId == request.auth.uid);
+    }
+
+    // 25. Roommates Collection
+    match /roommates/{roommateId} {
+      allow read: if true;
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid;
+      allow update, delete: if isAdmin() || (isSignedIn() && existing().userId == request.auth.uid);
+    }
+
+    // 26. Missing Places (AI Leads) Collection
+    match /missing_places/{placeId} {
+      allow read: if isAdmin();
+      allow create: if true;
+      allow update, delete: if isAdmin();
+    }
+
+    // 27. Device Tokens for Push Notifications
+    match /deviceTokens/{tokenId} {
+      allow read: if isAdmin();
+      allow create, update: if true;
+      allow delete: if isAdmin();
     }
   }
 }

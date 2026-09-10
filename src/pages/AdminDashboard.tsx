@@ -1,3 +1,4 @@
+import { useConfirm } from '../contexts/ConfirmContext';
 import React, { useEffect, useState, useMemo } from 'react';
 import { 
   collection, 
@@ -91,6 +92,7 @@ import { getAppConfig, setAppConfig, seedDemoDataToFirestore, clearDemoDataFromF
 import { getWhatsAppUrl } from '../lib/contactHelper';
 
 export function AdminDashboard() {
+  const { confirm } = useConfirm();
   const { currentUser, isAdmin, isSupervisor, isStaff, userRole, supervisorPermissions } = useAuth();
   const { addNotification } = useNotifications();
 
@@ -118,10 +120,12 @@ export function AdminDashboard() {
     summary: '',
     content: '',
     image: '',
-    category: 'أخبار عامة',
+    category: 'أخبار المدينة',
     source: 'إدارة المنصة',
     videoUrl: '',
-    isHot: false
+    isHot: false,
+    location: 'إربد',
+    readTime: '3 دقائق'
   });
 
   // Housing creation / edit state
@@ -225,6 +229,87 @@ export function AdminDashboard() {
   // Admin management
   const [newAdminEmail, setNewAdminEmail] = useState('');
 
+  // Business Selection State
+  const [selectedBusinessIds, setSelectedBusinessIds] = useState<string[]>([]);
+
+  const handleBulkDeleteBusinesses = async () => {
+    if (selectedBusinessIds.length === 0) return;
+    if (!(await confirm({ message: `تحذير هام: هل أنت متأكد من حذف ${selectedBusinessIds.length} محلات محددة نهائياً من النظام؟ لا يمكن استرجاع هذه البيانات!` }))) return;
+    
+    try {
+      setIsRefreshing(true);
+      for (const id of selectedBusinessIds) {
+        await deleteDoc(doc(db, 'businesses', id));
+      }
+      invalidateCache();
+      showToast(`تم حذف ${selectedBusinessIds.length} محلات بنجاح`, 'info');
+      setSelectedBusinessIds([]);
+      // Reload businesses
+      const querySnapshot = await getDocs(collection(db, 'businesses'));
+      const list: Business[] = [];
+      querySnapshot.forEach(docSnap => {
+        list.push({ id: docSnap.id, ...docSnap.data() } as Business);
+      });
+      setBusinesses(list);
+    } catch (err) {
+      console.error(err);
+      showToast('حدث خطأ أثناء الحذف الجماعي للمحلات', 'error');
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  const handleBulkToggleFeatured = async (featured: boolean) => {
+    if (selectedBusinessIds.length === 0) return;
+    try {
+      setIsRefreshing(true);
+      for (const id of selectedBusinessIds) {
+        await updateDoc(doc(db, 'businesses', id), { isFeatured: featured });
+      }
+      invalidateCache();
+      showToast(featured ? `تم تمييز ${selectedBusinessIds.length} محلات بنجاح` : `تم إلغاء تمييز ${selectedBusinessIds.length} محلات بنجاح`, 'success');
+      setSelectedBusinessIds([]);
+      // Reload
+      const querySnapshot = await getDocs(collection(db, 'businesses'));
+      const list: Business[] = [];
+      querySnapshot.forEach(docSnap => {
+        list.push({ id: docSnap.id, ...docSnap.data() } as Business);
+      });
+      setBusinesses(list);
+    } catch (err) {
+      console.error(err);
+      showToast('حدث خطأ أثناء التحديث الجماعي للمحلات', 'error');
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  const handleBulkToggleReviews = async (hide: boolean) => {
+    if (selectedBusinessIds.length === 0) return;
+    try {
+      setIsRefreshing(true);
+      const updateData = { hideSiteReviews: hide };
+      for (const id of selectedBusinessIds) {
+        await updateDoc(doc(db, 'businesses', id), updateData);
+      }
+      invalidateCache();
+      showToast(`تم تحديث إعدادات التقييمات لـ ${selectedBusinessIds.length} محلات بنجاح`, 'success');
+      setSelectedBusinessIds([]);
+      // Reload
+      const querySnapshot = await getDocs(collection(db, 'businesses'));
+      const list: Business[] = [];
+      querySnapshot.forEach(docSnap => {
+        list.push({ id: docSnap.id, ...docSnap.data() } as Business);
+      });
+      setBusinesses(list);
+    } catch (err) {
+      console.error(err);
+      showToast('حدث خطأ أثناء تحديث الإعدادات جماعياً', 'error');
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   // Show Toast
   const showToast = (text: string, type: 'success' | 'info' | 'error' = 'success') => {
     setToastMessage({ text, type });
@@ -313,7 +398,14 @@ export function AdminDashboard() {
         const tourismQuery = query(collection(db, 'tourism'));
         const tourismSnap = await getDocs(tourismQuery);
         const fetchedTourism: any[] = [];
-        tourismSnap.forEach(d => fetchedTourism.push({ id: d.id, ...d.data() }));
+        tourismSnap.forEach(d => {
+          const data = d.data();
+          let category = data.category || 'أثري';
+          if (category === 'طبيعي') category = 'طبيعة';
+          if (category === 'ترفيهي') category = 'ترفيه';
+          if (category === 'ثقافي') category = 'ثقافة';
+          fetchedTourism.push({ id: d.id, ...data, category });
+        });
         setTourismSpots(fetchedTourism);
       } catch (tErr) {
         console.warn("Could not fetch tourism:", tErr);
@@ -403,12 +495,16 @@ export function AdminDashboard() {
     const payload = {
       title: newNews.title,
       summary: newNews.summary,
+      excerpt: newNews.summary,
       content: newNews.content,
       image: newNews.image || 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&w=800&q=80',
+      imageUrl: newNews.image || 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&w=800&q=80',
       category: newNews.category,
       source: newNews.source || 'إدارة المنصة',
       videoUrl: newNews.videoUrl || '',
       isHot: newNews.isHot,
+      location: newNews.location || 'إربد',
+      readTime: newNews.readTime || '3 دقائق',
       createdAt: editingNews?.createdAt || new Date().toISOString()
     };
 
@@ -427,10 +523,12 @@ export function AdminDashboard() {
         summary: '',
         content: '',
         image: '',
-        category: 'أخبار عامة',
+        category: 'أخبار المدينة',
         source: 'إدارة المنصة',
         videoUrl: '',
-        isHot: false
+        isHot: false,
+        location: 'إربد',
+        readTime: '3 دقائق'
       });
       fetchData();
     } catch (err) {
@@ -443,19 +541,21 @@ export function AdminDashboard() {
     setEditingNews(item);
     setNewNews({
       title: item.title || '',
-      summary: item.summary || '',
+      summary: item.summary || item.excerpt || '',
       content: item.content || '',
-      image: item.image || '',
-      category: item.category || 'أخبار عامة',
+      image: item.image || item.imageUrl || '',
+      category: item.category || 'أخبار المدينة',
       source: item.source || 'إدارة المنصة',
       videoUrl: item.videoUrl || '',
-      isHot: item.isHot || false
+      isHot: item.isHot || false,
+      location: item.location || 'إربد',
+      readTime: item.readTime || '3 دقائق'
     });
     setIsNewsFormOpen(true);
   };
 
   const handleDeleteNews = async (id: string) => {
-    if (!window.confirm('هل أنت متأكد من حذف هذا الخبر؟')) return;
+    if (!(await confirm({ message: 'هل أنت متأكد من حذف هذا الخبر؟' }))) return;
     try {
       await deleteDoc(doc(db, 'news', id));
       showToast('تم حذف الخبر بنجاح');
@@ -565,7 +665,7 @@ export function AdminDashboard() {
   };
 
   const handleDeleteHousing = async (id: string) => {
-    if (!window.confirm('هل أنت متأكد من حذف هذا الإعلان العقاري؟')) return;
+    if (!(await confirm({ message: 'هل أنت متأكد من حذف هذا الإعلان العقاري؟' }))) return;
     try {
       await deleteDoc(doc(db, 'housings', id));
       showToast('تم حذف الإعلان بنجاح');
@@ -757,7 +857,7 @@ export function AdminDashboard() {
   };
 
   const handleDeleteTourismSpot = async (id: string) => {
-    if (!window.confirm('هل أنت متأكد من حذف هذا المعلم السياحي؟')) return;
+    if (!(await confirm({ message: 'هل أنت متأكد من حذف هذا المعلم السياحي؟' }))) return;
     try {
       await deleteDoc(doc(db, 'tourism', id));
       showToast('تم حذف المعلم بنجاح');
@@ -840,8 +940,10 @@ export function AdminDashboard() {
   };
 
   useEffect(() => {
-    fetchData();
-  }, [isAdmin]);
+    if (isStaff) {
+      fetchData();
+    }
+  }, [isStaff]);
 
   // Handler: Approve Business Request
   const handleApproveRequest = async (request: any) => {
@@ -868,7 +970,6 @@ export function AdminDashboard() {
         createdAt: now,
         isFeatured: false,
         hideSiteReviews: false,
-        hideGoogleReviews: false,
         // 1-Month Free Trial for primary new businesses (not branches)
         packagePlan: isPrimary ? 'golden' : (request.packagePlan || 'basic'),
         isVipTrial: isPrimary,
@@ -1051,21 +1152,6 @@ export function AdminDashboard() {
     }
   };
 
-  // Handler: Quick Toggle Google Reviews
-  const handleToggleGoogleReviews = async (biz: Business) => {
-    if (!db || !biz.id) return;
-    const newStatus = !biz.hideGoogleReviews;
-    try {
-      await updateDoc(doc(db, 'businesses', biz.id), { hideGoogleReviews: newStatus });
-      setBusinesses(prev => prev.map(b => b.id === biz.id ? { ...b, hideGoogleReviews: newStatus } : b));
-      invalidateCache();
-      showToast(newStatus ? `تم إخفاء تقييمات Google Maps لمحل (${biz.name})` : `تم إظهار تقييمات Google Maps لمحل (${biz.name})`, 'info');
-    } catch (error) {
-      console.error('Error toggling google reviews:', error);
-      showToast('تعذر تحديث إعدادات التقييمات', 'error');
-    }
-  };
-
   // Handler: Delete Business
   const handleDeleteBusiness = async (id: string, name: string) => {
     if (!db) return;
@@ -1194,12 +1280,15 @@ export function AdminDashboard() {
               if (reqDoc?.buttonText) rawBannerData.buttonText = reqDoc.buttonText;
               if (reqDoc?.buttonLink) rawBannerData.buttonLink = reqDoc.buttonLink;
               if (reqDoc?.badgeText) rawBannerData.badgeText = reqDoc.badgeText;
+              if (reqDoc?.pageTarget) rawBannerData.pageTarget = reqDoc.pageTarget;
+              if (reqDoc?.targetEntityId) rawBannerData.targetEntityId = reqDoc.targetEntityId;
               
               const bannerData = Object.fromEntries(
                 Object.entries(rawBannerData).filter(([_, v]) => v !== undefined)
               );
 
-              await setDoc(doc(db, 'banners', `business_banner_${businessId}`), bannerData);
+              const bannerDocId = `banner_mkt_${reqId}`;
+              await setDoc(doc(db, 'banners', bannerDocId), bannerData);
               invalidateCache();
               
               // Redirect/switch active tab to banners list!
@@ -1207,8 +1296,11 @@ export function AdminDashboard() {
                 setActiveTab('banners');
               }, 100);
             } else {
-              // Remove the banner on rejection or cancel
-              await deleteDoc(doc(db, 'banners', `business_banner_${businessId}`));
+              // Remove the specific banner on rejection or cancel
+              await deleteDoc(doc(db, 'banners', `banner_mkt_${reqId}`));
+              if (businessId) {
+                await deleteDoc(doc(db, 'banners', `business_banner_${businessId}`)).catch(() => {});
+              }
               invalidateCache();
             }
           } catch (bannerErr) {
@@ -1269,8 +1361,11 @@ export function AdminDashboard() {
     if (!db || !reqId) return;
     try {
       const reqToDelete = marketingRequests.find(r => r.id === reqId);
-      if (reqToDelete && reqToDelete.serviceType === 'homepage_banner' && reqToDelete.businessId) {
-        await deleteDoc(doc(db, 'banners', `business_banner_${reqToDelete.businessId}`));
+      if (reqToDelete && reqToDelete.serviceType === 'homepage_banner') {
+        await deleteDoc(doc(db, 'banners', `banner_mkt_${reqId}`));
+        if (reqToDelete.businessId) {
+          await deleteDoc(doc(db, 'banners', `business_banner_${reqToDelete.businessId}`)).catch(() => {});
+        }
       }
       if (reqToDelete && reqToDelete.serviceType === 'push_notifications') {
         await deleteDoc(doc(db, 'notifications', `notif_marketing_${reqId}`));
@@ -1805,28 +1900,111 @@ export function AdminDashboard() {
           ) : businessViewMode === 'table' ? (
             
             /* Table View */
-            <div className="bg-white rounded-3xl border border-[#e5e1da] shadow-xs overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-right text-xs">
-                  <thead className="bg-stone-50 border-b border-stone-200 text-stone-600 font-black">
-                    <tr>
-                      <th className="p-4">المحل والتصنيف</th>
-                      <th className="p-4">الموقع والهاتف</th>
-                      <th className="p-4 text-center">التقييم</th>
-                      <th className="p-4 text-center">باقة VIP الذهبية 👑</th>
-                      <th className="p-4 text-center">صدارة البحث / مميز</th>
-                      <th className="p-4 text-center">تقييمات الموقع</th>
-                      <th className="p-4 text-center">تقييمات Google</th>
-                      <th className="p-4 text-center">الإجراءات</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-stone-100 font-medium">
-                    {filteredBusinesses.map(biz => {
-                      const vipInfo = getBusinessVipStatus(biz);
-                      return (
-                      <tr key={biz.id} className="hover:bg-stone-50/70 transition-colors">
-                        
-                        {/* Name & Category */}
+            <div className="space-y-4">
+              {/* Bulk actions for selected businesses */}
+              {selectedBusinessIds.length > 0 && (
+                <div className="bg-amber-50/40 p-4 rounded-3xl border border-amber-200 flex flex-col sm:flex-row items-center justify-between gap-3 animate-fade-in shadow-2xs">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-black text-[#1a4d2e]">تم تحديد {selectedBusinessIds.length} محلات لإجراء عملية جماعية:</span>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={() => handleBulkToggleFeatured(true)}
+                      className="bg-white text-amber-800 hover:bg-amber-100 border border-amber-200 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                    >
+                      <Star className="h-3.5 w-3.5 text-amber-500 fill-amber-500" />
+                      تمييز كـ مميز ⭐
+                    </button>
+                    <button
+                      onClick={() => handleBulkToggleFeatured(false)}
+                      className="bg-white text-stone-700 hover:bg-stone-100 border border-stone-200 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                    >
+                      <Star className="h-3.5 w-3.5 text-stone-400" />
+                      إلغاء التمييز
+                    </button>
+                    <button
+                      onClick={() => handleBulkToggleReviews(true)}
+                      className="bg-white text-rose-800 hover:bg-rose-100 border border-rose-200 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                    >
+                      <EyeOff className="h-3.5 w-3.5 text-rose-500" />
+                      إخفاء تقييمات الموقع
+                    </button>
+                    <button
+                      onClick={() => handleBulkToggleReviews(false)}
+                      className="bg-white text-emerald-800 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                    >
+                      <Eye className="h-3.5 w-3.5 text-emerald-600" />
+                      إظهار تقييمات الموقع
+                    </button>
+                    <button
+                      onClick={handleBulkDeleteBusinesses}
+                      className="bg-red-600 hover:bg-red-700 text-white px-3.5 py-1.5 rounded-xl text-xs font-black flex items-center gap-1 transition-colors cursor-pointer shadow-3xs"
+                    >
+                      <Trash2 className="h-3.5 w-3.5 text-[#ff9f1c]" />
+                      حذف المحلات المحددة نهائياً
+                    </button>
+                    <button
+                      onClick={() => setSelectedBusinessIds([])}
+                      className="text-stone-500 hover:text-stone-700 text-xs font-bold px-2 py-1 cursor-pointer"
+                    >
+                      إلغاء التحديد
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="bg-white rounded-3xl border border-[#e5e1da] shadow-xs overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-right text-xs">
+                    <thead className="bg-stone-50 border-b border-stone-200 text-stone-600 font-black">
+                      <tr>
+                        <th className="p-4 w-10 text-center">
+                          <input
+                            type="checkbox"
+                            checked={filteredBusinesses.length > 0 && filteredBusinesses.every(b => selectedBusinessIds.includes(b.id))}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedBusinessIds(filteredBusinesses.map(b => b.id));
+                              } else {
+                                setSelectedBusinessIds([]);
+                              }
+                            }}
+                            className="h-4.5 w-4.5 rounded text-[#1a4d2e] focus:ring-[#1a4d2e] border-stone-300 cursor-pointer"
+                          />
+                        </th>
+                        <th className="p-4">المحل والتصنيف</th>
+                        <th className="p-4">الموقع والهاتف</th>
+                        <th className="p-4 text-center">التقييم</th>
+                        <th className="p-4 text-center">باقة VIP الذهبية 👑</th>
+                        <th className="p-4 text-center">صدارة البحث / مميز</th>
+                        <th className="p-4 text-center">تقييمات الموقع</th>
+                        <th className="p-4 text-center">الإجراءات</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-stone-100 font-medium">
+                      {filteredBusinesses.map(biz => {
+                        const vipInfo = getBusinessVipStatus(biz);
+                        const isSelected = selectedBusinessIds.includes(biz.id);
+                        return (
+                        <tr key={biz.id} className={`hover:bg-stone-50/70 transition-colors ${isSelected ? 'bg-emerald-50/10' : ''}`}>
+                          {/* Selection Checkbox */}
+                          <td className="p-4 w-10 text-center">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedBusinessIds(prev => [...prev, biz.id]);
+                                } else {
+                                  setSelectedBusinessIds(prev => prev.filter(id => id !== biz.id));
+                                }
+                              }}
+                              className="h-4.5 w-4.5 rounded text-[#1a4d2e] focus:ring-[#1a4d2e] border-stone-300 cursor-pointer"
+                            />
+                          </td>
+                          
+                          {/* Name & Category */}
                         <td className="p-4">
                           <div className="flex items-center gap-3">
                             {biz.imageUrl ? (
@@ -1942,21 +2120,6 @@ export function AdminDashboard() {
                           </button>
                         </td>
 
-                        {/* Google Reviews Visibility Toggle */}
-                        <td className="p-4 text-center">
-                          <button
-                            onClick={() => handleToggleGoogleReviews(biz)}
-                            className={`p-1.5 rounded-xl transition-all cursor-pointer ${
-                              biz.hideGoogleReviews
-                                ? 'bg-red-50 text-red-600'
-                                : 'bg-blue-50 text-blue-700'
-                            }`}
-                            title={biz.hideGoogleReviews ? 'تقييمات Google مخفية - انقر للإظهار' : 'تقييمات Google ظاهرة - انقر للإخفاء'}
-                          >
-                            {biz.hideGoogleReviews ? <EyeOff className="h-4 w-4" /> : <Globe className="h-4 w-4" />}
-                          </button>
-                        </td>
-
                         {/* Actions */}
                         <td className="p-4 text-center">
                           <div className="flex items-center justify-center gap-1.5">
@@ -2008,6 +2171,7 @@ export function AdminDashboard() {
                 </table>
               </div>
             </div>
+          </div>
           ) : (
             
             /* Grid View */
@@ -2727,10 +2891,12 @@ export function AdminDashboard() {
                   summary: '',
                   content: '',
                   image: '',
-                  category: 'أخبار عامة',
+                  category: 'أخبار المدينة',
                   source: 'إدارة المنصة',
                   videoUrl: '',
-                  isHot: false
+                  isHot: false,
+                  location: 'إربد',
+                  readTime: '3 دقائق'
                 });
                 setIsNewsFormOpen(!isNewsFormOpen);
               }}
@@ -2759,17 +2925,19 @@ export function AdminDashboard() {
                     className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
                   />
                 </div>
-                <div className="space-y-1.5">
+                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-stone-700">التصنيف</label>
                   <select
                     value={newNews.category}
                     onChange={e => setNewNews({...newNews, category: e.target.value})}
                     className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none"
                   >
-                    <option value="أخبار الجامعة">أخبار الجامعة 🎓</option>
-                    <option value="عروض وخصومات">عروض وخصومات 🛍️</option>
-                    <option value="فعاليات وإعلانات">فعاليات وإعلانات 📢</option>
-                    <option value="أخبار عامة">أخبار عامة 📰</option>
+                    <option value="أخبار المدينة">أخبار المدينة 📰</option>
+                    <option value="تعليم وجامعات">تعليم وجامعات 🎓</option>
+                    <option value="فعاليات وثقافة">فعاليات وثقافة 🎭</option>
+                    <option value="سياحة وبيئة">سياحة وبيئة 🌲</option>
+                    <option value="تجارة ومحلات">تجارة ومحلات 🛍️</option>
+                    <option value="طقس وخدمات">طقس وخدمات ☀️</option>
                   </select>
                 </div>
                 <div className="space-y-1.5 md:col-span-2">
@@ -2815,6 +2983,26 @@ export function AdminDashboard() {
                   />
                 </div>
                 <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-stone-700">الموقع في إربد</label>
+                  <input
+                    type="text"
+                    value={newNews.location}
+                    onChange={e => setNewNews({...newNews, location: e.target.value})}
+                    placeholder="مثال: شارع الجامعة، لواء بني كنانة..."
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-stone-700">وقت القراءة</label>
+                  <input
+                    type="text"
+                    value={newNews.readTime}
+                    onChange={e => setNewNews({...newNews, readTime: e.target.value})}
+                    placeholder="مثال: 3 دقائق"
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none"
+                  />
+                </div>
+                <div className="space-y-1.5 md:col-span-2">
                   <label className="text-xs font-bold text-stone-700">رابط الفيديو إن وجد (يوتيوب أو انستغرام أو فيسبوك)</label>
                   <input
                     type="text"
@@ -3545,10 +3733,9 @@ export function AdminDashboard() {
                     className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none"
                   >
                     <option value="أثري">تاريخي وأثري 🏛️</option>
-                    <option value="طبيعي">طبيعي ومتنزهات 🌳</option>
-                    <option value="ترفيهي">ترفيهي ومطاعم 🎡</option>
-                    <option value="ثقافي">مراكز ثقافية ومتاحف 🎨</option>
-                    <option value="ديني">مراقد ومساجد أثرية 🕌</option>
+                    <option value="طبيعة">طبيعة ومحميات 🌲</option>
+                    <option value="ترفيه">ترفيه ومتنزهات 🎡</option>
+                    <option value="ثقافة">متاحف ومراكز ثقافية 🎨</option>
                   </select>
                 </div>
                 <div className="space-y-1.5">

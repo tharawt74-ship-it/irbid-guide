@@ -96,6 +96,8 @@ export function JobFormModal({
   const [businesses, setBusinesses] = useState<Business[]>(propBusinesses || []);
   const [loadingBusinesses, setLoadingBusinesses] = useState(false);
   const [selectedBusinessId, setSelectedBusinessId] = useState<string>(defaultBusinessId || '');
+  const [selectedParentId, setSelectedParentId] = useState<string>('');
+  const [selectedBranchId, setSelectedBranchId] = useState<string>('');
   
   // Form fields
   const [title, setTitle] = useState('');
@@ -147,7 +149,27 @@ export function JobFormModal({
         }
         setBusinesses(fetched);
         if (fetched.length > 0 && !selectedBusinessId && !editingJob) {
-          handleSelectBusiness(fetched[0].id, fetched);
+          const defaultBiz = fetched[0];
+          if (defaultBiz.parentBusinessId) {
+            setSelectedParentId(defaultBiz.parentBusinessId);
+            setSelectedBranchId(defaultBiz.id);
+            setSelectedBusinessId(defaultBiz.id);
+          } else {
+            setSelectedParentId(defaultBiz.id);
+            setSelectedBranchId(defaultBiz.id);
+            setSelectedBusinessId(defaultBiz.id);
+          }
+          // Set fields based on business
+          setCompany(defaultBiz.name);
+          if (defaultBiz.address) setLocation(defaultBiz.address);
+          if (defaultBiz.phone) {
+            setContactPhone(defaultBiz.phone);
+            setContactWhatsapp(defaultBiz.phone);
+          }
+          if (defaultBiz.category) {
+            const matchingCat = JOB_CATEGORIES.find(c => defaultBiz.category.includes(c) || c.includes(defaultBiz.category)) || defaultBiz.category;
+            setCategory(matchingCat);
+          }
         }
       } catch (e) {
         console.error(e);
@@ -166,7 +188,29 @@ export function JobFormModal({
     if (editingJob) {
       setTitle(editingJob.title || '');
       setCompany(editingJob.company || '');
-      setSelectedBusinessId(editingJob.businessId || '');
+      const bId = editingJob.businessId || '';
+      setSelectedBusinessId(bId);
+      
+      // Initialize parent and branch selection states
+      if (bId && bId !== 'manual') {
+        const foundBiz = businesses.find(b => b.id === bId);
+        if (foundBiz) {
+          if (foundBiz.parentBusinessId) {
+            setSelectedParentId(foundBiz.parentBusinessId);
+            setSelectedBranchId(foundBiz.id);
+          } else {
+            setSelectedParentId(foundBiz.id);
+            setSelectedBranchId(foundBiz.id);
+          }
+        } else {
+          setSelectedParentId(bId);
+          setSelectedBranchId('');
+        }
+      } else {
+        setSelectedParentId('manual');
+        setSelectedBranchId('');
+      }
+
       setCategory(editingJob.category || 'مطاعم ومقاهي');
       setJobType(editingJob.jobType || 'دوام كامل');
       setLocation(editingJob.location || 'إربد');
@@ -185,17 +229,43 @@ export function JobFormModal({
     } else {
       // Reset defaults
       setTitle('');
-      if (defaultBusinessId && businesses.length > 0) {
-        handleSelectBusiness(defaultBusinessId, businesses);
-      } else if (businesses.length > 0) {
-        handleSelectBusiness(businesses[0].id, businesses);
+      
+      const initialBizId = defaultBusinessId || (businesses.length > 0 ? businesses[0].id : '');
+      if (initialBizId && initialBizId !== 'manual') {
+        const foundBiz = businesses.find(b => b.id === initialBizId);
+        if (foundBiz) {
+          if (foundBiz.parentBusinessId) {
+            setSelectedParentId(foundBiz.parentBusinessId);
+            setSelectedBranchId(foundBiz.id);
+            setSelectedBusinessId(foundBiz.id);
+          } else {
+            setSelectedParentId(foundBiz.id);
+            setSelectedBranchId(foundBiz.id);
+            setSelectedBusinessId(foundBiz.id);
+          }
+          // Set fields based on business
+          setCompany(foundBiz.name);
+          if (foundBiz.address) setLocation(foundBiz.address);
+          if (foundBiz.phone) {
+            setContactPhone(foundBiz.phone);
+            setContactWhatsapp(foundBiz.phone);
+          }
+          if (foundBiz.category) {
+            const matchingCat = JOB_CATEGORIES.find(c => foundBiz.category.includes(c) || c.includes(foundBiz.category)) || foundBiz.category;
+            setCategory(matchingCat);
+          }
+        }
       } else {
+        setSelectedParentId('manual');
+        setSelectedBranchId('');
+        setSelectedBusinessId('manual');
         setCompany('');
         setLocation('شارع الجامعة، إربد');
         setContactPhone('');
         setContactWhatsapp('');
+        setCategory('مطاعم ومقاهي');
       }
-      setCategory('مطاعم ومقاهي');
+
       setJobType('دوام كامل');
       setSalary('280 - 350 دينار');
       setWorkHours('شفت 8 ساعات (أوقات مرنة)');
@@ -208,14 +278,15 @@ export function JobFormModal({
       setIsUrgent(false);
       setErrorMsg(null);
     }
-  }, [editingJob, isOpen, defaultBusinessId]);
+  }, [editingJob, isOpen, defaultBusinessId, businesses]);
 
-  const handleSelectBusiness = (bId: string, currentBusinesses = businesses) => {
-    setSelectedBusinessId(bId);
-    if (!bId || bId === 'manual') {
+  const handleSelectBranch = (branchId: string, currentBusinesses = businesses) => {
+    setSelectedBranchId(branchId);
+    setSelectedBusinessId(branchId);
+    if (!branchId || branchId === 'manual') {
       return;
     }
-    const found = currentBusinesses.find(b => b.id === bId);
+    const found = currentBusinesses.find(b => b.id === branchId);
     if (found) {
       setCompany(found.name);
       if (found.address) setLocation(found.address);
@@ -225,10 +296,47 @@ export function JobFormModal({
       }
       // Match category if appropriate
       if (found.category) {
-        const matchingCat = JOB_CATEGORIES.find(c => found.category.includes(c) || c.includes(found.category));
+        const matchingCat = JOB_CATEGORIES.find(c => found.category.includes(c) || c.includes(found.category)) || found.category;
         if (matchingCat) setCategory(matchingCat);
       }
     }
+  };
+
+  const handleSelectParent = (parentId: string, currentBusinesses = businesses) => {
+    setSelectedParentId(parentId);
+    if (!parentId || parentId === 'manual') {
+      setSelectedBranchId('');
+      setSelectedBusinessId('manual');
+      return;
+    }
+
+    // Find branches for this parent
+    const branchesOfParent = currentBusinesses.filter(b => b.parentBusinessId === parentId);
+    if (branchesOfParent.length > 0) {
+      // Default to selecting the parent itself as the active branch
+      handleSelectBranch(parentId, currentBusinesses);
+    } else {
+      // No branches, just select the parent as the business
+      setSelectedBranchId('');
+      setSelectedBusinessId(parentId);
+      const found = currentBusinesses.find(b => b.id === parentId);
+      if (found) {
+        setCompany(found.name);
+        if (found.address) setLocation(found.address);
+        if (found.phone) {
+          setContactPhone(found.phone);
+          setContactWhatsapp(found.phone);
+        }
+        if (found.category) {
+          const matchingCat = JOB_CATEGORIES.find(c => found.category.includes(c) || c.includes(found.category)) || found.category;
+          if (matchingCat) setCategory(matchingCat);
+        }
+      }
+    }
+  };
+
+  const handleSelectBusiness = (bId: string, currentBusinesses = businesses) => {
+    handleSelectParent(bId, currentBusinesses);
   };
 
   const handleApplyRoleTemplate = (role: typeof COMMON_JOB_ROLES[0]) => {
@@ -306,14 +414,22 @@ export function JobFormModal({
       createdAt: editingJob?.createdAt || now
     };
 
+    // Clean undefined fields to prevent Firestore "Unsupported field value: undefined" error
+    const cleanedJobData = Object.entries(jobData).reduce((acc, [key, value]) => {
+      if (value !== undefined) {
+        acc[key] = value;
+      }
+      return acc;
+    }, {} as any);
+
     try {
       let savedId = editingJob?.id || `job-${now}`;
 
       if (db) {
         if (editingJob) {
-          await setDoc(doc(db, 'jobs', editingJob.id), jobData, { merge: true });
+          await setDoc(doc(db, 'jobs', editingJob.id), cleanedJobData, { merge: true });
         } else {
-          const docRef = await addDoc(collection(db, 'jobs'), jobData);
+          const docRef = await addDoc(collection(db, 'jobs'), cleanedJobData);
           savedId = docRef.id;
         }
       }
@@ -420,46 +536,96 @@ export function JobFormModal({
           )}
 
           {/* Section 1: Business Linker / Selector */}
-          <div className="bg-emerald-50/60 p-4 sm:p-5 rounded-2xl border border-emerald-100 space-y-3">
+          <div className="bg-emerald-50/60 p-4 sm:p-5 rounded-2xl border border-emerald-100 space-y-4">
             <div className="flex items-center justify-between">
               <label className="text-xs font-black text-[#1a4d2e] uppercase tracking-wider flex items-center gap-1.5">
                 <Store className="h-4 w-4 text-[#ff9f1c]" />
-                <span>المحل أو المنشأة المعلنة</span>
+                <span>المحل أو المنشأة وتحديد الفرع للوظيفة</span>
               </label>
               {businesses.length > 0 && (
                 <span className="text-[11px] text-emerald-800 font-bold bg-white/80 px-2 py-0.5 rounded-md">
-                  لديك {businesses.length} محل مسجل
+                  لديك {businesses.length} محل/فرع مسجل
                 </span>
               )}
             </div>
 
             {businesses.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <select
-                    value={selectedBusinessId}
-                    onChange={(e) => handleSelectBusiness(e.target.value)}
-                    className="w-full p-2.5 bg-white border border-emerald-200 rounded-xl text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
-                  >
-                    {businesses.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        🏪 {b.name} ({b.category})
-                      </option>
-                    ))}
-                    <option value="manual">✍️ كتابة اسم منشأة / محل آخر يدوياً</option>
-                  </select>
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  {/* Parent Business Selector */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-stone-500 block">المحل أو المنشأة المعلنة:</label>
+                    <select
+                      value={selectedParentId}
+                      onChange={(e) => handleSelectParent(e.target.value)}
+                      className="w-full p-2.5 bg-white border border-emerald-200 rounded-xl text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                    >
+                      {businesses.filter(b => !b.parentBusinessId).map((b) => (
+                        <option key={b.id} value={b.id}>
+                          🏪 {b.name} ({b.category})
+                        </option>
+                      ))}
+                      <option value="manual">✍️ كتابة اسم منشأة / محل آخر يدوياً</option>
+                    </select>
+                  </div>
+
+                  {/* Manual input for company name (only editable if manual) */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-stone-500 block">اسم المنشأة كما سيظهر للعامة:</label>
+                    <input
+                      type="text"
+                      required
+                      value={company}
+                      onChange={(e) => setCompany(e.target.value)}
+                      disabled={selectedParentId !== 'manual'}
+                      placeholder="اسم المحل أو المطعم أو الشركة"
+                      className="w-full p-2.5 bg-white disabled:bg-stone-50 border border-emerald-200 rounded-xl text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <input
-                    type="text"
-                    required
-                    value={company}
-                    onChange={(e) => setCompany(e.target.value)}
-                    placeholder="اسم المحل أو المطعم أو الشركة"
-                    className="w-full p-2.5 bg-white border border-emerald-200 rounded-xl text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
-                  />
-                </div>
+                {/* Branch Selector (Visible if parent is not manual and has branches or is a valid business) */}
+                {selectedParentId && selectedParentId !== 'manual' && (
+                  <div className="bg-white/85 p-3.5 rounded-xl border border-emerald-100/80 space-y-2">
+                    <label className="text-[11px] font-bold text-stone-600 block flex items-center gap-1">
+                      <MapPin className="h-3.5 w-3.5 text-amber-500" />
+                      <span>حدد الفرع المطلوب نشر الوظيفة له:</span>
+                    </label>
+                    
+                    {businesses.filter(b => b.parentBusinessId === selectedParentId).length > 0 ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <select
+                          value={selectedBranchId}
+                          onChange={(e) => handleSelectBranch(e.target.value)}
+                          className="w-full p-2.5 bg-white border border-stone-200 rounded-xl text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                        >
+                          {/* Main/Parent branch option */}
+                          {businesses.find(b => b.id === selectedParentId) && (
+                            <option value={selectedParentId}>
+                              📍 المركز الرئيسي (العنوان: {businesses.find(b => b.id === selectedParentId)?.address || 'شارع الجامعة'})
+                            </option>
+                          )}
+                          
+                          {/* Other branches options */}
+                          {businesses.filter(b => b.parentBusinessId === selectedParentId).map((branch) => (
+                            <option key={branch.id} value={branch.id}>
+                              🌿 فرع: {branch.name} (العنوان: {branch.address || 'غير محدد'})
+                            </option>
+                          ))}
+                        </select>
+
+                        <div className="text-[11px] text-stone-500 flex flex-col justify-center font-medium bg-stone-50 px-3 py-1.5 rounded-xl border border-stone-100">
+                          <span>سيتم تعيين تصنيف وموقع الوظيفة تلقائياً لتطابق بيانات الفرع المختار لضمان دقة معلومات المتقدمين.</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-xs text-stone-500 font-bold flex items-center gap-1.5 bg-stone-50 p-2.5 rounded-xl border border-stone-200/50">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                        <span>هذا المحل لا يملك فروعاً إضافية مسجلة. سيتم النشر لفرعه الرئيسي المختار أعلاه (العنوان: {businesses.find(b => b.id === selectedParentId)?.address || 'شارع الجامعة'}).</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             ) : (
               <div>

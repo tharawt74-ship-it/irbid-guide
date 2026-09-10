@@ -1,3 +1,4 @@
+import { useConfirm } from '../../contexts/ConfirmContext';
 import React, { useEffect, useState } from 'react';
 import { db } from '../../lib/firebase';
 import { collection, getDocs, doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
@@ -9,6 +10,7 @@ import {
 } from 'lucide-react';
 
 export function SupervisorsManager() {
+  const { confirm } = useConfirm();
   const { currentUser, isAdmin } = useAuth();
   const [supervisors, setSupervisors] = useState<SupervisorAccount[]>([]);
   const [loading, setLoading] = useState(true);
@@ -125,7 +127,7 @@ export function SupervisorsManager() {
   };
 
   const handleDeleteSupervisor = async (sup: SupervisorAccount) => {
-    if (!db || !isAdmin || !confirm(`هل أنت متأكد من إلغاء رتبة المشرف عن: ${sup.displayName}؟`)) return;
+    if (!db || !isAdmin || !(await confirm({ message: `هل أنت متأكد من إلغاء رتبة المشرف عن: ${sup.displayName}؟` }))) return;
     try {
       await deleteDoc(doc(db, 'supervisors', sup.uid));
       await setDoc(doc(db, 'users', sup.uid), { role: 'user' }, { merge: true });

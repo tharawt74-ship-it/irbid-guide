@@ -1,3 +1,4 @@
+import { useConfirm } from '../../contexts/ConfirmContext';
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { useAuth } from '../../contexts/AuthContext';
@@ -9,6 +10,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { ar } from 'date-fns/locale';
 
 export function VisitorReviewsTab() {
+  const { confirm } = useConfirm();
   const { currentUser } = useAuth();
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
@@ -50,7 +52,7 @@ export function VisitorReviewsTab() {
   }, [currentUser]);
 
   const handleDeleteReview = async (reviewId: string) => {
-    if (!db || !confirm('هل أنت متأكد من رغبتك في حذف هذا التقييم؟')) return;
+    if (!db || !(await confirm({ message: 'هل أنت متأكد من رغبتك في حذف هذا التقييم؟' }))) return;
     try {
       await deleteDoc(doc(db, 'reviews', reviewId));
       setReviews(prev => prev.filter(r => r.id !== reviewId));

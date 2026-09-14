@@ -641,6 +641,10 @@ async function startServer() {
   // API Route for getting and setting system config with Admin bypass rules
   app.get("/api/system-settings", async (req, res) => {
     try {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+
       const appInstance = getAdminApp();
       if (!appInstance) {
         return res.status(500).json({ error: "Firebase Admin not initialized" });

@@ -271,7 +271,7 @@ export function SystemSettingsProvider({ children }: { children: React.ReactNode
         
         // 1. Try to fetch from server-side API (guarantees bypass of client-side rules/permissions)
         try {
-          const apiRes = await fetch('/api/system-settings');
+          const apiRes = await fetch('/api/system-settings', { cache: 'no-store' });
           if (apiRes.ok) {
             const resJson = await apiRes.json();
             if (resJson.success && resJson.settings) {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   collection, 
   query, 
@@ -7,6 +7,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Business } from '../types';
+import { compareBusinessesByTier } from '../lib/vipHelper';
 import { Link, useNavigate } from 'react-router';
 import { 
   Stethoscope, 
@@ -115,7 +116,7 @@ export default function Medical() {
         const fbData: Business[] = [];
         querySnapshot.forEach((doc) => {
           const data = doc.data() as Business;
-          if (data.status === 'rejected') return;
+          if (data.status === 'pending' || data.status === 'rejected') return;
           fbData.push({ id: doc.id, ...data });
         });
 
@@ -170,53 +171,61 @@ export default function Medical() {
     };
   }, []);
 
-  // Filter listings based on selections
-  const filteredListings = businesses.filter(b => {
-    // 1. Region filter
-    if (selectedRegion && selectedRegion !== 'الكل') {
-      const matchesRegion = b.district === selectedRegion || (b.address || "").includes(selectedRegion) || b.region === selectedRegion;
-      if (!matchesRegion) return false;
-    }
-
-    // 2. Specialty keywords filter
-    if (activeSpecialty && activeSpecObj) {
-      const textToSearch = `${b.name} ${b.description || ''} ${b.category || ''}`.toLowerCase();
-      
-      // If a subspecialty is selected, check its specific keywords, otherwise check main specialty keywords
-      if (activeSubspecialty) {
-        // Normalize names for comparison
-        const subKey = activeSubspecialty.replace('أمراض ', '').replace('طب ', '').substring(0, 5).toLowerCase();
-        const matchesSub = textToSearch.includes(subKey) || (activeSpecObj.keywords || []).some((k: string) => textToSearch.includes(k));
-        if (!matchesSub) return false;
-      } else {
-        const matchesMain = (activeSpecObj.keywords || []).some((k: string) => textToSearch.includes(k));
-        if (!matchesMain) return false;
+  // Filter listings based on selections and sort strictly by tier: Featured -> Golden VIP -> Rest
+  const filteredListings = useMemo(() => {
+    const list = businesses.filter(b => {
+      // 1. Region filter
+      if (selectedRegion && selectedRegion !== 'الكل') {
+        const matchesRegion = b.district === selectedRegion || (b.address || "").includes(selectedRegion) || b.region === selectedRegion;
+        if (!matchesRegion) return false;
       }
-    }
 
-    // 3. Search query filter
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const matchesSearch = 
-        b.name.toLowerCase().includes(q) || 
-        (b.description || '').toLowerCase().includes(q) ||
-        (b.category || '').toLowerCase().includes(q);
-      if (!matchesSearch) return false;
-    }
+      // 2. Specialty keywords filter
+      if (activeSpecialty && activeSpecObj) {
+        const textToSearch = `${b.name} ${b.description || ''} ${b.category || ''}`.toLowerCase();
+        
+        // If a subspecialty is selected, check its specific keywords, otherwise check main specialty keywords
+        if (activeSubspecialty) {
+          // Normalize names for comparison
+          const subKey = activeSubspecialty.replace('أمراض ', '').replace('طب ', '').substring(0, 5).toLowerCase();
+          const matchesSub = textToSearch.includes(subKey) || (activeSpecObj.keywords || []).some((k: string) => textToSearch.includes(k));
+          if (!matchesSub) return false;
+        } else {
+          const matchesMain = (activeSpecObj.keywords || []).some((k: string) => textToSearch.includes(k));
+          if (!matchesMain) return false;
+        }
+      }
 
-    // 4. Open Now filter
-    if (openNowFilter) {
-      const status = getLiveWorkingStatus(b.workingHours);
-      if (!status.isOpen) return false;
-    }
+      // 3. Search query filter
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchesSearch = 
+          b.name.toLowerCase().includes(q) || 
+          (b.description || '').toLowerCase().includes(q) ||
+          (b.category || '').toLowerCase().includes(q);
+        if (!matchesSearch) return false;
+      }
 
-    // 5. Favorites filter
-    if (favoritesOnly) {
-      if (!userFavorites.includes(b.id)) return false;
-    }
+      // 4. Open Now filter
+      if (openNowFilter) {
+        const status = getLiveWorkingStatus(b.workingHours);
+        if (!status.isOpen) return false;
+      }
 
-    return true;
-  });
+      // 5. Favorites filter
+      if (favoritesOnly) {
+        if (!userFavorites.includes(b.id)) return false;
+      }
+
+      return true;
+    });
+
+    // Always sort by: Featured -> Golden VIP -> Rest
+    const now = Date.now();
+    return list.sort((a, b) => {
+      return compareBusinessesByTier(a, b, undefined, now);
+    });
+  }, [businesses, selectedRegion, activeSpecialty, activeSpecObj, activeSubspecialty, searchQuery, openNowFilter, favoritesOnly, userFavorites]);
 
   return (
     <div className="min-h-screen bg-[#fdfcfb]" dir="rtl">
@@ -309,13 +318,6 @@ export default function Medical() {
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <Link
-              to="/medical/register"
-              className="text-[11px] sm:text-xs font-black text-white bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 flex items-center gap-1.5 px-3.5 py-1.5 rounded-full transition-all shadow-2xs cursor-pointer active:scale-95"
-            >
-              <Stethoscope className="h-3.5 w-3.5 text-emerald-200" />
-              <span>أضف منشأتك الطبية</span>
-            </Link>
             <button
               onClick={() => setIsSpecialtiesModalOpen(true)}
               className="text-[11px] sm:text-xs font-black text-blue-600 hover:text-blue-700 flex items-center gap-1 bg-blue-50 hover:bg-blue-100 px-3.5 py-1.5 rounded-full transition-all cursor-pointer"
@@ -649,7 +651,7 @@ export default function Medical() {
                 <Sparkles className="h-5 w-5 text-amber-500 mx-auto mb-2" />
                 <h5 className="text-xs font-black text-stone-800">هل أنت طبيب أو تملك منشأة طبية؟</h5>
                 <p className="text-[10px] text-stone-500 mt-1 font-bold leading-relaxed">
-                  سجل عيادتك أو منشأتك الطبية في دليل إربد المعتمد وابدأ باستقبال المراجعين وتنسيق المواعيد مباشرة.
+                  سجل عيادتك أو منشأتك الطبية في منصة شو في بإربد المعتمدة وابدأ باستقبال المراجعين وتنسيق المواعيد مباشرة.
                 </p>
                 <Link 
                   to="/medical/register"

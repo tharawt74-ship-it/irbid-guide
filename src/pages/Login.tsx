@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router';
 import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, sendPasswordResetEmail, sendEmailVerification, signOut as firebaseSignOut } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, getDocs, query, where } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 import { sendCustomVerificationEmail } from '../lib/email';
+import { resolveAuthInput, linkUserToMatchedBusinesses, isUserOnboardedByAdmin } from '../lib/authPhoneHelper';
 import { useAuth } from '../contexts/AuthContext';
 import { Store, KeyRound, Mail, CheckCircle2, ArrowRight, X, AlertCircle, Eye, EyeOff, ShieldCheck, RefreshCw, Copy, Check } from 'lucide-react';
 
@@ -80,9 +81,22 @@ export function Login() {
     }
 
     try {
-      const cleanEmail = email.trim().toLowerCase();
+      const authRes = await resolveAuthInput(email);
+      if (authRes.isPhone && !authRes.isAuthorized) {
+        setError(authRes.errorMessage || 'رقم الهاتف هذا غير مسجل كمالك منشأة أو محل بالمنصة.');
+        setLoading(false);
+        return;
+      }
+
+      const cleanEmail = authRes.effectiveEmail;
+      const isPhoneOwner = authRes.isPhone && authRes.isAuthorized;
+
       const userCredential = await signInWithEmailAndPassword(auth, cleanEmail, password);
       const user = userCredential.user;
+
+      if (isPhoneOwner && db) {
+        await linkUserToMatchedBusinesses(user.uid, authRes.phoneDigits, cleanEmail);
+      }
 
       // Reload user status to get freshest emailVerified flag
       try {
@@ -91,8 +105,8 @@ export function Login() {
         console.warn("User reload warning:", rErr);
       }
 
-      const isBootstrapAdmin = ['princessofx2344@gmail.com', 'admin@shoofiirbid.com', 'irbid.admin@gmail.com'].includes(cleanEmail);
-      let isEmailVerified = user.emailVerified || isBootstrapAdmin;
+      const isBootstrapAdmin = ['princessofx2344@gmail.com', 'admin@shoofiirbid.com', 'irbid.admin@gmail.com', 'tharawt74@gmail.com'].includes(cleanEmail);
+      let isEmailVerified = user.emailVerified || isBootstrapAdmin || isPhoneOwner;
 
       if (!isEmailVerified && db) {
         try {
@@ -100,6 +114,13 @@ export function Login() {
           const userDocSnap = await getDoc(userDocRef);
           if (userDocSnap.exists() && (userDocSnap.data()?.emailVerified === true || userDocSnap.data()?.customEmailVerified === true)) {
             isEmailVerified = true;
+          } else {
+            // Check if user (email or phone) was created or onboarded by Admin with a business or medical facility page
+            const isOnboarded = await isUserOnboardedByAdmin(cleanEmail) || (email !== cleanEmail ? await isUserOnboardedByAdmin(email) : false);
+            if (isOnboarded) {
+              isEmailVerified = true;
+              await setDoc(userDocRef, { emailVerified: true, role: 'merchant' }, { merge: true });
+            }
           }
         } catch (fErr) {
           console.warn("Error checking emailVerified in Firestore:", fErr);
@@ -349,14 +370,14 @@ export function Login() {
           <form className="space-y-5" onSubmit={handleSubmit}>
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-stone-700">
-                البريد الإلكتروني
+                البريد الإلكتروني *
               </label>
               <div className="mt-1">
                 <input
                   id="email"
                   name="email"
-                  type="email"
-                  autoComplete="email"
+                  type="text"
+                  autoComplete="username"
                   required
                   dir="ltr"
                   placeholder="name@example.com"

@@ -15,7 +15,8 @@ import {
   Hourglass,
   CalendarDays,
   Info,
-  Store
+  Store,
+  Gift
 } from 'lucide-react';
 import { Business } from '../../types';
 import { getBusinessVipStatus } from '../../lib/vipHelper';
@@ -112,6 +113,8 @@ export function VipUpgradeModal({
         ...business,
         packagePlan: 'basic',
         isVerified: false,
+        isVip: false,
+        isVipTrial: false,
         vipSubscriptionStartsAt: undefined,
         vipSubscriptionExpiresAt: undefined,
         isVipScheduled: false,
@@ -120,6 +123,44 @@ export function VipUpgradeModal({
       onClose();
     } catch (err) {
       console.error('Error revoking VIP upgrade:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleConvertToMonthTrial = async () => {
+    setIsSubmitting(true);
+    try {
+      const now = Date.now();
+      const expires = now + 30 * 24 * 60 * 60 * 1000;
+      await onSave({
+        ...business,
+        packagePlan: 'basic',
+        selectedPackagePlan: 'basic',
+        isVip: true,
+        isVipTrial: true,
+        isVerified: true,
+        vipSubscriptionStartsAt: now,
+        vipSubscriptionExpiresAt: expires,
+        isVipScheduled: true,
+        billingPeriod: 'lifetime',
+        vipNotes: (vipNotes ? `${vipNotes} | ` : '') + 'اشتراك تجريبي VIP مدة شهر (باقة أساسية)'
+      });
+
+      recordAuditLog({
+        action: 'UPDATE_VIP',
+        actionAr: 'منح فترة تجريبية VIP مجانية (شهر)',
+        details: `تم تحويل حساب "${business.name}" إلى الباقة الأساسية مع فترة تجريبية VIP مجانية لمدة شهر`,
+        performedBy: 'مدير النظام (Admin)',
+        userRole: 'admin',
+        targetId: business.id,
+        targetName: business.name,
+        timestamp: Date.now()
+      });
+
+      onClose();
+    } catch (err) {
+      console.error('Error applying 1-month VIP trial:', err);
     } finally {
       setIsSubmitting(false);
     }
@@ -243,17 +284,30 @@ export function VipUpgradeModal({
             </div>
           </div>
 
-          {currentVipStatus.isVip && (
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={handleRevokeUpgrade}
+              onClick={handleConvertToMonthTrial}
               disabled={isSubmitting}
-              className="inline-flex items-center gap-1.5 text-xs font-black bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 px-3 py-1.5 rounded-xl shadow-xs transition-all hover:scale-105 cursor-pointer disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 text-xs font-black bg-white hover:bg-amber-50 text-amber-900 border border-amber-300 px-3 py-1.5 rounded-xl shadow-xs transition-all hover:scale-105 cursor-pointer disabled:opacity-50"
+              title="تعديل الحساب ليكون باقة أساسية مع تجربة شهر VIP مجانية"
             >
-              <ArrowDownCircle className="h-4 w-4" />
-              <span>سحب الترقية فوراً</span>
+              <Gift className="h-4 w-4 text-amber-600" />
+              <span>{currentVipStatus.isTrial ? 'تجديد تجربة الشهر (30 يوم)' : 'تحويل لتجربة شهر VIP مجانية'}</span>
             </button>
-          )}
+
+            {currentVipStatus.isVip && (
+              <button
+                type="button"
+                onClick={handleRevokeUpgrade}
+                disabled={isSubmitting}
+                className="inline-flex items-center gap-1.5 text-xs font-black bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 px-3 py-1.5 rounded-xl shadow-xs transition-all hover:scale-105 cursor-pointer disabled:opacity-50"
+              >
+                <ArrowDownCircle className="h-4 w-4" />
+                <span>سحب الترقية فوراً</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Form Body */}

@@ -52,6 +52,7 @@ export function AiSiteAssistant() {
   const navigate = useNavigate();
   const { addItem, totalCount } = useCart();
   const { globalSettings } = useSystemSettings();
+  const isAiDisabled = globalSettings?.enableAiAssistant === false;
 
   const [isOpen, setIsOpen] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
@@ -77,7 +78,12 @@ export function AiSiteAssistant() {
   const [missingLeadSubmitted, setMissingLeadSubmitted] = useState<{ [key: string]: boolean }>({});
   const [missingLeadPhone, setMissingLeadPhone] = useState<{ [key: string]: string }>({});
 
-  const initialGreeting: ChatMessage = {
+  const initialGreeting: ChatMessage = globalSettings?.enableAiAssistant === false ? {
+    id: 'welcome-msg',
+    sender: 'assistant',
+    text: `مرحباً بك في **شو في بإربد؟** 🌸✨\n\nعذراً، المساعد الذكي **ربداوي AI** غير متاح حالياً.\n\nستتوفر هذه الميزة قريباً جداً، شكراً لتفهمك! 😊`,
+    timestamp: Date.now()
+  } : {
     id: 'welcome-msg',
     sender: 'assistant',
     text: `مرحباً بك في **شو في بإربد؟** 🌸✨\n\nأنا **ربداوي AI** 🤖، مرشدك التفاعلي المجاني:\n- 🟢 **معرفة المحلات المفتوحة الآن** وساعات عملها.\n- 🏢 **فلترة السكنات والشقق** حسب الجامعة والميزانية.\n- 🏷️ **مقارنة الأسعار والعروض** واختيار الأوفر لك.\n- 🛒 **إضافة للسلة والطلب الفوري** من داخل الشات.\n- 📢 **تسجيل المحلات غير الموجودة** لإضافتها فوراً.\n\nاكتب لي ما الذي تبحث عنه في إربد وسأساعدك فوراً!`,
@@ -142,10 +148,7 @@ export function AiSiteAssistant() {
     }
   }, [cartToast]);
 
-  // If AI Assistant is disabled by Admin, hide completely
-  if (globalSettings?.enableAiAssistant === false) {
-    return null;
-  }
+
 
   const handleToggle = () => {
     if (isOpen) {
@@ -162,6 +165,8 @@ export function AiSiteAssistant() {
   };
 
   const handleSendMessage = async (textToSend?: string) => {
+    if (isAiDisabled) return;
+    if (globalSettings?.enableAiAssistant === false) return;
     const text = (textToSend || inputValue).trim();
     if (!text || isLoading) return;
 
@@ -400,14 +405,27 @@ export function AiSiteAssistant() {
                   <div>
                     <div className="flex items-center gap-2">
                       <h3 className="font-extrabold text-stone-900 text-sm sm:text-base tracking-tight leading-none">ربداوي AI</h3>
+                      {isAiDisabled ? (
+                      <span className="px-2 py-0.5 rounded-full text-[9px] font-black tracking-wider bg-amber-100 text-amber-800 border border-amber-200 select-none">
+                        ستتوفر قريباً
+                      </span>
+                    ) : (
                       <span className="px-1.5 py-0.5 rounded-full text-[9px] font-black tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-100 select-none">
                         PRO 3.5
                       </span>
+                    )}
                     </div>
-                    <p className="text-[11px] text-stone-400 font-medium mt-1 flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                      مساعدك الذكي الحصري في إربد
-                    </p>
+                    {isAiDisabled ? (
+                      <p className="text-[11px] text-amber-700 font-bold mt-1 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                        غير متاح حالياً
+                      </p>
+                    ) : (
+                      <p className="text-[11px] text-stone-400 font-medium mt-1 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                        مساعدك الذكي الحصري في إربد
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -476,6 +494,24 @@ export function AiSiteAssistant() {
 
               {/* Chat Body Container with warm background and editorial message spacing */}
               <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 space-y-6 bg-[#faf9f6]">
+                {isAiDisabled ? (
+                  <div className="py-12 sm:py-16 flex flex-col items-center justify-center text-center space-y-5 max-w-sm mx-auto h-full my-auto px-4">
+                    <div className="w-20 h-20 rounded-3xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600 shadow-xs">
+                      <Bot className="w-10 h-10" />
+                    </div>
+                    <div className="space-y-2.5">
+                      <span className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-amber-100 text-amber-900 text-xs font-black border border-amber-200/80">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                        ستتوفر هذه الميزة قريباً
+                      </span>
+                      <h4 className="text-lg font-black text-stone-900">المساعد الذكي غير متاح حالياً</h4>
+                      <p className="text-xs text-stone-600 leading-relaxed font-medium">
+                        تم إيقاف المساعد الذكي (ربداوي AI) مؤقتاً للتطوير والتحديث من قبل إدارة المنصة. سنعود بخدمات جديدة ومميزة لتوجيهكم ومساعدتكم في كل ما يخص محافظة إربد قريباً جداً!
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <>
                 {messages.length === 1 && (
                   /* Stunning ChatGPT/Gemini Landing State */
                   <div className="py-6 sm:py-8 flex flex-col items-center text-center space-y-6 max-w-sm mx-auto">
@@ -854,6 +890,8 @@ export function AiSiteAssistant() {
                   );
                 })}
 
+                </>
+                )}
                 {/* Modern Generating / Thinking State Indicators */}
                 {isLoading && (
                   <motion.div
@@ -874,7 +912,7 @@ export function AiSiteAssistant() {
               </div>
 
               {/* Quick Suggestions Horizontal chips displayed above input form only when not on landing screen */}
-              {messages.length > 1 && messages.length < 5 && (
+              {!isAiDisabled && messages.length > 1 && messages.length < 5 && (
                 <div className="px-4 py-2.5 bg-[#faf9f6] border-t border-stone-150/40 overflow-x-auto no-scrollbar flex gap-2 shrink-0">
                   <button
                     type="button"
@@ -927,10 +965,14 @@ export function AiSiteAssistant() {
                           handleSendMessage();
                         }
                       }}
-                      placeholder="اسألني عن محلات، عروض، شقق، أو خدمات..."
-                      className="w-full bg-transparent px-4 py-3.5 text-xs sm:text-sm text-stone-900 placeholder-stone-400 focus:outline-none font-medium resize-none min-h-[44px] max-h-[120px] scrollbar-none"
+                      placeholder={isAiDisabled ? "ستتوفر هذه الميزة قريباً..." : "اسألني عن محلات، عروض، شقق، أو خدمات..."}
+                      className={`w-full px-4 py-3.5 text-xs sm:text-sm placeholder-stone-400 focus:outline-none font-medium resize-none min-h-[44px] max-h-[120px] scrollbar-none rounded-2xl ${
+                        isAiDisabled 
+                          ? 'bg-stone-100 text-stone-400 cursor-not-allowed select-none' 
+                          : 'bg-transparent text-stone-900'
+                      }`}
                       rows={1}
-                      disabled={isLoading}
+                      disabled={isAiDisabled || isLoading}
                     />
 
                     {/* Subtle AI sparkle aesthetic details inside the prompt bar */}
@@ -941,16 +983,16 @@ export function AiSiteAssistant() {
 
                   <button
                     type="submit"
-                    disabled={!inputValue.trim() || isLoading}
+                    disabled={isAiDisabled || !inputValue.trim() || isLoading}
                     className="w-11 h-11 rounded-2xl bg-[#1a4d2e] hover:bg-[#143d24] disabled:opacity-30 disabled:hover:bg-[#1a4d2e] text-white flex items-center justify-center transition-all shadow-xs shrink-0 cursor-pointer active:scale-95"
                     title="إرسال"
                   >
-                    <Send className="w-4.5 h-4.5 rtl:rotate-180" />
+                    <Send className="w-4.5 h-4.5 rtl:-scale-x-100" />
                   </button>
                 </form>
                 
                 <p className="text-[9px] text-stone-400 text-center mt-2 font-medium leading-none">
-                  نموذج ربداوي AI متصل ومحدث حياً بقاعدة بيانات "شو في بإربد؟" لعام 2026
+                  {isAiDisabled ? 'المساعد الذكي معطل مؤقتاً من قبل إدارة المنصة' : 'نموذج ربداوي AI متصل ومحدث حياً بقاعدة بيانات «شو في بإربد؟» لعام 2026'}
                 </p>
               </div>
             </motion.div>

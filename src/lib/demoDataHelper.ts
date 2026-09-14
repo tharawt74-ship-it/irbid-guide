@@ -23,6 +23,8 @@ export interface AppConfig {
   priceMessaging3Months?: number;
   priceMessaging6Months?: number;
   priceMessaging1Year?: number;
+  priceHousingExtraWeek?: number;
+  priceHousingFeatured3Days?: number;
 }
 
 export const DEFAULT_APP_CONFIG: AppConfig = {
@@ -62,7 +64,7 @@ export async function setAppConfig(config: Partial<AppConfig>): Promise<void> {
 }
 
 export const DEMO_SEED_DATA = {
-  // 20 Businesses in Irbid
+  // 22 Businesses in Irbid across all categories & specialties
   businesses: [
     {
       isDemo: true,
@@ -81,7 +83,12 @@ export const DEMO_SEED_DATA = {
       packagePlan: 'vip',
       imageUrl: 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&q=80&w=800',
       image: 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&q=80&w=800',
-      createdAt: Date.now() - 86400000 * 10
+      createdAt: Date.now() - 86400000 * 10,
+      menuItems: [
+        { id: 'm1', name: 'سبانيش لاتيه بارد (Iced Spanish Latte)', price: '2.75', category: 'مشروبات باردة', description: 'قهوة مختصة مع حليب مكثف محلى وثلج ناعم', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1517701604599-bb29b565090c?auto=format&fit=crop&q=80&w=400' },
+        { id: 'm2', name: 'قهوة V60 إثيوبية هاند دريب', price: '3.00', category: 'قهوة مختصة', description: 'إيحاءات فواكه استوائية وياسمين مع تحضير يدوي مخصص', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&q=80&w=400' },
+        { id: 'm3', name: 'تشيز كيك التوت الأزرق', price: '2.50', category: 'حلويات وكيك', description: 'قطعة تشيز كيك كريمية مخبوزة مع صوص التوت', isPopular: false, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1533134242443-d4fd215305ad?auto=format&fit=crop&q=80&w=400' }
+      ]
     },
     {
       isDemo: true,
@@ -100,7 +107,12 @@ export const DEMO_SEED_DATA = {
       packagePlan: 'golden',
       imageUrl: 'https://images.unsplash.com/photo-1529006557810-274b9b2fc783?auto=format&fit=crop&q=80&w=800',
       image: 'https://images.unsplash.com/photo-1529006557810-274b9b2fc783?auto=format&fit=crop&q=80&w=800',
-      createdAt: Date.now() - 86400000 * 9
+      createdAt: Date.now() - 86400000 * 9,
+      menuItems: [
+        { id: 'm4', name: 'كيلو مشاوي مشكل ديلوكس', price: '14.00', category: 'مشاوي وفحم', description: 'كباب شامي، شيش طاووق، قطع لحم، عرايس، حمص ومقبلات', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&q=80&w=400' },
+        { id: 'm5', name: 'وجبة كباب شامي بالمكسرات', price: '4.50', category: 'وجبات أفراد', description: '3 سيخ كباب مع أرز بسمتي بالزعفران ومقبلات', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1529006557810-274b9b2fc783?auto=format&fit=crop&q=80&w=400' },
+        { id: 'm6', name: 'صحن حمص بالمفرومة والصنوبر', price: '2.25', category: 'مقبلات وسلطات', description: 'حمص بلدي ناعم مع لحمة مفرومة وصنوبر وزيت بلدي', isPopular: false, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1577968897966-3d4325b36b61?auto=format&fit=crop&q=80&w=400' }
+      ]
     },
     {
       isDemo: true,
@@ -119,7 +131,12 @@ export const DEMO_SEED_DATA = {
       packagePlan: 'vip',
       imageUrl: 'https://images.unsplash.com/photo-1587314168485-3236d6710814?auto=format&fit=crop&q=80&w=800',
       image: 'https://images.unsplash.com/photo-1587314168485-3236d6710814?auto=format&fit=crop&q=80&w=800',
-      createdAt: Date.now() - 86400000 * 8
+      createdAt: Date.now() - 86400000 * 8,
+      menuItems: [
+        { id: 'm7', name: 'كيلو كنافة نابلسية ناعمة بالجبن البلدي', price: '7.50', category: 'كنافة شرقية', description: 'سخنة وطرية غنية بالجبن البلدي والقطر الفاخر', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1587314168485-3236d6710814?auto=format&fit=crop&q=80&w=400' },
+        { id: 'm8', name: 'طبق بقلاوة مشكلة بالفستق والكاجو', price: '9.00', category: 'حلويات مشكلة', description: 'رقائق جلاش مقرمشة بالسمن البلدي والمكسرات', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1519676867240-f03562e64548?auto=format&fit=crop&q=80&w=400' },
+        { id: 'm9', name: 'حلاوة الجبن الحمصية بالقشطة', price: '3.00', category: 'حلويات باردة', description: 'شرائح حلاوة الجبن المحشوة بالقشطة البلدية', isPopular: false, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&q=80&w=400' }
+      ]
     },
     {
       isDemo: true,
@@ -138,7 +155,12 @@ export const DEMO_SEED_DATA = {
       packagePlan: 'golden',
       imageUrl: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&q=80&w=800',
       image: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&q=80&w=800',
-      createdAt: Date.now() - 86400000 * 8
+      createdAt: Date.now() - 86400000 * 8,
+      menuItems: [
+        { id: 'm10', name: 'بيتزا روما سوبر سوبريم عائلية', price: '8.50', category: 'بيتزا حطب', description: 'ببروني، لحم مفروم، فلفل، زيتون وجبنة موزاريلا', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&q=80&w=400' },
+        { id: 'm11', name: 'بيتزا ببروني مقرمشة وسط', price: '5.50', category: 'بيتزا حطب', description: 'شرائح الببروني البقري مع صلصة الطماطم', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1628840042765-356cda07504e?auto=format&fit=crop&q=80&w=400' },
+        { id: 'm12', name: 'أصابع جبنة الموزاريلا المقلية', price: '2.50', category: 'المقبلات الجانبية', description: 'مكسوة بالبقسماط المقرمش مع صوص المارينارا', isPopular: false, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1531749668029-2db88e4276c7?auto=format&fit=crop&q=80&w=400' }
+      ]
     },
     {
       isDemo: true,
@@ -157,7 +179,12 @@ export const DEMO_SEED_DATA = {
       packagePlan: 'basic',
       imageUrl: 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&q=80&w=800',
       image: 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&q=80&w=800',
-      createdAt: Date.now() - 86400000 * 7
+      createdAt: Date.now() - 86400000 * 7,
+      menuItems: [
+        { id: 'm13', name: 'شاحن أنكر 20 واط سريع الأصلي', price: '12.00', category: 'شواحن وكوابل', description: 'شاحن معتمد بتقنية الشحن الفائق مع كفالة سنة', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1583863788434-e58a36330cf0?auto=format&fit=crop&q=80&w=400' },
+        { id: 'm14', name: 'سماعات بلوتوث Joyroom AirBuds Pro', price: '18.00', category: 'سماعات وصوتيات', description: 'عزل ضوضاء حقيقي وبطارية تدوم 24 ساعة', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?auto=format&fit=crop&q=80&w=400' },
+        { id: 'm15', name: 'باور بنك Anker 20,000mAh', price: '25.00', category: 'بطاريات وبنوك طاقة', description: 'يشحن الهاتف حتى 5 مرات مع منفذين Type-C', isPopular: false, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1609592424074-1a28a3b83f3e?auto=format&fit=crop&q=80&w=400' }
+      ]
     },
     {
       isDemo: true,
@@ -176,7 +203,11 @@ export const DEMO_SEED_DATA = {
       packagePlan: 'golden',
       imageUrl: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&q=80&w=800',
       image: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&q=80&w=800',
-      createdAt: Date.now() - 86400000 * 7
+      createdAt: Date.now() - 86400000 * 7,
+      menuItems: [
+        { id: 'm16', name: 'عباية خليجية مطرزة كريب فاخرة', price: '35.00', category: 'عبايات وشيل', description: 'تصميم راقي جداً مناسب للمناسبات مع شال مطابق', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?auto=format&fit=crop&q=80&w=400' },
+        { id: 'm17', name: 'فستان سهرة ميد أنيق سوبر ديلوكس', price: '45.00', category: 'فساتين سهرة', description: 'أحدث موديلات الأزياء بخامات تركية فاخرة', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1566174053879-31528523f8ae?auto=format&fit=crop&q=80&w=400' }
+      ]
     },
     {
       isDemo: true,
@@ -195,7 +226,11 @@ export const DEMO_SEED_DATA = {
       packagePlan: 'vip',
       imageUrl: 'https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&q=80&w=800',
       image: 'https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&q=80&w=800',
-      createdAt: Date.now() - 86400000 * 6
+      createdAt: Date.now() - 86400000 * 6,
+      menuItems: [
+        { id: 'm18', name: 'جلسة تنظيف بشرة هيدرافيدرو 9 خطوات', price: '20.00', category: 'عناية بالبشرة', description: 'إزالة الخلايا الميتة وتغشية السيروم بالهيالورونيك', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?auto=format&fit=crop&q=80&w=400' },
+        { id: 'm19', name: 'جلسة بروتين وتنعيم الشعر برازيلي الأصلي', price: '40.00', category: 'علاج وتصفيف الشعر', description: 'بروتين خالي من الفورمالين يعيد الحيوية للشعر', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&q=80&w=400' }
+      ]
     },
     {
       isDemo: true,
@@ -214,7 +249,11 @@ export const DEMO_SEED_DATA = {
       packagePlan: 'golden',
       imageUrl: 'https://images.unsplash.com/photo-1581783342308-f792dbdd27c5?auto=format&fit=crop&q=80&w=800',
       image: 'https://images.unsplash.com/photo-1581783342308-f792dbdd27c5?auto=format&fit=crop&q=80&w=800',
-      createdAt: Date.now() - 86400000 * 6
+      createdAt: Date.now() - 86400000 * 6,
+      menuItems: [
+        { id: 'm20', name: 'خلاط مغسلة ألماني Grohe أصل', price: '32.00', category: 'أطقم وخلاطات', description: 'خلاط مياه نحاسي ألماني بضمان 5 سنوات', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&q=80&w=400' },
+        { id: 'm21', name: 'دهان جوتن داخلي 20 لتر أبيض', price: '28.00', category: 'دهانات وديكور', description: 'دهان عالي الجودة قابل للغسيل وبدون رائحة', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&q=80&w=400' }
+      ]
     },
     {
       isDemo: true,
@@ -233,7 +272,11 @@ export const DEMO_SEED_DATA = {
       packagePlan: 'basic',
       imageUrl: 'https://images.unsplash.com/photo-1578916171728-46686eac8d58?auto=format&fit=crop&q=80&w=800',
       image: 'https://images.unsplash.com/photo-1578916171728-46686eac8d58?auto=format&fit=crop&q=80&w=800',
-      createdAt: Date.now() - 86400000 * 5
+      createdAt: Date.now() - 86400000 * 5,
+      menuItems: [
+        { id: 'm22', name: 'زيت زيتون بلدي إربدي عصرة أولى 16 لتر', price: '85.00', category: 'منتجات بلدية', description: 'تنكة زيت بلدي بكر نقي 100% مضمون المفحص', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?auto=format&fit=crop&q=80&w=400' },
+        { id: 'm23', name: 'أرز مصري ممتاز 5 كغم', price: '4.50', category: 'مواد تموينية', description: 'حبة حبة ناصعة البياض للطهي العائلي', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&q=80&w=400' }
+      ]
     },
     {
       isDemo: true,
@@ -252,7 +295,11 @@ export const DEMO_SEED_DATA = {
       packagePlan: 'vip',
       imageUrl: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&q=80&w=800',
       image: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&q=80&w=800',
-      createdAt: Date.now() - 86400000 * 5
+      createdAt: Date.now() - 86400000 * 5,
+      menuItems: [
+        { id: 'm24', name: 'أرجيلة جدارا التراثية', price: '3.50', category: 'أراجيل ومزاج', description: 'نكهات تفاحتين فاخر، حامض ونعناع، وعلكة ومستكة', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&q=80&w=400' },
+        { id: 'm25', name: 'كوكتيل إربد بالقطع والمكسرات', price: '2.75', category: 'عصائر وكوكتيل', description: 'قطع مانجو وموز وفراولة مع القشطة والعسل', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1553530666-ba11a7da3888?auto=format&fit=crop&q=80&w=400' }
+      ]
     },
     {
       isDemo: true,
@@ -271,7 +318,11 @@ export const DEMO_SEED_DATA = {
       packagePlan: 'basic',
       imageUrl: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&q=80&w=800',
       image: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&q=80&w=800',
-      createdAt: Date.now() - 86400000 * 4
+      createdAt: Date.now() - 86400000 * 4,
+      menuItems: [
+        { id: 'm26', name: 'ربطة خبز عربي كبير طازج', price: '0.40', category: 'خبز طازج', description: 'خبز محضر يومياً بأعلى المعايير', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&q=80&w=400' },
+        { id: 'm27', name: 'كيلو معجنات ومناقيش مشكلة', price: '3.50', category: 'معجنات وفطائر', description: 'مناقيش زعتر، جبنة، محمرة وسفيحة بلدي', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&q=80&w=400' }
+      ]
     },
     {
       isDemo: true,
@@ -290,7 +341,11 @@ export const DEMO_SEED_DATA = {
       packagePlan: 'golden',
       imageUrl: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&q=80&w=800',
       image: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&q=80&w=800',
-      createdAt: Date.now() - 86400000 * 4
+      createdAt: Date.now() - 86400000 * 4,
+      menuItems: [
+        { id: 'm28', name: 'وجبة دبل تشيز برغر لحم انجوس', price: '4.80', category: 'وجبات البرغر', description: 'شريحتين لحم بلدي مشوي، جبنة شيدر وبصل مكرمل', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&q=80&w=400' },
+        { id: 'm29', name: 'وجبة كريسبي تشيكن سبايسي', price: '4.20', category: 'وجبات الدجاج', description: 'صدر دجاج مقرمش مع هلابينو وجبنة وبطاطا كيرلي', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1625813506062-0aeb1d7a094b?auto=format&fit=crop&q=80&w=400' }
+      ]
     },
     {
       isDemo: true,
@@ -309,7 +364,11 @@ export const DEMO_SEED_DATA = {
       packagePlan: 'golden',
       imageUrl: 'https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?auto=format&fit=crop&q=80&w=800',
       image: 'https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?auto=format&fit=crop&q=80&w=800',
-      createdAt: Date.now() - 86400000 * 3
+      createdAt: Date.now() - 86400000 * 3,
+      menuItems: [
+        { id: 'm30', name: 'غسيل بخار خارجي وداخلي شامل', price: '8.00', category: 'غسيل وتنظيف', description: 'تنظيف وتلميع الهيكل والفرش والمحرك بالبخار', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?auto=format&fit=crop&q=80&w=400' },
+        { id: 'm31', name: 'بولش نانو سيراميك 3 طبقات حماية', price: '60.00', category: 'عناية وبولش', description: 'حماية الطلاء من الخدوش وأشعة الشمس مع لمعان مائي', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1607860108855-64acf2078ed9?auto=format&fit=crop&q=80&w=400' }
+      ]
     },
     {
       isDemo: true,
@@ -328,13 +387,17 @@ export const DEMO_SEED_DATA = {
       packagePlan: 'basic',
       imageUrl: 'https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?auto=format&fit=crop&q=80&w=800',
       image: 'https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?auto=format&fit=crop&q=80&w=800',
-      createdAt: Date.now() - 86400000 * 3
+      createdAt: Date.now() - 86400000 * 3,
+      menuItems: [
+        { id: 'm32', name: 'طباعة وتجليد مشروع تخرج ألوان', price: '10.00', category: 'طباعة وأبحاث', description: 'طباعة ورق فاخر وتجليد ناعم / كرتون مقوى', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?auto=format&fit=crop&q=80&w=400' },
+        { id: 'm33', name: 'حقيبة ظهر جامعية مقاومة للماء', price: '12.00', category: 'قرطاسية ومستلزمات', description: 'مخصصة لحمل اللاب توب والكتب بالجامعة', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&q=80&w=400' }
+      ]
     },
     {
       isDemo: true,
       name: 'مركز نيو لايف للياقة وكمال الأجسام (New Life Gym)',
       category: 'أندية ورياضة',
-      description: 'نادي أجهزة رياضية متطور، مدربين شخصيين، جاكوزي وسونا، واشتراكات خاصة للطلبة والشباب.',
+      description: 'نادي أجهزة رياضية متطور، مدربين شخصيين، جاكوزي وسونا، وااشتراكات خاصة للطلبة والشباب.',
       address: 'شارع فلسطين، بجانب مجمع الباصات القديم، إربد',
       phone: '0779900112',
       whatsapp: '962779900112',
@@ -347,7 +410,11 @@ export const DEMO_SEED_DATA = {
       packagePlan: 'vip',
       imageUrl: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&q=80&w=800',
       image: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&q=80&w=800',
-      createdAt: Date.now() - 86400000 * 2
+      createdAt: Date.now() - 86400000 * 2,
+      menuItems: [
+        { id: 'm34', name: 'اشتراك شهري شامل لياقة وحديد وسونا', price: '25.00', category: 'اشتراكات النادي', description: 'دخول مفتوح للأجهزة مع فحص قياسات InBody', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&q=80&w=400' },
+        { id: 'm35', name: 'اشتراك 3 شهور + حصتين تدريب شخصي PT', price: '60.00', category: 'اشتراكات النادي', description: 'توفير ممتاز مع برنامج تدريبي وغذائي مخصص', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&q=80&w=400' }
+      ]
     },
     {
       isDemo: true,
@@ -366,7 +433,11 @@ export const DEMO_SEED_DATA = {
       packagePlan: 'basic',
       imageUrl: 'https://images.unsplash.com/photo-1594938298603-c8148c4dae35?auto=format&fit=crop&q=80&w=800',
       image: 'https://images.unsplash.com/photo-1594938298603-c8148c4dae35?auto=format&fit=crop&q=80&w=800',
-      createdAt: Date.now() - 86400000 * 2
+      createdAt: Date.now() - 86400000 * 2,
+      menuItems: [
+        { id: 'm36', name: 'بدلة عريس رسمية إيطالية كاملة', price: '85.00', category: 'بدلات رسمية', description: 'جاكيت، بنطال، وستة وربطة عنق فاخرة', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1594938298603-c8148c4dae35?auto=format&fit=crop&q=80&w=400' },
+        { id: 'm37', name: 'قميص رجالي قطن 100% كلاسيك', price: '14.00', category: 'قمصان رجالية', description: 'ألوان متعددة ومقاسات مريحة للعمل والمناسبات', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1602810318383-e386cc2a3ccf?auto=format&fit=crop&q=80&w=400' }
+      ]
     },
     {
       isDemo: true,
@@ -385,7 +456,11 @@ export const DEMO_SEED_DATA = {
       packagePlan: 'golden',
       imageUrl: 'https://images.unsplash.com/photo-1486006920555-c77dce18193b?auto=format&fit=crop&q=80&w=800',
       image: 'https://images.unsplash.com/photo-1486006920555-c77dce18193b?auto=format&fit=crop&q=80&w=800',
-      createdAt: Date.now() - 86400000 * 1
+      createdAt: Date.now() - 86400000 * 1,
+      menuItems: [
+        { id: 'm38', name: 'فحص كمبيوتر وشامل أونلاين', price: '10.00', category: 'فحص وتشخيص', description: 'فحص الماكينة، الجير، الهايبرد والفرامل بدقة', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1486006920555-c77dce18193b?auto=format&fit=crop&q=80&w=400' },
+        { id: 'm39', name: 'صيانة وتصنيع خلايا بطارية الهايبرد', price: '45.00', category: 'صيانة هايبرد', description: 'موازنة وفحص خلايا بطارية التويوتا والهوندا', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1517524008697-84bbe3c3fd98?auto=format&fit=crop&q=80&w=400' }
+      ]
     },
     {
       isDemo: true,
@@ -404,7 +479,11 @@ export const DEMO_SEED_DATA = {
       packagePlan: 'vip',
       imageUrl: 'https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&q=80&w=800',
       image: 'https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&q=80&w=800',
-      createdAt: Date.now() - 86400000 * 1
+      createdAt: Date.now() - 86400000 * 1,
+      menuItems: [
+        { id: 'm40', name: 'إبريق شاي بالنعناع والمهباج الشامي', price: '2.00', category: 'مشروبات ساخنة', description: 'شاي مخدر على الفحم بأجواء تراثية', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&q=80&w=400' },
+        { id: 'm41', name: 'أرجيلة ديوان زمان المميزة', price: '3.00', category: 'أراجيل ومزاج', description: 'أجود المعسلات مع خدمة تغيير فحم مستمرة', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&q=80&w=400' }
+      ]
     },
     {
       isDemo: true,
@@ -423,7 +502,11 @@ export const DEMO_SEED_DATA = {
       packagePlan: 'basic',
       imageUrl: 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&q=80&w=800',
       image: 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&q=80&w=800',
-      createdAt: Date.now() - 3600000 * 12
+      createdAt: Date.now() - 3600000 * 12,
+      menuItems: [
+        { id: 'm42', name: 'طقم نوم خشب سويد ديلوكس كامل', price: '450.00', category: 'غرف نوم', description: 'تخت، خزانة 6 أبواب، تسريحة و2 كومودينة', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&q=80&w=400' },
+        { id: 'm43', name: 'طقم كنبه مودرن 7 مقاعد', price: '380.00', category: 'أطقم معيشة', description: 'خامات إسفنج مضغوط مع قماش مخمل راقي', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?auto=format&fit=crop&q=80&w=400' }
+      ]
     },
     {
       isDemo: true,
@@ -442,7 +525,77 @@ export const DEMO_SEED_DATA = {
       packagePlan: 'golden',
       imageUrl: 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&q=80&w=800',
       image: 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&q=80&w=800',
-      createdAt: Date.now() - 3600000 * 6
+      createdAt: Date.now() - 3600000 * 6,
+      menuItems: [
+        { id: 'm44', name: 'جلسة تصوير عرسان خارجية مع ألبوم حراري', price: '120.00', category: 'تصوير أعراس', description: 'تصوير كاميرا سينمائية، تعديل ألوان، وألبوم حراري 30×60', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&q=80&w=400' },
+        { id: 'm45', name: 'تصوير منتجات ودعايات فيديو للمحلات', price: '35.00', category: 'تصوير إعلاني', description: 'إخراج فيديو ترويجي احترافي 30 ثانية للسوشيال ميديا', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&q=80&w=400' }
+      ]
+    },
+    {
+      isDemo: true,
+      name: 'مجمع الشفاء الطبي التخصصي',
+      category: 'منشآت طبية',
+      facilityType: 'مجمع طبي',
+      description: 'مجمع طبي متكامل يضم نخبة من الاستشاريين في طب الأسرة، العظام، الأطفال، والجلدية مع مختبر تحاليل شامل.',
+      address: 'شارع وصفي التل، بالقرب من دوار النسيم، إربد',
+      phone: '0789012345',
+      whatsapp: '962789012345',
+      rating: 4.9,
+      reviewsCount: 165,
+      reviewCount: 165,
+      views: 580,
+      isVerified: true,
+      isFeatured: true,
+      packagePlan: 'vip',
+      imageUrl: 'https://images.unsplash.com/photo-1629909613654-28e377c37b09?auto=format&fit=crop&q=80&w=800',
+      image: 'https://images.unsplash.com/photo-1629909613654-28e377c37b09?auto=format&fit=crop&q=80&w=800',
+      createdAt: Date.now() - 3600000 * 2,
+      menuItems: [
+        { id: 'm46', name: 'كشف واستشارة طبية عامة / متخصصة', price: '15.00', category: 'الاستشارات والعيادات', description: 'فحص طبي شامل مع تشخيص دقيق وخطة علاجية مخصصة', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1629909613654-28e377c37b09?auto=format&fit=crop&q=80&w=400' },
+        { id: 'm47', name: 'باقة الفحص الطبي الشامل للدم والوظائف', price: '25.00', category: 'الفحوصات والمختبر', description: 'CBC + وظائف كبد وكلى + سكر + كوليسترول + فيتامين د', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1579154204601-01588f351e67?auto=format&fit=crop&q=80&w=400' }
+      ],
+      medicalProfile: {
+        aboutFacility: 'مجمع الشفاء الطبي يضم أحدث العيادات التخصصية والمختبرات المعتمدة ونخبة من الأطباء الاستشاريين في الأردن.',
+        consultationFee: '15 دينار',
+        followUpPolicy: 'المراجعة مجانية خلال 14 يوماً',
+        insurances: ['النقابات المهنية', 'تأمين الفوسفات', 'الشركة الكهروميكانيكية', 'ميدسيرف'],
+        has24Emergency: true,
+        emergencyPhone: '0789012345'
+      }
+    },
+    {
+      isDemo: true,
+      name: 'عيادة الدكتور أحمد الشبول للأسنان وتجميل الابتسامة',
+      category: 'منشآت طبية',
+      facilityType: 'عيادة',
+      description: 'عيادة تخصصية في طب وزراعة الأسنان، التبييض بالليزر، ابتسامة هوليوود، وتقويم الأسنان الشفاف بأعلى أجهزة المعايرة.',
+      address: 'شارع الجامعة، مجمع دبي الطبي، الطابق الثالث، إربد',
+      phone: '0771234567',
+      whatsapp: '962771234567',
+      rating: 4.95,
+      reviewsCount: 140,
+      reviewCount: 140,
+      views: 490,
+      isVerified: true,
+      isFeatured: true,
+      packagePlan: 'vip',
+      imageUrl: 'https://images.unsplash.com/photo-1606811841689-23dfddce3e95?auto=format&fit=crop&q=80&w=800',
+      image: 'https://images.unsplash.com/photo-1606811841689-23dfddce3e95?auto=format&fit=crop&q=80&w=800',
+      createdAt: Date.now() - 3600000 * 1,
+      menuItems: [
+        { id: 'm48', name: 'تنظيف أسنان وتلميع وتزيل الجير UltraSonic', price: '15.00', category: 'تنظيف وعناية', description: 'تنظيف بأحدث الأجهزة الصوتية مع إزالة البقع', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1606811841689-23dfddce3e95?auto=format&fit=crop&q=80&w=400' },
+        { id: 'm49', name: 'تبييض أسنان ليزر زوم (Zoom Laser Whitening)', price: '60.00', category: 'تجميل الأسنان', description: 'تبييض فوري بـ 45 دقيقة بالعيادة مع نتائج براقة', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?auto=format&fit=crop&q=80&w=400' },
+        { id: 'm50', name: 'حشوة أسنان ضوئية تجميلية', price: '18.00', category: 'حشوات ومعالجة', description: 'حشوة سيراميك مطابقة للون السن الطبيعي', isPopular: false, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1598256989800-fe5f95da9787?auto=format&fit=crop&q=80&w=400' }
+      ],
+      medicalProfile: {
+        aboutFacility: 'عيادة الدكتور أحمد الشبول مجهزة بآخر صيحات تكنولوجيا الأسنان والأشعة البانورامية الرقمية.',
+        consultationFee: '10 دنانير (تخصم من المعالجة)',
+        doctorProfile: {
+          name: 'د. أحمد الشبول',
+          specialty: 'استشاري طب وزراعة الأسنان',
+          experienceYears: 14
+        }
+      }
     }
   ],
 
@@ -1530,15 +1683,21 @@ export const DEMO_SEED_DATA = {
   ]
 };
 
-export async function seedDemoDataToFirestore(): Promise<{ count: number }> {
+export async function seedDemoDataToFirestore(): Promise<{ count: number; businessesCount: number }> {
   if (!db) throw new Error('Database connection not available');
 
   let totalAdded = 0;
+  let businessesCount = 0;
+  const businessNameToId: Record<string, string> = {};
 
-  // Seed Businesses (20)
+  // Seed Businesses (22)
   for (const b of DEMO_SEED_DATA.businesses) {
-    await addDoc(collection(db, 'businesses'), b);
+    const docRef = await addDoc(collection(db, 'businesses'), b);
+    if (b.name) {
+      businessNameToId[b.name] = docRef.id;
+    }
     totalAdded++;
+    businessesCount++;
   }
 
   // Seed Housings (20)
@@ -1547,9 +1706,11 @@ export async function seedDemoDataToFirestore(): Promise<{ count: number }> {
     totalAdded++;
   }
 
-  // Seed Jobs (20)
+  // Seed Jobs (20) with linked businessId if matching company
   for (const j of DEMO_SEED_DATA.jobs) {
-    await addDoc(collection(db, 'jobs'), j);
+    const linkedId = j.company ? businessNameToId[j.company] : undefined;
+    const jobData = linkedId ? { ...j, businessId: linkedId } : j;
+    await addDoc(collection(db, 'jobs'), jobData);
     totalAdded++;
   }
 
@@ -1559,9 +1720,11 @@ export async function seedDemoDataToFirestore(): Promise<{ count: number }> {
     totalAdded++;
   }
 
-  // Seed Offers
+  // Seed Offers with linked businessId if matching businessName
   for (const o of DEMO_SEED_DATA.offers) {
-    await addDoc(collection(db, 'offers'), o);
+    const linkedId = o.businessName ? businessNameToId[o.businessName] : undefined;
+    const offerData = linkedId ? { ...o, businessId: linkedId } : o;
+    await addDoc(collection(db, 'offers'), offerData);
     totalAdded++;
   }
 
@@ -1574,7 +1737,7 @@ export async function seedDemoDataToFirestore(): Promise<{ count: number }> {
   // Enable showDemoData in appConfig
   await setAppConfig({ showDemoData: true });
 
-  return { count: totalAdded };
+  return { count: totalAdded, businessesCount };
 }
 
 export async function clearDemoDataFromFirestore(): Promise<{ count: number }> {

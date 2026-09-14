@@ -11,12 +11,13 @@ import {
   deleteDoc, 
   setDoc, 
   orderBy,
-  addDoc 
+  addDoc,
+  onSnapshot
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotifications } from '../contexts/NotificationsContext';
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { 
   Store, 
   CheckCircle, 
@@ -62,11 +63,14 @@ import {
   Home,
   Compass
 } from 'lucide-react';
-import { Business, MarketingRequest, JobOffer, AppNotification, BannerBookingRequest, EditSuggestion, ReviewReport } from '../types';
+import { Business, MarketingRequest, JobOffer, AppNotification, BannerBookingRequest, EditSuggestion, ReviewReport, UpgradeRequest } from '../types';
+import { isMedicalBusiness } from '../lib/medicalHelper';
 import { AdminHeader } from '../components/admin/AdminHeader';
 import { AdminStatsOverview } from '../components/admin/AdminStatsOverview';
 import { BusinessEditModal } from '../components/admin/BusinessEditModal';
 import { BusinessAddModal } from '../components/admin/BusinessAddModal';
+import { AddMedicalFacilityModal } from '../components/medical/AddMedicalFacilityModal';
+import { AddEntitySelectionModal } from '../components/admin/AddEntitySelectionModal';
 import { BroadcastNotificationModal } from '../components/admin/BroadcastNotificationModal';
 import { MarketingDetailsModal } from '../components/admin/MarketingDetailsModal';
 import { VipUpgradeModal } from '../components/admin/VipUpgradeModal';
@@ -74,6 +78,7 @@ import { SupervisorsManager } from '../components/admin/SupervisorsManager';
 import { AccountsManager } from '../components/admin/AccountsManager';
 import { AdminAuditLogs } from '../components/admin/AdminAuditLogs';
 import { AdminSubscriptionsOverview } from '../components/admin/AdminSubscriptionsOverview';
+import { AdminSubscriptionsManager } from '../components/admin/AdminSubscriptionsManager';
 import { EditSuggestionsPanel } from '../components/admin/EditSuggestionsPanel';
 import { ReviewReportsPanel } from '../components/admin/ReviewReportsPanel';
 import { ClaimVerificationPanel } from '../components/admin/ClaimVerificationPanel';
@@ -88,14 +93,16 @@ import { UpgradeRequestsManager } from '../components/admin/UpgradeRequestsManag
 import { MedicalFacilitiesManager } from '../components/admin/MedicalFacilitiesManager';
 import { RequestDetailsModal } from '../components/admin/RequestDetailsModal';
 import { recordAuditLog } from '../lib/auditLogHelper';
-import { getBusinessVipStatus } from '../lib/vipHelper';
+import { getBusinessVipStatus, applyNewBusinessWelcomeGift } from '../lib/vipHelper';
 import { sanitizeFirestorePayload, compressAndSanitizeFirestorePayload } from '../lib/firestoreHelper';
 import { invalidateCache } from '../lib/dataCache';
 import { getWhatsAppUrl } from '../lib/contactHelper';
 import { WhatsAppIcon } from '../components/common/WhatsAppIcon';
-import { getAppConfig, setAppConfig } from '../lib/demoDataHelper';
+import { getAppConfig, setAppConfig, seedDemoDataToFirestore, clearDemoDataFromFirestore } from '../lib/demoDataHelper';
+import { deleteBusinessCascading } from '../lib/businessDeleteHelper';
 
 export function AdminDashboard() {
+  const navigate = useNavigate();
   const { confirm } = useConfirm();
   const { currentUser, isAdmin, isSupervisor, isStaff, userRole, supervisorPermissions } = useAuth();
   const { addNotification } = useNotifications();
@@ -110,6 +117,10 @@ export function AdminDashboard() {
   const [reviewReports, setReviewReports] = useState<ReviewReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Demo Seeding States
+  const [isSeedingDemo, setIsSeedingDemo] = useState(false);
+  const [isClearingDemo, setIsClearingDemo] = useState(false);
 
   // News, Housings, Tourism states
   const [news, setNews] = useState<any[]>([]);
@@ -211,7 +222,9 @@ export function AdminDashboard() {
   const [housingStatusFilter, setHousingStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
 
   // Modals Control State
+  const [isAddEntitySelectionOpen, setIsAddEntitySelectionOpen] = useState(false);
   const [isAddBusinessOpen, setIsAddBusinessOpen] = useState(false);
+  const [isAddMedicalOpen, setIsAddMedicalOpen] = useState(false);
   const [isEditBusinessOpen, setIsEditBusinessOpen] = useState(false);
   const [selectedBusinessForEdit, setSelectedBusinessForEdit] = useState<Business | null>(null);
 
@@ -219,6 +232,7 @@ export function AdminDashboard() {
   const [selectedBusinessForVip, setSelectedBusinessForVip] = useState<Business | null>(null);
 
   const [isBroadcastModalOpen, setIsBroadcastModalOpen] = useState(false);
+  const [isDeletingAllNotifications, setIsDeletingAllNotifications] = useState(false);
   const [isMarketingDetailsOpen, setIsMarketingDetailsOpen] = useState(false);
   const [selectedMarketingRequest, setSelectedMarketingRequest] = useState<MarketingRequest | null>(null);
 
@@ -232,6 +246,7 @@ export function AdminDashboard() {
 
   const [appConfigState, setAppConfigState] = useState<any>(null);
   const [isEditingPrices, setIsEditingPrices] = useState(false);
+  const [isEditingHousingPrices, setIsEditingHousingPrices] = useState(false);
   const [editPricesData, setEditPricesData] = useState<any>({});
 
   const handleSavePrices = async () => {
@@ -548,6 +563,51 @@ export function AdminDashboard() {
     }
   };
 
+  const handleSeedDemoAccounts = async () => {
+    const isConfirmed = await confirm({
+      title: 'زرع 20+ حساب تجريبي وهمي في Firebase',
+      message: 'هل أنت متأكد من رغبتك في إنشاء وزرع 20+ حساباً ومحلاً تجارياً وطبياً وهمياً في قاعدة بيانات Firebase Firestore؟ تتضمن هذه الحسابات منيوهات منتجات، عروض ترويجية، وشواغر وظيفية متكاملة في مختلف أقسام وااختصاصات إربد.',
+      confirmText: 'نعم، زرع الحسابات الآن 🌱',
+      cancelText: 'إلغاء',
+      variant: 'info'
+    });
+    if (!isConfirmed) return;
+
+    setIsSeedingDemo(true);
+    try {
+      const res = await seedDemoDataToFirestore();
+      showToast(`تم زرع ${res.count} عنصر (${res.businessesCount} حساب/محل تجريبي بالمنيوهات والعروض والوظائف) بنجاح في Firebase!`, 'success');
+      await fetchData();
+    } catch (err: any) {
+      console.error("Error seeding demo data:", err);
+      showToast('حدث خطأ أثناء زرع الحسابات الوهمية: ' + (err?.message || ''), 'error');
+    } finally {
+      setIsSeedingDemo(false);
+    }
+  };
+
+  const handleClearDemoAccounts = async () => {
+    const isConfirmed = await confirm({
+      title: 'مسح الحسابات والبيانات التجريبية',
+      message: 'هل أنت متأكد من رغبتك في حذف وإزالة جميع الحسابات والبيانات التجريبية (الموسومة كـ Demo) من قاعدة البيانات نهائياً؟',
+      confirmText: 'نعم، مسح الحسابات التجريبية 🗑️',
+      cancelText: 'إلغاء',
+      variant: 'danger'
+    });
+    if (!isConfirmed) return;
+
+    setIsClearingDemo(true);
+    try {
+      const res = await clearDemoDataFromFirestore();
+      showToast(`تم مسح ${res.count} عنصر تجريبي بنجاح من قاعدة البيانات!`, 'success');
+      await fetchData();
+    } catch (err: any) {
+      console.error("Error clearing demo data:", err);
+      showToast('حدث خطأ أثناء مسح البيانات التجريبية: ' + (err?.message || ''), 'error');
+    } finally {
+      setIsClearingDemo(false);
+    }
+  };
   const handleToggleNewsHot = async (item: any) => {
     try {
       await updateDoc(doc(db, 'news', item.id), { isHot: !item.isHot });
@@ -931,85 +991,149 @@ export function AdminDashboard() {
   const handleApproveRequest = async (request: any) => {
     if (!db) return;
     try {
-      const isPrimary = !request.parentBusinessId && !request.isBranch;
       const now = Date.now();
-      const oneMonthMs = 30 * 24 * 60 * 60 * 1000;
+      let chosenPlan: 'basic' | 'golden' = 'basic';
+      if (
+        request.isVipTrial || 
+        request.selectedPackagePlan === 'basic' || 
+        request.packagePlan === 'basic' || 
+        request.billingPeriod === 'lifetime'
+      ) {
+        chosenPlan = 'basic';
+      } else if (
+        request.packagePlan === 'golden' || 
+        request.packagePlan === 'vip' || 
+        request.selectedPackagePlan === 'golden' || 
+        request.selectedPackagePlan === 'vip'
+      ) {
+        chosenPlan = 'golden';
+      } else {
+        chosenPlan = 'basic';
+      }
 
-      const newBusiness: Omit<Business, 'id'> = {
-        name: request.name || '',
-        category: request.category || request.subCategory || 'أخرى',
-        description: request.description || '',
-        address: request.address || '',
-        district: request.district || 'شارع الجامعة',
-        phone: request.phone || '',
-        imageUrl: request.imageUrl || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&q=80',
-        logoUrl: request.logoUrl || request.logo || '',
-        googlePlaceUrl: request.googlePlaceUrl || '',
-        userId: request.userId || null,
-        ownerName: request.ownerName || '',
-        rating: Number(request.rating) || 0,
-        reviewCount: Number(request.reviewCount) || 0,
-        createdAt: now,
-        isFeatured: false,
-        hideSiteReviews: false,
-        // 1-Month Free Trial for primary new businesses (not branches)
-        packagePlan: isPrimary ? 'golden' : (request.packagePlan || 'basic'),
-        isVipTrial: isPrimary,
-        vipSubscriptionStartsAt: isPrimary ? now : undefined,
-        vipSubscriptionExpiresAt: isPrimary ? now + oneMonthMs : undefined,
-        isVerified: isPrimary,
-        workingHours: request.workingHours || {
-          isOpen24Hours: false,
-          openTime: '09:00',
-          closeTime: '23:00',
-          days: 'طوال أيام الأسبوع',
-          isCustomClosed: false
-        },
-        socialLinks: request.socialLinks || (request.socialMedia ? { website: request.socialMedia } : {}),
-        views: 0,
-        analytics: {
+      const billingPeriod = chosenPlan === 'basic' ? 'lifetime' : (request.billingPeriod || 'yearly');
+      const gift = applyNewBusinessWelcomeGift(chosenPlan, billingPeriod, now);
+
+      // Check if this request already exists in 'businesses' (e.g. from medical registration)
+      const existingBiz = businesses.find(b => b.id === request.id || (b as any).requestId === request.id);
+      let targetDocId = existingBiz ? existingBiz.id : '';
+
+      if (existingBiz) {
+        targetDocId = existingBiz.id;
+        const updates: any = {
+          status: 'approved',
+          packagePlan: gift.packagePlan,
+          selectedPackagePlan: chosenPlan,
+          isVip: gift.isVip,
+          isVipTrial: gift.isVipTrial,
+          billingPeriod: billingPeriod,
+          vipSubscriptionStartsAt: gift.vipSubscriptionStartsAt,
+          vipSubscriptionExpiresAt: gift.vipSubscriptionExpiresAt,
+          isVerified: gift.isVerified,
+          isFeatured: gift.isFeatured,
+          featuredStartDate: gift.featuredStartDate || null,
+          featuredExpiryDate: gift.featuredExpiryDate || null,
+          updatedAt: now
+        };
+        if (request.medicalProfile) updates.medicalProfile = request.medicalProfile;
+        if (request.menuItems) updates.menuItems = request.menuItems;
+
+        await updateDoc(doc(db, 'businesses', existingBiz.id), updates);
+        setBusinesses(prev => prev.map(b => b.id === existingBiz.id ? { ...b, ...updates } : b));
+      } else {
+        const newBusiness: Omit<Business, 'id'> = {
+          name: request.name || '',
+          category: request.category || request.subCategory || 'أخرى',
+          description: request.description || '',
+          address: request.address || '',
+          district: request.district || 'شارع الجامعة',
+          phone: request.phone || '',
+          imageUrl: request.imageUrl || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&q=80',
+          logoUrl: request.logoUrl || request.logo || '',
+          googlePlaceUrl: request.googlePlaceUrl || '',
+          userId: request.userId || null,
+          ownerName: request.ownerName || '',
+          rating: Number(request.rating) || 0,
+          reviewCount: Number(request.reviewCount) || 0,
+          createdAt: now,
+          status: 'approved',
+          hideSiteReviews: false,
+          packagePlan: gift.packagePlan,
+          selectedPackagePlan: chosenPlan,
+          isVip: gift.isVip,
+          isVipTrial: gift.isVipTrial,
+          billingPeriod: billingPeriod,
+          vipSubscriptionStartsAt: gift.vipSubscriptionStartsAt,
+          vipSubscriptionExpiresAt: gift.vipSubscriptionExpiresAt,
+          isVerified: gift.isVerified,
+          isFeatured: gift.isFeatured,
+          featuredStartDate: gift.featuredStartDate || null,
+          featuredExpiryDate: gift.featuredExpiryDate || null,
+          workingHours: request.workingHours || {
+            isOpen24Hours: false,
+            openTime: '09:00',
+            closeTime: '23:00',
+            days: 'طوال أيام الأسبوع',
+            isCustomClosed: false
+          },
+          socialLinks: request.socialLinks || (request.socialMedia ? { website: request.socialMedia } : {}),
           views: 0,
-          whatsappClicks: 0,
-          callClicks: 0,
-          directionClicks: 0,
-          menuViews: 0,
-          shareClicks: 0,
-          lastUpdated: now
-        }
-      };
+          analytics: {
+            views: 0,
+            whatsappClicks: 0,
+            callClicks: 0,
+            directionClicks: 0,
+            menuViews: 0,
+            shareClicks: 0,
+            lastUpdated: now
+          },
+          ...(request.medicalProfile ? { medicalProfile: request.medicalProfile } : {}),
+          ...(request.menuItems ? { menuItems: request.menuItems } : {})
+        };
 
-      const docRef = doc(collection(db, 'businesses'));
-      const sanitized = await compressAndSanitizeFirestorePayload(newBusiness, false);
-      await setDoc(docRef, sanitized);
+        const docRef = doc(collection(db, 'businesses'));
+        targetDocId = docRef.id;
+        const sanitized = await compressAndSanitizeFirestorePayload(newBusiness, false);
+        await setDoc(docRef, sanitized);
+        setBusinesses(prev => [{ id: docRef.id, ...newBusiness }, ...prev]);
+      }
+
       await updateDoc(doc(db, 'businessRequests', request.id), { status: 'approved' });
 
       setRequests(prev => prev.map(r => r.id === request.id ? { ...r, status: 'approved' } : r));
-      setBusinesses(prev => [{ id: docRef.id, ...newBusiness }, ...prev]);
       invalidateCache();
 
-      // Push notification
+      // Push notification tailored to the specific welcome gift
+      const notifMessage = gift.isFeatured
+        ? `انضم ${request.name} رسمياً بالباقة الذهبية VIP وحصل على ميزة (المميز/صدارة البحث) ذات الإطار الذهبي وعلامة ممول مجاناً لمدة أسبوع!`
+        : `انضم ${request.name} رسمياً إلى دليل شو في بإربد وحصل على شهر تجربة مجانية للباقة الذهبية VIP!`;
+
       await addNotification({
-        title: `تم توثيق محل جديد: ${request.name} 🏬`,
-        message: `انضم محل ${request.name} رسمياً إلى دليل شو في بإربد وحصل على شهر تجربة مجانية للباقة الذهبية VIP!`,
+        title: `تم توثيق منشأة جديدة: ${request.name} 🏬`,
+        message: notifMessage,
         type: 'business',
-        link: `/business/${docRef.id}`,
-        badge: 'محل جديد VIP 🌟',
+        link: `/business/${targetDocId}`,
+        badge: gift.isFeatured ? 'صدارة وممول ⭐' : 'محل جديد VIP 🌟',
         userId: 'all',
-        businessId: docRef.id,
+        businessId: targetDocId,
         businessName: request.name,
         businessLogoUrl: request.logoUrl || request.logo || ''
       });
 
-      showToast(`تم قبول وتوثيق محل (${request.name}) وتفعيل تجربة VIP مجانية (شهر كامل) بنجاح!`);
+      const toastMessage = gift.isFeatured
+        ? `تم قبول وتوثيق (${request.name}) بالباقة الذهبية مع ميزة (المميز/صدارة البحث) بالإطار الذهبي وعلامة ممول لمدة أسبوع!`
+        : `تم قبول وتوثيق (${request.name}) بالباقة الأساسية مع هدية اشتراك شهر مجاني تجريبي في الباقة الذهبية VIP!`;
+
+      showToast(toastMessage);
 
       // Record Audit Log
       recordAuditLog({
         action: 'VERIFY_BUSINESS',
         actionAr: 'توثيق وتسجيل محل جديد',
-        details: `تم قبول وتوثيق محل "${request.name}" وتفعيله في المنصة قسم ${request.category}`,
+        details: `تم قبول وتوثيق محل "${request.name}" وتفعيله في المنصة (${gift.isFeatured ? 'باقة ذهبية + أسبوع ممول' : 'باقة أساسية + شهر VIP مجاني'})`,
         performedBy: currentUser?.email || userRole || 'المشرف الإداري',
         userRole: userRole,
-        targetId: docRef.id,
+        targetId: targetDocId,
         targetName: request.name,
         timestamp: Date.now()
       });
@@ -1049,18 +1173,26 @@ export function AdminDashboard() {
   const handleAddBusiness = async (newBiz: Omit<Business, 'id'>) => {
     if (!db) return;
     try {
-      const isPrimary = !newBiz.parentBusinessId && !newBiz.isBranch;
       const now = Date.now();
-      const oneMonthMs = 30 * 24 * 60 * 60 * 1000;
+      const chosenPlan = (newBiz as any).selectedPackagePlan || newBiz.packagePlan || 'basic';
+      const billingPeriod = (newBiz as any).billingPeriod || (chosenPlan === 'basic' ? 'lifetime' : 'yearly');
+      const gift = applyNewBusinessWelcomeGift(chosenPlan, billingPeriod, now);
 
-      const preparedBiz = { ...newBiz };
-      if (isPrimary && !preparedBiz.vipSubscriptionExpiresAt) {
-        preparedBiz.packagePlan = 'golden';
-        preparedBiz.isVipTrial = true;
-        preparedBiz.vipSubscriptionStartsAt = now;
-        preparedBiz.vipSubscriptionExpiresAt = now + oneMonthMs;
-        preparedBiz.isVerified = true;
-      }
+      const preparedBiz = {
+        ...newBiz,
+        status: 'approved',
+        packagePlan: gift.packagePlan,
+        selectedPackagePlan: chosenPlan,
+        isVip: gift.isVip,
+        isVipTrial: gift.isVipTrial,
+        billingPeriod: billingPeriod,
+        vipSubscriptionStartsAt: gift.vipSubscriptionStartsAt,
+        vipSubscriptionExpiresAt: gift.vipSubscriptionExpiresAt,
+        isVerified: gift.isVerified,
+        isFeatured: gift.isFeatured,
+        featuredStartDate: gift.featuredStartDate || null,
+        featuredExpiryDate: gift.featuredExpiryDate || null
+      };
 
       const docRef = doc(collection(db, 'businesses'));
       const sanitized = await compressAndSanitizeFirestorePayload(preparedBiz, false);
@@ -1069,19 +1201,27 @@ export function AdminDashboard() {
       setBusinesses(prev => [created, ...prev]);
       invalidateCache();
 
+      const notifMessage = gift.isFeatured
+        ? `تمت إضافة ${newBiz.name} بالباقة الذهبية مع ميزة (المميز وصدارة البحث) والإطار الذهبي وعلامة ممول لمدة أسبوع!`
+        : `تم إضافة ${newBiz.name} في ${newBiz.address} مع شهر تجريبي مجاني في الباقة الذهبية VIP!`;
+
       await addNotification({
         title: `إضافة مميزة: ${newBiz.name} ✨`,
-        message: `تم إضافة ${newBiz.name} في ${newBiz.address} إلى دليل إربد.`,
+        message: notifMessage,
         type: 'business',
         link: `/business/${docRef.id}`,
-        badge: 'جديد بالدليل 📍',
+        badge: gift.isFeatured ? 'صدارة وممول ⭐' : 'جديد بالدليل 📍',
         userId: 'all',
         businessId: docRef.id,
         businessName: newBiz.name,
         businessLogoUrl: newBiz.logoUrl || ''
       });
 
-      showToast(`تمت إضافة محل (${newBiz.name}) بنجاح!`);
+      const toastMessage = gift.isFeatured
+        ? `تمت إضافة (${newBiz.name}) بالباقة الذهبية مع ميزة (المميز/صدارة البحث) ذات الإطار الذهبي وعلامة ممول لمدة أسبوع!`
+        : `تمت إضافة (${newBiz.name}) بالباقة الأساسية مع هدية شهر مجاني تجريبي في الباقة الذهبية VIP!`;
+
+      showToast(toastMessage);
     } catch (error) {
       console.error('Error creating business:', error);
       showToast('حدث خطأ أثناء إضافة المحل', 'error');
@@ -1138,22 +1278,11 @@ export function AdminDashboard() {
   const handleDeleteBusiness = async (id: string, name: string) => {
     if (!db) return;
     try {
-      await deleteDoc(doc(db, 'businesses', id));
-
-      // Also clean up any homepage banners linked to this deleted business
-      try {
-        await deleteDoc(doc(db, 'banners', `business_banner_${id}`)).catch(() => {});
-        const bannersSnap = await getDocs(query(collection(db, 'banners'), where('businessId', '==', id)));
-        bannersSnap.forEach((bannerDoc) => {
-          deleteDoc(doc(db, 'banners', bannerDoc.id)).catch(() => {});
-        });
-      } catch (bannerErr) {
-        console.error("Error cleaning up business banners:", bannerErr);
-      }
+      await deleteBusinessCascading(id, name);
 
       setBusinesses(prev => prev.filter(b => b.id !== id));
       invalidateCache();
-      showToast(`تم حذف محل (${name}) من الدليل وإزالة إعلاناته تلقائياً`, 'info');
+      showToast(`تم حذف محل (${name}) وكافة العروض والوظائف والمنيو المرتبطة به بنجاح`, 'info');
     } catch (err) {
       console.error("Error deleting business:", err);
       showToast('تعذر حذف المحل', 'error');
@@ -1358,6 +1487,38 @@ export function AdminDashboard() {
     } catch (error) {
       console.error("Error deleting marketing request:", error);
       showToast('تعذر حذف الطلب', 'error');
+    }
+  };
+
+  // Handler: Delete All Global Notifications from Firestore
+  const handleDeleteAllGlobalNotifications = async () => {
+    if (!db) return;
+    const isConfirmed = await confirm({
+      title: 'حذف جميع الإشعارات لجميع المستخدمين',
+      message: '⚠️ تحذير أمني هام: هل أنت متأكد من رغبتك في مسح وحذف جميع الإشعارات العامة والخاصة لجميع المستخدمين نهائياً من قاعدة البيانات؟ لا يمكن التراجع عن هذا الإجراء.',
+      variant: 'danger',
+      confirmText: 'نعم، مسح كلي للإشعارات',
+      cancelText: 'إلغاء'
+    });
+    if (!isConfirmed) return;
+
+    setIsDeletingAllNotifications(true);
+    try {
+      const snap = await getDocs(collection(db, 'notifications'));
+      if (snap.empty) {
+        showToast('لا توجد إشعارات حالياً في قاعدة البيانات.', 'info');
+        return;
+      }
+
+      const deletePromises = snap.docs.map(docSnap => deleteDoc(doc(db, 'notifications', docSnap.id)));
+      await Promise.all(deletePromises);
+
+      showToast(`تم مسح وحذف ${snap.docs.length} إشعار بنجاح لجميع المستخدمين!`, 'success');
+    } catch (err: any) {
+      console.error("Error deleting all notifications:", err);
+      showToast('حدث خطأ أثناء حذف الإشعارات: ' + (err?.message || ''), 'error');
+    } finally {
+      setIsDeletingAllNotifications(false);
     }
   };
 
@@ -1649,6 +1810,62 @@ export function AdminDashboard() {
     return setIds.size;
   }, [requests, businesses]);
 
+  // Real-time Upgrade Requests for Subscriptions Badges & Counting
+  const [upgradeRequestsList, setUpgradeRequestsList] = useState<UpgradeRequest[]>([]);
+
+  useEffect(() => {
+    if (!db) return;
+    const q = query(collection(db, 'upgradeRequests'), orderBy('createdAt', 'desc'));
+    const unsub = onSnapshot(
+      q,
+      (snapshot) => {
+        const list: UpgradeRequest[] = [];
+        snapshot.forEach((d) => list.push({ id: d.id, ...d.data() } as UpgradeRequest));
+        setUpgradeRequestsList(list);
+      },
+      (err) => console.error('Error fetching upgrade requests for header:', err)
+    );
+    return () => unsub();
+  }, []);
+
+  const pendingShopsUpgradeCount = useMemo(() => {
+    return upgradeRequestsList.filter((r) => {
+      if (r.status !== 'pending') return false;
+      const b = businesses.find((item) => item.id === r.businessId);
+      const isMed = b
+        ? isMedicalBusiness(b) || !!b.medicalProfile || (b as any).requestType === 'medical_facility_registration'
+        : (
+            r.businessName?.includes('عياد') ||
+            r.businessName?.includes('مستشف') ||
+            r.businessName?.includes('طبي') ||
+            r.businessName?.includes('دكتور') ||
+            r.businessName?.includes('صيدل') ||
+            r.businessName?.includes('مختبر') ||
+            r.businessName?.includes('مركز طبي')
+          );
+      return !isMed;
+    }).length;
+  }, [upgradeRequestsList, businesses]);
+
+  const pendingMedicalUpgradeCount = useMemo(() => {
+    return upgradeRequestsList.filter((r) => {
+      if (r.status !== 'pending') return false;
+      const b = businesses.find((item) => item.id === r.businessId);
+      const isMed = b
+        ? isMedicalBusiness(b) || !!b.medicalProfile || (b as any).requestType === 'medical_facility_registration'
+        : (
+            r.businessName?.includes('عياد') ||
+            r.businessName?.includes('مستشف') ||
+            r.businessName?.includes('طبي') ||
+            r.businessName?.includes('دكتور') ||
+            r.businessName?.includes('صيدل') ||
+            r.businessName?.includes('مختبر') ||
+            r.businessName?.includes('مركز طبي')
+          );
+      return isMed;
+    }).length;
+  }, [upgradeRequestsList, businesses]);
+
   if (!isStaff) {
     return (
       <div className="max-w-xl mx-auto py-16 px-4 text-center space-y-6" dir="rtl">
@@ -1721,7 +1938,10 @@ export function AdminDashboard() {
         pendingHousingCount={housings.filter(h => h.status === 'pending').length}
         medicalFacilitiesCount={medicalFacilitiesCount}
         pendingMedicalRequestsCount={pendingMedicalRequestsCount}
+        pendingShopsUpgradeCount={pendingShopsUpgradeCount}
+        pendingMedicalUpgradeCount={pendingMedicalUpgradeCount}
         onRefresh={fetchData}
+        onOpenAddEntity={() => setIsAddEntitySelectionOpen(true)}
         onOpenAddBusiness={() => setIsAddBusinessOpen(true)}
         onOpenBroadcastModal={() => setIsBroadcastModalOpen(true)}
         onExportData={handleExportBackup}
@@ -1731,6 +1951,49 @@ export function AdminDashboard() {
       {/* TAB 1: OVERVIEW & ANALYTICS */}
       {activeTab === 'overview' && (
         <div className="space-y-6">
+          {/* Seed Demo Accounts Seeder Card */}
+          <div className="bg-gradient-to-r from-emerald-900 via-[#1a4d2e] to-teal-900 text-white p-6 rounded-3xl shadow-lg border border-emerald-700/50 space-y-4">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className="flex items-start gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-amber-400/20 text-amber-300 border border-amber-400/30 flex items-center justify-center font-bold shrink-0">
+                  <Sparkles className="h-6 w-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-lg font-black text-white">زرع 20+ حساب وهمي متكامل في Firebase 🔥</h3>
+                    <span className="bg-amber-400/20 text-amber-300 border border-amber-400/30 text-[10px] font-black px-2.5 py-0.5 rounded-full">
+                      شامل المنيوهات والعروض والوظائف
+                    </span>
+                  </div>
+                  <p className="text-xs text-emerald-100/90 mt-1 leading-relaxed max-w-3xl">
+                    زرع وتوليد 20 حساباً ومحلاً تجارياً وطبياً وهمياً في مختلف أقسام واختصاصات محافظة إربد (مطاعم، مقاهي، عيادات طبية، صالونات، إلكترونيات، أزياء، خيارات طلابية، وسكنات) مع قوائم المنتجات (المنيوهات)، العروض والخصومات والوظائف الشاغرة بضغطة زر واحدة على قاعدة بيانات Firebase.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 flex-wrap shrink-0">
+                <button
+                  onClick={handleSeedDemoAccounts}
+                  disabled={isSeedingDemo || isClearingDemo}
+                  className="inline-flex items-center gap-2 bg-amber-500 hover:bg-amber-400 text-stone-950 font-black px-5 py-3 rounded-2xl text-xs shadow-md transition-all cursor-pointer disabled:opacity-50 active:scale-95"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  <span>{isSeedingDemo ? 'جاري زرع الحسابات في Firebase...' : 'زرع 20 حساب وهمي الآن 🌱'}</span>
+                </button>
+
+                <button
+                  onClick={handleClearDemoAccounts}
+                  disabled={isSeedingDemo || isClearingDemo}
+                  className="inline-flex items-center gap-2 bg-red-600/80 hover:bg-red-600 text-white font-black px-4 py-3 rounded-2xl text-xs border border-red-500/40 transition-all cursor-pointer disabled:opacity-50 active:scale-95"
+                  title="مسح الحسابات والبيانات الوهمية التجريبية فقط"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span>{isClearingDemo ? 'جاري المسح...' : 'حذف البيانات الوهمية 🗑️'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
           <AdminStatsOverview
             businesses={businesses}
             requests={requests}
@@ -3335,6 +3598,86 @@ export function AdminDashboard() {
             </div>
           </div>
 
+          
+          {/* Housing Pricing Editor */}
+          <div className="bg-white p-6 rounded-3xl border border-[#e5e1da] shadow-xs mb-6 mt-4">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-base font-black text-stone-900">أسعار إعلانات السكنات والعقارات</h3>
+                <p className="text-xs text-stone-500 mt-1">تعديل أسعار إضافة مدة للإعلان وتمييز الإعلان</p>
+              </div>
+              {!isEditingHousingPrices ? (
+                <button
+                  onClick={() => {
+                    setEditPricesData(appConfigState || {});
+                    setIsEditingHousingPrices(true);
+                  }}
+                  className="bg-stone-100 hover:bg-stone-200 text-stone-800 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                >
+                  تعديل الأسعار
+                </button>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setIsEditingHousingPrices(false)}
+                    className="bg-stone-100 hover:bg-stone-200 text-stone-600 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    إلغاء
+                  </button>
+                  <button
+                    onClick={async () => {
+                      try {
+                        await setAppConfig(editPricesData);
+                        setAppConfigState(editPricesData);
+                        setIsEditingHousingPrices(false);
+                        showToast('تم حفظ أسعار العقارات بنجاح');
+                      } catch (err) {
+                        showToast('حدث خطأ أثناء حفظ الأسعار', 'error');
+                      }
+                    }}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    حفظ التغييرات
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {!isEditingHousingPrices ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="p-3 bg-stone-50 rounded-xl border border-stone-200/60">
+                  <div className="text-[10px] font-bold text-stone-500 mb-1">تمديد الإعلان لأسبوع إضافي</div>
+                  <div className="text-sm font-black text-[#1a4d2e]">{appConfigState?.priceHousingExtraWeek ?? 2} د.أ</div>
+                </div>
+                <div className="p-3 bg-stone-50 rounded-xl border border-stone-200/60">
+                  <div className="text-[10px] font-bold text-stone-500 mb-1">تمييز وتثبيت الإعلان (لكل 3 أيام)</div>
+                  <div className="text-sm font-black text-[#1a4d2e]">{appConfigState?.priceHousingFeatured3Days ?? 1} د.أ</div>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-stone-500">تمديد الإعلان لأسبوع إضافي (د.أ)</label>
+                  <input
+                    type="number"
+                    value={editPricesData.priceHousingExtraWeek ?? 2}
+                    onChange={(e) => setEditPricesData({ ...editPricesData, priceHousingExtraWeek: Number(e.target.value) })}
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-stone-500">تمييز وتثبيت الإعلان (لكل 3 أيام) (د.أ)</label>
+                  <input
+                    type="number"
+                    value={editPricesData.priceHousingFeatured3Days ?? 1}
+                    onChange={(e) => setEditPricesData({ ...editPricesData, priceHousingFeatured3Days: Number(e.target.value) })}
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Quick Counter Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div 
@@ -4090,24 +4433,36 @@ export function AdminDashboard() {
       {activeTab === 'broadcast' && (
         <div className="space-y-6">
           <div className="bg-white p-6 rounded-3xl border border-[#e5e1da] shadow-xs space-y-6">
-            <div className="flex items-center justify-between border-b border-stone-100 pb-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-stone-100 pb-4 gap-3">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
                   <Bell className="h-5 w-5" />
                 </div>
                 <div>
                   <h3 className="text-xl font-black text-[#2d2a26]">مركز الإشعارات والتنبيهات العامة</h3>
-                  <p className="text-xs text-stone-500">إرسال إشعارات جماعية لكافة المستخدمين وأصحاب المحلات في إربد</p>
+                  <p className="text-xs text-stone-500">إرسال وتحديث وإدارة إشعارات جميع المستخدمين وأصحاب المحلات في إربد</p>
                 </div>
               </div>
 
-              <button
-                onClick={() => setIsBroadcastModalOpen(true)}
-                className="inline-flex items-center gap-2 bg-[#1a4d2e] hover:bg-[#143e25] text-white px-5 py-2.5 rounded-2xl text-xs font-black shadow-xs transition-colors cursor-pointer"
-              >
-                <Send className="h-4 w-4 text-[#ff9f1c]" />
-                <span>إرسال إشعار فوري الآن</span>
-              </button>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={handleDeleteAllGlobalNotifications}
+                  disabled={isDeletingAllNotifications}
+                  className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white px-4 py-2.5 rounded-2xl text-xs font-black shadow-xs transition-colors cursor-pointer"
+                  title="حذف جميع الإشعارات من قاعدة البيانات نهائياً لجميع المستخدمين"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span>{isDeletingAllNotifications ? 'جاري الحذف...' : 'حذف جميع الإشعارات لجميع المستخدمين'}</span>
+                </button>
+
+                <button
+                  onClick={() => setIsBroadcastModalOpen(true)}
+                  className="inline-flex items-center gap-2 bg-[#1a4d2e] hover:bg-[#143e25] text-white px-5 py-2.5 rounded-2xl text-xs font-black shadow-xs transition-colors cursor-pointer"
+                >
+                  <Send className="h-4 w-4 text-[#ff9f1c]" />
+                  <span>إرسال إشعار فوري الآن</span>
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -4157,15 +4512,17 @@ export function AdminDashboard() {
         <AccountsManager />
       )}
 
-      {/* TAB: SUBSCRIPTIONS OVERVIEW */}
-      {activeTab === 'subscriptions' && (
-        <AdminSubscriptionsOverview
+      {/* TAB: SUBSCRIPTIONS & PLANS MANAGEMENT (قسم رئيسي كامل لإدارة الاشتراكات والباقات) */}
+      {(activeTab === 'subscriptions_shops' || activeTab === 'subscriptions_medical' || activeTab === 'subscriptions') && (
+        <AdminSubscriptionsManager
           businesses={businesses}
+          initialTarget={activeTab === 'subscriptions_medical' ? 'medical' : 'shops'}
           onOpenVipModal={(biz) => {
             setSelectedBusinessForVip(biz);
             setIsVipUpgradeModalOpen(true);
           }}
           onShowToast={showToast}
+          onRefreshData={fetchData}
         />
       )}
 
@@ -4206,6 +4563,36 @@ export function AdminDashboard() {
                   <Download className="h-4 w-4" />
                   <span>تنزيل ملف النسخة الاحتياطية</span>
                 </button>
+              </div>
+
+              {/* Demo Data Seeder Card */}
+              <div className="p-5 rounded-2xl border border-amber-200 bg-amber-50/40 space-y-3 col-span-1 md:col-span-2">
+                <div className="flex items-center gap-2 text-stone-900 font-black text-sm">
+                  <Sparkles className="h-4 w-4 text-amber-600" />
+                  <span>زرع وإدارة 20+ حساب وهمي تجريبي في Firebase</span>
+                </div>
+                <p className="text-xs text-stone-600 leading-relaxed">
+                  توليد وقذف 20+ حساباً تجارياً وطبياً وهمياً مع كافة المنيوهات، الأطعمة والخدمات، العروض الترويجية، الشواغر الوظيفية، والسكنات الطلابية في جميع أرجاء إربد لاختبار المنصة وتجربة النظام كاملاً.
+                </p>
+                <div className="flex items-center gap-3 pt-1">
+                  <button
+                    onClick={handleSeedDemoAccounts}
+                    disabled={isSeedingDemo || isClearingDemo}
+                    className="inline-flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-stone-950 font-black px-5 py-2.5 rounded-xl text-xs transition-colors shadow-xs cursor-pointer disabled:opacity-50"
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    <span>{isSeedingDemo ? 'جاري الزرع...' : 'زرع 20+ حساب وهمي تجريبي 🌱'}</span>
+                  </button>
+
+                  <button
+                    onClick={handleClearDemoAccounts}
+                    disabled={isSeedingDemo || isClearingDemo}
+                    className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-black px-4 py-2.5 rounded-xl text-xs transition-colors shadow-xs cursor-pointer disabled:opacity-50"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    <span>{isClearingDemo ? 'جاري الحذف...' : 'مسح البيانات التجريبية 🗑️'}</span>
+                  </button>
+                </div>
               </div>
 
               {/* System Diagnostics */}
@@ -4291,6 +4678,23 @@ export function AdminDashboard() {
         request={selectedRequestForDetails}
         onApprove={(req) => handleApproveRequest(req)}
         onReject={(reqId, reqName) => handleRejectRequest(reqId)}
+      />
+
+      {/* 7. Add Entity Selection Modal (Admin Only) */}
+      <AddEntitySelectionModal
+        isOpen={isAddEntitySelectionOpen}
+        onClose={() => setIsAddEntitySelectionOpen(false)}
+        onSelectBusiness={() => setIsAddBusinessOpen(true)}
+        onSelectMedical={() => setIsAddMedicalOpen(true)}
+      />
+
+      {/* 8. Add Medical Facility Modal (Admin Only) */}
+      <AddMedicalFacilityModal
+        isOpen={isAddMedicalOpen}
+        onClose={() => setIsAddMedicalOpen(false)}
+        onFacilityAdded={async () => {
+          await fetchData();
+        }}
       />
 
     </div>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSystemSettings } from '../../contexts/SystemSettingsContext';
 import { Globe, Save, Phone, Mail, Facebook, Instagram, Share2, Image as ImageIcon, LayoutGrid, CheckCircle2, Bot, Sparkles, Power, Zap, AlertCircle } from 'lucide-react';
 import { WhatsAppIcon } from '../common/WhatsAppIcon';
@@ -11,10 +11,39 @@ interface GlobalSettingsManagerProps {
 export function GlobalSettingsManager({ showToast }: GlobalSettingsManagerProps) {
   const { globalSettings, updateGlobalSettings } = useSystemSettings();
   const [formData, setFormData] = useState(globalSettings);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    setFormData(globalSettings);
+  }, [globalSettings]);
 
   const handleSave = async () => {
-    await updateGlobalSettings(formData);
-    showToast('تم حفظ إعدادات الهوية والتواصل بنجاح');
+    setIsSaving(true);
+    try {
+      await updateGlobalSettings(formData);
+      showToast('تم حفظ إعدادات الهوية والتواصل بنجاح', 'success');
+    } catch {
+      showToast('حدث خطأ أثناء حفظ الإعدادات', 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleToggleAi = async () => {
+    const nextVal = !(formData.enableAiAssistant !== false);
+    const updated = { ...formData, enableAiAssistant: nextVal };
+    setFormData(updated);
+    try {
+      await updateGlobalSettings(updated);
+      showToast(
+        nextVal 
+          ? 'تم تفعيل المساعد الذكي (ربداوي AI) بنجاح 🟢' 
+          : 'تم تعطيل المساعد الذكي (سيظهر إشعار "ستتوفر الميزة قريباً" للزوار) ⚪',
+        'success'
+      );
+    } catch {
+      showToast('حدث خطأ أثناء حفظ التغيير', 'error');
+    }
   };
 
   return (
@@ -29,13 +58,13 @@ export function GlobalSettingsManager({ showToast }: GlobalSettingsManagerProps)
             <p className="text-stone-500 text-xs">تعديل اسم الموقع، الشعار، أرقام التواصل وروابط وسائل التواصل الاجتماعي</p>
           </div>
         </div>
-
         <button
           onClick={handleSave}
-          className="inline-flex items-center justify-center gap-2 bg-[#1a4d2e] hover:bg-[#133b22] text-white px-5 py-2.5 rounded-xl text-xs font-black transition-colors cursor-pointer shadow-xs"
+          disabled={isSaving}
+          className="inline-flex items-center justify-center gap-2 bg-[#1a4d2e] hover:bg-[#133b22] text-white px-5 py-2.5 rounded-xl text-xs font-black transition-colors cursor-pointer shadow-xs disabled:opacity-50"
         >
           <Save className="h-4 w-4 text-[#ff9f1c]" />
-          <span>حفظ التغييرات</span>
+          <span>{isSaving ? 'جارٍ الحفظ...' : 'حفظ التغييرات'}</span>
         </button>
       </div>
 
@@ -62,21 +91,20 @@ export function GlobalSettingsManager({ showToast }: GlobalSettingsManagerProps)
                     ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                     : 'bg-amber-100 text-amber-800 border border-amber-300'
                 }`}>
-                  {formData.enableAiAssistant !== false ? '● مفعّل ويعمل' : '○ معطل ومخفي'}
+                  {formData.enableAiAssistant !== false ? '● مفعّل ويعمل' : '○ غير مفعل'}
                 </span>
               </div>
               <p className="text-stone-600 text-xs mt-1 leading-relaxed">
                 {formData.enableAiAssistant !== false 
                   ? 'المساعد الذكي ينشط كأيقونة عائمة في جميع صفحات المنصة لتوجيه الزوار، البحث، ومقارنة العروض.'
-                  : 'تم إيقاف المساعد الذكي كلياً من المنصة، ولن تظهر أيقونة المحادثة الذكية لأي مستخدم حتى إعادة تفعيله.'}
+                  : 'سيظهر زر المساعد الذكي ولكن عند فتحه سيعرض رسالة "ستتوفر هذه الميزة قريباً" ولن يتمكن الزائر من المحادثة.'}
               </p>
             </div>
           </div>
-
           <div className="flex items-center gap-3 shrink-0 self-end sm:self-center">
             <button
               type="button"
-              onClick={() => setFormData(prev => ({ ...prev, enableAiAssistant: !(prev.enableAiAssistant !== false) }))}
+              onClick={handleToggleAi}
               className={`relative inline-flex h-7 w-14 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
                 formData.enableAiAssistant !== false ? 'bg-[#1a4d2e]' : 'bg-stone-300'
               }`}
@@ -87,7 +115,6 @@ export function GlobalSettingsManager({ showToast }: GlobalSettingsManagerProps)
                 }`}
               />
             </button>
-
             <span className="text-xs font-black text-stone-800 min-w-[65px]">
               {formData.enableAiAssistant !== false ? 'مفعّل الآن' : 'معطّل الآن'}
             </span>

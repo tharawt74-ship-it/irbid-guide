@@ -3,6 +3,7 @@ import { User, onAuthStateChanged, signOut as firebaseSignOut } from 'firebase/a
 import { doc, getDoc, setDoc, collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 import { UserRole, UserProfile, SupervisorPermissions, Business } from '../types';
+import { linkUserToMatchedBusinesses } from '../lib/authPhoneHelper';
 
 const ADMIN_BOOTSTRAP_EMAILS = [
   'princessofx2344@gmail.com',
@@ -201,12 +202,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
 
-        const userBizList: Business[] = [];
-        if (bizSnap) {
-          bizSnap.forEach(d => {
-            userBizList.push({ id: d.id, ...d.data() } as Business);
+        const userPhone = profileData?.phone || (userEmail.startsWith('phone_') ? userEmail.replace('phone_', '').split('@')[0] : '');
+        
+        // Auto-link any business created with this user's phone or email in golden field
+        if (db) {
+          await linkUserToMatchedBusinesses(user.uid, userPhone, userEmail);
+        }
+
+        const userBizMap = new Map<string, Business>();
+
+        // Re-query businesses now that matching businesses have been transferred to user.uid in Firestore
+        const postLinkSnap = await getDocs(query(collection(db, 'businesses'), where('userId', '==', user.uid))).catch(() => null);
+        if (postLinkSnap) {
+          postLinkSnap.forEach(d => {
+            userBizMap.set(d.id, { id: d.id, ...d.data() } as Business);
           });
         }
+
+        // Additional fallback match by ownerEmail, ownerPhone or ownerContact
+        if (db && (userEmail || userPhone)) {
+          try {
+            const [snapEmail, snapPhone, snapContact] = await Promise.all([
+              userEmail ? getDocs(query(collection(db, 'businesses'), where('ownerEmail', '==', userEmail))).catch(() => null) : null,
+              userPhone ? getDocs(query(collection(db, 'businesses'), where('ownerPhone', '==', userPhone))).catch(() => null) : null,
+              userEmail ? getDocs(query(collection(db, 'businesses'), where('ownerContact', '==', userEmail))).catch(() => null) : null
+            ]);
+            if (snapEmail && !snapEmail.empty) {
+              snapEmail.forEach(d => userBizMap.set(d.id, { id: d.id, ...d.data() } as Business));
+            }
+            if (snapPhone && !snapPhone.empty) {
+              snapPhone.forEach(d => userBizMap.set(d.id, { id: d.id, ...d.data() } as Business));
+            }
+            if (snapContact && !snapContact.empty) {
+              snapContact.forEach(d => userBizMap.set(d.id, { id: d.id, ...d.data() } as Business));
+            }
+          } catch (e) {
+            console.warn("Could not query secondary owned businesses:", e);
+          }
+        }
+
+        const userBizList: Business[] = Array.from(userBizMap.values());
         setOwnedBusinesses(userBizList);
 
         if (userBizList.length > 0 && computedRole === 'user') {

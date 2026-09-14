@@ -8,8 +8,9 @@ import {
   Percent, Building2, SlidersHorizontal, FilterX, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { Business, MenuItem, NewsArticle, JobOffer, HousingItem } from '../types';
+import { getAppConfig, DEMO_SEED_DATA } from '../lib/demoDataHelper';
 import { normalizeArabic } from '../lib/arabicSearch';
-import { getBusinessVipStatus } from '../lib/vipHelper';
+import { getBusinessVipStatus, compareBusinessesByTier } from '../lib/vipHelper';
 import { getLiveWorkingStatus } from '../lib/businessHoursHelper';
 import { SEO } from '../components/common/SEO';
 import { BUSINESS_CATEGORIES, ALL_IRBID_DISTRICTS } from '../lib/categories';
@@ -107,6 +108,7 @@ export function Search() {
       }
       setLoading(true);
       try {
+        const appConfig = await getAppConfig();
         const [bizSnap, offersSnap, jobsSnap, housingsSnap, newsSnap] = await Promise.all([
           getDocs(query(collection(db, 'businesses'))),
           getDocs(query(collection(db, 'offers'), orderBy('createdAt', 'desc'))).catch(() => ({ docs: [] } as any)),
@@ -115,11 +117,19 @@ export function Search() {
           getDocs(query(collection(db, 'news'), orderBy('createdAt', 'desc'))).catch(() => ({ docs: [] } as any))
         ]);
 
-        const bizDocs = bizSnap.docs.map(d => ({ id: d.id, ...d.data() } as Business)).filter(b => !(b as any).isDemo);
+        let bizDocs = bizSnap.docs
+          .map(d => ({ id: d.id, ...d.data() } as Business))
+          .filter(b => b.status !== 'pending' && b.status !== 'rejected')
+          .filter(b => appConfig.showDemoData !== false || !(b as any).isDemo);
+
+        if (bizDocs.length === 0) {
+          bizDocs = DEMO_SEED_DATA.businesses.map((b, idx) => ({ id: `demo-b-${idx}`, ...b } as Business));
+        }
+
         setBusinesses(bizDocs);
-        setOffers(offersSnap.docs.map(d => ({ id: d.id, ...d.data() } as OfferItem)).filter(o => !o.isDemo));
-        setJobs(jobsSnap.docs.map(d => ({ id: d.id, ...d.data() } as JobOffer)).filter(j => !j.isDemo));
-        setHousings(housingsSnap.docs.map(d => ({ id: d.id, ...d.data() } as HousingItem)).filter(h => !h.isDemo));
+        setOffers(offersSnap.docs.map(d => ({ id: d.id, ...d.data() } as OfferItem)).filter(o => appConfig.showDemoData !== false || !o.isDemo));
+        setJobs(jobsSnap.docs.map(d => ({ id: d.id, ...d.data() } as JobOffer)).filter(j => appConfig.showDemoData !== false || !j.isDemo));
+        setHousings(housingsSnap.docs.map(d => ({ id: d.id, ...d.data() } as HousingItem)).filter(h => appConfig.showDemoData !== false || !h.isDemo));
         setNews(newsSnap.docs.map(d => ({ id: d.id, ...d.data() } as NewsArticle)));
       } catch (err) {
         console.error('Error loading search datasets:', err);
@@ -194,12 +204,10 @@ export function Search() {
       return isSearchMatch && isLocMatch && isCatMatch;
     });
 
-    // Float active sponsored/featured to the top!
+    // Always sort by: Featured -> Golden VIP -> Rest
     const now = Date.now();
     return list.sort((a, b) => {
-      const aFeatured = a.isFeatured && (!a.featuredStartDate || a.featuredStartDate <= now) && (!a.featuredExpiryDate || a.featuredExpiryDate > now) ? 1 : 0;
-      const bFeatured = b.isFeatured && (!b.featuredStartDate || b.featuredStartDate <= now) && (!b.featuredExpiryDate || b.featuredExpiryDate > now) ? 1 : 0;
-      return bFeatured - aFeatured;
+      return compareBusinessesByTier(a, b, undefined, now);
     });
   }, [businesses, queryTokens, selectedLocation, selectedMainCategory, selectedSubCategory]);
 
@@ -232,7 +240,12 @@ export function Search() {
         });
       }
     });
-    return products;
+
+    // Sort products based on parent business tier: Featured -> Golden VIP -> Rest
+    const now = Date.now();
+    return products.sort((a, b) => {
+      return compareBusinessesByTier(a.parentBusiness, b.parentBusiness, undefined, now);
+    });
   }, [businesses, queryTokens, selectedLocation, selectedMainCategory, selectedSubCategory]);
 
   // 3. FILTERED OFFERS

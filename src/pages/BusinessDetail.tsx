@@ -203,7 +203,7 @@ export function BusinessDetail() {
     if (clean.startsWith('07')) {
       clean = '962' + clean.substring(1);
     }
-    return `https://wa.me/${clean}?text=${encodeURIComponent('مرحباً، أود الاستفسار عن توفر دواء أو إرسال وصفة طبية للصيدلية عبر تطبيق بلدك إربد.')}`;
+    return `https://wa.me/${clean}?text=${encodeURIComponent('مرحباً، أود الاستفسار عن توفر دواء أو إرسال وصفة طبية للصيدلية عبر منصة شو في بإربد.')}`;
   }, [business?.socialLinks?.whatsapp, business?.whatsapp, business?.phone]);
   const medicalProfile = useMemo(() => getMedicalProfile(business), [business]);
   const [isMedicalBookingOpen, setIsMedicalBookingOpen] = useState(false);
@@ -401,6 +401,14 @@ export function BusinessDetail() {
           if (bizData.isHidden && currentUser?.uid !== bizData.userId && !isAdmin) {
             setBusiness(null);
             setError('تم إخفاء صفحة هذا المحل مؤقتاً بواسطة المالك.');
+            setLoading(false);
+            return;
+          }
+
+          // Check if store is not approved yet (pending or rejected)
+          if ((bizData.status === 'pending' || bizData.status === 'rejected') && currentUser?.uid !== bizData.userId && !isAdmin) {
+            setBusiness(null);
+            setError('هذه الصفحة بانتظار مراجعة إدارة منصة شو في بإربد والموافقة عليها قبل النشر.');
             setLoading(false);
             return;
           }
@@ -685,7 +693,7 @@ export function BusinessDetail() {
 
   // Automatic VIP Welcome Popup Trigger for visitors (Displays 1 out of every 5 visits: 1st, 6th, 11th, etc.)
   useEffect(() => {
-    if (!business) return;
+    if (!business || !vipInfo.isVip) return;
     const popupConfig = business.vipPopup;
     if (popupConfig?.enabled && (popupConfig.videoUrl || popupConfig.imageUrl || popupConfig.title || popupConfig.description)) {
       const visitsKey = `welcome_popup_visit_count_${business.id}`;
@@ -1696,7 +1704,7 @@ export function BusinessDetail() {
               <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 -mt-12 sm:-mt-16 mb-4 relative z-20">
                 <div className="flex items-end gap-3 sm:gap-4">
                   {/* Circular Profile Picture / Logo with Instagram/Facebook Story ring for Vip Welcome Popup */}
-                  {business.vipPopup?.enabled ? (
+                  {vipInfo.isVip && business.vipPopup?.enabled ? (
                     <div 
                       onClick={() => setIsVipWelcomePopupOpen(true)}
                       className="relative group cursor-pointer shrink-0 z-30"
@@ -5285,7 +5293,7 @@ export function BusinessDetail() {
           )}
 
       {/* Visitor VIP Interactive Welcome Popup */}
-      {business && business.vipPopup?.enabled && (
+      {business && vipInfo.isVip && business.vipPopup?.enabled && (
         <VipWelcomePopupModal
           business={business}
           popupConfig={business.vipPopup}

@@ -127,27 +127,14 @@ export function MedicalFacilitiesTab({
         </div>
 
         <div>
-          <button
-            type="button"
-            onClick={() => setIsAddModalOpen(true)}
+          <Link
+            to="/medical/register"
             className="inline-flex items-center gap-2 bg-teal-700 hover:bg-teal-800 text-white px-7 py-3.5 rounded-2xl font-black text-sm shadow-md transition-all cursor-pointer"
           >
             <Plus className="h-5 w-5" />
             <span>تسجيل منشأة طبية جديدة الآن</span>
-          </button>
+          </Link>
         </div>
-
-        {isAddModalOpen && (
-          <AddMedicalFacilityModal
-            isOpen={isAddModalOpen}
-            onClose={() => setIsAddModalOpen(false)}
-            onFacilityAdded={() => {
-              setIsAddModalOpen(false);
-              onRefresh();
-              showToast('تم إرسال طلب تسجيل المنشأة الطبية بنجاح! 🩺');
-            }}
-          />
-        )}
       </div>
     );
   }
@@ -609,18 +596,6 @@ export function MedicalFacilitiesTab({
       </div>
 
       {/* Modal Dialogs */}
-      {isAddModalOpen && (
-        <AddMedicalFacilityModal
-          isOpen={isAddModalOpen}
-          onClose={() => setIsAddModalOpen(false)}
-          onFacilityAdded={() => {
-            setIsAddModalOpen(false);
-            onRefresh();
-            showToast('تم إرسال طلب تسجيل المنشأة بنجاح! 🩺');
-          }}
-        />
-      )}
-
       {isUpgradeModalOpen && (
         <VipUpgradeRequestModal
           isOpen={isUpgradeModalOpen}

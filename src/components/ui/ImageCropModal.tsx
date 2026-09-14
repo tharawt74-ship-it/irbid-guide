@@ -114,11 +114,26 @@ export function ImageCropModal({
   };
 
   const [aspectRatio, setAspectRatio] = useState<CropAspectRatio>(getInitialRatio());
+  const [naturalAspect, setNaturalAspect] = useState<number | null>(null);
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [rotation, setRotation] = useState(0);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<any>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Load natural aspect ratio of the image
+  useEffect(() => {
+    if (imageSrc) {
+      const img = new Image();
+      img.onload = () => {
+        if (img.naturalWidth && img.naturalHeight) {
+          const aspect = img.naturalWidth / img.naturalHeight;
+          setNaturalAspect(aspect);
+        }
+      };
+      img.src = imageSrc;
+    }
+  }, [imageSrc]);
 
   useEffect(() => {
     if (isOpen) {
@@ -129,6 +144,36 @@ export function ImageCropModal({
       setCroppedAreaPixels(null);
     }
   }, [isOpen, imageSrc, initialAspectRatio]);
+
+  // Inject handle DOM elements into the cropper area for tactile visualization
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const timer = setTimeout(() => {
+      const cropArea = document.querySelector('.custom-crop-area');
+      if (cropArea && !cropArea.querySelector('.crop-handle-tl')) {
+        const handles = [
+          { cls: 'crop-handle crop-handle-corner crop-handle-tl', title: 'تحكم بالزاوية العلوية' },
+          { cls: 'crop-handle crop-handle-corner crop-handle-tr', title: 'تحكم بالزاوية العلوية' },
+          { cls: 'crop-handle crop-handle-corner crop-handle-bl', title: 'تحكم بالزاوية السفلية' },
+          { cls: 'crop-handle crop-handle-corner crop-handle-br', title: 'تحكم بالزاوية السفلية' },
+          { cls: 'crop-handle crop-handle-edge-h crop-handle-t', title: 'تحكم بالحافة العلوية' },
+          { cls: 'crop-handle crop-handle-edge-h crop-handle-b', title: 'تحكم بالحافة السفلية' },
+          { cls: 'crop-handle crop-handle-edge-v crop-handle-l', title: 'تحكم بالحافة الجانبية' },
+          { cls: 'crop-handle crop-handle-edge-v crop-handle-r', title: 'تحكم بالحافة الجانبية' },
+        ];
+
+        handles.forEach(h => {
+          const el = document.createElement('div');
+          el.className = h.cls;
+          el.title = h.title;
+          cropArea.appendChild(el);
+        });
+      }
+    }, 120);
+
+    return () => clearTimeout(timer);
+  }, [isOpen, aspectRatio, zoom, rotation]);
 
   const onCropChange = (crop: { x: number; y: number }) => setCrop(crop);
   const onZoomChange = (zoom: number) => setZoom(zoom);
@@ -177,36 +222,42 @@ export function ImageCropModal({
     }
   };
 
+  // Determine active aspect ratio value (defaults to full natural image aspect on 'free')
   const aspectValue = aspectRatio === '1:1' ? 1 : 
                       aspectRatio === '16:9' ? 16 / 9 : 
                       aspectRatio === '4:3' ? 4 / 3 : 
                       aspectRatio === '3:1' ? 3 / 1 : 
-                      undefined; // free
+                      (naturalAspect || undefined);
 
   if (!isOpen || typeof document === 'undefined') return null;
 
   return createPortal(
     <AnimatePresence>
-      <div className="fixed inset-0 z-[100000] flex items-center justify-center p-3 sm:p-4 md:p-6 bg-black/90 backdrop-blur-sm" dir="rtl">
+      <div 
+        data-no-bottom-sheet="true"
+        className="fixed inset-0 z-[9999999] flex items-center justify-center p-2 sm:p-4 md:p-6 bg-black/90 backdrop-blur-md select-none" 
+        dir="rtl"
+      >
         <motion.div
           initial={{ opacity: 0, scale: 0.94, y: 15 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.94, y: 15 }}
           transition={{ duration: 0.2 }}
-          className="bg-stone-900 border border-stone-700/80 w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[88vh]"
+          className="bg-stone-900 border border-stone-700/80 w-full max-w-2xl rounded-2xl sm:rounded-3xl shadow-2xl flex flex-col h-[94dvh] sm:h-[88vh] max-h-[820px] overflow-hidden"
         >
           {/* Header */}
-          <div className="px-5 py-4 border-b border-stone-800 flex items-center justify-between bg-stone-950/60 shrink-0">
+          <div className="px-4 py-3 sm:px-5 sm:py-3.5 border-b border-stone-800 flex items-center justify-between bg-stone-950/90 shrink-0">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-xl bg-[#1a4d2e] text-white flex items-center justify-center shadow-xs">
                 <CropIcon className="h-4 w-4 text-emerald-300" />
               </div>
               <div>
                 <h3 className="text-sm sm:text-base font-black text-white">تعديل وقص الصورة</h3>
-                <p className="text-[11px] text-stone-400 font-medium">قم بضبط المقاس، التكبير، والتدوير للوصول للمظهر المثالي</p>
+                <p className="text-[11px] text-stone-400 font-medium">اسحب إطار القص، المقابض أو استخدم التكبير للحصول على النتيجة المطلوبة</p>
               </div>
             </div>
             <button
+              type="button"
               onClick={onClose}
               className="w-8 h-8 rounded-full bg-stone-800 text-stone-400 hover:text-white hover:bg-stone-700 flex items-center justify-center transition-all cursor-pointer"
             >
@@ -214,19 +265,19 @@ export function ImageCropModal({
             </button>
           </div>
 
-          {/* Aspect Ratios */}
-          <div className="px-4 py-2.5 bg-stone-950/40 border-b border-stone-800 flex items-center justify-between gap-2 overflow-x-auto shrink-0 scrollbar-hide">
+          {/* Aspect Ratios Switcher */}
+          <div className="px-3 py-2 sm:px-4 sm:py-2.5 bg-stone-950/60 border-b border-stone-800/80 flex items-center justify-between gap-2 overflow-x-auto shrink-0 scrollbar-none">
             <span className="text-[11px] font-bold text-stone-400 shrink-0 flex items-center gap-1">
-              <Sliders className="h-3.5 w-3.5 text-stone-400" />
+              <Sliders className="h-3.5 w-3.5 text-emerald-500" />
               <span>نسبة الأبعاد:</span>
             </span>
             <div className="flex items-center gap-1.5 shrink-0">
               {[
+                { id: 'free', label: 'كامل الصورة (حر)' },
                 { id: '1:1', label: 'مربع 1:1' },
                 { id: '16:9', label: 'غلاف 16:9' },
                 { id: '4:3', label: 'عريض 4:3' },
-                { id: '3:1', label: 'بانر 3:1' },
-                { id: 'free', label: 'حر' }
+                { id: '3:1', label: 'بانر 3:1' }
               ].map((ratio) => (
                 <button
                   key={ratio.id}
@@ -234,7 +285,7 @@ export function ImageCropModal({
                   onClick={() => setAspectRatio(ratio.id as CropAspectRatio)}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
                     aspectRatio === ratio.id
-                      ? 'bg-[#1a4d2e] text-emerald-100 border border-emerald-500/40 shadow-xs'
+                      ? 'bg-[#1a4d2e] text-emerald-100 border border-emerald-500/50 shadow-xs ring-1 ring-emerald-400/30'
                       : 'bg-stone-800/80 text-stone-400 hover:text-stone-200 hover:bg-stone-700 border border-transparent'
                   }`}
                 >
@@ -244,8 +295,8 @@ export function ImageCropModal({
             </div>
           </div>
 
-          {/* Cropper Container */}
-          <div className="relative flex-1 w-full bg-stone-950 overflow-hidden" style={{ minHeight: '300px' }}>
+          {/* Cropper Viewport Container */}
+          <div className="relative flex-1 w-full min-h-[160px] bg-stone-950 overflow-hidden">
             <Cropper
               image={imageSrc}
               crop={crop}
@@ -258,20 +309,31 @@ export function ImageCropModal({
               onRotationChange={onRotationChange}
               showGrid={true}
               cropShape="rect"
+              objectFit="contain"
+              restrictPosition={true}
+              classes={{
+                cropAreaClassName: 'custom-crop-area',
+                containerClassName: 'bg-stone-950'
+              }}
+              onMediaLoaded={(mediaSize) => {
+                if (mediaSize.naturalWidth && mediaSize.naturalHeight) {
+                  setNaturalAspect(mediaSize.naturalWidth / mediaSize.naturalHeight);
+                }
+              }}
             />
           </div>
 
-          {/* Tools */}
-          <div className="px-5 py-4 bg-stone-950/80 border-t border-stone-800/80 flex flex-wrap items-center justify-between gap-4 shrink-0">
+          {/* Tool Controls (Zoom + Rotate + Reset) */}
+          <div className="px-4 py-2 sm:px-5 sm:py-2.5 bg-stone-950/90 border-t border-stone-800/80 flex flex-wrap items-center justify-between gap-3 shrink-0">
             {/* Zoom Slider Control */}
-            <div className="flex items-center gap-2 min-w-[200px] flex-1 max-w-xs">
+            <div className="flex items-center gap-2 min-w-[180px] flex-1 max-w-xs">
               <button
                 type="button"
-                onClick={() => setZoom((z) => Math.max(1, z - 0.1))}
-                className="w-8 h-8 rounded-lg bg-stone-800 text-stone-300 hover:text-white hover:bg-stone-700 flex items-center justify-center transition-all cursor-pointer"
+                onClick={() => setZoom((z) => Math.max(1, +(z - 0.1).toFixed(2)))}
+                className="w-7 h-7 rounded-lg bg-stone-800 text-stone-300 hover:text-white hover:bg-stone-700 flex items-center justify-center transition-all cursor-pointer"
                 title="تصغير"
               >
-                <ZoomOut className="h-4 w-4" />
+                <ZoomOut className="h-3.5 w-3.5" />
               </button>
               <input
                 type="range"
@@ -284,11 +346,11 @@ export function ImageCropModal({
               />
               <button
                 type="button"
-                onClick={() => setZoom((z) => Math.min(3, z + 0.1))}
-                className="w-8 h-8 rounded-lg bg-stone-800 text-stone-300 hover:text-white hover:bg-stone-700 flex items-center justify-center transition-all cursor-pointer"
+                onClick={() => setZoom((z) => Math.min(3, +(z + 0.1).toFixed(2)))}
+                className="w-7 h-7 rounded-lg bg-stone-800 text-stone-300 hover:text-white hover:bg-stone-700 flex items-center justify-center transition-all cursor-pointer"
                 title="تكبير"
               >
-                <ZoomIn className="h-4 w-4" />
+                <ZoomIn className="h-3.5 w-3.5" />
               </button>
             </div>
 
@@ -297,20 +359,20 @@ export function ImageCropModal({
               <button
                 type="button"
                 onClick={() => setRotation((r) => (r - 90) % 360)}
-                className="p-2.5 rounded-xl bg-stone-800/90 text-stone-300 hover:text-white hover:bg-stone-700 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                className="px-2.5 py-1.5 rounded-xl bg-stone-800/90 text-stone-300 hover:text-white hover:bg-stone-700 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
                 title="تدوير لليسار 90°"
               >
-                <RotateCcw className="h-4 w-4" />
-                <span className="hidden sm:inline">يسار</span>
+                <RotateCcw className="h-3.5 w-3.5 text-emerald-400" />
+                <span className="hidden sm:inline">تدوير لليسار</span>
               </button>
               <button
                 type="button"
                 onClick={() => setRotation((r) => (r + 90) % 360)}
-                className="p-2.5 rounded-xl bg-stone-800/90 text-stone-300 hover:text-white hover:bg-stone-700 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                className="px-2.5 py-1.5 rounded-xl bg-stone-800/90 text-stone-300 hover:text-white hover:bg-stone-700 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
                 title="تدوير لليمين 90°"
               >
-                <RotateCw className="h-4 w-4" />
-                <span className="hidden sm:inline">يمين</span>
+                <RotateCw className="h-3.5 w-3.5 text-emerald-400" />
+                <span className="hidden sm:inline">تدوير لليمين</span>
               </button>
               <button
                 type="button"
@@ -319,20 +381,21 @@ export function ImageCropModal({
                   setRotation(0);
                   setCrop({ x: 0, y: 0 });
                 }}
-                className="p-2.5 rounded-xl bg-stone-800/60 text-stone-400 hover:text-stone-200 hover:bg-stone-800 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
-                title="إعادة ضبط"
+                className="px-2.5 py-1.5 rounded-xl bg-stone-800/60 text-stone-400 hover:text-stone-200 hover:bg-stone-800 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                title="إعادة ضبط الإطار"
               >
-                <RefreshCw className="h-4 w-4" />
+                <RefreshCw className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">إعادة ضبط</span>
               </button>
             </div>
           </div>
 
-          {/* Footer Actions */}
-          <div className="px-5 py-4 bg-stone-950 border-t border-stone-800 flex items-center justify-between gap-3 shrink-0">
+          {/* Permanently Sticky Bottom Footer Actions (Always & Ever visible) */}
+          <div className="px-4 py-3 sm:px-5 sm:py-3.5 bg-stone-950 border-t border-stone-800/90 flex items-center justify-between gap-3 shrink-0 sticky bottom-0 z-40 shadow-[0_-4px_25px_rgba(0,0,0,0.6)]">
             <button
               type="button"
               onClick={onClose}
-              className="px-5 py-2.5 rounded-xl bg-stone-800 text-stone-300 hover:bg-stone-700 hover:text-white text-sm font-bold transition-all cursor-pointer"
+              className="px-5 py-2.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 hover:text-white text-xs sm:text-sm font-bold transition-all cursor-pointer min-h-[42px]"
             >
               إلغاء الأمر
             </button>
@@ -340,16 +403,16 @@ export function ImageCropModal({
               type="button"
               disabled={isProcessing}
               onClick={handlePerformCrop}
-              className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#1a4d2e] to-[#256f43] hover:from-[#143d24] hover:to-[#1a4d2e] text-white text-sm font-black shadow-lg shadow-emerald-950/50 flex items-center gap-2 transition-all cursor-pointer active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
+              className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#1a4d2e] to-[#256f43] hover:from-[#143d24] hover:to-[#1a4d2e] text-white text-xs sm:text-sm font-black shadow-lg shadow-emerald-950/50 flex items-center gap-2 transition-all cursor-pointer active:scale-95 disabled:opacity-50 disabled:pointer-events-none min-h-[42px]"
             >
               {isProcessing ? (
                 <>
-                  <RefreshCw className="h-5 w-5 animate-spin" />
+                  <RefreshCw className="h-4 w-4 sm:h-5 sm:w-5 animate-spin" />
                   <span>جاري القص...</span>
                 </>
               ) : (
                 <>
-                  <Check className="h-5 w-5 stroke-[3px]" />
+                  <Check className="h-4 w-4 sm:h-5 sm:w-5 stroke-[3px]" />
                   <span>اعتماد وقص</span>
                 </>
               )}

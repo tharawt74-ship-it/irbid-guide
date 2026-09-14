@@ -60,7 +60,7 @@ export function MedicalAppointmentModal({
     const cleanPhone = (business?.phone || business?.socialLinks?.whatsapp || '').replace(/[^0-9]/g, '');
 
     // Format professional WhatsApp appointment message
-    const msg = `مرحباً، أود حجز موعد كشفية لدى *${business?.name || 'العيادة'}* عبر دليل إربد الطبي:
+    const msg = `مرحباً، أود حجز موعد كشفية لدى *${business?.name || 'العيادة'}* عبر منصة شو في بإربد:
 
 👤 *اسم المريض:* ${patientName}
 📱 *رقم الهاتف:* ${patientPhone}

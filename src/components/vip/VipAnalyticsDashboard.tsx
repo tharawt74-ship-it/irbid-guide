@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   TrendingUp, Eye, Phone, MessageSquare, MapPin, 
   Store, Share2, Sparkles, Crown, ArrowUpRight, 
@@ -8,6 +8,8 @@ import {
 import { WhatsAppIcon } from '../common/WhatsAppIcon';
 import { Business, BusinessAnalytics } from '../../types';
 import { getDefaultAnalytics } from '../../lib/analyticsTracker';
+import { db } from '../../lib/firebase';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 
 interface VipAnalyticsDashboardProps {
   business: Business;
@@ -35,6 +37,42 @@ const DAY_NAMES_AR = ['الأحد', 'الإثنين', 'الثلاثاء', 'ال�
 
 export function VipAnalyticsDashboard({ business }: VipAnalyticsDashboardProps) {
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | 'all'>('all');
+  const [marketBenchmarks, setMarketBenchmarks] = useState<{ avgConversionRate: number, avgMenuEngagement: number }>({ avgConversionRate: 12, avgMenuEngagement: 40 });
+  const [peakHours, setPeakHours] = useState('5:30 مساءً - 11:00 ليلاً');
+
+  useEffect(() => {
+    // Fetch real market benchmarks from all businesses in DB
+    const fetchMarketData = async () => {
+      try {
+        const snapshot = await getDocs(collection(db, 'businesses'));
+        let totalViews = 0;
+        let totalInteractions = 0;
+        let totalMenuViews = 0;
+        
+        snapshot.docs.forEach(doc => {
+           const d = doc.data() as Business;
+           const dViews = d.analytics?.views || d.views || 0;
+           const dInteractions = (d.analytics?.whatsappClicks || 0) + (d.analytics?.callClicks || 0) + (d.analytics?.directionClicks || 0) + (d.analytics?.menuViews || 0);
+           const dMenuViews = d.analytics?.menuViews || 0;
+           
+           totalViews += dViews;
+           totalInteractions += dInteractions;
+           totalMenuViews += dMenuViews;
+        });
+
+        const avgConversionRate = totalViews > 0 ? (totalInteractions / totalViews) * 100 : 12;
+        const avgMenuEngagement = totalViews > 0 ? (totalMenuViews / totalViews) * 100 : 40;
+        
+        setMarketBenchmarks({
+          avgConversionRate: Number(avgConversionRate.toFixed(1)),
+          avgMenuEngagement: Number(avgMenuEngagement.toFixed(1))
+        });
+      } catch (err) {
+        console.error('Error fetching market benchmarks', err);
+      }
+    };
+    fetchMarketData();
+  }, []);
 
   const rawAnalytics: BusinessAnalytics = business.analytics || getDefaultAnalytics(business.views);
   const dailyStats = rawAnalytics.dailyStats || {};
@@ -310,7 +348,7 @@ export function VipAnalyticsDashboard({ business }: VipAnalyticsDashboardProps) 
               <Eye className="h-4 w-4" />
             </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-black text-[#2d2a26]">{views.toLocaleString('ar-JO')}</div>
+          <div className="text-2xl sm:text-3xl font-black text-[#2d2a26]">{views.toLocaleString('en-US')}</div>
           <div className="flex items-center gap-1 text-[11px] font-bold text-emerald-600 mt-2">
             <TrendingUp className="h-3 w-3" />
             <span>مشاهدات مسجلة وموثوقة</span>
@@ -325,7 +363,7 @@ export function VipAnalyticsDashboard({ business }: VipAnalyticsDashboardProps) 
               <WhatsAppIcon className="h-4 w-4" />
             </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-black text-emerald-700">{whatsapp.toLocaleString('ar-JO')}</div>
+          <div className="text-2xl sm:text-3xl font-black text-emerald-700">{whatsapp.toLocaleString('en-US')}</div>
           <div className="flex items-center gap-1 text-[11px] font-bold text-stone-500 mt-2">
             <span>استفسارات وطلبات مباشرة</span>
           </div>
@@ -339,7 +377,7 @@ export function VipAnalyticsDashboard({ business }: VipAnalyticsDashboardProps) 
               <Phone className="h-4 w-4" />
             </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-black text-[#2d2a26]">{calls.toLocaleString('ar-JO')}</div>
+          <div className="text-2xl sm:text-3xl font-black text-[#2d2a26]">{calls.toLocaleString('en-US')}</div>
           <div className="flex items-center gap-1 text-[11px] font-bold text-stone-500 mt-2">
             <span>اتصالات مباشرة من زبائن إربد</span>
           </div>
@@ -353,7 +391,7 @@ export function VipAnalyticsDashboard({ business }: VipAnalyticsDashboardProps) 
               <MapPin className="h-4 w-4" />
             </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-black text-[#2d2a26]">{directions.toLocaleString('ar-JO')}</div>
+          <div className="text-2xl sm:text-3xl font-black text-[#2d2a26]">{directions.toLocaleString('en-US')}</div>
           <div className="flex items-center gap-1 text-[11px] font-bold text-stone-500 mt-2">
             <span>زبائن فتحوا موقع المحل على الخريطة</span>
           </div>
@@ -367,7 +405,7 @@ export function VipAnalyticsDashboard({ business }: VipAnalyticsDashboardProps) 
               <Store className="h-4 w-4" />
             </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-black text-purple-700">{menuViews.toLocaleString('ar-JO')}</div>
+          <div className="text-2xl sm:text-3xl font-black text-purple-700">{menuViews.toLocaleString('en-US')}</div>
           <div className="flex items-center gap-1 text-[11px] font-bold text-stone-500 mt-2">
             <span>تصفح الأسعار والكتالوج</span>
           </div>
@@ -381,7 +419,7 @@ export function VipAnalyticsDashboard({ business }: VipAnalyticsDashboardProps) 
               <Share2 className="h-4 w-4" />
             </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-black text-[#2d2a26]">{shares.toLocaleString('ar-JO')}</div>
+          <div className="text-2xl sm:text-3xl font-black text-[#2d2a26]">{shares.toLocaleString('en-US')}</div>
           <div className="flex items-center gap-1 text-[11px] font-bold text-stone-500 mt-2">
             <span>مشاركات وتوصيات بين الأصدقاء</span>
           </div>
@@ -512,11 +550,13 @@ export function VipAnalyticsDashboard({ business }: VipAnalyticsDashboardProps) 
             {/* Peak Hours */}
             <div className="bg-white p-4 rounded-2xl border border-[#e5e1da] space-y-1">
               <div className="flex items-center gap-1.5 text-xs text-stone-500 font-bold">
-                <Clock className="h-3.5 w-3.5 text-[#ff9f1c]" />
-                <span>أوقات ذروة طلب الزبائن في إربد:</span>
+                <Flame className="h-3.5 w-3.5 text-[#ff9f1c]" />
+                <span>أيام الذروة الخاصة بنشاطك:</span>
               </div>
-              <div className="text-sm font-black text-[#2d2a26]">5:30 مساءً - 11:00 ليلاً</div>
-              <p className="text-[11px] text-stone-400">الفترة الأكثر نشاطاً لطلب الخدمات والمأكولات في إربد.</p>
+              <div className="text-sm font-black text-[#2d2a26]">
+                 {weeklyBars.slice().sort((a,b) => b.interactions - a.interactions).slice(0, 2).map(b => b.label).join(' و ') || 'لا توجد بيانات كافية'}
+              </div>
+              <p className="text-[11px] text-stone-400">الأيام الأكثر نشاطاً في التفاعلات مع المحل.</p>
             </div>
           </div>
 
@@ -573,10 +613,10 @@ export function VipAnalyticsDashboard({ business }: VipAnalyticsDashboardProps) 
               <div className="space-y-1">
                 <div className="flex justify-between text-[11px] text-stone-500">
                   <span>المتوسط القياسي للسوق</span>
-                  <span>10% - 15%</span>
+                  <span>{marketBenchmarks.avgConversionRate}%</span>
                 </div>
                 <div className="w-full bg-stone-100 h-2 rounded-full overflow-hidden">
-                  <div className="bg-stone-400 h-full rounded-full" style={{ width: '50%' }}></div>
+                  <div className="bg-stone-400 h-full rounded-full" style={{ width: `${Math.min(100, (marketBenchmarks.avgConversionRate / 25) * 100)}%` }}></div>
                 </div>
               </div>
             </div>
@@ -593,7 +633,7 @@ export function VipAnalyticsDashboard({ business }: VipAnalyticsDashboardProps) 
             <div className="space-y-3 pt-1">
               <div className="space-y-1">
                 <div className="flex justify-between text-xs">
-                  <span className="font-bold text-purple-800">مشاهدات الكتالوج</span>
+                  <span className="font-bold text-purple-800">مشاهدات الكتالوج (محلّك)</span>
                   <span className="font-black text-stone-900">{menuViews}</span>
                 </div>
                 <div className="w-full bg-stone-100 h-2.5 rounded-full overflow-hidden">
@@ -603,8 +643,15 @@ export function VipAnalyticsDashboard({ business }: VipAnalyticsDashboardProps) 
 
               <div className="space-y-1">
                 <div className="flex justify-between text-[11px] text-stone-500">
-                  <span>نسبة تصفح الأصناف</span>
+                  <span>نسبة تصفح الأصناف لمحلّك</span>
                   <span>{views > 0 ? Math.round((menuViews / views) * 100) : 0}%</span>
+                </div>
+              </div>
+              
+              <div className="space-y-1 pt-1">
+                <div className="flex justify-between text-[11px] text-stone-500">
+                  <span>متوسط نسبة التصفح بالسوق</span>
+                  <span>{marketBenchmarks.avgMenuEngagement}%</span>
                 </div>
               </div>
             </div>

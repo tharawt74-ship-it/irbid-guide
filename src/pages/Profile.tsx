@@ -1,6 +1,8 @@
 import { useConfirm } from '../contexts/ConfirmContext';
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { getAppConfig } from '../lib/demoDataHelper';
+import { deleteBusinessCascading } from '../lib/businessDeleteHelper';
 import { useAuth } from '../contexts/AuthContext';
 import { db, auth } from '../lib/firebase';
 import { collection, query, where, getDocs, doc, updateDoc, addDoc, deleteDoc, orderBy, setDoc } from 'firebase/firestore';
@@ -27,6 +29,7 @@ import { getBusinessVipStatus } from '../lib/vipHelper';
 import { ensureBusinessAnalyticsSaved } from '../lib/analyticsTracker';
 import { sanitizeFirestorePayload, compressAndSanitizeFirestorePayload } from '../lib/firestoreHelper';
 import { sanitizeInput } from '../lib/security';
+import { linkUserToMatchedBusinesses } from '../lib/authPhoneHelper';
 import { invalidateCache } from '../lib/dataCache';
 import { BUSINESS_CATEGORIES, MainCategory, IRBID_REGIONS_CATEGORIZED } from '../lib/categories';
 import { SearchableSelect } from '../components/ui/SearchableSelect';
@@ -40,7 +43,6 @@ import { VisitorReviewsTab } from '../components/profile/VisitorReviewsTab';
 import { VisitorHousingsTab } from '../components/profile/VisitorHousingsTab';
 import { MedicalFacilitiesTab } from '../components/profile/MedicalFacilitiesTab';
 import { isMedicalBusiness } from '../lib/medicalHelper';
-import { RoiCampaignTracker } from '../components/profile/RoiCampaignTracker';
 import { PrintableQrPosterModal } from '../components/profile/PrintableQrPosterModal';
 import { MultiBranchModal } from '../components/profile/MultiBranchModal';
 import { ScheduledNotificationModal } from '../components/profile/ScheduledNotificationModal';
@@ -108,6 +110,12 @@ export function Profile() {
   const [activeMarketingModalName, setActiveMarketingModalName] = useState<string>("");
   const [activeMarketingModalSuccess, setActiveMarketingModalSuccess] = useState<string>("");
   const [submittingMarketingRequest, setSubmittingMarketingRequest] = useState(false);
+  const [appConfigState, setAppConfigState] = useState<any>({});
+
+  useEffect(() => {
+    getAppConfig().then(config => setAppConfigState(config));
+  }, []);
+
   const [marketingForm, setMarketingForm] = useState({
     contactWhatsapp: '',
     durationWeeks: 'أسبوع واحد',
@@ -856,25 +864,58 @@ export function Profile() {
   const fetchUserBusinesses = async () => {
     if (!currentUser || !db) return;
     try {
-      // Strict Data Isolation: Users only query their own stores where userId == currentUser.uid
+      const userEmail = currentUser.email?.trim().toLowerCase() || '';
+      const phoneDigits = currentUser.phoneNumber?.replace(/\D/g, '') || 
+                         (userEmail.startsWith('phone_') ? userEmail.replace('phone_', '').split('@')[0] : '');
+
+      // Ensure any business created with this user's email or phone in the golden contact field is auto-linked to userId = currentUser.uid
+      await linkUserToMatchedBusinesses(currentUser.uid, phoneDigits, userEmail);
+
+      // Query stores where userId == currentUser.uid
       const q = query(collection(db, 'businesses'), where('userId', '==', currentUser.uid));
       const snapshot = await getDocs(q);
-      const userBusinesses: Business[] = [];
-      snapshot.forEach(doc => {
-        userBusinesses.push({ id: doc.id, ...doc.data() } as Business);
+      const userBizMap = new Map<string, Business>();
+
+      snapshot.forEach(docSnap => {
+        userBizMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as Business);
       });
 
       // Or where they are added as a delegated staff member in staffEmails array
-      if (currentUser.email) {
-        const qStaff = query(collection(db, 'businesses'), where('staffEmails', 'array-contains', currentUser.email.trim().toLowerCase()));
-        const snapStaff = await getDocs(qStaff);
-        snapStaff.forEach(doc => {
-          if (!userBusinesses.some(b => b.id === doc.id)) {
-            userBusinesses.push({ id: doc.id, ...doc.data() } as Business);
+      if (userEmail) {
+        const qStaff = query(collection(db, 'businesses'), where('staffEmails', 'array-contains', userEmail));
+        const snapStaff = await getDocs(qStaff).catch(() => null);
+        if (snapStaff) {
+          snapStaff.forEach(docSnap => {
+            if (!userBizMap.has(docSnap.id)) {
+              userBizMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as Business);
+            }
+          });
+        }
+      }
+
+      // Secondary fallback check for ownerEmail or ownerPhone
+      if (userEmail || phoneDigits) {
+        try {
+          const [snapEmail, snapPhone, snapContact] = await Promise.all([
+            userEmail ? getDocs(query(collection(db, 'businesses'), where('ownerEmail', '==', userEmail))).catch(() => null) : null,
+            phoneDigits ? getDocs(query(collection(db, 'businesses'), where('ownerPhone', '==', phoneDigits))).catch(() => null) : null,
+            userEmail ? getDocs(query(collection(db, 'businesses'), where('ownerContact', '==', userEmail))).catch(() => null) : null
+          ]);
+          if (snapEmail && !snapEmail.empty) {
+            snapEmail.forEach(docSnap => userBizMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as Business));
           }
-        });
+          if (snapPhone && !snapPhone.empty) {
+            snapPhone.forEach(docSnap => userBizMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as Business));
+          }
+          if (snapContact && !snapContact.empty) {
+            snapContact.forEach(docSnap => userBizMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as Business));
+          }
+        } catch (e) {
+          console.warn("Could not query secondary owned businesses in Profile:", e);
+        }
       }
       
+      const userBusinesses: Business[] = Array.from(userBizMap.values());
       setBusinesses(userBusinesses);
       const medList = userBusinesses.filter(b => isMedicalBusiness(b) || !!b.medicalProfile || b.requestType === 'medical_facility_registration');
       const commList = userBusinesses.filter(b => !(isMedicalBusiness(b) || !!b.medicalProfile || b.requestType === 'medical_facility_registration'));
@@ -983,18 +1024,7 @@ export function Profile() {
     }
 
     try {
-      await deleteDoc(doc(db, 'businesses', businessId));
-
-      // Also clean up any homepage banners linked to this deleted business
-      try {
-        await deleteDoc(doc(db, 'banners', `business_banner_${businessId}`)).catch(() => {});
-        const bannersSnap = await getDocs(query(collection(db, 'banners'), where('businessId', '==', businessId)));
-        bannersSnap.forEach((bannerDoc) => {
-          deleteDoc(doc(db, 'banners', bannerDoc.id)).catch(() => {});
-        });
-      } catch (bannerErr) {
-        console.error("Error cleaning up business banners:", bannerErr);
-      }
+      await deleteBusinessCascading(businessId, target.name);
 
       setBusinesses(prev => prev.filter(b => b.id !== businessId));
       invalidateCache();
@@ -1781,7 +1811,7 @@ export function Profile() {
                           <div className="bg-stone-50 border border-stone-100 p-3 sm:p-4 rounded-xl text-right col-span-2 sm:col-span-1">
                             <span className="text-[10px] font-bold text-stone-400 block mb-1">الزيارات والمشاهدات</span>
                             <span className="text-lg sm:text-xl font-black text-[#1a4d2e]">
-                              {(selectedBusiness.analytics?.views ?? selectedBusiness.views ?? 0).toLocaleString('ar-JO')}
+                              {(selectedBusiness.analytics?.views ?? selectedBusiness.views ?? 0).toLocaleString('en-US')}
                             </span>
                             <span className="text-[10px] text-stone-500 block mt-0.5 sm:mt-1">مشاهدات بطاقة المحل</span>
                           </div>
@@ -1823,27 +1853,31 @@ export function Profile() {
                           </div>
                         </div>
 
-                        <div className="bg-emerald-50/50 border border-emerald-200 p-4 rounded-2xl flex items-center justify-between flex-wrap gap-3">
-                          <div className="flex items-center gap-2">
-                            <Sparkles className="h-5 w-5 text-emerald-600 fill-emerald-500" />
-                            <div>
-                              <h4 className="text-sm font-black text-emerald-950">النافذة الترحيبية التفاعلية 🎬</h4>
-                              <p className="text-xs text-stone-500">متاحة لجميع المحلات لعرض عروض أو ترحيب خاص</p>
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => { setSelectedBusinessForPopup(selectedBusiness); setIsVipPopupManagerOpen(true); }}
-                            className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white rounded-xl text-xs font-bold transition-colors shadow-xs cursor-pointer"
-                          >
-                            <Sparkles className="h-3.5 w-3.5 text-emerald-200" />
-                            <span>إعداد النافذة الترحيبية</span>
-                          </button>
-                        </div>
+                        
 
                         {/* VIP Exclusive Live Analytics or Non-VIP Upgrade Callout */}
                         {vipInfo.isVip ? (
                           <div className="space-y-5 pt-2">
+                            <div className="bg-amber-50/70 border border-amber-200 p-4 rounded-2xl flex items-center justify-between flex-wrap gap-3">
+                              <div className="flex items-center gap-2">
+                                <Sparkles className="h-5 w-5 text-amber-600 fill-amber-500" />
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <h4 className="text-sm font-black text-amber-950">النافذة الترحيبية وستوري المحل (VIP)</h4>
+                                    <span className="text-[10px] font-black bg-amber-200 text-amber-900 px-2 py-0.5 rounded-full">👑 ميزة VIP</span>
+                                  </div>
+                                  <p className="text-xs text-stone-600">بوستر أو فيديو ترحيبي يظهر للزوار تلقائياً مع إطار ستوري تفاعلي لشعار المحل</p>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => { setSelectedBusinessForPopup(selectedBusiness); setIsVipPopupManagerOpen(true); }}
+                                className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs font-bold transition-colors shadow-xs cursor-pointer"
+                              >
+                                <Sparkles className="h-3.5 w-3.5 text-amber-200" />
+                                <span>إدارة النافذة الترحيبية</span>
+                              </button>
+                            </div>
                             <div className="bg-amber-50/50 border border-amber-200 p-4 rounded-2xl flex items-center justify-between flex-wrap gap-3">
                               <div className="flex items-center gap-2">
                                 <Crown className="h-5 w-5 text-amber-600 fill-amber-500" />
@@ -3319,7 +3353,7 @@ export function Profile() {
                 <div className="flex items-baseline justify-between">
                   <span className="text-xs font-bold text-stone-400">التكلفة الإجمالية:</span>
                   <div className="text-base font-black text-[#1a4d2e]">
-                    15 دينار <span className="text-[10px] text-stone-400 font-normal">/ أسبوع</span>
+                    {appConfigState?.priceSponsored ?? 15} دينار <span className="text-[10px] text-stone-400 font-normal">/ أسبوع</span>
                   </div>
                 </div>
 
@@ -3369,7 +3403,7 @@ export function Profile() {
                 <div className="flex items-baseline justify-between">
                   <span className="text-xs font-bold text-stone-400">التكلفة الإجمالية:</span>
                   <div className="text-base font-black text-sky-800">
-                    10 دنانير <span className="text-[10px] text-stone-400 font-normal">/ إشعار</span>
+                    {appConfigState?.pricePushNotifications ?? 10} دنانير <span className="text-[10px] text-stone-400 font-normal">/ إشعار</span>
                   </div>
                 </div>
 
@@ -3419,7 +3453,7 @@ export function Profile() {
                 <div className="flex items-baseline justify-between">
                   <span className="text-xs font-bold text-stone-400">التكلفة الإجمالية:</span>
                   <div className="text-base font-black text-purple-800">
-                    25 دينار <span className="text-[10px] text-stone-400 font-normal">/ أسبوع</span>
+                    {appConfigState?.priceHomepageBanner ?? 25} دينار <span className="text-[10px] text-stone-400 font-normal">/ أسبوع</span>
                   </div>
                 </div>
 
@@ -3491,10 +3525,10 @@ export function Profile() {
                     className="w-full p-2.5 rounded-xl border border-amber-200 bg-white text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-400"
                     defaultValue="1_month"
                   >
-                    <option value="1_month">شهري: 5 دنانير (وسائط ✓ | الاحتفاظ 1 شهر)</option>
-                    <option value="3_months">3 أشهر: 12 دينار (وفر 20% | الاحتفاظ 3 أشهر)</option>
-                    <option value="6_months">6 أشهر: 20 دينار (وفر 33% | الاحتفاظ 6 أشهر)</option>
-                    <option value="1_year">سنوي: 35 دينار (وفر 40% | الاحتفاظ 1 سنة)</option>
+                    <option value="1_month">شهري: {appConfigState?.priceMessaging1Month ?? 5} دنانير (وسائط ✓ | الاحتفاظ 1 شهر)</option>
+                    <option value="3_months">3 أشهر: {appConfigState?.priceMessaging3Months ?? 12} دينار (الاحتفاظ 3 أشهر)</option>
+                    <option value="6_months">6 أشهر: {appConfigState?.priceMessaging6Months ?? 20} دينار (الاحتفاظ 6 أشهر)</option>
+                    <option value="1_year">سنوي: {appConfigState?.priceMessaging1Year ?? 35} دينار (الاحتفاظ 1 سنة)</option>
                   </select>
                 </div>
               </div>
@@ -3513,11 +3547,6 @@ export function Profile() {
                 </button>
               </div>
             </div>
-          </div>
-
-          {/* ROI Campaign Tracker Component */}
-          <div className="mt-8 pt-6 border-t border-stone-100">
-            <RoiCampaignTracker businessId={selectedBusiness.id} isVip={getBusinessVipStatus(selectedBusiness).isVip} />
           </div>
         </div>
       )}
@@ -3772,10 +3801,10 @@ export function Profile() {
                         onChange={e => setMarketingForm(prev => ({ ...prev, durationWeeks: e.target.value }))}
                         className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs font-bold text-stone-700"
                       >
-                        <option value="أسبوع واحد">أسبوع واحد (15 دينار)</option>
-                        <option value="أسبوعين">أسبوعين (30 دينار)</option>
-                        <option value="شهر كامل">شهر كامل (50 دينار - وفر 10 دنانير)</option>
-                        <option value="3 أشهر">3 أشهر (130 دينار - وفر 50 دينار)</option>
+                        <option value="أسبوع واحد">أسبوع واحد ({appConfigState?.priceSponsored ?? 15} دينار)</option>
+                        <option value="أسبوعين">أسبوعين ({(appConfigState?.priceSponsored ?? 15) * 2} دينار)</option>
+                        <option value="شهر كامل">شهر كامل ({(appConfigState?.priceSponsored ?? 15) * 4 - 10} دينار - وفر 10 دنانير)</option>
+                        <option value="3 أشهر">3 أشهر ({(appConfigState?.priceSponsored ?? 15) * 12 - 50} دينار - وفر 50 دينار)</option>
                       </select>
                     </div>
 
@@ -4326,10 +4355,10 @@ export function Profile() {
                         onChange={e => setMarketingForm(prev => ({ ...prev, durationWeeks: e.target.value }))}
                         className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs font-bold text-stone-700 cursor-pointer"
                       >
-                        <option value="أسبوع واحد">أسبوع واحد (25 دينار)</option>
-                        <option value="أسبوعين">أسبوعين (45 دينار)</option>
-                        <option value="شهر كامل">شهر كامل (80 دينار - وفر 20 دينار)</option>
-                        <option value="3 أشهر">3 أشهر (200 دينار - وفر 50 دينار)</option>
+                        <option value="أسبوع واحد">أسبوع واحد ({appConfigState?.priceHomepageBanner ?? 25} دينار)</option>
+                        <option value="أسبوعين">أسبوعين ({(appConfigState?.priceHomepageBanner ?? 25) * 2 - 5} دينار - وفر 5 دنانير)</option>
+                        <option value="شهر كامل">شهر كامل ({(appConfigState?.priceHomepageBanner ?? 25) * 4 - 20} دينار - وفر 20 دينار)</option>
+                        <option value="3 أشهر">3 أشهر ({(appConfigState?.priceHomepageBanner ?? 25) * 12 - 100} دينار - وفر 100 دينار)</option>
                       </select>
                     </div>
 

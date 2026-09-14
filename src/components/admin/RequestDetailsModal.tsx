@@ -52,13 +52,17 @@ export function RequestDetailsModal({
     (request.category || '').includes('صيدل') ||
     (request.category || '').includes('مختبر');
 
+  const isTrialOrBasic = request.isVipTrial || request.selectedPackagePlan === 'basic' || (request.packagePlan === 'basic' && request.isVipTrial !== false);
+  const isExplicitGolden = !isTrialOrBasic && (request.packagePlan === 'golden' || request.packagePlan === 'vip' || request.selectedPackagePlan === 'golden');
+
   const planName = 
-    request.packagePlan === 'golden' ? 'الباقة الذهبية (VIP)' :
-    request.packagePlan === 'basic' ? 'الباقة الأساسية' :
+    isTrialOrBasic ? 'الباقة الأساسية (مع هدية شهر تجريبي مجاني في VIP 🎁)' :
+    isExplicitGolden ? 'الباقة الذهبية (VIP 🌟)' :
     request.packagePlan === 'pay_per_use' ? 'باقة حسب الاستخدام' :
     'الباقة الأساسية';
 
   const billingPeriodLabel = 
+    isTrialOrBasic ? 'اشتراك مجاني دائم (مع تجربة شهر VIP)' :
     request.billingPeriod === 'yearly' ? 'الدفع السنوي (الافتراضي)' :
     request.billingPeriod === 'monthly' ? 'الدفع الشهري' :
     'غير محدد';

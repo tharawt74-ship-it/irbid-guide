@@ -16,6 +16,8 @@ import { SEO } from '../components/common/SEO';
 import { ImageUploader } from '../components/ui/ImageUploader';
 import { isBotSubmission, checkSubmissionRateLimit, recordSubmissionTime, sanitizeInput, executeReCaptcha } from '../lib/security';
 import { sendCustomVerificationEmail } from '../lib/email';
+import { isUserOnboardedByAdmin } from '../lib/authPhoneHelper';
+import { compressAndSanitizeFirestorePayload } from '../lib/firestoreHelper';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile, signOut as firebaseSignOut } from 'firebase/auth';
 
 const PACKAGES_INFO = {
@@ -375,8 +377,18 @@ export function Contact() {
         console.warn("Reloading user account error:", reErr);
       }
 
-      const isBootstrapAdmin = ['princessofx2344@gmail.com', 'admin@shoofiirbid.com', 'irbid.admin@gmail.com'].includes(cleanEmail);
+      const isBootstrapAdmin = ['princessofx2344@gmail.com', 'admin@shoofiirbid.com', 'irbid.admin@gmail.com', 'tharawt74@gmail.com'].includes(cleanEmail);
       let isVerified = user.emailVerified || isBootstrapAdmin;
+
+      if (!isVerified) {
+        const isOnboarded = await isUserOnboardedByAdmin(cleanEmail);
+        if (isOnboarded) {
+          isVerified = true;
+          if (db) {
+            await setDoc(doc(db, 'users', user.uid), { emailVerified: true, role: 'merchant' }, { merge: true });
+          }
+        }
+      }
 
       if (!isVerified && db) {
         try {
@@ -539,18 +551,24 @@ export function Contact() {
         additionalNotes: sanitizeInput(formData.additionalNotes)
       };
 
-      await addDoc(collection(db, 'businessRequests'), {
+      const rawPayload = {
         userId: currentUser?.uid || auth?.currentUser?.uid || null,
         userEmail: currentUser?.email || auth?.currentUser?.email || null,
         ...sanitizedData,
-        workingHours,
-        socialLinks,
+        workingHours: workingHours || null,
+        socialLinks: socialLinks || null,
         packagePlan: selectedPackage,
+        selectedPackagePlan: selectedPackage,
+        isVipTrial: selectedPackage === 'basic',
         billingPeriod: selectedPackage === 'basic' ? 'lifetime' : billingPeriod,
         category: formData.subCategory,
         createdAt: Date.now(),
         status: 'pending'
-      });
+      };
+
+      const sanitizedPayload = await compressAndSanitizeFirestorePayload(rawPayload, false);
+
+      await addDoc(collection(db, 'businessRequests'), sanitizedPayload);
 
       recordSubmissionTime('contact_submit');
       

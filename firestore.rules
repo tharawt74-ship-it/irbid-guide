@@ -68,6 +68,7 @@ service cloud.firestore {
         incoming().userId == request.auth.uid &&
         !incoming().keys().hasAny([
           'isVip', 'vip', 'vipStatus', 'isFeatured', 'featured', 
+          'isVerified', 'verified',
           'rating', 'reviewCount', 'vipStartDate', 'vipEndDate',
           'featuredStartDate', 'featuredExpiryDate', 'approved',
           'packagePlan', 'vipSubscriptionStartsAt', 'vipSubscriptionExpiresAt',
@@ -84,6 +85,7 @@ service cloud.firestore {
             ) &&
             !incoming().diff(existing()).affectedKeys().hasAny([
               'approved', 'vipStatus', 'isVip', 'vip', 'sponsored', 'isFeatured', 'featured', 
+              'isVerified', 'verified',
               'ownerId', 'userId', 'rating', 'reviewCount', 'vipStartDate', 'vipEndDate',
               'featuredStartDate', 'featuredExpiryDate', 'packagePlan', 'vipSubscriptionStartsAt',
               'vipSubscriptionExpiresAt', 'isVipTrial', 'isVipScheduled', 'tier'
@@ -104,7 +106,14 @@ service cloud.firestore {
     // 3. Business Requests Collection (Submission for verification/addition)
     match /businessRequests/{requestId} {
       allow read: if isSignedIn() && (isAdmin() || existing().userId == request.auth.uid);
-      allow create: if isSignedIn() && incoming().userId == request.auth.uid && incoming().status == 'pending';
+      allow create: if isAdmin() || (
+        isSignedIn() && 
+        (incoming().userId == request.auth.uid || !('userId' in incoming()) || incoming().userId == '') && 
+        (incoming().status == 'pending' || incoming().status == 'approved')
+      ) || (
+        // Allow public/guest requests for business registration
+        incoming().status == 'pending' || incoming().status == 'approved'
+      );
       allow update: if isAdmin() || (
         isSignedIn() && 
         existing().userId == request.auth.uid && 

@@ -17,6 +17,7 @@ import {
   Store
 } from 'lucide-react';
 import { WhatsAppIcon } from '../common/WhatsAppIcon';
+import { getAppConfig } from '../../lib/demoDataHelper';
 import { MarketingRequest, Business } from '../../types';
 
 interface MarketingDetailsModalProps {
@@ -36,6 +37,11 @@ export function MarketingDetailsModal({
   onStatusChange,
   onDelete
 }: MarketingDetailsModalProps) {
+  const [appConfigState, setAppConfigState] = React.useState<any>({});
+
+  useEffect(() => {
+    getAppConfig().then(config => setAppConfigState(config));
+  }, []);
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
@@ -51,10 +57,10 @@ export function MarketingDetailsModal({
 
   const getServicePricing = (type: string) => {
     switch (type) {
-      case 'sponsored': return { price: '15 دينار / أسبوعياً', desc: 'ظهور المحل في صدارة نتائج البحث والتصنيفات وبانر مميز' };
-      case 'push_notifications': return { price: '10 دنانير / إشعار', desc: 'إشعار فوري موجه لجميع مستخدمي المنصة في إربد' };
-      case 'homepage_banner': return { price: '25 دينار / أسبوعياً', desc: 'إعلان رئيسي بارز في سلايدر أعلى الصفحة الرئيسية' };
-      case 'premium_messaging': return { price: '5 دنانير / شهرياً', desc: 'ترقية نظام استقبال الوسائط والمحادثات' };
+      case 'sponsored': return { price: `${appConfigState?.priceSponsored ?? 15} دينار / أسبوعياً`, desc: 'ظهور المحل في صدارة نتائج البحث والتصنيفات وبانر مميز' };
+      case 'push_notifications': return { price: `${appConfigState?.pricePushNotifications ?? 10} دنانير / إشعار`, desc: 'إشعار فوري موجه لجميع مستخدمي المنصة في إربد' };
+      case 'homepage_banner': return { price: `${appConfigState?.priceHomepageBanner ?? 25} دينار / أسبوعياً`, desc: 'إعلان رئيسي بارز في سلايدر أعلى الصفحة الرئيسية' };
+      case 'premium_messaging': return { price: `${appConfigState?.priceMessaging1Month ?? 5} دنانير / شهرياً`, desc: 'ترقية نظام استقبال الوسائط والمحادثات' };
       default: return { price: '15 دينار', desc: 'خدمة تسويقية مخصصة' };
     }
   };

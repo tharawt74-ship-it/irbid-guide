@@ -18,6 +18,7 @@ import { Pagination } from '../components/common/Pagination';
 import { CategoryButtonLabel } from '../components/CategoryButtonLabel';
 import { getCachedBusinesses, setCachedBusinesses, getCachedBanners, setCachedBanners } from '../lib/dataCache';
 import { BOOK_YOUR_AD_BANNER } from '../lib/pageBanners';
+import { compareBusinessesByTier, isBusinessCurrentlyFeatured } from '../lib/vipHelper';
 import { 
   MapPin, Star, Search, Store, Filter, X,
   LayoutGrid, UtensilsCrossed, Coffee, CakeSlice, 
@@ -135,6 +136,7 @@ export function Home() {
       }
       
       try {
+        const appConfig = await getAppConfig();
         const q = query(collection(db, 'businesses'), orderBy('createdAt', 'desc'));
         const bannersQuery = query(collection(db, 'banners'));
 
@@ -152,11 +154,24 @@ export function Home() {
           if (data.isHidden) {
             return;
           }
-          if (data.isDemo) {
+          // Filter out unpublished/pending/rejected businesses
+          if (data.status === 'pending' || data.status === 'rejected') {
+            return;
+          }
+          // Allow demo data if showDemoData is true or if not explicitly disabled
+          if (appConfig.showDemoData === false && data.isDemo) {
             return;
           }
           fetchedBusinesses.push({ id: docSnap.id, ...data } as Business);
         });
+
+        // Fallback: If no businesses exist in Firestore, show DEMO_SEED_DATA businesses so Home Page is never empty
+        if (fetchedBusinesses.length === 0) {
+          DEMO_SEED_DATA.businesses.forEach((b, idx) => {
+            fetchedBusinesses.push({ id: `demo-b-${idx}`, ...b } as Business);
+          });
+        }
+
         setBusinesses(fetchedBusinesses);
         setCachedBusinesses(fetchedBusinesses);
 
@@ -441,44 +456,33 @@ export function Home() {
 
   // Calculate displayed businesses with dynamic sorting/filtering from tabs
   let displayedBusinesses = [...filteredBusinesses];
+  const now = Date.now();
+
   if (searchTerm) {
-    // Sort primarily by relevance search score
+    // Sort strictly: Featured -> Golden VIP -> Rest (with relevance search score as secondary sort)
     displayedBusinesses = displayedBusinesses.sort((a, b) => {
-      const scoreA = searchScoreMap[a.id]?.score || 0;
-      const scoreB = searchScoreMap[b.id]?.score || 0;
-      return scoreB - scoreA;
-    });
-    // Float active sponsored/featured to the top within search results!
-    const now = Date.now();
-    displayedBusinesses = displayedBusinesses.sort((a, b) => {
-      const aFeatured = a.isFeatured && (!a.featuredStartDate || a.featuredStartDate <= now) && (!a.featuredExpiryDate || a.featuredExpiryDate > now) ? 1 : 0;
-      const bFeatured = b.isFeatured && (!b.featuredStartDate || b.featuredStartDate <= now) && (!b.featuredExpiryDate || b.featuredExpiryDate > now) ? 1 : 0;
-      return bFeatured - aFeatured;
+      return compareBusinessesByTier(a, b, (bizA, bizB) => {
+        const scoreA = searchScoreMap[bizA.id]?.score || 0;
+        const scoreB = searchScoreMap[bizB.id]?.score || 0;
+        return scoreB - scoreA;
+      }, now);
     });
   } else {
     // Regular tabs sorting if no active search
     if (activeTab === 'featured') {
-      displayedBusinesses = displayedBusinesses.filter(b => {
-        const now = Date.now();
-        const startsOk = !b.featuredStartDate || b.featuredStartDate <= now;
-        const endsOk = !b.featuredExpiryDate || b.featuredExpiryDate > now;
-        return b.isFeatured && startsOk && endsOk;
-      });
-    } else if (activeTab === 'popular') {
-      displayedBusinesses = displayedBusinesses.sort((a, b) => (b.views || 0) - (a.views || 0));
-    } else if (activeTab === 'recent') {
-      displayedBusinesses = displayedBusinesses.sort((a, b) => b.createdAt - a.createdAt);
+      displayedBusinesses = displayedBusinesses.filter(b => isBusinessCurrentlyFeatured(b, now));
     }
 
-    // For tabs other than 'featured', we should still float sponsored/featured businesses to the very top!
-    if (activeTab !== 'featured') {
-      const now = Date.now();
-      displayedBusinesses = displayedBusinesses.sort((a, b) => {
-        const aFeatured = a.isFeatured && (!a.featuredStartDate || a.featuredStartDate <= now) && (!a.featuredExpiryDate || a.featuredExpiryDate > now) ? 1 : 0;
-        const bFeatured = b.isFeatured && (!b.featuredStartDate || b.featuredStartDate <= now) && (!b.featuredExpiryDate || b.featuredExpiryDate > now) ? 1 : 0;
-        return bFeatured - aFeatured;
-      });
-    }
+    // Always sort by: Featured -> Golden VIP -> Rest (with tab criteria as secondary sort)
+    displayedBusinesses = displayedBusinesses.sort((a, b) => {
+      let secondary: ((x: Business, y: Business) => number) | undefined;
+      if (activeTab === 'popular') {
+        secondary = (x, y) => (y.views || 0) - (x.views || 0);
+      } else if (activeTab === 'recent') {
+        secondary = (x, y) => (y.createdAt || 0) - (x.createdAt || 0);
+      }
+      return compareBusinessesByTier(a, b, secondary, now);
+    });
   }
 
   return (

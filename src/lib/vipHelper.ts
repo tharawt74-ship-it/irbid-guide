@@ -179,3 +179,132 @@ export function hasVerificationBadge(business?: Business | null): boolean {
   return getBusinessVipStatus(business).isVip;
 }
 
+/**
+ * Checks if a business is actively featured right now.
+ */
+export function isBusinessCurrentlyFeatured(business?: Business | null, now = Date.now()): boolean {
+  if (!business || !business.isFeatured) return false;
+  const startsOk = !business.featuredStartDate || business.featuredStartDate <= now;
+  const endsOk = !business.featuredExpiryDate || business.featuredExpiryDate > now;
+  return startsOk && endsOk;
+}
+
+/**
+ * Returns the tier ranking:
+ * 3 = Featured (المميز)
+ * 2 = Golden VIP subscriber (أصحاب اشتراكات الـ VIP الذهبية)
+ * 1 = Regular business (باقي المحلات)
+ */
+export function getBusinessTierRank(business?: Business | null, now = Date.now()): number {
+  if (!business) return 0;
+  if (isBusinessCurrentlyFeatured(business, now)) {
+    return 3;
+  }
+  if (getBusinessVipStatus(business).isVip) {
+    return 2;
+  }
+  return 1;
+}
+
+/**
+ * Compares two businesses so that:
+ * 1. Featured businesses come first (المميز)
+ * 2. Golden VIP subscribers come second (أصحاب اشتراكات الـ VIP الذهبية)
+ * 3. Regular businesses come third (باقي المحلات)
+ * 
+ * An optional secondarySort function is applied when two businesses share the same tier rank.
+ */
+export function compareBusinessesByTier(
+  a: Business,
+  b: Business,
+  secondarySort?: (a: Business, b: Business) => number,
+  now = Date.now()
+): number {
+  const rankA = getBusinessTierRank(a, now);
+  const rankB = getBusinessTierRank(b, now);
+
+  if (rankA !== rankB) {
+    return rankB - rankA; // Higher rank first (3 -> 2 -> 1)
+  }
+
+  // Same tier rank: apply secondary sort if provided
+  if (secondarySort) {
+    const secondaryDiff = secondarySort(a, b);
+    if (secondaryDiff !== 0) return secondaryDiff;
+  }
+
+  // Default tie-breakers: Newest to oldest (createdAt) first
+  const createdDiff = (b.createdAt || 0) - (a.createdAt || 0);
+  if (createdDiff !== 0) return createdDiff;
+
+  // Fallback to rating and views if dates are missing or identical
+  const ratingDiff = (b.rating || 0) - (a.rating || 0);
+  if (ratingDiff !== 0) return ratingDiff;
+
+  return (b.views || 0) - (a.views || 0);
+}
+
+export interface WelcomeGiftPlanDetails {
+  packagePlan: 'golden' | 'basic';
+  isVip: boolean;
+  isVipTrial: boolean;
+  vipSubscriptionStartsAt: number;
+  vipSubscriptionExpiresAt?: number | null;
+  isVerified: boolean;
+  isFeatured: boolean;
+  featuredStartDate?: number | null;
+  featuredExpiryDate?: number | null;
+}
+
+/**
+ * Applies the automatic onboarding perks for newly approved or added businesses & medical facilities:
+ * 1. Basic Plan selection:
+ *    - Gets a 1-month (30 days) free trial of the Golden VIP package (`isVipTrial: true`).
+ *    - `isFeatured: false`.
+ * 2. Golden VIP Plan selection:
+ *    - Gets the full Golden VIP subscription (`isVipTrial: false`).
+ *    - Gets 1 week (7 days) of Featured/Sponsored promotion with the golden border, crown, and "ممول" badge (`isFeatured: true`).
+ */
+export function applyNewBusinessWelcomeGift(
+  chosenPlan: string = 'basic',
+  billingPeriod: string = 'yearly',
+  now = Date.now()
+): WelcomeGiftPlanDetails {
+  const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+  const ONE_MONTH_MS = 30 * ONE_DAY_MS;
+  const ONE_WEEK_MS = 7 * ONE_DAY_MS;
+  const ONE_YEAR_MS = 365 * ONE_DAY_MS;
+
+  const isGolden = chosenPlan === 'golden' || chosenPlan === 'vip';
+
+  if (isGolden) {
+    const vipDuration = billingPeriod === 'monthly' ? ONE_MONTH_MS : ONE_YEAR_MS;
+    return {
+      packagePlan: 'golden',
+      isVip: true,
+      isVipTrial: false,
+      vipSubscriptionStartsAt: now,
+      vipSubscriptionExpiresAt: now + vipDuration,
+      isVerified: true,
+      // 1-Week Featured / Sponsored promotion with golden frame & ممول badge
+      isFeatured: true,
+      featuredStartDate: now,
+      featuredExpiryDate: now + ONE_WEEK_MS,
+    };
+  }
+
+  // Basic plan selection -> 1-month free VIP trial!
+  return {
+    packagePlan: 'basic',
+    isVip: true,
+    isVipTrial: true,
+    vipSubscriptionStartsAt: now,
+    vipSubscriptionExpiresAt: now + ONE_MONTH_MS,
+    isVerified: true,
+    isFeatured: false,
+    featuredStartDate: null,
+    featuredExpiryDate: null,
+  };
+}
+
+

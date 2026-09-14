@@ -118,8 +118,7 @@ export function BottomNavigation({
       dir="rtl"
     >
       {/* Standalone Circular AI Assistant Button */}
-      {isAiEnabled && (
-        <motion.button
+      <motion.button
           type="button"
           whileTap={{ scale: 0.94 }}
           onMouseEnter={playAiHoverSound}
@@ -149,7 +148,6 @@ export function BottomNavigation({
             {isAiOpen ? 'إغلاق' : 'ربداوي'}
           </span>
         </motion.button>
-      )}
 
       {/* Unified 4-Item Main Navigation Bar - Clean 2D flat style with matching h-14 height */}
       <nav 

@@ -47,8 +47,11 @@ interface AdminHeaderProps {
   pendingHousingCount?: number;
   medicalFacilitiesCount?: number;
   pendingMedicalRequestsCount?: number;
+  pendingShopsUpgradeCount?: number;
+  pendingMedicalUpgradeCount?: number;
   onRefresh: () => void;
-  onOpenAddBusiness: () => void;
+  onOpenAddBusiness?: () => void;
+  onOpenAddEntity?: () => void;
   onOpenBroadcastModal: () => void;
   onExportData: () => void;
   isRefreshing: boolean;
@@ -66,8 +69,11 @@ export function AdminHeader({
   pendingHousingCount = 0,
   medicalFacilitiesCount = 0,
   pendingMedicalRequestsCount = 0,
+  pendingShopsUpgradeCount = 0,
+  pendingMedicalUpgradeCount = 0,
   onRefresh,
   onOpenAddBusiness,
+  onOpenAddEntity,
   onOpenBroadcastModal,
   onExportData,
   isRefreshing
@@ -103,6 +109,27 @@ export function AdminHeader({
       ]
     },
     {
+      id: 'subscriptions_main',
+      label: 'إدارة الاشتراكات والباقات',
+      icon: Crown,
+      tabs: [
+        { 
+          id: 'subscriptions_shops', 
+          label: 'المحلات', 
+          icon: Store, 
+          count: pendingShopsUpgradeCount || null, 
+          isAlert: (pendingShopsUpgradeCount || 0) > 0 
+        },
+        { 
+          id: 'subscriptions_medical', 
+          label: 'المنشآت الطبية', 
+          icon: Stethoscope, 
+          count: pendingMedicalUpgradeCount || null, 
+          isAlert: (pendingMedicalUpgradeCount || 0) > 0 
+        },
+      ]
+    },
+    {
       id: 'marketing_main',
       label: 'التسويق والإعلانات',
       icon: Megaphone,
@@ -110,7 +137,6 @@ export function AdminHeader({
         { id: 'marketing', label: 'الحملات التسويقية', icon: Megaphone, count: pendingMarketingCount, isAlert: pendingMarketingCount > 0 },
         { id: 'banners', label: 'البانرات الإعلانية 🎨', icon: ImageIcon, count: null },
         { id: 'broadcast', label: 'مركز الإشعارات', icon: Bell, count: null },
-        { id: 'subscriptions', label: 'أرباح الباقات', icon: Crown, count: null },
       ]
     },
     {
@@ -189,11 +215,11 @@ export function AdminHeader({
           {/* Quick Action Toolbar */}
           <div className="flex flex-wrap items-center gap-2.5 pt-2 lg:pt-0">
             <button
-              onClick={onOpenAddBusiness}
+              onClick={onOpenAddEntity || onOpenAddBusiness}
               className="inline-flex items-center gap-2 bg-[#ff9f1c] hover:bg-[#f39209] text-white px-4.5 py-2.5 rounded-2xl font-black text-xs sm:text-sm transition-all shadow-md hover:scale-105 active:scale-95 cursor-pointer"
             >
               <Plus className="h-4 w-4" />
-              <span>إضافة محل جديد</span>
+              <span>إضافة منشأة جديدة</span>
             </button>
 
             <button
@@ -240,7 +266,7 @@ export function AdminHeader({
       <div className="space-y-4" dir="rtl">
         <div>
           <span className="text-xs font-black text-stone-400 block mb-2 mr-1">الأقسام الرئيسية للوحة الإدارة</span>
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 w-full">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 w-full">
             {groups.map((group) => {
               const GroupIcon = group.icon;
               const isGroupActive = activeGroup.id === group.id;

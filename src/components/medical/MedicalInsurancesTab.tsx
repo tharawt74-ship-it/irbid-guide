@@ -3,14 +3,12 @@ import {
   Shield, 
   Award, 
   Building2, 
-  CheckCircle2, 
   Search, 
   Phone, 
   MessageSquare, 
   FileText, 
   AlertCircle, 
   ArrowRight, 
-  Info,
   Calendar
 } from 'lucide-react';
 import { Business, MedicalFacilityInfo, MedicalInsurance } from '../../types';
@@ -122,7 +120,7 @@ export function MedicalInsurancesTab({
           </div>
 
           <p className="text-xs sm:text-sm text-slate-300 font-medium leading-relaxed max-w-3xl">
-            تتعامل منشأة <strong className="text-white font-bold">{business.name}</strong> مع شبكة واسعة من كبرى شركات التأمين الصحي الخاصة، النقابات المهنية، وصناديق التأمين الجامعي في الأردن لتوفير تغطية كشفيات وإجراءات طبية بمطالبة مباشرة بدون تعقيد.
+            تتعامل منشأة <strong className="text-white font-bold">{business.name}</strong> مع شبكة واسعة من كبرى شركات التأمين الصحي الخاصة، النقابات المهنية، وصناديق التأمين الجامعي في الأردن لتوفير تغطية كشفيات وإجراءات طبية معتمدة وميسرة بدون تعقيد.
           </p>
 
           {/* Quick Metrics Bar */}
@@ -290,17 +288,10 @@ export function MedicalInsurancesTab({
                       </div>
                       <p className="text-xs text-stone-500 font-medium">
                         {ins.coverageDetails || (isSyndicate 
-                          ? 'تغطية مباشرة بنموذج النقابة المعتمد للكشفيات' 
+                          ? 'تغطية معتمدة بنموذج النقابة للكشفيات' 
                           : 'تغطية تأمينية معتمدة للكشفيات والإجراءات الطبية وفق فئة بطاقتك')}
                       </p>
                     </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto mr-13 sm:mr-0">
-                    <span className="text-[11px] font-bold bg-stone-50 text-stone-700 px-3 py-1.5 rounded-xl border border-stone-200 flex items-center gap-1.5 shadow-2xs">
-                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                      <span>{ins.isDirectBilling ? 'مطالبة وموافقة مباشرة' : 'جهة معتمدة'}</span>
-                    </span>
                   </div>
                 </div>
               );
@@ -326,24 +317,6 @@ export function MedicalInsurancesTab({
         )}
       </div>
 
-      {/* Insurance Guidelines & Notes Card */}
-      <div className="bg-amber-50/70 border border-amber-200/90 rounded-2xl p-5 sm:p-6 space-y-3 shadow-xs">
-        <div className="flex items-center gap-2.5 text-amber-900 font-black text-sm sm:text-base">
-          <Info className="h-5 w-5 text-amber-700 shrink-0" />
-          <span>إرشادات وتعليمات استخدام التأمين الصحي لدى المنشأة:</span>
-        </div>
-        <ul className="text-xs sm:text-sm text-amber-950 font-medium space-y-2 list-disc list-inside mr-2 leading-relaxed">
-          <li>يرجى إبراز بطاقة التأمين الصحي الأصلية (أو البطاقة الإلكترونية في تطبيق التأمين) سارية المفعول عند الاستقبال.</li>
-          <li>إبراز إثبات الشخصية الرسمي (الهوية الوطنية للأردنيين أو جواز السفر لغير الأردنيين).</li>
-          <li>بالنسبة لمنتسبي النقابات، يرجى إحضار نموذج التحويل النقابي في حال كانت النقابة تشترط ذلك للاستفادة من الخصم المباشر.</li>
-          {medicalProfile.insuranceNotes && (
-            <li className="font-bold text-amber-900 bg-amber-100/60 p-2.5 rounded-xl border border-amber-300/60 mt-2 list-none">
-              💡 <strong>ملاحظة المنشأة:</strong> {medicalProfile.insuranceNotes}
-            </li>
-          )}
-        </ul>
-      </div>
-
       {/* Not Found? Contact the Facility */}
       <div className="bg-gradient-to-r from-stone-50 via-blue-50/40 to-stone-50 border border-blue-100 rounded-2xl p-5 sm:p-6 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xs">
         <div className="space-y-1 text-center sm:text-right">
@@ -351,9 +324,6 @@ export function MedicalInsurancesTab({
             <AlertCircle className="h-4.5 w-4.5 text-blue-700" />
             <span>لم تجد شركتك التأمينية في القائمة أعلاه؟</span>
           </h4>
-          <p className="text-xs text-stone-600 font-medium">
-            توفر المنشأة فواتير ضريبية مفصلة وتقارير طبية رسمية لتمكينك من استرداد كامل المصاريف من تأمينك الخاص (Reimbursement).
-          </p>
         </div>
 
         <div className="flex items-center gap-2.5 shrink-0">

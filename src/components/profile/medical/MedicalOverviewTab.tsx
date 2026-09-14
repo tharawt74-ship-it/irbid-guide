@@ -62,7 +62,7 @@ export function MedicalOverviewTab({
           </div>
           <div className="mt-3 flex items-baseline gap-2">
             <span className="text-2xl sm:text-3xl font-black text-stone-900 tracking-tight">
-              {viewsCount.toLocaleString('ar-JO')}
+              {viewsCount.toLocaleString('en-US')}
             </span>
             <span className="text-[10px] text-stone-400 font-medium">زيارة مريض</span>
           </div>
@@ -78,7 +78,7 @@ export function MedicalOverviewTab({
           </div>
           <div className="mt-3 flex items-baseline gap-2">
             <span className="text-2xl sm:text-3xl font-black text-stone-900 tracking-tight">
-              {phoneClicks.toLocaleString('ar-JO')}
+              {phoneClicks.toLocaleString('en-US')}
             </span>
             <span className="text-[10px] text-stone-400 font-medium">مكالمة هاتفية</span>
           </div>
@@ -94,7 +94,7 @@ export function MedicalOverviewTab({
           </div>
           <div className="mt-3 flex items-baseline gap-2">
             <span className="text-2xl sm:text-3xl font-black text-stone-900 tracking-tight">
-              {directionsClicks.toLocaleString('ar-JO')}
+              {directionsClicks.toLocaleString('en-US')}
             </span>
             <span className="text-[10px] text-stone-400 font-medium">فتح الخريطة</span>
           </div>

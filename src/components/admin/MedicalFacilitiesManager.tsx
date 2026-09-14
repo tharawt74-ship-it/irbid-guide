@@ -32,11 +32,14 @@ import { Business, MedicalFacilityInfo, MedicalProcedure } from '../../types';
 import { doc, updateDoc, deleteDoc, setDoc, collection } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { invalidateCache } from '../../lib/dataCache';
+import { deleteBusinessCascading } from '../../lib/businessDeleteHelper';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { Link } from 'react-router';
 import { getWhatsAppUrl } from '../../lib/contactHelper';
 import { WhatsAppIcon } from '../common/WhatsAppIcon';
 import { recordAuditLog } from '../../lib/auditLogHelper';
+import { applyNewBusinessWelcomeGift } from '../../lib/vipHelper';
+import { compressAndSanitizeFirestorePayload } from '../../lib/firestoreHelper';
 
 interface MedicalFacilitiesManagerProps {
   businesses: Business[];
@@ -175,14 +178,51 @@ export function MedicalFacilitiesManager({
   const handleApproveMedicalRequest = async (req: any) => {
     try {
       let targetId = req.id;
-      // If record exists in businesses collection with status 'pending'
+      const now = Date.now();
       const existingBiz = businesses.find(b => b.id === req.id || b.requestId === req.id);
+      
+      let chosenPlan: 'basic' | 'golden' = 'basic';
+      if (
+        req.isVipTrial || 
+        req.selectedPackagePlan === 'basic' || 
+        req.packagePlan === 'basic' || 
+        existingBiz?.selectedPackagePlan === 'basic' ||
+        existingBiz?.packagePlan === 'basic' || 
+        existingBiz?.isVipTrial ||
+        req.billingPeriod === 'lifetime'
+      ) {
+        chosenPlan = 'basic';
+      } else if (
+        req.packagePlan === 'golden' || 
+        req.packagePlan === 'vip' || 
+        req.selectedPackagePlan === 'golden' || 
+        req.selectedPackagePlan === 'vip' || 
+        existingBiz?.packagePlan === 'golden'
+      ) {
+        chosenPlan = 'golden';
+      } else {
+        chosenPlan = 'basic';
+      }
+
+      const billingPeriod = chosenPlan === 'basic' ? 'lifetime' : (req.billingPeriod || existingBiz?.billingPeriod || 'yearly');
+      const gift = applyNewBusinessWelcomeGift(chosenPlan, billingPeriod, now);
+
       if (existingBiz) {
         targetId = existingBiz.id;
         await updateDoc(doc(db, 'businesses', existingBiz.id), {
           status: 'approved',
-          isVerified: true,
-          updatedAt: Date.now()
+          packagePlan: gift.packagePlan,
+          selectedPackagePlan: chosenPlan,
+          isVip: gift.isVip,
+          isVipTrial: gift.isVipTrial,
+          billingPeriod: billingPeriod,
+          vipSubscriptionStartsAt: gift.vipSubscriptionStartsAt,
+          vipSubscriptionExpiresAt: gift.vipSubscriptionExpiresAt,
+          isVerified: gift.isVerified,
+          isFeatured: gift.isFeatured,
+          featuredStartDate: gift.featuredStartDate || null,
+          featuredExpiryDate: gift.featuredExpiryDate || null,
+          updatedAt: now
         });
       } else {
         const docRef = doc(collection(db, 'businesses'));
@@ -197,10 +237,19 @@ export function MedicalFacilitiesManager({
           ownerName: req.ownerName || '',
           ownerEmail: req.userEmail || req.ownerEmail || '',
           imageUrl: req.imageUrl || req.coverImageUrl || 'https://images.unsplash.com/photo-1629909613654-28e377c37b09?auto=format&fit=crop&q=80&w=600',
-          isVerified: true,
-          isFeatured: false,
+          isVerified: gift.isVerified,
+          isFeatured: gift.isFeatured,
+          featuredStartDate: gift.featuredStartDate || null,
+          featuredExpiryDate: gift.featuredExpiryDate || null,
+          packagePlan: gift.packagePlan,
+          selectedPackagePlan: chosenPlan,
+          isVip: gift.isVip,
+          isVipTrial: gift.isVipTrial,
+          billingPeriod: billingPeriod,
+          vipSubscriptionStartsAt: gift.vipSubscriptionStartsAt,
+          vipSubscriptionExpiresAt: gift.vipSubscriptionExpiresAt,
           status: 'approved',
-          createdAt: req.createdAt || Date.now(),
+          createdAt: req.createdAt || now,
           ...(req.googlePlaceUrl ? { googlePlaceUrl: req.googlePlaceUrl } : {}),
           medicalProfile: req.medicalProfile || {
             doctorProfile: {
@@ -211,7 +260,8 @@ export function MedicalFacilitiesManager({
             has24Emergency: false
           }
         };
-        await setDoc(docRef, newBizData);
+        const sanitized = await compressAndSanitizeFirestorePayload(newBizData, false);
+        await setDoc(docRef, sanitized);
       }
 
       if (req.id) {
@@ -223,7 +273,11 @@ export function MedicalFacilitiesManager({
       }
 
       invalidateCache();
-      showToast(`تم قبول وتوثيق المنشأة الطبية (${req.name}) بنجاح 🛡️`, 'success');
+      const toastMsg = gift.isFeatured
+        ? `تم قبول وتوثيق (${req.name}) بالباقة الذهبية مع ميزة (المميز/صدارة البحث) بالإطار الذهبي وعلامة ممول لمدة أسبوع!`
+        : `تم قبول وتوثيق (${req.name}) بالباقة الأساسية مع هدية اشتراك شهر مجاني تجريبي في الباقة الذهبية VIP!`;
+
+      showToast(toastMsg, 'success');
       recordAuditLog({
         action: 'APPROVE_MEDICAL_REQUEST',
         actionAr: 'الموافقة وتوثيق منشأة طبية جديدة',
@@ -383,12 +437,12 @@ export function MedicalFacilitiesManager({
   };
 
   const handleDelete = async (b: Business) => {
-    if (!(await confirm({ message: `تحذير: هل أنت متأكد من حذف المنشأة الطبية (${b.name}) نهائياً من قاعدة البيانات؟` }))) return;
+    if (!(await confirm({ message: `تحذير: هل أنت متأكد من حذف المنشأة الطبية (${b.name}) نهائياً وكافة بياناتها وعروضها الملحقة من قاعدة البيانات؟` }))) return;
 
     try {
-      await deleteDoc(doc(db, 'businesses', b.id));
+      await deleteBusinessCascading(b.id, b.name);
       invalidateCache();
-      showToast(`تم حذف المنشأة (${b.name}) بنجاح`, 'info');
+      showToast(`تم حذف المنشأة (${b.name}) وكافة بياناتها الملحقة بنجاح`, 'info');
       recordAuditLog({
         action: 'DELETE_BUSINESS',
         actionAr: 'حذف منشأة طبية',

@@ -388,7 +388,7 @@ export function MedicalBusinessDetailView({
                         </span>
                       </div>
                       <p className="text-[11px] text-stone-500 font-medium truncate mt-0.5">
-                        {ins.coverageDetails || (isSyndicate ? 'تأمين نقابي معتمد ومباشر' : 'تغطية تأمينية معتمدة للكشفيات والإجراءات الطبية')}
+                        {ins.coverageDetails || (isSyndicate ? 'تأمين نقابي معتمد' : 'تغطية تأمينية معتمدة للكشفيات والإجراءات الطبية')}
                       </p>
                     </div>
                   </div>
@@ -400,10 +400,6 @@ export function MedicalBusinessDetailView({
                         : 'bg-emerald-50 text-emerald-800 border-emerald-200'
                     }`}>
                       {ins.type || (isSyndicate ? 'نقابة مهنية' : 'شركة تأمين')}
-                    </span>
-                    <span className="text-[10px] font-bold bg-white text-stone-700 px-2.5 py-1 rounded-lg border border-stone-200 flex items-center gap-1 shadow-2xs">
-                      <CheckCircle2 className="h-3 w-3 text-emerald-600" />
-                      <span>{ins.isDirectBilling ? 'مطالبة مباشرة' : 'معتمد'}</span>
                     </span>
                   </div>
                 </div>

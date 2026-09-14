@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router';
-import { createUserWithEmailAndPassword, updateProfile, sendEmailVerification, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, sendEmailVerification, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import { doc, setDoc, getDoc, collection, getDocs, query, where } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 import { sendCustomVerificationEmail } from '../lib/email';
+import { resolveAuthInput, linkUserToMatchedBusinesses, isUserOnboardedByAdmin } from '../lib/authPhoneHelper';
 import { Store, Eye, EyeOff, ShieldCheck, Mail, CheckCircle2, ArrowRight, RefreshCw, AlertCircle, Hourglass, Sparkles } from 'lucide-react';
 
 export function Register() {
@@ -102,34 +103,60 @@ export function Register() {
     }
 
     try {
-      const cleanEmail = email.trim().toLowerCase();
-      const userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, password);
-      const user = userCredential.user;
-      
-      await updateProfile(user, {
-         displayName: name.trim()
-      });
+      const authRes = await resolveAuthInput(email);
+      if (authRes.isPhone && !authRes.isAuthorized) {
+        setError(authRes.errorMessage || 'عذراً، رقم الهاتف هذا غير مسجل كمالك منشأة أو محل بالمنصة.');
+        setLoading(false);
+        return;
+      }
 
-      // Send custom beautiful Resend verification email
+      const cleanEmail = authRes.effectiveEmail;
+      const isPhoneOwner = authRes.isPhone && authRes.isAuthorized;
+
+      let user: any = null;
+
       try {
-        await sendCustomVerificationEmail({
-          uid: user.uid,
-          email: cleanEmail,
-          displayName: name.trim()
+        const userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, password);
+        user = userCredential.user;
+        await updateProfile(user, {
+           displayName: name.trim()
         });
-      } catch (verr: any) {
-        console.warn("sendCustomVerificationEmail failed, trying Firebase native fallback...", verr);
-        try {
-          await sendEmailVerification(user);
-        } catch (fbErr: any) {
-          console.error("Firebase native email verification failed:", fbErr);
+      } catch (authError: any) {
+        if (authError.code === 'auth/email-already-in-use' || authError?.message?.includes('email-already-in-use')) {
+          // Attempt to log in seamlessly if the user already has an account with this email/phone
+          try {
+            const loginCred = await signInWithEmailAndPassword(auth, cleanEmail, password);
+            user = loginCred.user;
+          } catch (loginError: any) {
+            setError(isPhoneOwner 
+              ? 'رقم الهاتف هذا مسجل مسبقاً بالمنصة. يرجى إدخال كلمة المرور الصحيحة أو الانتقال لشاشة تسجيل الدخول.'
+              : 'البريد الإلكتروني مستخدم مسبقاً. يمكنك الانتقال لشاشة تسجيل الدخول.');
+            setLoading(false);
+            return;
+          }
+        } else if (authError.code === 'auth/weak-password' || authError?.message?.includes('weak-password')) {
+          setError('كلمة المرور ضعيفة جداً. يرجى اختيار كلمة مرور أطول وأقوى (8 خانات على الأقل).');
+          setLoading(false);
+          return;
+        } else {
+          throw authError;
         }
       }
 
-      const isBootstrapAdmin = ['princessofx2344@gmail.com', 'admin@shoofiirbid.com', 'irbid.admin@gmail.com'].includes(cleanEmail);
-      const userRole = isBootstrapAdmin ? 'super_admin' : 'user';
+      const isBootstrapAdmin = ['princessofx2344@gmail.com', 'admin@shoofiirbid.com', 'irbid.admin@gmail.com', 'tharawt74@gmail.com'].includes(cleanEmail);
+      let isAutoVerified = isBootstrapAdmin || isPhoneOwner;
 
-      if (db) {
+      // Check if this user (email or phone) was created or onboarded by Admin with a business or medical facility page
+      if (!isAutoVerified) {
+        const isOnboarded = await isUserOnboardedByAdmin(cleanEmail) || (email !== cleanEmail ? await isUserOnboardedByAdmin(email) : false);
+        if (isOnboarded) {
+          isAutoVerified = true;
+        }
+      }
+
+      const userRole = isBootstrapAdmin ? 'super_admin' : (isAutoVerified ? 'merchant' : 'user');
+
+      if (db && user) {
         await setDoc(doc(db, 'users', user.uid), {
           uid: user.uid,
           email: cleanEmail,
@@ -139,13 +166,36 @@ export function Register() {
           createdAt: Date.now(),
           lastLoginAt: Date.now(),
           savedFavorites: [],
-          emailVerified: isBootstrapAdmin ? true : false
+          emailVerified: isAutoVerified,
+          ...(authRes.phoneDigits ? { phone: authRes.phoneDigits } : {})
         }, { merge: true });
+
+        if (isPhoneOwner) {
+          await linkUserToMatchedBusinesses(user.uid, authRes.phoneDigits, cleanEmail);
+        }
       }
 
-      if (isBootstrapAdmin) {
+      if (!isAutoVerified && user) {
+        // Send custom beautiful Resend verification email only for standard unverified users
+        try {
+          await sendCustomVerificationEmail({
+            uid: user.uid,
+            email: cleanEmail,
+            displayName: name.trim()
+          });
+        } catch (verr: any) {
+          console.warn("sendCustomVerificationEmail failed, trying Firebase native fallback...", verr);
+          try {
+            await sendEmailVerification(user);
+          } catch (fbErr: any) {
+            console.error("Firebase native email verification failed:", fbErr);
+          }
+        }
+      }
+
+      if (isBootstrapAdmin || isAutoVerified) {
         navigate('/');
-      } else {
+      } else if (user) {
         // Keep them logged in, showing unverified holding screen with active polling
         setPendingUser({
           uid: user.uid,
@@ -155,15 +205,8 @@ export function Register() {
         setPendingVerification(true);
       }
     } catch (err: any) {
-      console.error("Register error:", err);
-      const errMsg = err?.message || '';
-      if (err.code === 'auth/email-already-in-use' || errMsg.includes('email-already-in-use')) {
-        setError('البريد الإلكتروني مستخدم مسبقاً. يمكنك الانتقال لشاشة تسجيل الدخول.');
-      } else if (err.code === 'auth/weak-password' || errMsg.includes('weak-password')) {
-        setError('كلمة المرور ضعيفة جداً. يرجى اختيار كلمة مرور أطول وأقوى.');
-      } else {
-        setError('حدث خطأ أثناء إنشاء الحساب. يرجى التأكد من البيانات والمحاولة مجدداً.');
-      }
+      console.warn("Register processing notice:", err?.message || err);
+      setError('حدث خطأ أثناء إنشاء الحساب. يرجى التأكد من البيانات والمحاولة مجدداً.');
     } finally {
       setLoading(false);
     }
@@ -401,8 +444,8 @@ export function Register() {
                     <input
                       id="email"
                       name="email"
-                      type="email"
-                      autoComplete="email"
+                      type="text"
+                      autoComplete="username"
                       required
                       dir="ltr"
                       placeholder="name@example.com"

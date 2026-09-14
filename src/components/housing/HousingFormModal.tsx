@@ -13,6 +13,7 @@ import { getWhatsAppUrl } from '../../lib/contactHelper';
 import { ImageUploader } from '../ui/ImageUploader';
 import { SearchableSelect } from '../ui/SearchableSelect';
 import { IRBID_REGIONS_CATEGORIZED } from '../../lib/categories';
+import { getAppConfig } from '../../lib/demoDataHelper';
 
 interface HousingFormModalProps {
   isOpen: boolean;
@@ -58,6 +59,13 @@ export function HousingFormModal({
   const [hpValue, setHpValue] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [appConfigState, setAppConfigState] = useState<any>({});
+
+  useEffect(() => {
+    if (isOpen) {
+      getAppConfig().then(config => setAppConfigState(config));
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     if (initialListing) {
@@ -115,11 +123,12 @@ export function HousingFormModal({
   if (!isOpen) return null;
 
   // Pricing Logic:
-  // Base duration: 2 days FREE (0 JOD)
-  // Extra duration: 2 JOD per week after 2 days
-  // Featured status: 1 JOD for every 3 days
-  const durationFee = formData.extraWeeks * 2;
-  const featuredFee = Math.round((formData.featuredDays / 3) * 1);
+  // Pricing from config
+  const priceHousingExtraWeek = appConfigState?.priceHousingExtraWeek ?? 2;
+  const priceHousingFeatured3Days = appConfigState?.priceHousingFeatured3Days ?? 1;
+
+  const durationFee = formData.extraWeeks * priceHousingExtraWeek;
+  const featuredFee = Math.round((formData.featuredDays / 3) * priceHousingFeatured3Days);
   const totalFee = durationFee + featuredFee;
   const totalDays = 2 + (formData.extraWeeks * 7);
 
@@ -689,7 +698,7 @@ export function HousingFormModal({
                     weeks: 1,
                     daysText: '9 أيام',
                     subText: 'أسبوع + يومين',
-                    priceText: '2 دينار',
+                    priceText: `${priceHousingExtraWeek} دينار`,
                     badge: 'اقتصادي ⚡',
                     isFree: false,
                     isPopular: false
@@ -698,7 +707,7 @@ export function HousingFormModal({
                     weeks: 2,
                     daysText: '16 يوم',
                     subText: 'أسبوعين + يومين',
-                    priceText: '4 دنانير',
+                    priceText: `${priceHousingExtraWeek * 2} دينار`,
                     badge: 'تغطية مناسبة 👍',
                     isFree: false,
                     isPopular: false
@@ -707,7 +716,7 @@ export function HousingFormModal({
                     weeks: 4,
                     daysText: '30 يوم',
                     subText: 'شهر كامل',
-                    priceText: '8 دنانير',
+                    priceText: `${priceHousingExtraWeek * 4} دينار`,
                     badge: 'الأكثر طلباً 🔥',
                     isFree: false,
                     isPopular: true
@@ -775,16 +784,16 @@ export function HousingFormModal({
                   <span>٢. تمييز وتثبيت الإعلان في صدارة نتائج البحث (اختياري):</span>
                 </label>
                 <span className="text-[10px] font-bold text-amber-800 bg-amber-100/80 px-2 py-0.5 rounded-md">
-                  1 دينار / 3 أيام
+                  {priceHousingFeatured3Days} دينار / 3 أيام
                 </span>
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {[
                   { days: 0, label: 'بدون تمييز', price: '0 د.أ', icon: null },
-                  { days: 3, label: '3 أيام تمييز', price: '+1 د.أ', icon: '⭐' },
-                  { days: 6, label: '6 أيام تمييز', price: '+2 د.أ', icon: '⭐⭐' },
-                  { days: 15, label: '15 يوم تمييز', price: '+5 د.أ', icon: '👑' },
+                  { days: 3, label: '3 أيام تمييز', price: `+${priceHousingFeatured3Days} د.أ`, icon: '⭐' },
+                  { days: 6, label: '6 أيام تمييز', price: `+${priceHousingFeatured3Days * 2} د.أ`, icon: '⭐⭐' },
+                  { days: 15, label: '15 يوم تمييز', price: `+${priceHousingFeatured3Days * 5} د.أ`, icon: '👑' },
                 ].map((feat) => {
                   const isSelected = formData.featuredDays === feat.days;
                   return (

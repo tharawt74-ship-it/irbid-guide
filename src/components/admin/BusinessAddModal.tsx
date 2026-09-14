@@ -12,7 +12,9 @@ import {
   CheckCircle2,
   Clock,
   Crown,
-  ShieldCheck
+  ShieldCheck,
+  Gift,
+  Sparkles
 } from 'lucide-react';
 import { Business, WorkingHours, SocialLinks } from '../../types';
 import { BUSINESS_CATEGORIES, IRBID_REGIONS_CATEGORIZED, MainCategory } from '../../lib/categories';
@@ -21,6 +23,7 @@ import { WorkingHoursEditor } from '../ui/WorkingHoursEditor';
 import { SocialLinksEditor } from '../ui/SocialLinksEditor';
 import { ImageUploader } from '../ui/ImageUploader';
 import { RichTextEditor } from '../common/RichTextEditor';
+import { validateJordanianPhone } from '../../lib/medicalHelper';
 
 interface BusinessAddModalProps {
   isOpen: boolean;
@@ -45,6 +48,7 @@ export function BusinessAddModal({
     logoUrl: '',
     googlePlaceUrl: '',
     ownerName: '',
+    ownerContact: '',
     rating: 0,
     reviewCount: 0,
     isFeatured: false,
@@ -52,6 +56,8 @@ export function BusinessAddModal({
     isVerified: true,
     hideSiteReviews: false
   });
+
+  const [contactError, setContactError] = useState('');
 
   const [workingHours, setWorkingHours] = useState<WorkingHours>({
     isOpen24Hours: false,
@@ -83,24 +89,49 @@ export function BusinessAddModal({
     if (!formData.name.trim() || !formData.subCategory) return;
     
     setIsSubmitting(true);
+    setContactError('');
     try {
+      const contactVal = formData.ownerContact.trim();
+      let ownerEmail = '';
+      let ownerPhone = '';
+
+      if (contactVal) {
+        if (contactVal.includes('@')) {
+          ownerEmail = contactVal.toLowerCase();
+        } else {
+          const phoneCheck = validateJordanianPhone(contactVal);
+          if (!phoneCheck.isValid) {
+            setContactError(phoneCheck.message || 'يرجى إدخال بريد إلكتروني صحيح أو رقم هاتف أردني صحيح (مثال: 0791234567).');
+            setIsSubmitting(false);
+            return;
+          }
+          ownerPhone = contactVal.trim();
+        }
+      }
+
       await onAdd({
         name: formData.name.trim(),
         category: formData.subCategory, // Mapping subCategory to category
         description: formData.description.trim(),
         address: formData.address.trim(),
         district: formData.district || 'شارع الجامعة',
-        phone: formData.phone.trim(),
+        phone: formData.phone.trim() || ownerPhone,
         imageUrl: formData.imageUrl.trim() || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&q=80',
         logoUrl: formData.logoUrl.trim(),
         googlePlaceUrl: formData.googlePlaceUrl.trim(),
         ownerName: formData.ownerName.trim() || 'إدارة شو في بإربد',
+        ownerEmail: ownerEmail || undefined,
+        ownerPhone: ownerPhone || undefined,
+        ownerContact: contactVal || undefined,
         rating: Number(formData.rating) >= 0 ? Number(formData.rating) : 0,
         reviewCount: Number(formData.reviewCount) >= 0 ? Number(formData.reviewCount) : 0,
         createdAt: Date.now(),
         isFeatured: formData.isFeatured,
         isVerified: formData.isVerified,
         packagePlan: formData.packagePlan as any,
+        selectedPackagePlan: formData.packagePlan as any,
+        isVipTrial: formData.packagePlan === 'basic',
+        billingPeriod: formData.packagePlan === 'basic' ? 'lifetime' : 'yearly',
         hideSiteReviews: formData.hideSiteReviews,
         workingHours: {
           isOpen24Hours: !!workingHours.isOpen24Hours,
@@ -135,6 +166,7 @@ export function BusinessAddModal({
         logoUrl: '',
         googlePlaceUrl: '',
         ownerName: '',
+        ownerContact: '',
         rating: 0,
         reviewCount: 0,
         isFeatured: false,
@@ -142,6 +174,7 @@ export function BusinessAddModal({
         isVerified: true,
         hideSiteReviews: false
       });
+      setContactError('');
     } catch (error) {
       console.error('Error adding business:', error);
     } finally {
@@ -358,6 +391,28 @@ export function BusinessAddModal({
                 </label>
               </div>
             </div>
+
+            {formData.packagePlan === 'golden' ? (
+              <div className="bg-amber-100/70 border border-amber-300/80 rounded-xl p-3 flex gap-2 items-start mt-2">
+                <Sparkles className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <div className="text-[11px] font-black text-amber-950">هدية انضمام حصرية للباقة الذهبية VIP 🌟</div>
+                  <div className="text-[10px] text-amber-900 font-bold mt-0.5 leading-tight">
+                    سيحصل المحل تلقائياً على ميزة (المميز/صدارة البحث) ذات الإطار الذهبي وعلامة ممول مجاناً لمدة أسبوع كامل فور الإضافة.
+                  </div>
+                </div>
+              </div>
+            ) : formData.packagePlan === 'basic' ? (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex gap-2 items-start mt-2">
+                <Gift className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                <div>
+                  <div className="text-[11px] font-black text-emerald-950">هدية انضمام للباقة الأساسية 🎁</div>
+                  <div className="text-[10px] text-emerald-800 font-bold mt-0.5 leading-tight">
+                    سيحصل المحل تلقائياً على اشتراك شهر مجاني تجريبي في الباقة الذهبية VIP لمدة شهر كامل فور الإضافة.
+                  </div>
+                </div>
+              </div>
+            ) : null}
           </div>
 
           {/* Rating, Reviews, Owner */}
@@ -395,6 +450,43 @@ export function BusinessAddModal({
                 placeholder="اسم المالك"
                 className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2 text-sm font-bold text-stone-800"
               />
+            </div>
+          </div>
+
+          {/* Golden Owner Account Access Input Box */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-amber-50 via-amber-100/60 to-amber-50 border-2 border-amber-300 shadow-sm space-y-2">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold shadow-xs">
+                <Crown className="h-4 w-4" />
+              </div>
+              <div>
+                <label className="block text-xs sm:text-sm font-black text-amber-950">
+                  بيانات وصول صاحب المحل (البريد الإلكتروني أو رقم الهاتف) 🔑
+                </label>
+                <p className="text-[11px] text-amber-850 font-medium">
+                  سيستخدم صاحب المحل هذا البريد أو رقم الهاتف للدخول إلى حسابه وإدارة صفحته دون الحاجة لتأكيد البريد.
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-1">
+              <input
+                type="text"
+                value={formData.ownerContact}
+                onChange={e => {
+                  setFormData({ ...formData, ownerContact: e.target.value });
+                  setContactError('');
+                }}
+                placeholder="أدخل البريد الإلكتروني (مثال: owner@gmail.com) أو رقم الهاتف (مثال: 0791234567)"
+                className="w-full bg-white border-2 border-amber-400 focus:border-amber-600 rounded-xl px-4 py-3 text-sm font-black text-stone-900 placeholder:text-stone-400 placeholder:font-normal focus:outline-none focus:ring-2 focus:ring-amber-400/40 transition-all shadow-inner"
+                dir="ltr"
+              />
+              {contactError && (
+                <p className="text-xs font-bold text-red-600 mt-1.5 flex items-center gap-1" dir="rtl">
+                  <span>⚠️</span>
+                  <span>{contactError}</span>
+                </p>
+              )}
             </div>
           </div>
 

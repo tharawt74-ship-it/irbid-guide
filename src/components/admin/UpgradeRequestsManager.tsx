@@ -78,6 +78,10 @@ export function UpgradeRequestsManager({ showToast }: UpgradeRequestsManagerProp
 
         await updateDoc(doc(db, 'businesses', req.businessId), {
           packagePlan: 'golden',
+          selectedPackagePlan: 'golden',
+          isVip: true,
+          isVipTrial: false,
+          billingPeriod: req.cycle || 'yearly',
           isVerified: true,
           vipSubscriptionStartsAt: now,
           vipSubscriptionExpiresAt: expiresAt,

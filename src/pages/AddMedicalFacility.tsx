@@ -43,6 +43,7 @@ import {
   Gift
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router';
+import { applyNewBusinessWelcomeGift } from '../lib/vipHelper';
 import { useAuth } from '../contexts/AuthContext';
 import { useSystemSettings } from '../contexts/SystemSettingsContext';
 import { SearchableSelect } from '../components/ui/SearchableSelect';
@@ -162,7 +163,7 @@ const getSpecIcon = (spec: any) => {
 };
 
 export function AddMedicalFacility() {
-  const { currentUser, userProfile } = useAuth();
+  const { currentUser, userProfile, isAdmin } = useAuth();
   const navigate = useNavigate();
   const { medicalCategories } = useSystemSettings();
 
@@ -269,6 +270,10 @@ export function AddMedicalFacility() {
   // Package Plan Selection
   const [selectedPackagePlan, setSelectedPackagePlan] = useState<'golden' | 'basic' | 'pay_per_use'>('golden');
   const [billingPeriod, setBillingPeriod] = useState<'yearly' | 'monthly'>('yearly');
+
+  // Owner Account Linking (Step 5 golden input)
+  const [ownerContact, setOwnerContact] = useState('');
+  const [contactError, setContactError] = useState('');
 
   // Submission State
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -515,8 +520,27 @@ export function AddMedicalFacility() {
 
     setIsSubmitting(true);
     setErrorMessage('');
+    setContactError('');
 
     try {
+      const contactVal = ownerContact.trim();
+      let parsedOwnerEmail = '';
+      let parsedOwnerPhone = '';
+
+      if (contactVal) {
+        if (contactVal.includes('@')) {
+          parsedOwnerEmail = contactVal.toLowerCase();
+        } else {
+          const phoneCheck = validateJordanianPhone(contactVal);
+          if (!phoneCheck.isValid) {
+            setContactError(phoneCheck.message || 'يرجى إدخال بريد إلكتروني صحيح أو رقم هاتف أردني صحيح (مثال: 0791234567).');
+            setIsSubmitting(false);
+            return;
+          }
+          parsedOwnerPhone = contactVal.trim();
+        }
+      }
+
       const selectedSpecObj = medicalCategories.find(s => s.id === mainSpecialty) || medicalCategories[0] || MEDICAL_SPECIALTIES[0];
       const mainSpecialtyTitle = selectedSpecObj.name;
       const chosenSubCategory = selectedSubspecialties.length > 0 
@@ -652,6 +676,10 @@ export function AddMedicalFacility() {
         isPopular: proc.isPopular
       }));
 
+      const now = Date.now();
+      const actualBillingPeriod = selectedPackagePlan === 'basic' ? 'lifetime' : billingPeriod;
+      const gift = applyNewBusinessWelcomeGift(selectedPackagePlan, actualBillingPeriod, now);
+
       const finalPayload: Omit<Business, 'id'> = {
         name: sanitizeInput(name),
         category: category,
@@ -668,51 +696,75 @@ export function AddMedicalFacility() {
         socialLinks: finalSocialLinks,
         menuItems: generatedMenuItems,
         medicalProfile: medicalProfileData,
-        isVerified: selectedPackagePlan === 'golden',
-        isFeatured: selectedPackagePlan === 'golden',
-        packagePlan: selectedPackagePlan,
-        billingPeriod: billingPeriod,
+        isVerified: gift.isVerified,
+        isFeatured: gift.isFeatured,
+        featuredStartDate: gift.featuredStartDate || null,
+        featuredExpiryDate: gift.featuredExpiryDate || null,
+        packagePlan: gift.packagePlan,
+        selectedPackagePlan: selectedPackagePlan,
+        isVip: gift.isVip,
+        isVipTrial: gift.isVipTrial,
+        vipSubscriptionStartsAt: gift.vipSubscriptionStartsAt,
+        vipSubscriptionExpiresAt: gift.vipSubscriptionExpiresAt,
+        billingPeriod: actualBillingPeriod,
         rating: 5.0,
         reviewCount: 0,
         views: 1,
-        createdAt: Date.now(),
+        createdAt: now,
         userId: currentUser?.uid || '',
-        ownerEmail: currentUser?.email || '',
+        ownerEmail: parsedOwnerEmail || currentUser?.email || '',
+        ownerPhone: parsedOwnerPhone || undefined,
+        ownerContact: contactVal || undefined,
         ownerName: doctorName ? sanitizeInput(doctorName) : sanitizeInput(name)
       };
 
-      // Submit request to 'businessRequests' collection for Admin Dashboard approval
+      // If created by Admin with direct onboarding, auto-approve directly into 'businesses'
+      const statusValue = isAdmin ? 'approved' : 'pending';
+
+      // Submit request to 'businessRequests' collection for record keeping
       const pendingRequestData = {
         ...finalPayload,
         requestType: 'medical_facility_registration',
-        status: 'pending',
+        status: statusValue,
         submittedAt: Date.now(),
-        userEmail: currentUser?.email || '',
+        userEmail: parsedOwnerEmail || currentUser?.email || '',
         userId: currentUser?.uid || ''
       };
 
       const sanitizedRequestPayload = await compressAndSanitizeFirestorePayload(pendingRequestData, false);
-      const requestRef = await addDoc(collection(db, 'businessRequests'), sanitizedRequestPayload);
+      let requestRef: any = null;
+      try {
+        requestRef = await addDoc(collection(db, 'businessRequests'), sanitizedRequestPayload);
+      } catch (reqErr) {
+        console.warn("businessRequests record warning:", reqErr);
+      }
 
-      // Also create an unverified record in 'businesses' with status 'pending'
+      // Create record in 'businesses'
+      let createdDocId = requestRef?.id || '';
       try {
         const sanitizedBizPayload = await compressAndSanitizeFirestorePayload({
           ...finalPayload,
-          status: 'pending',
-          requestId: requestRef.id
+          status: statusValue,
+          requestId: requestRef?.id || ''
         }, false);
         const docRef = await addDoc(collection(db, 'businesses'), sanitizedBizPayload);
+        createdDocId = docRef.id;
         setCreatedFacilityId(docRef.id);
       } catch (bizErr) {
-        console.warn("Direct business pending record warning:", bizErr);
-        setCreatedFacilityId(requestRef.id);
+        console.warn("Direct business record warning:", bizErr);
+        if (requestRef?.id) {
+          setCreatedFacilityId(requestRef.id);
+          createdDocId = requestRef.id;
+        } else {
+          throw bizErr;
+        }
       }
 
       recordSubmissionTime('add_medical_facility');
       invalidateCache();
 
       // Trigger custom events to notify listeners across the app
-      window.dispatchEvent(new CustomEvent('medical-business-added', { detail: { id: requestRef.id, name } }));
+      window.dispatchEvent(new CustomEvent('medical-business-added', { detail: { id: createdDocId, name } }));
 
       setIsSuccess(true);
     } catch (err: any) {
@@ -727,7 +779,7 @@ export function AddMedicalFacility() {
     <div className="min-h-screen bg-[#fdfcfb] py-8 sm:py-12" dir="rtl">
       <SEO 
         title="تسجيل عيادة أو منشأة طبية | منصة شو في بإربد"
-        description="انضم إلى دليل إربد الطبي المعتمد. وثّق عيادتك، مركزك الطبي، صيدليتك أو مختبرك واستقبل المرضى والمراجعين مباشرة."
+        description="انضم إلى قسم الرعاية الصحية في منصة شو في بإربد. وثّق عيادتك، مركزك الطبي، صيدليتك أو مختبرك واستقبل المرضى والمراجعين مباشرة."
       />
 
       <div className="max-w-4xl mx-auto px-4 sm:px-6">
@@ -761,7 +813,7 @@ export function AddMedicalFacility() {
                 <span>نموذج التسجيل الطبي المعتمد</span>
               </div>
               <h1 className="text-xl sm:text-2xl md:text-3xl font-black tracking-tight text-white">
-                سجّل عيادتك أو منشأتك في دليل إربد الطبي 🩺
+                سجّل عيادتك أو منشأتك في منصة شو في بإربد 🩺
               </h1>
               <p className="text-xs sm:text-sm text-emerald-100/90 font-medium leading-relaxed">
                 انضم الآن لمنظومة الرعاية الصحية المتكاملة في محافظة إربد. عرّف آلاف المرضى والمراجعين باختصاصك، أوقات دوامك، والتأمينات المعتمدة لديك.
@@ -771,7 +823,7 @@ export function AddMedicalFacility() {
             <div className="hidden md:flex flex-col items-center justify-center p-4 rounded-2xl bg-white/10 border border-white/15 text-center shrink-0 w-44">
               <ShieldCheck className="h-8 w-8 text-emerald-300 mb-1" />
               <span className="text-xs font-black text-white">مراجعة واعتماد الإدارة</span>
-              <span className="text-[10px] text-emerald-200 font-bold mt-0.5">لوحة تحكم المدير</span>
+              <span className="text-[10px] text-emerald-200 font-bold mt-0.5">توثيق وتدقيق رسمي</span>
             </div>
           </div>
         </div>
@@ -785,17 +837,17 @@ export function AddMedicalFacility() {
 
             <div className="space-y-2 max-w-lg mx-auto">
               <h2 className="text-2xl font-black text-stone-900">
-                تم إرسال الطلب للوحة تحكم المدير بنجاح! 📑
+                تم إرسال الطلب بنجاح! 📑
               </h2>
               <p className="text-sm text-stone-600 font-bold leading-relaxed">
-                تم إرسال طلب تسجيل منشأة / عيادة <span className="text-[#1a4d2e] font-black">"{name}"</span> إلى لوحة تحكم الإدارة. سيقوم المدير بمراجعة البيانات والترخيص والموافقة على إدراجها ونشرها في دليل إربد الطبي قريباً.
+                تم إرسال طلب تسجيل منشأة / عيادة <span className="text-[#1a4d2e] font-black">"{name}"</span> بنجاح. سيقوم فريق المنصة بمراجعة البيانات والترخيص والموافقة على إدراجها ونشرها في منصة شو في بإربد قريباً.
               </p>
             </div>
 
             <div className="p-4 bg-emerald-50/70 border border-emerald-200/80 rounded-2xl max-w-md mx-auto text-right space-y-2 text-xs font-bold text-emerald-900">
               <div className="flex items-center gap-2">
                 <Check className="h-4 w-4 text-emerald-600 shrink-0" />
-                <span>تم إرسال كافة التفاصيل والتراخيص إلى لوحة تحكم المدير</span>
+                <span>تم إرسال كافة التفاصيل والتراخيص بنجاح</span>
               </div>
               <div className="flex items-center gap-2">
                 <Check className="h-4 w-4 text-emerald-600 shrink-0" />
@@ -803,7 +855,7 @@ export function AddMedicalFacility() {
               </div>
               <div className="flex items-center gap-2">
                 <Check className="h-4 w-4 text-emerald-600 shrink-0" />
-                <span>سيتم نشر وتفعيل الصفحة فور موافقة المدير عليها</span>
+                <span>سيتم نشر وتفعيل الصفحة فور استكمال الاعتماد والمراجعة</span>
               </div>
             </div>
 
@@ -812,7 +864,7 @@ export function AddMedicalFacility() {
                 to="/medical"
                 className="w-full sm:w-auto px-8 py-3.5 rounded-2xl bg-[#1a4d2e] hover:bg-[#143d24] text-white font-black text-sm shadow-md transition-all flex items-center justify-center gap-2"
               >
-                <span>الانتقال لدليل إربد الطبي</span>
+                <span>الانتقال لقسم المنشآت الطبية</span>
                 <ArrowLeft className="h-4 w-4" />
               </Link>
               <Link
@@ -1979,7 +2031,7 @@ export function AddMedicalFacility() {
                     <div className="flex items-center gap-2">
                       <Crown className="h-5 w-5 text-[#ff9f1c]" />
                       <h3 className="text-base sm:text-lg font-black text-stone-900">
-                        الخطوة 4: اختر باقة الاشتراك لمنشأتك الطبية
+                        المرحلة الرابعة: اختر باقة الاشتراك لمنشأتك الطبية
                       </h3>
                     </div>
                     <span className="text-[10px] font-black bg-emerald-100 text-emerald-900 px-3 py-1 rounded-full border border-emerald-200">
@@ -2129,6 +2181,14 @@ export function AddMedicalFacility() {
                           </div>
                         </div>
 
+                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex gap-2 items-start mt-2">
+                          <Sparkles className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                          <div>
+                            <div className="text-[10px] font-black text-amber-900">هدية انضمام حصرية للباقة الذهبية</div>
+                            <div className="text-[9px] text-amber-800 font-bold mt-0.5 leading-tight">ميزة (المميز/صدارة البحث) ذات الإطار الذهبي وعلامة ممول مجاناً لمدة أسبوع كامل فور الموافقة!</div>
+                          </div>
+                        </div>
+
                         <div className="border-t border-stone-100 pt-3">
                           <h4 className="text-[10px] font-black text-stone-400 mb-2">ميزات المنظومة الطبية المتقدمة:</h4>
                           <ul className="space-y-2.5">
@@ -2175,10 +2235,10 @@ export function AddMedicalFacility() {
                   <div>
                     <h3 className="text-base sm:text-lg font-black text-stone-900 flex items-center gap-2">
                       <Clock className="h-5 w-5 text-[#1a4d2e]" />
-                      <span>المرحلة الرابعة: الأجهزة والتسهيلات وساعات العمل وتأكيد الإرسال</span>
+                      <span>المرحلة الخامسة: الأجهزة والتسهيلات وساعات العمل وتأكيد الإرسال</span>
                     </h3>
                     <p className="text-xs text-stone-500 font-bold mt-1">
-                      حدد مواعيد وساعات الدوام، وخصص ظهور الأجهزة والتقنيات وتسهيلات المرضى، ثم قم بتأكيد الإرسال للوحة تحكم المدير.
+                      حدد مواعيد وساعات الدوام، وخصص ظهور الأجهزة والتقنيات وتسهيلات المرضى، ثم قم بتأكيد الإرسال للمراجعة والاعتماد.
                     </p>
                   </div>
 
@@ -2558,7 +2618,6 @@ export function AddMedicalFacility() {
                       onChange={setSocialLinks}
                     />
                   </div>
-
                   {/* Terms & Certification Agreement */}
                   <div className="p-4 rounded-2xl bg-emerald-50/60 border border-emerald-200/80 space-y-3">
                     <label className="flex items-start gap-3 cursor-pointer">
@@ -2569,13 +2628,27 @@ export function AddMedicalFacility() {
                         className="mt-1 h-4 w-4 rounded text-[#1a4d2e] focus:ring-emerald-500 cursor-pointer"
                       />
                       <span className="text-xs font-bold text-emerald-950 leading-relaxed">
-                        {isPharmacy 
-                          ? 'أتعهد بصفتي صيدلياً / مديراً مفوضاً بصحة ودقة جميع البيانات والتراخيص الدوائية المقدمة أعلاه، ومطابقتها للمعايير والأنظمة الصحية في المملكة الأردنية الهاشمية.' 
-                          : isLab 
-                          ? 'أتعهد بصفتي أخصائياً / مديراً مفوضاً بصحة ودقة جميع بيانات الاعتماد والمختبر المقدمة أعلاه، ومطابقتها للأنظمة الصحية المعمول بها.' 
-                          : isHospital 
-                          ? 'أتعهد بصفتي مديراً طبياً / مفوضاً بصحة ودقة جميع التراخيص والمعلومات الطبية والمؤسسية المقدمة أعلاه، ومطابقتها للمعايير الرسمية.' 
-                          : 'أتعهد بصفتي طبيباً / مديراً مفوضاً بصحة ودقة جميع المعلومات والمؤهلات الطبية والتراخيص المقدمة أعلاه، ومطابقتها للمعايير والأنظمة الصحية المعمول بها.'}
+                        أوافق على{' '}
+                        <Link 
+                          to="/terms" 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          onClick={(e) => e.stopPropagation()} 
+                          className="underline hover:text-emerald-700 text-[#1a4d2e] font-black transition-colors"
+                        >
+                          الشروط والأحكام
+                        </Link>{' '}
+                        و{' '}
+                        <Link 
+                          to="/privacy" 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          onClick={(e) => e.stopPropagation()} 
+                          className="underline hover:text-emerald-700 text-[#1a4d2e] font-black transition-colors"
+                        >
+                          سياسة الخصوصية
+                        </Link>{' '}
+                        المعمول بها في منصة شو في بإربد.
                       </span>
                     </label>
                   </div>
@@ -2620,12 +2693,12 @@ export function AddMedicalFacility() {
                     {isSubmitting ? (
                       <>
                         <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        <span>جاري إرسال الطلب للإدارة...</span>
+                        <span>جاري إرسال الطلب...</span>
                       </>
                     ) : (
                       <>
                         <CheckCircle2 className="h-5 w-5 text-emerald-200" />
-                        <span>إرسال الطلب لوحة تحكم المدير للمراجعة والاعتماد 📩</span>
+                        <span>إرسال الطلب</span>
                       </>
                     )}
                   </button>

@@ -152,6 +152,8 @@ export interface Business {
   ownerId?: string;
   ownerName?: string;
   ownerEmail?: string;
+  ownerPhone?: string;
+  ownerContact?: string;
   username?: string; // e.g. "alkhiyam_cafe" or "irbid_burger" for custom social media profile URL
   isHidden?: boolean; // Hide / unpublish business page from public directory
   status?: 'active' | 'hidden' | 'pending' | 'rejected' | 'approved';
@@ -159,8 +161,8 @@ export interface Business {
   googlePlaceUrl?: string;
   hideSiteReviews?: boolean;
   isFeatured?: boolean;
-  featuredStartDate?: number;
-  featuredExpiryDate?: number;
+  featuredStartDate?: number | null;
+  featuredExpiryDate?: number | null;
   views?: number;
   
   // Map and VIP details
@@ -174,7 +176,8 @@ export interface Business {
   
   // Package & Verification
   packagePlan?: 'basic' | 'golden' | 'vip' | 'pay_per_use';
-  billingPeriod?: 'monthly' | 'yearly';
+  selectedPackagePlan?: 'basic' | 'golden' | 'vip' | 'pay_per_use' | string;
+  billingPeriod?: 'monthly' | 'yearly' | 'lifetime';
   isVerified?: boolean;
   isVipTrial?: boolean;
   vipSubscriptionStartsAt?: number; // timestamp in ms

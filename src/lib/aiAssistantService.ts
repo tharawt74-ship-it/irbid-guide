@@ -1366,7 +1366,7 @@ export async function getSmartLocalResponse(
         actions: [
           { label: `🔍 البحث عن "${cleanTerm}" في صفحة البحث`, path: `/search?q=${encodeURIComponent(cleanTerm)}` },
           { label: '🏢 تصفح دليل المحلات في إربد', path: '/search' },
-          { label: `➕ إضافة محل "${cleanTerm}" للمنصة`, path: '/packages' }
+          { label: `➕ إضافة محل "${cleanTerm}" للمنصة`, path: '/contact' }
         ]
       };
     }

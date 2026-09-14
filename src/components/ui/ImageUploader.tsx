@@ -1,7 +1,6 @@
 import React, { useState, useRef } from 'react';
-import { Upload, Image as ImageIcon, Trash2, CheckCircle2, Sparkles, Link as LinkIcon, RefreshCw, AlertCircle, Crop as CropIcon } from 'lucide-react';
+import { Upload, Image as ImageIcon, Trash2, Sparkles, Link as LinkIcon, RefreshCw, AlertCircle, Crop as CropIcon } from 'lucide-react';
 import { uploadAndCompressImage } from '../../lib/storageHelper';
-import { formatFileSize } from '../../lib/imageCompression';
 import { ImageCropModal, CropAspectRatio } from './ImageCropModal';
 
 interface ImageUploaderProps {
@@ -28,7 +27,6 @@ export function ImageUploader({
   const [isUploading, setIsUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [dragActive, setDragActive] = useState(false);
-  const [uploadStats, setUploadStats] = useState<{ original: number; compressed: number; ratio: number } | null>(null);
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [customUrl, setCustomUrl] = useState('');
   const [cropModalOpen, setCropModalOpen] = useState(false);
@@ -40,7 +38,6 @@ export function ImageUploader({
   const startUploadProcess = async (file: File) => {
     setIsUploading(true);
     setProgress(5);
-    setUploadStats(null);
 
     try {
       const result = await uploadAndCompressImage(file, {
@@ -52,11 +49,6 @@ export function ImageUploader({
       });
 
       onChange(result.url);
-      setUploadStats({
-        original: result.originalSize,
-        compressed: result.compressedSize,
-        ratio: result.savedPercentage
-      });
     } catch (error) {
       console.error("Error uploading image:", error);
       alert("حدث خطأ أثناء تحميل الصورة. يرجى المحاولة مرة أخرى.");
@@ -219,14 +211,6 @@ export function ImageUploader({
                   <span>حذف</span>
                 </button>
               </div>
-
-              {/* Compression Badge overlay if available */}
-              {uploadStats && uploadStats.ratio > 0 && (
-                <div className="absolute bottom-2 right-2 bg-stone-900/80 backdrop-blur-md text-emerald-400 text-[10px] font-black px-2 py-1 rounded-lg border border-emerald-500/30 flex items-center gap-1">
-                  <Sparkles className="h-3 w-3" />
-                  <span>تم الضغط ({uploadStats.ratio}% توفير)</span>
-                </div>
-              )}
             </div>
           ) : (
             /* Upload Zone Drop Area */
@@ -284,16 +268,6 @@ export function ImageUploader({
               )}
             </div>
           )}
-        </div>
-      )}
-
-      {/* Upload Stats Note */}
-      {uploadStats && !isUploading && (
-        <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
-          <CheckCircle2 className="h-3 w-3 shrink-0" />
-          <span>
-            الحجم الأصلي: {formatFileSize(uploadStats.original)} ← المضغوط: {formatFileSize(uploadStats.compressed)} (وفرت {uploadStats.ratio}%)
-          </span>
         </div>
       )}
 

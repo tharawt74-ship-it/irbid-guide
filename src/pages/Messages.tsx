@@ -1199,7 +1199,7 @@ export function Messages() {
                         disabled={!inputText.trim() && !selectedFile}
                         className="p-3 bg-[#1a4d2e] text-white hover:bg-[#133b22] disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-colors shrink-0 shadow-xs cursor-pointer"
                       >
-                        <Send className="h-5 w-5 transform rotate-180" />
+                        <Send className="h-5 w-5 rtl:-scale-x-100" />
                       </button>
                     </div>
                   </form>

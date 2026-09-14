@@ -12,12 +12,13 @@ import { useAuth } from '../contexts/AuthContext';
 import { Business } from '../types';
 import { VipUpgradeRequestModal } from '../components/vip/VipUpgradeRequestModal';
 import { isMedicalBusiness } from '../lib/medicalHelper';
+import { getAppConfig } from '../lib/demoDataHelper';
 
-const MARKETING_SERVICES_DATA = [
+const getMarketingServicesData = (config: any) => [
   {
     id: 'banner',
     title: 'إعلان بانر ترويجي متحرك',
-    price: '29 د.أ / أسبوع',
+    price: `${config?.priceHomepageBanner ?? 29} د.أ / أسبوع`,
     description: 'وضع محلك أو عرضك الخاص في السلايدر الرئيسي أعلى الصفحة الرئيسية للمنصة لضمان أعلى نسبة مشاهدة واهتمام من زوار إربد.',
     icon: Tv,
     whatsappText: 'أرغب في حجز مساحة إعلان بانر ترويجي متحرك في الصفحة الرئيسية لمحلي.',
@@ -27,7 +28,7 @@ const MARKETING_SERVICES_DATA = [
   {
     id: 'sponsored',
     title: 'صدارة نتائج البحث والترشيح Sponsored',
-    price: '19 د.أ / أسبوع',
+    price: `${config?.priceSponsored ?? 19} د.أ / أسبوع`,
     description: 'احصل على الأولوية القصوى والظهور الدائم في أعلى نتائج البحث والتصنيفات وفي قائمة "المحلات المقترحة" للمستخدمين.',
     icon: TrendingUp,
     whatsappText: 'أرغب في تفعيل خدمة صدارة نتائج البحث والتصنيف Sponsored لمحلي.',
@@ -37,7 +38,7 @@ const MARKETING_SERVICES_DATA = [
   {
     id: 'notifications',
     title: 'إرسال إشعار ترويجي جماعي فوري',
-    price: '15 د.أ / إشعار',
+    price: `${config?.pricePushNotifications ?? 15} د.أ / إشعار`,
     description: 'أرسل إشعاراً فورياً ومباشراً يصل لجميع مستخدمي المنصة في إربد للإعلان عن افتتاح، عرض جديد، أو فعالية خاصة بمحلك.',
     icon: Bell,
     whatsappText: 'أرغب في إرسال إشعار ترويجي جماعي فوري لجميع مستخدمي المنصة للإعلان عن محلي.',
@@ -46,11 +47,11 @@ const MARKETING_SERVICES_DATA = [
   }
 ];
 
-const MEDICAL_MARKETING_SERVICES_DATA = [
+const getMedicalMarketingServicesData = (config: any) => [
   {
     id: 'medical_banner',
     title: 'إعلان بانر ترويجي للعيادة أو المركز',
-    price: '29 د.أ / أسبوع',
+    price: `${config?.priceHomepageBanner ?? 29} د.أ / أسبوع`,
     description: 'إبراز اسم الطبيب، التخصص، أو الخدمات المتميزة في السلايدر الرئيسي أعلى الصفحة الرئيسية للمنصة لضمان أعلى وصول للمراجعين في إربد.',
     icon: Tv,
     whatsappText: 'أرغب في حجز مساحة إعلان بانر ترويجي في الصفحة الرئيسية لمنشأتي الطبية.',
@@ -60,7 +61,7 @@ const MEDICAL_MARKETING_SERVICES_DATA = [
   {
     id: 'medical_sponsored',
     title: 'صدارة نتائج البحث والتصنيف الطبي Sponsored',
-    price: '19 د.أ / أسبوع',
+    price: `${config?.priceSponsored ?? 19} د.أ / أسبوع`,
     description: 'احصل على الأولوية القصوى والظهور الدائم في أعلى نتائج البحث الطبي وتصنيفات الأطباء وفي قائمة "المراكز الموصى بها" للمرضى.',
     icon: TrendingUp,
     whatsappText: 'أرغب في تفعيل خدمة صدارة نتائج البحث والتصنيف الطبي Sponsored لعيادتي/مركزي.',
@@ -70,7 +71,7 @@ const MEDICAL_MARKETING_SERVICES_DATA = [
   {
     id: 'medical_notifications',
     title: 'إشعار ترويجي جماعي لحملة فحص أو طبيب زائر',
-    price: '15 د.أ / إشعار',
+    price: `${config?.pricePushNotifications ?? 15} د.أ / إشعار`,
     description: 'أرسل إشعاراً فورياً ومباشراً يصل لهواتف مستخدمي المنصة في إربد للإعلان عن افتتاح قسم جديد، استضافة استشاري زائر، أو إطلاق حملة فحص دوري.',
     icon: Bell,
     whatsappText: 'أرغب في إرسال إشعار ترويجي جماعي لمستخدمي المنصة للإعلان عن حملة فحص أو افتتاح قسم جديد.',
@@ -80,6 +81,15 @@ const MEDICAL_MARKETING_SERVICES_DATA = [
 ];
 
 export function Pricing() {
+  const [appConfigState, setAppConfigState] = React.useState<any>({});
+
+  React.useEffect(() => {
+    getAppConfig().then(config => setAppConfigState(config));
+  }, []);
+
+  const MARKETING_SERVICES_DATA = getMarketingServicesData(appConfigState);
+  const MEDICAL_MARKETING_SERVICES_DATA = getMedicalMarketingServicesData(appConfigState);
+
   const { vipPlans, globalSettings } = useSystemSettings();
   const { currentUser, ownedBusinesses } = useAuth();
   const navigate = useNavigate();
@@ -187,9 +197,9 @@ export function Pricing() {
   const handleAddNewBusiness = () => {
     setShowBusinessSelectModal(false);
     if (sectorTab === 'medical') {
-      navigate('/add-medical-facility');
+      navigate('/medical/register');
     } else {
-      navigate('/contact?type=business');
+      navigate('/contact');
     }
   };
 
@@ -203,10 +213,10 @@ export function Pricing() {
   return (
     <div className="w-full space-y-12 sm:space-y-16 pb-16">
       <SEO 
-        title={sectorTab === 'medical' ? "باقات اشتراك المنشآت الطبية والعيادات | دليل إربد الطبي" : "أضف محلك - باقات الاشتراك | دليل إربد"}
+        title={sectorTab === 'medical' ? "باقات اشتراك المنشآت الطبية والعيادات | منصة شو في بإربد" : "أضف محلك - باقات الاشتراك | منصة شو في بإربد"}
         description={sectorTab === 'medical' 
-          ? "انضم لأكبر دليل طبي ورعاية صحية في إربد. باقات مخصصة للعيادات والمراكز والمختبرات لحجز المواعيد والتوثيق والظهور المتقدم مع شهر مجاني VIP للمنشآت الجديدة."
-          : "انضم لأكبر منصة تجارية في إربد وضاعف زبائنك. استعرض باقات الاشتراك لإضافة محلك أو شركتك في دليل شو في بإربد الشامل وابدأ باستقبال العملاء الجدد."}
+          ? "انضم لأكبر قسم طبي ورعاية صحية في إربد. باقات مخصصة للعيادات والمراكز والمختبرات لحجز المواعيد والتوثيق والظهور المتقدم مع شهر مجاني VIP للمنشآت الجديدة."
+          : "انضم لأكبر منصة تجارية في إربد وضاعف زبائنك. استعرض باقات الاشتراك لإضافة محلك أو شركتك في منصة شو في بإربد الشاملة وابدأ باستقبال العملاء الجدد."}
         keywords={['أضف محلك', 'باقات إربد', 'تسجيل المحلات', 'عيادات إربد', 'أطباء إربد', 'تسويق في إربد', 'إعلانات إربد']}
         canonicalUrl="https://shofierbid.com/pricing"
       />
@@ -799,7 +809,7 @@ export function Pricing() {
         </h3>
         <p className="text-stone-600 leading-relaxed text-sm">
           {sectorTab === 'medical' 
-            ? "آلاف المراجعين والمرضى يبحثون يومياً عن أطباء ومراكز ومختبرات معتمدة في محافظتك. انضم الآن لدليل إربد الطبي وسهل وصول المرضى إليك."
+            ? "آلاف المراجعين والمرضى يبحثون يومياً عن أطباء ومراكز ومختبرات معتمدة في محافظتك. انضم الآن لمنصة شو في بإربد وسهل وصول المرضى إليك."
             : "آلاف الأهالي والزوار يبحثون عن الخدمات والمطاعم في مدينتك. انضم الآن ولا تفوت الفرصة لزيادة مبيعاتك وتعزيز علامتك التجارية."}
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">

@@ -110,33 +110,34 @@ export default function App() {
                     <Route path="cart" element={<CartPage />} />
                     <Route path="search" element={<Search />} />
                     <Route path="medical" element={<Medical />} />
+                    <Route path="medical/add" element={<AddMedicalFacility />} />
                     <Route path="medical/register" element={<AddMedicalFacility />} />
                     <Route path="add-medical" element={<AddMedicalFacility />} />
                     <Route path="add-medical-facility" element={<AddMedicalFacility />} />
                     <Route path="business/:id" element={<BusinessDetail />} />
-                  <Route path="b/:id" element={<BusinessDetail />} />
-                  <Route path=":id" element={<BusinessDetail />} />
-                  <Route path="news" element={<News />} />
-                  <Route path="news/:id" element={<News />} />
-                  <Route path="jobs" element={<Jobs />} />
-                  <Route path="offers" element={<Offers />} />
-                  <Route path="offers/:id" element={<OfferDetail />} />
-                  <Route path="housing" element={<Housing />} />
-                  <Route path="housing/:id" element={<HousingDetail />} />
-                  <Route path="tourism" element={<Tourism />} />
-                  <Route path="tourism/:id" element={<Tourism />} />
-                  <Route path="transportation" element={<Transportation />} />
-                  <Route path="prayer-times" element={<PrayerTimes />} />
-                  <Route path="packages" element={<Pricing />} />
-                  <Route path="pricing" element={<Pricing />} />
-                  <Route path="contact" element={<Contact />} />
-                  <Route path="terms" element={<Terms />} />
-                  <Route path="privacy" element={<Privacy />} />
-                  <Route path="about" element={<AboutUs />} />
-                  <Route path="login" element={<Login />} />
-                  <Route path="register" element={<Register />} />
-                  <Route path="verify" element={<Verify />} />
+                    <Route path="b/:id" element={<BusinessDetail />} />
+                    <Route path="news" element={<News />} />
+                    <Route path="news/:id" element={<News />} />
+                    <Route path="jobs" element={<Jobs />} />
+                    <Route path="offers" element={<Offers />} />
+                    <Route path="offers/:id" element={<OfferDetail />} />
+                    <Route path="housing" element={<Housing />} />
+                    <Route path="housing/:id" element={<HousingDetail />} />
+                    <Route path="tourism" element={<Tourism />} />
+                    <Route path="tourism/:id" element={<Tourism />} />
+                    <Route path="transportation" element={<Transportation />} />
+                    <Route path="prayer-times" element={<PrayerTimes />} />
+                    <Route path="packages" element={<Pricing />} />
+                    <Route path="pricing" element={<Pricing />} />
+                    <Route path="contact" element={<Contact />} />
+                    <Route path="terms" element={<Terms />} />
+                    <Route path="privacy" element={<Privacy />} />
+                    <Route path="about" element={<AboutUs />} />
+                    <Route path="login" element={<Login />} />
+                    <Route path="register" element={<Register />} />
+                    <Route path="verify" element={<Verify />} />
                     <Route path="reset-password" element={<ResetPassword />} />
+                    <Route path=":id" element={<BusinessDetail />} />
                   </Route>
                 </Routes>
               </Suspense>

@@ -55,7 +55,7 @@ import { ShoppingBag } from 'lucide-react';
 import { WhatsAppIcon } from '../common/WhatsAppIcon';
 
 export function Layout() {
-  const { currentUser, userProfile, refreshUserData, isAdmin, isSupervisor, isStaff, isMerchant, userRole, logout } = useAuth();
+  const { currentUser, userProfile, refreshUserData, isAdmin, isSupervisor, isStaff, isMerchant, ownedBusinesses, userRole, logout } = useAuth();
   const { globalSettings, isSettingsLoaded } = useSystemSettings();
   const { totalCount } = useCart();
   const location = useLocation();
@@ -89,8 +89,19 @@ export function Layout() {
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const [showMenuTooltip, setShowMenuTooltip] = useState(false);
   const [showDesktopMoreTooltip, setShowDesktopMoreTooltip] = useState(false);
-  const isBootstrapAdmin = currentUser && ['princessofx2344@gmail.com', 'admin@shoofiirbid.com', 'irbid.admin@gmail.com'].includes(currentUser.email?.toLowerCase().trim() || '');
-  const isEmailVerified = currentUser?.emailVerified || userProfile?.customEmailVerified || isBootstrapAdmin;
+  const isBootstrapAdmin = currentUser && ['princessofx2344@gmail.com', 'admin@shoofiirbid.com', 'irbid.admin@gmail.com', 'tharawt74@gmail.com'].includes(currentUser.email?.toLowerCase().trim() || '');
+  const isEmailVerified = Boolean(
+    currentUser?.emailVerified || 
+    userProfile?.customEmailVerified || 
+    userProfile?.emailVerified || 
+    isBootstrapAdmin || 
+    isStaff || 
+    isMerchant || 
+    userRole === 'merchant' || 
+    userRole === 'super_admin' || 
+    userRole === 'supervisor' || 
+    (ownedBusinesses && ownedBusinesses.length > 0)
+  );
   const isMedicalPage = location.pathname.startsWith('/medical');
 
   // Active polling to check verification status automatically every 3 seconds

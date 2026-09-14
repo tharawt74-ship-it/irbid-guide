@@ -1,12 +1,13 @@
 import { Link, useNavigate } from 'react-router';
 import { Business } from '../types';
-import { Star, MapPin, Store, Clock, Heart, Crown, Tag } from 'lucide-react';
+import { Star, MapPin, Store, Clock, Heart, Crown, Tag, Stethoscope } from 'lucide-react';
 import { VerifiedBadge } from './vip/VerifiedBadge';
 import { ShareButton } from './ShareButton';
 import { getLiveWorkingStatus } from '../lib/businessHoursHelper';
 import { getBusinessVipStatus } from '../lib/vipHelper';
 import { useAuth } from '../contexts/AuthContext';
 import { getBusinessLink, cn, stripHtml } from '../lib/utils';
+import { getMedicalSubspecialtyOnly } from '../lib/medicalHelper';
 import { WhatsApp3DIcon, Phone3DIcon } from './common/PremiumContactButtons';
 
 interface BusinessCardProps {
@@ -24,6 +25,8 @@ export function BusinessCard({ business, featured = false, searchReasons }: Busi
   const isCurrentlyFeatured = business.isFeatured && (!business.featuredStartDate || business.featuredStartDate <= Date.now()) && (!business.featuredExpiryDate || business.featuredExpiryDate > Date.now());
   const isLuxuryFeatured = isCurrentlyFeatured;
   const businessLink = getBusinessLink(business);
+  const medicalSubSpecialty = getMedicalSubspecialtyOnly(business);
+  const subCategoryName = (business as any).subCategory || (business as any).subcategory;
 
   const handleToggleFavorite = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -68,12 +71,18 @@ export function BusinessCard({ business, featured = false, searchReasons }: Busi
             <div className="flex items-center gap-1.5 ml-auto">
               <button
                 onClick={handleToggleFavorite}
-                className="w-8 h-8 rounded-full bg-black/40 backdrop-blur-md hover:bg-black/60 flex items-center justify-center transition-all border border-white/10"
+                className="w-8 h-8 rounded-full bg-black/40 backdrop-blur-md hover:bg-black/60 flex items-center justify-center transition-all border border-white/10 text-white cursor-pointer"
                 title={isFavorited ? "إزالة من المفضلة" : "إضافة للمفضلة"}
               >
                 <Heart className={`h-4.5 w-4.5 transition-transform duration-300 active:scale-125 ${isFavorited ? 'fill-red-500 text-red-500' : 'text-white'}`} />
               </button>
-              <ShareButton title={business.name} url={businessLink} size="sm" variant="pill" />
+              <ShareButton 
+                title={business.name} 
+                url={businessLink} 
+                size="sm" 
+                variant="circle" 
+                className="w-8 h-8 rounded-full bg-black/40 backdrop-blur-md hover:bg-black/60 flex items-center justify-center transition-all border border-white/10 text-white" 
+              />
             </div>
           </div>
 
@@ -98,12 +107,25 @@ export function BusinessCard({ business, featured = false, searchReasons }: Busi
             </div>
 
             {/* Category & Department Tag */}
-            {business.category && (
-              <div className="flex items-center gap-1.5 mb-2.5">
-                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-white/20 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-white/20 shadow-xs">
-                  <Tag className="w-3 h-3 text-[#ff9f1c]" />
-                  <span>{business.category}</span>
-                </span>
+            {(business.category || subCategoryName || medicalSubSpecialty) && (
+              <div className="flex items-center gap-1.5 mb-2.5 flex-wrap">
+                {business.category && (
+                  <span className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-white/20 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-white/20 shadow-xs">
+                    <Tag className="w-3 h-3 text-[#ff9f1c]" />
+                    <span>{business.category}</span>
+                  </span>
+                )}
+                {subCategoryName && subCategoryName !== business.category && subCategoryName !== medicalSubSpecialty && (
+                  <span className="inline-flex items-center gap-1.5 text-xs font-bold text-white/90 bg-white/15 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-white/15 shadow-xs">
+                    <span>{subCategoryName}</span>
+                  </span>
+                )}
+                {medicalSubSpecialty && (
+                  <span className="inline-flex items-center gap-1.5 text-xs font-bold text-teal-200 bg-teal-900/60 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-teal-400/35 shadow-xs">
+                    <Stethoscope className="w-3.5 h-3.5 text-teal-300 shrink-0" />
+                    <span>{medicalSubSpecialty}</span>
+                  </span>
+                )}
               </div>
             )}
 
@@ -181,7 +203,13 @@ export function BusinessCard({ business, featured = false, searchReasons }: Busi
           >
             <Heart className={`h-4 w-4 transition-transform duration-300 active:scale-125 ${isFavorited ? 'fill-red-500 text-red-500' : 'text-stone-600'}`} />
           </button>
-          <ShareButton title={business.name} url={businessLink} size="sm" variant="pill" />
+          <ShareButton 
+            title={business.name} 
+            url={businessLink} 
+            size="sm" 
+            variant="circle" 
+            className="w-8 h-8 rounded-full bg-white/70 backdrop-blur-xl hover:bg-white flex items-center justify-center transition-all shadow-[0_4px_12px_rgba(0,0,0,0.08)] border border-white/40 text-stone-600" 
+          />
         </div>
 
         {/* Live Working Status Bottom Right of Image */}
@@ -220,12 +248,25 @@ export function BusinessCard({ business, featured = false, searchReasons }: Busi
         </div>
 
         {/* Category & Department Tag */}
-        {business.category && (
-          <div className="flex items-center gap-1.5 mb-2.5">
-            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#1a4d2e] bg-[#1a4d2e]/7 hover:bg-[#1a4d2e]/12 px-2.5 py-0.5 rounded-full border border-[#1a4d2e]/15 transition-colors">
-              <Tag className="w-3 h-3 text-[#1a4d2e]" />
-              <span>{business.category}</span>
-            </span>
+        {(business.category || subCategoryName || medicalSubSpecialty) && (
+          <div className="flex items-center gap-1.5 mb-2.5 flex-wrap">
+            {business.category && (
+              <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#1a4d2e] bg-[#1a4d2e]/7 hover:bg-[#1a4d2e]/12 px-2.5 py-0.5 rounded-full border border-[#1a4d2e]/15 transition-colors">
+                <Tag className="w-3 h-3 text-[#1a4d2e]" />
+                <span>{business.category}</span>
+              </span>
+            )}
+            {subCategoryName && subCategoryName !== business.category && subCategoryName !== medicalSubSpecialty && (
+              <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200/60 transition-colors">
+                <span>{subCategoryName}</span>
+              </span>
+            )}
+            {medicalSubSpecialty && (
+              <span className="inline-flex items-center gap-1.5 text-xs font-bold text-teal-800 bg-teal-50/95 hover:bg-teal-100 px-2.5 py-0.5 rounded-full border border-teal-200 transition-colors shadow-2xs">
+                <Stethoscope className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                <span>{medicalSubSpecialty}</span>
+              </span>
+            )}
           </div>
         )}
 

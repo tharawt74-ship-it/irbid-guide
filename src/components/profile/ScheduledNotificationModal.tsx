@@ -60,7 +60,7 @@ export function ScheduledNotificationModal({ business, isOpen, onClose, onSchedu
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto" dir="rtl">
+    <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto" dir="rtl">
       <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-stone-200 space-y-5 text-right my-auto animate-in fade-in zoom-in-95">
         
         <div className="flex items-center justify-between border-b border-stone-100 pb-3">

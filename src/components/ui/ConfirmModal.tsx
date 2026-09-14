@@ -87,7 +87,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   const styles = getVariantStyles();
 
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[100000] flex items-center justify-center p-4">
       <div 
         className="absolute inset-0 bg-stone-900/60 backdrop-blur-sm transition-opacity" 
         onClick={!isProcessing ? onClose : undefined}

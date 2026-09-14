@@ -7,7 +7,7 @@ import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-ch
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyDDswaCceyey9mjAC7ERlkPQ0dIkNsbquw",
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "irbid-7f4dd.firebaseapp.com",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "shofibirbid.site",
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "irbid-7f4dd",
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "irbid-7f4dd.firebasestorage.app",
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "422374274279",

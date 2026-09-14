@@ -1,8 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { MenuItem } from '../types';
+import { MenuItem, MenuItemVersion } from '../types';
 
 export interface CartItem {
   id: string;
+  originalItemId?: string;
   name: string;
   price: string | number;
   originalPrice?: string;
@@ -10,6 +11,7 @@ export interface CartItem {
   category?: string;
   image?: string;
   options?: string[];
+  selectedVersion?: MenuItemVersion;
   notes?: string;
   businessId: string;
   businessName: string;
@@ -22,15 +24,62 @@ export interface BusinessCartInfo {
   phone?: string;
 }
 
+export function calculateItemPriceWithVersion(basePrice: string | number, version?: MenuItemVersion): number {
+  const base = typeof basePrice === 'number' ? basePrice : parseFloat(String(basePrice)) || 0;
+  if (!version) return base;
+  if (version.priceType === 'free') return base;
+  if (version.priceType === 'fixed') {
+    return typeof version.price === 'number' ? version.price : parseFloat(String(version.price)) || base;
+  }
+  if (version.priceType === 'additional') {
+    const add = typeof version.price === 'number' ? version.price : parseFloat(String(version.price)) || 0;
+    return base + add;
+  }
+  return base;
+}
+
+export interface DisplayPriceInfo {
+  formattedPrice: string;
+  isStartingPrice: boolean;
+  minPrice: number;
+  basePrice: number;
+}
+
+export function getMenuItemDisplayPrice(item: { price: string | number; versions?: MenuItemVersion[]; versionType?: 'sizes' | 'addons' }): DisplayPriceInfo {
+  const base = typeof item.price === 'number' ? item.price : parseFloat(String(item.price)) || 0;
+  const hasVersions = !!(item.versions && item.versions.length > 0);
+  const isSizesMode = hasVersions && item.versionType !== 'addons';
+
+  if (isSizesMode && item.versions && item.versions.length > 0) {
+    const prices = item.versions.map(v => calculateItemPriceWithVersion(base, v));
+    const min = Math.min(...prices);
+    const formatted = min % 1 === 0 ? min.toString() : min.toFixed(2);
+    return {
+      formattedPrice: formatted,
+      isStartingPrice: true,
+      minPrice: min,
+      basePrice: base
+    };
+  }
+
+  const formatted = typeof item.price === 'number' ? item.price.toString() : (String(item.price) || '0');
+  return {
+    formattedPrice: formatted,
+    isStartingPrice: false,
+    minPrice: base,
+    basePrice: base
+  };
+}
+
 interface CartContextType {
   items: CartItem[];
   businessId: string | null;
   businessName: string | null;
   businessPhone: string | null;
-  pendingConflict: { item: MenuItem; business: BusinessCartInfo } | null;
+  pendingConflict: { item: MenuItem; business: BusinessCartInfo; selectedVersion?: MenuItemVersion; quantity?: number } | null;
   isFloatingCartVisible: boolean;
   
-  addItem: (item: MenuItem, business: BusinessCartInfo) => void;
+  addItem: (item: MenuItem, business: BusinessCartInfo, selectedVersion?: MenuItemVersion, quantity?: number) => void;
   removeItem: (itemId: string) => void;
   updateQuantity: (itemId: string, delta: number) => void;
   clearCart: () => void;
@@ -99,7 +148,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     return null;
   });
 
-  const [pendingConflict, setPendingConflict] = useState<{ item: MenuItem; business: BusinessCartInfo } | null>(null);
+  const [pendingConflict, setPendingConflict] = useState<{ item: MenuItem; business: BusinessCartInfo; selectedVersion?: MenuItemVersion; quantity?: number } | null>(null);
   const [isFloatingCartVisible, setIsFloatingCartVisible] = useState<boolean>(true);
 
   // Save cart to local storage whenever items or business change
@@ -128,18 +177,21 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     return sum + (p * item.quantity);
   }, 0);
 
-  // Get quantity of a single item
+  // Get quantity of a single item or its versions combined
   const getItemQuantity = (itemId: string) => {
-    const found = items.find(i => i.id === itemId);
-    return found ? found.quantity : 0;
+    return items
+      .filter(i => i.id === itemId || i.originalItemId === itemId)
+      .reduce((sum, item) => sum + item.quantity, 0);
   };
 
-  // Add Item to cart with conflict resolution
-  const addItem = (item: MenuItem, business: BusinessCartInfo) => {
+  // Add Item to cart with conflict resolution and version support
+  const addItem = (item: MenuItem, business: BusinessCartInfo, selectedVersion?: MenuItemVersion, quantity: number = 1) => {
+    const qtyToAdd = Math.max(1, quantity);
+
     // Check if cart has items from another business
     if (items.length > 0 && businessId && businessId !== business.id) {
       // Trigger conflict modal
-      setPendingConflict({ item, business });
+      setPendingConflict({ item, business, selectedVersion, quantity: qtyToAdd });
       return;
     }
 
@@ -148,27 +200,33 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     setBusinessName(business.name);
     if (business.phone) setBusinessPhone(business.phone);
 
+    const calculatedPrice = calculateItemPriceWithVersion(item.price, selectedVersion);
+    const cartItemId = selectedVersion ? `${item.id}_v_${selectedVersion.id}` : item.id;
+    const displayName = selectedVersion ? `${item.name} (${selectedVersion.name})` : item.name;
+
     setItems(prevItems => {
-      const existingIndex = prevItems.findIndex(i => i.id === item.id);
+      const existingIndex = prevItems.findIndex(i => i.id === cartItemId);
       if (existingIndex > -1) {
         const updated = [...prevItems];
         updated[existingIndex] = {
           ...updated[existingIndex],
-          quantity: updated[existingIndex].quantity + 1
+          quantity: updated[existingIndex].quantity + qtyToAdd
         };
         return updated;
       } else {
         return [
           ...prevItems,
           {
-            id: item.id,
-            name: item.name,
-            price: item.price,
+            id: cartItemId,
+            originalItemId: item.id,
+            name: displayName,
+            price: calculatedPrice,
             originalPrice: item.originalPrice,
-            quantity: 1,
+            quantity: qtyToAdd,
             category: item.category,
             image: item.imageUrl,
             options: item.options,
+            selectedVersion: selectedVersion,
             businessId: business.id,
             businessName: business.name,
             businessPhone: business.phone
@@ -184,18 +242,25 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   // Confirm replacing old cart with new business items
   const confirmReplaceCart = () => {
     if (!pendingConflict) return;
-    const { item, business } = pendingConflict;
+    const { item, business, selectedVersion, quantity } = pendingConflict;
+    const qtyToAdd = Math.max(1, quantity || 1);
+
+    const calculatedPrice = calculateItemPriceWithVersion(item.price, selectedVersion);
+    const cartItemId = selectedVersion ? `${item.id}_v_${selectedVersion.id}` : item.id;
+    const displayName = selectedVersion ? `${item.name} (${selectedVersion.name})` : item.name;
 
     setItems([
       {
-        id: item.id,
-        name: item.name,
-        price: item.price,
+        id: cartItemId,
+        originalItemId: item.id,
+        name: displayName,
+        price: calculatedPrice,
         originalPrice: item.originalPrice,
-        quantity: 1,
+        quantity: qtyToAdd,
         category: item.category,
         image: item.imageUrl,
         options: item.options,
+        selectedVersion: selectedVersion,
         businessId: business.id,
         businessName: business.name,
         businessPhone: business.phone

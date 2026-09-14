@@ -21,6 +21,19 @@ export const DEFAULT_HOUSING_BANNERS: HomepageBanner[] = [BOOK_YOUR_AD_BANNER];
 export const DEFAULT_TRANSPORT_BANNERS: HomepageBanner[] = [BOOK_YOUR_AD_BANNER];
 export const DEFAULT_NEWS_BANNERS: HomepageBanner[] = [BOOK_YOUR_AD_BANNER];
 export const DEFAULT_TOURISM_BANNERS: HomepageBanner[] = [BOOK_YOUR_AD_BANNER];
+export const DEFAULT_MEDICAL_BANNERS: HomepageBanner[] = [
+  {
+    id: 'medical-hero-banner',
+    type: 'text_and_button',
+    title: 'دليلك الطبي الأول في محافظة إربد 🏥',
+    subtitle: 'ابحث عن طبيبك المناسب وتصفح جميع العيادات، المستشفيات، الصيدليات والمختبرات في إربد بأعلى درجات الدقة والتقييم الحقيقي.',
+    imageUrl: '/src/assets/images/medical_banner_hero_1789156288017.jpg',
+    badgeText: 'الرعاية الطبية الموثوقة',
+    buttonText: 'تصفح العيادات والمرافق',
+    buttonLink: '#specialties-list'
+  },
+  BOOK_YOUR_AD_BANNER
+];
 
 /**
  * Utility to completely delete all banners in Firestore

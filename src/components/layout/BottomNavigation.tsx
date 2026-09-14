@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router';
-import { Store, Flame, Bot, Menu, X, PlusCircle } from 'lucide-react';
-import { motion } from 'motion/react';
+import { Store, Flame, Bot, Menu, X, PlusCircle, Stethoscope } from 'lucide-react';
+import { motion, LayoutGroup } from 'motion/react';
 import { cn } from '../../lib/utils';
 import { useSystemSettings } from '../../contexts/SystemSettingsContext';
 import { playAiHoverSound, playAiClickSound } from '../../utils/aiSoundEffects';
@@ -56,16 +56,19 @@ export function BottomNavigation({
     };
   }, []);
 
-  // Hide global bottom navigation on business details page or messages pages
+  // Hide global bottom navigation on business details page, messages, or search
   if (
     location.pathname === '/messages' ||
     location.pathname.startsWith('/messages/') ||
     location.pathname.startsWith('/business/') || 
     location.pathname.startsWith('/b/') || 
-    location.pathname.includes('/@')
+    location.pathname.includes('/@') ||
+    location.pathname === '/search'
   ) {
     return null;
   }
+
+  const isMedicalPage = location.pathname.startsWith('/medical');
 
   const mainNavItems: NavItem[] = [
     {
@@ -81,7 +84,13 @@ export function BottomNavigation({
       type: 'link',
       specialIconClass: "text-amber-600"
     },
-    {
+    isMedicalPage ? {
+      label: 'أضف منشأتك',
+      path: '/medical/register',
+      icon: Stethoscope,
+      type: 'link',
+      specialIconClass: "text-emerald-600"
+    } : {
       label: 'أضف محلك',
       path: '/contact',
       icon: PlusCircle,
@@ -147,77 +156,81 @@ export function BottomNavigation({
         aria-label="التنقل السفلي"
         className="pointer-events-auto flex-1 h-14 bg-white border border-stone-200 shadow-sm rounded-full px-2.5 flex items-center min-w-0"
       >
-        <div className="flex items-center justify-between w-full gap-1">
-          {mainNavItems.map((item, index) => {
-            const Icon = item.icon;
-            const isActive = item.type === 'menu_button' 
-              ? isMenuOpen 
-              : (item.path ? location.pathname === item.path : false);
+        <LayoutGroup id="mobile-bottom-nav">
+          <div className="flex items-center justify-between w-full gap-1">
+            {mainNavItems.map((item, index) => {
+              const Icon = item.icon;
+              const isActive = item.type === 'menu_button' 
+                ? isMenuOpen 
+                : (item.path ? (item.path === '/' ? location.pathname === '/' : (location.pathname === item.path || location.pathname.startsWith(`${item.path}/`))) : false);
 
-            const innerContent = (
-              <>
-                <div className="w-8 h-8 rounded-full flex items-center justify-center relative shrink-0">
-                  {isActive && (
-                    <motion.div
-                      layoutId="activeNavBubble2D"
-                      className="absolute inset-0 rounded-full bg-[#1a4d2e]/10 border border-[#1a4d2e]/20"
-                      transition={{
-                        type: "spring",
-                        stiffness: 450,
-                        damping: 35,
-                      }}
+              const innerContent = (
+                <>
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center relative shrink-0">
+                    {isActive && (
+                      <motion.div
+                        layoutId="activeNavBubble2D"
+                        initial={false}
+                        className="absolute inset-0 rounded-full bg-[#1a4d2e]/10 border border-[#1a4d2e]/25 pointer-events-none transform-gpu will-change-transform"
+                        transition={{
+                          type: "spring",
+                          stiffness: 480,
+                          damping: 34,
+                          mass: 0.6,
+                        }}
+                      />
+                    )}
+                    <Icon 
+                      className={cn(
+                        "h-4.5 w-4.5 relative z-10 transition-colors duration-150", 
+                        isActive 
+                          ? "text-[#1a4d2e] stroke-[2.5px]" 
+                          : item.specialIconClass 
+                          ? item.specialIconClass 
+                          : "text-stone-500 group-hover:text-stone-800"
+                      )} 
                     />
-                  )}
-                  <Icon 
+                    {item.hasBadge && (
+                      <span className="absolute 0 top-0 right-0 w-2 h-2 rounded-full bg-red-600 ring-2 ring-white z-20" />
+                    )}
+                  </div>
+                  <span
                     className={cn(
-                      "h-4.5 w-4.5 relative z-10 transition-colors duration-150", 
-                      isActive 
-                        ? "text-[#1a4d2e] stroke-[2.5px]" 
-                        : item.specialIconClass 
-                        ? item.specialIconClass 
-                        : "text-stone-500 group-hover:text-stone-800"
-                    )} 
-                  />
-                  {item.hasBadge && (
-                    <span className="absolute 0 top-0 right-0 w-2 h-2 rounded-full bg-red-600 ring-2 ring-white z-20" />
-                  )}
-                </div>
-                <span
-                  className={cn(
-                    "text-[10px] sm:text-[11px] mt-0.5 text-center whitespace-nowrap leading-none transition-colors relative z-10",
-                    isActive ? "font-bold text-[#1a4d2e]" : "font-medium text-stone-600 group-hover:text-stone-900"
-                  )}
-                >
-                  {item.label}
-                </span>
-              </>
-            );
+                      "text-[10px] sm:text-[11px] mt-0.5 text-center whitespace-nowrap leading-none transition-colors relative z-10",
+                      isActive ? "font-bold text-[#1a4d2e]" : "font-medium text-stone-600 group-hover:text-stone-900"
+                    )}
+                  >
+                    {item.label}
+                  </span>
+                </>
+              );
 
-            if (item.type === 'menu_button') {
+              if (item.type === 'menu_button') {
+                return (
+                  <button
+                    key={index}
+                    type="button"
+                    onClick={item.onClick}
+                    className="flex-1 flex flex-col items-center justify-center py-1 px-0.5 rounded-2xl transition-all relative cursor-pointer active:scale-95 group focus:outline-none min-w-0"
+                  >
+                    {innerContent}
+                  </button>
+                );
+              }
+
               return (
-                <button
+                <Link
                   key={index}
-                  type="button"
-                  onClick={item.onClick}
+                  to={item.path!}
+                  onClick={onCloseMenu}
                   className="flex-1 flex flex-col items-center justify-center py-1 px-0.5 rounded-2xl transition-all relative cursor-pointer active:scale-95 group focus:outline-none min-w-0"
                 >
                   {innerContent}
-                </button>
+                </Link>
               );
-            }
-
-            return (
-              <Link
-                key={index}
-                to={item.path!}
-                onClick={onCloseMenu}
-                className="flex-1 flex flex-col items-center justify-center py-1 px-0.5 rounded-2xl transition-all relative cursor-pointer active:scale-95 group focus:outline-none min-w-0"
-              >
-                {innerContent}
-              </Link>
-            );
-          })}
-        </div>
+            })}
+          </div>
+        </LayoutGroup>
       </nav>
     </div>
   );

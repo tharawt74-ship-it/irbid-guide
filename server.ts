@@ -73,6 +73,14 @@ async function startServer() {
   // 🛡️ Security Headers & Server Hardening 🛡️
   app.disable('x-powered-by');
 
+  // Enforce HTTPS in production
+  app.use((req, res, next) => {
+    if (process.env.NODE_ENV === 'production' && req.headers['x-forwarded-proto'] !== 'https') {
+      return res.redirect(301, `https://${req.headers.host}${req.url}`);
+    }
+    next();
+  });
+
   app.use((req, res, next) => {
     // Prevent MIME-type sniffing
     res.setHeader('X-Content-Type-Options', 'nosniff');

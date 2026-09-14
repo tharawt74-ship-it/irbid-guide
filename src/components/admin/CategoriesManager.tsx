@@ -14,6 +14,8 @@ export function CategoriesManager({ showToast }: CategoriesManagerProps) {
 
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editFormData, setEditFormData] = useState<CategoryConfig | null>(null);
+  const [newSubcatForEdit, setNewSubcatForEdit] = useState('');
 
   const [formData, setFormData] = useState<Partial<CategoryConfig>>({
     name: '',
@@ -75,6 +77,39 @@ export function CategoriesManager({ showToast }: CategoriesManagerProps) {
     }
   };
 
+  const handleStartEdit = (cat: CategoryConfig) => {
+    setEditingId(cat.id);
+    setEditFormData({ ...cat });
+    setNewSubcatForEdit('');
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editFormData) return;
+    if (!editFormData.name.trim()) {
+      showToast('اسم التصنيف مطلوب', 'error');
+      return;
+    }
+
+    await updateCategory(editFormData.id, editFormData);
+    showToast(`تم حفظ تعديلات تصنيف (${editFormData.name}) بنجاح`, 'success');
+    setEditingId(null);
+    setEditFormData(null);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setEditFormData(null);
+  };
+
+  const handleAddSubcatForEdit = () => {
+    if (!newSubcatForEdit.trim() || !editFormData) return;
+    setEditFormData({
+      ...editFormData,
+      subcategories: [...editFormData.subcategories, newSubcatForEdit.trim()]
+    });
+    setNewSubcatForEdit('');
+  };
+
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   const handleBulkDelete = async () => {
@@ -113,8 +148,8 @@ export function CategoriesManager({ showToast }: CategoriesManagerProps) {
             <FolderTree className="h-6 w-6" />
           </div>
           <div>
-            <h2 className="text-xl font-black text-stone-900">إدارة التصنيفات الرئيسية والفرعية</h2>
-            <p className="text-stone-500 text-xs">إضافة، تعديل وترتيب أطياف الخدمات والمحلات في إربد ديناميكياً</p>
+            <h2 className="text-xl font-black text-stone-900">إدارة التصنيفات الرئيسية والفرعية للمحلات</h2>
+            <p className="text-stone-500 text-xs">إضافة وتعديل وحذف التصنيفات الرئيسية والأقسام الفرعية ديناميكياً</p>
           </div>
         </div>
 
@@ -268,72 +303,181 @@ export function CategoriesManager({ showToast }: CategoriesManagerProps) {
 
       {/* Categories List */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {categories.map((cat) => (
-          <div key={cat.id} className={`border rounded-2xl p-4 bg-white flex flex-col justify-between space-y-3 transition-all ${
-            selectedIds.includes(cat.id) ? 'border-[#1a4d2e] ring-1 ring-[#1a4d2e] bg-emerald-50/5' : 'border-stone-200'
-          }`}>
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-start gap-3">
-                <input
-                  type="checkbox"
-                  checked={selectedIds.includes(cat.id)}
-                  onChange={(e) => {
-                    if (e.target.checked) {
-                      setSelectedIds(prev => [...prev, cat.id]);
-                    } else {
-                      setSelectedIds(prev => prev.filter(id => id !== cat.id));
-                    }
-                  }}
-                  className="mt-1 h-4.5 w-4.5 rounded text-[#1a4d2e] focus:ring-[#1a4d2e] border-stone-300 cursor-pointer"
-                />
-                <div className="flex items-center gap-3">
-                  <div className="p-2.5 bg-amber-50 rounded-xl text-amber-700 font-black text-sm">
-                    {cat.iconName.slice(0, 2)}
+        {categories.map((cat) => {
+          const isEditingThis = editingId === cat.id;
+
+          return (
+            <div key={cat.id} className={`border rounded-2xl p-4 bg-white flex flex-col justify-between space-y-3 transition-all ${
+              selectedIds.includes(cat.id) ? 'border-[#1a4d2e] ring-1 ring-[#1a4d2e] bg-emerald-50/5' : 'border-stone-200'
+            }`}>
+              {isEditingThis && editFormData ? (
+                // EDITING MODE
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between border-b pb-2">
+                    <span className="text-xs font-black text-stone-800">تعديل التصنيف: {cat.name}</span>
+                    <div className="flex gap-1.5">
+                      <button
+                        onClick={handleSaveEdit}
+                        className="bg-emerald-600 text-white p-1 rounded hover:bg-emerald-700 text-[10px] font-bold flex items-center gap-1 px-2.5 py-1"
+                      >
+                        <Check className="h-3 w-3" />
+                        حفظ التعديل
+                      </button>
+                      <button
+                        onClick={handleCancelEdit}
+                        className="bg-stone-200 text-stone-700 p-1 rounded hover:bg-stone-300 text-[10px] font-bold flex items-center gap-1 px-2.5 py-1"
+                      >
+                        <X className="h-3 w-3" />
+                        إلغاء
+                      </button>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-black text-sm text-stone-900 flex items-center gap-2">
-                      <span>{cat.name}</span>
-                      {cat.active === false && (
-                        <span className="text-[10px] bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-bold">معطل</span>
-                      )}
-                    </h3>
-                    {cat.description && <p className="text-xs text-stone-500">{cat.description}</p>}
+
+                  <div className="space-y-2">
+                    <div>
+                      <label className="block text-[10px] font-black text-stone-500 mb-0.5">اسم التصنيف الرئيسي</label>
+                      <input
+                        type="text"
+                        value={editFormData.name}
+                        onChange={e => setEditFormData({ ...editFormData, name: e.target.value })}
+                        className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-stone-800"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black text-stone-500 mb-0.5">وصف التصنيف</label>
+                      <input
+                        type="text"
+                        value={editFormData.description || ''}
+                        onChange={e => setEditFormData({ ...editFormData, description: e.target.value })}
+                        className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-stone-800"
+                      />
+                    </div>
+
+                    <div className="space-y-2 pt-2 border-t border-stone-100">
+                      <span className="block text-[10px] font-black text-stone-500">تعديل الأقسام الفرعية:</span>
+                      
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-[140px] overflow-y-auto p-1 bg-stone-50 rounded-xl border border-stone-100">
+                        {editFormData.subcategories.map((sub, sIdx) => (
+                          <div key={sIdx} className="flex items-center gap-1 bg-white p-1.5 rounded-lg border border-stone-200 shadow-3xs">
+                            <input
+                              type="text"
+                              value={sub}
+                              onChange={e => {
+                                const updated = [...editFormData.subcategories];
+                                updated[sIdx] = e.target.value;
+                                setEditFormData({ ...editFormData, subcategories: updated });
+                              }}
+                              className="flex-1 bg-transparent border-none p-0 text-[11px] font-bold text-stone-800 focus:ring-0 focus:outline-none"
+                            />
+                            <button
+                              onClick={() => {
+                                const updated = editFormData.subcategories.filter((_, i) => i !== sIdx);
+                                setEditFormData({ ...editFormData, subcategories: updated });
+                              }}
+                              className="text-red-500 hover:text-red-700 p-0.5"
+                              title="حذف هذا القسم الفرعي"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="flex gap-1.5 pt-1">
+                        <input
+                          type="text"
+                          value={newSubcatForEdit}
+                          onChange={e => setNewSubcatForEdit(e.target.value)}
+                          placeholder="إضافة قسم فرعي جديد..."
+                          className="flex-1 bg-white border border-stone-200 rounded-lg px-2 py-1 text-[11px] font-bold text-stone-800"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddSubcatForEdit}
+                          className="bg-stone-800 hover:bg-stone-900 text-white px-2.5 py-1 rounded-lg text-[10px] font-bold shrink-0"
+                        >
+                          إضافة
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
+              ) : (
+                // DISPLAY MODE
+                <>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(cat.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedIds(prev => [...prev, cat.id]);
+                          } else {
+                            setSelectedIds(prev => prev.filter(id => id !== cat.id));
+                          }
+                        }}
+                        className="mt-1 h-4.5 w-4.5 rounded text-[#1a4d2e] focus:ring-[#1a4d2e] border-stone-300 cursor-pointer"
+                      />
+                      <div className="flex items-center gap-3">
+                        <div className="p-2.5 bg-amber-50 rounded-xl text-amber-700 font-black text-sm">
+                          {cat.iconName.slice(0, 2)}
+                        </div>
+                        <div>
+                          <h3 className="font-black text-sm text-stone-900 flex items-center gap-2">
+                            <span>{cat.name}</span>
+                            {cat.active === false && (
+                              <span className="text-[10px] bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-bold">معطل</span>
+                            )}
+                          </h3>
+                          {cat.description && <p className="text-xs text-stone-500">{cat.description}</p>}
+                        </div>
+                      </div>
+                    </div>
 
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => handleToggleActive(cat)}
-                  className={`p-1.5 rounded-lg text-xs font-bold transition-colors ${cat.active !== false ? 'bg-emerald-50 text-emerald-700' : 'bg-stone-100 text-stone-500'}`}
-                  title="تفعيل/تعطيل الظهور"
-                >
-                  <Eye className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={() => handleDelete(cat)}
-                  className="p-1.5 rounded-lg text-xs font-bold bg-red-50 text-red-600 hover:bg-red-100"
-                  title="حذف التصنيف"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => handleStartEdit(cat)}
+                        className="p-1.5 rounded-lg text-xs font-bold bg-sky-50 text-sky-700 hover:bg-sky-100"
+                        title="تعديل هذا التصنيف"
+                      >
+                        <Edit3 className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => handleToggleActive(cat)}
+                        className={`p-1.5 rounded-lg text-xs font-bold transition-colors ${cat.active !== false ? 'bg-emerald-50 text-emerald-700' : 'bg-stone-100 text-stone-500'}`}
+                        title="تفعيل/تعطيل الظهور"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(cat)}
+                        className="p-1.5 rounded-lg text-xs font-bold bg-red-50 text-red-600 hover:bg-red-100"
+                        title="حذف التصنيف"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {cat.subcategories && cat.subcategories.length > 0 && (
+                    <div className="bg-stone-50 rounded-xl p-2.5 border border-stone-100">
+                      <span className="text-[10px] font-black text-stone-400 block mb-1">الأقسام الفرعية:</span>
+                      <div className="flex flex-wrap gap-1">
+                        {cat.subcategories.map((sub, sIdx) => (
+                          <span key={sIdx} className="bg-white border border-stone-200 px-2 py-0.5 rounded-md text-[11px] font-bold text-stone-700">
+                            {sub}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
-
-            {cat.subcategories && cat.subcategories.length > 0 && (
-              <div className="bg-stone-50 rounded-xl p-2.5 border border-stone-100">
-                <span className="text-[10px] font-black text-stone-400 block mb-1">الأقسام الفرعية:</span>
-                <div className="flex flex-wrap gap-1">
-                  {cat.subcategories.map((sub, sIdx) => (
-                    <span key={sIdx} className="bg-white border border-stone-200 px-2 py-0.5 rounded-md text-[11px] font-bold text-stone-700">
-                      {sub}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

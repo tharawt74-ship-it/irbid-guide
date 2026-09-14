@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { ShoppingBag, X, Trash2, ChevronDown, ChevronUp, MessageCircle, ArrowLeft, Eye, EyeOff } from 'lucide-react';
+import { ShoppingBag, X, Trash2, ChevronDown, ChevronUp, ArrowLeft, Eye, EyeOff } from 'lucide-react';
+import { WhatsAppIcon } from '../common/WhatsAppIcon';
 import { useCart } from '../../contexts/CartContext';
 import { Link, useNavigate, useLocation } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
@@ -82,9 +83,16 @@ export function FloatingCartWidget() {
                     <div key={cartItem.id} className="pt-2 first:pt-0 flex items-center justify-between gap-2">
                       <div className="flex-1 min-w-0">
                         <span className="font-black text-stone-900 block truncate">{cartItem.name}</span>
-                        <span className="text-[10px] text-stone-500 font-bold">
-                          ({cartItem.quantity} × {p.toFixed(2)} د.أ)
-                        </span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {cartItem.selectedVersion && (
+                            <span className="inline-block text-[9px] bg-amber-50 text-amber-900 border border-amber-200/80 px-1 py-0.2 rounded font-bold">
+                              {cartItem.selectedVersion.name}
+                            </span>
+                          )}
+                          <span className="text-[10px] text-stone-500 font-bold">
+                            ({cartItem.quantity} × {p.toFixed(2)} د.أ)
+                          </span>
+                        </div>
                       </div>
 
                       <div className="flex items-center gap-2 shrink-0">
@@ -125,7 +133,7 @@ export function FloatingCartWidget() {
                   onClick={sendOrderViaWhatsapp}
                   className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black py-2.5 px-3 rounded-2xl text-xs flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer"
                 >
-                  <MessageCircle className="h-4 w-4" />
+                  <WhatsAppIcon className="h-4 w-4" />
                   <span>تأكيد الطلب والحجز عبر الواتساب</span>
                 </button>
 

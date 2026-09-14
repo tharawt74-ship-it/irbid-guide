@@ -82,6 +82,29 @@
         "createdAt": { "type": "number" }
       },
       "required": ["applicantName", "applicantPhone"]
+    },
+    "MarketingRequest": {
+      "title": "MarketingRequest",
+      "description": "Marketing and banner requests submitted by business owners",
+      "type": "object",
+      "properties": {
+        "businessId": { "type": "string", "maxLength": 128 },
+        "businessName": { "type": "string", "maxLength": 200 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "userEmail": { "type": "string", "maxLength": 150 },
+        "serviceType": { "type": "string", "maxLength": 100 },
+        "serviceName": { "type": "string", "maxLength": 200 },
+        "status": { "type": "string", "enum": ["pending", "contacted", "approved", "completed", "rejected"] },
+        "createdAt": { "type": "number" },
+        "bannerType": { "type": "string", "maxLength": 50 },
+        "bannerTitle": { "type": "string", "maxLength": 200 },
+        "bannerSubtitle": { "type": "string", "maxLength": 500 },
+        "bannerImageUrl": { "type": "string", "maxLength": 1000 },
+        "buttonText": { "type": "string", "maxLength": 100 },
+        "buttonLink": { "type": "string", "maxLength": 500 },
+        "badgeText": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["serviceType", "userId"]
     }
   },
   "firestore": {
@@ -104,6 +127,10 @@
     "/bannerBookingRequests/{bookingId}": {
       "schema": { "$ref": "#/entities/BannerBookingRequest" },
       "description": "Banner ad booking requests"
+    },
+    "/marketingRequests/{marketingId}": {
+      "schema": { "$ref": "#/entities/MarketingRequest" },
+      "description": "Marketing and homepage banner requests"
     }
   }
 }

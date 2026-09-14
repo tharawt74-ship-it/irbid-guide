@@ -54,15 +54,13 @@ export function AdminStatsOverview({
       if (serviceType === 'sponsored') return 15;
       if (serviceType === 'push_notifications') return 10;
       if (serviceType === 'homepage_banner') return 25;
-      if (serviceType === 'nfc_stands') return 8;
-      if (serviceType === 'social_media') return 50;
+      if (serviceType === 'premium_messaging') return 5;
       return 15;
     }
     if (serviceType === 'sponsored') return config.priceSponsored ?? 15;
     if (serviceType === 'push_notifications') return config.pricePushNotifications ?? 10;
     if (serviceType === 'homepage_banner') return config.priceHomepageBanner ?? 25;
-    if (serviceType === 'nfc_stands') return config.priceNfcStands ?? 8;
-    if (serviceType === 'social_media') return config.priceSocialMedia ?? 50;
+    if (serviceType === 'premium_messaging') return config.priceMessaging1Month ?? 5;
     return 15;
   };
 
@@ -135,8 +133,7 @@ export function AdminStatsOverview({
       { type: 'sponsored', label: 'إعلان ممول' },
       { type: 'push_notifications', label: 'إشعار دفع' },
       { type: 'homepage_banner', label: 'بنر رئيسي' },
-      { type: 'nfc_stands', label: 'لوحات NFC' },
-      { type: 'social_media', label: 'سوشيال ميديا' }
+      { type: 'premium_messaging', label: 'نظام الرسائل' }
     ];
     return services.map(s => {
       const count = marketingRequests.filter(m => m.serviceType === s.type && (m.status === 'completed' || m.status === 'approved')).length;

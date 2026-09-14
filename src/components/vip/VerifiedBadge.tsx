@@ -57,7 +57,7 @@ export function VerifiedBadge({
       {/* Verification Trust Modal */}
       {showModal && typeof document !== 'undefined' && createPortal(
         <div 
-          className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto" 
+          className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto" 
           dir="rtl"
           onClick={() => setShowModal(false)}
         >

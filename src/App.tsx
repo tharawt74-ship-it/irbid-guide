@@ -64,6 +64,8 @@ const Privacy = lazyWithRetry(() => import('./pages/Privacy').then(m => ({ defau
 const AboutUs = lazyWithRetry(() => import('./pages/AboutUs').then(m => ({ default: m.AboutUs })));
 const CartPage = lazyWithRetry(() => import('./pages/CartPage').then(m => ({ default: m.CartPage })));
 const Search = lazyWithRetry(() => import('./pages/Search').then(m => ({ default: m.Search })));
+const Medical = lazyWithRetry(() => import('./pages/Medical').then(m => ({ default: m.default })));
+const AddMedicalFacility = lazyWithRetry(() => import('./pages/AddMedicalFacility').then(m => ({ default: m.AddMedicalFacility })));
 
 export default function App() {
   return (
@@ -107,6 +109,10 @@ export default function App() {
                     } />
                     <Route path="cart" element={<CartPage />} />
                     <Route path="search" element={<Search />} />
+                    <Route path="medical" element={<Medical />} />
+                    <Route path="medical/register" element={<AddMedicalFacility />} />
+                    <Route path="add-medical" element={<AddMedicalFacility />} />
+                    <Route path="add-medical-facility" element={<AddMedicalFacility />} />
                     <Route path="business/:id" element={<BusinessDetail />} />
                   <Route path="b/:id" element={<BusinessDetail />} />
                   <Route path=":id" element={<BusinessDetail />} />

@@ -316,7 +316,7 @@ export function OfferDetail() {
                   className="flex-1 inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-3.5 px-4 rounded-xl text-xs font-black transition-colors shadow-xs hover:shadow-md cursor-pointer"
                 >
                   <WhatsApp3DIcon className="h-4 w-4 text-white" />
-                  <span>استفسر عبر واتساب فوراً 💬</span>
+                  <span>استفسر عبر واتساب فوراً</span>
                 </a>
 
                 <a
@@ -324,7 +324,7 @@ export function OfferDetail() {
                   className="inline-flex items-center justify-center gap-2 bg-stone-900 hover:bg-stone-950 text-white py-3.5 px-6 rounded-xl text-xs font-black transition-colors shadow-xs hover:shadow-md min-w-[160px]"
                 >
                   <Phone3DIcon className="h-4 w-4 text-white" />
-                  <span>اتصال هاتفي 📞</span>
+                  <span>اتصال هاتفي</span>
                 </a>
               </div>
 
@@ -414,7 +414,7 @@ export function OfferDetail() {
           className="flex-1 inline-flex items-center justify-center gap-2 bg-emerald-600 active:bg-emerald-700 text-white py-3 px-3 rounded-xl text-xs font-black shadow-xs"
         >
           <WhatsApp3DIcon className="h-4 w-4 text-white" />
-          <span>مراسلة واتساب 💬</span>
+          <span>مراسلة واتساب</span>
         </a>
 
         <a
@@ -422,7 +422,7 @@ export function OfferDetail() {
           className="bg-stone-950 active:bg-black text-white px-5 py-3 rounded-xl text-xs font-black flex items-center justify-center gap-1.5"
         >
           <Phone3DIcon className="h-4 w-4 text-white" />
-          <span>اتصال هاتفي 📞</span>
+          <span>اتصال هاتفي</span>
         </a>
       </div>
 

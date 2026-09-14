@@ -23,6 +23,7 @@ import {
   Tag,
   AlertCircle
 } from 'lucide-react';
+import { WhatsAppIcon } from '../common/WhatsAppIcon';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   askAiAssistant, 
@@ -735,7 +736,7 @@ export function AiSiteAssistant() {
                                                 title="واتساب"
                                                 className="p-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 rounded-xl border border-emerald-200/40 transition-colors shrink-0"
                                               >
-                                                <MessageCircle className="w-3.5 h-3.5" />
+                                                <WhatsAppIcon className="w-3.5 h-3.5" />
                                               </a>
                                             )}
 

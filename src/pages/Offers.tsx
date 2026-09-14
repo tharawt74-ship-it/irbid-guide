@@ -18,7 +18,8 @@ import {
   Plus, 
   X,
   MessageSquare,
-  SlidersHorizontal
+  SlidersHorizontal,
+  ChevronDown
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Link } from 'react-router';
@@ -123,6 +124,7 @@ export function Offers() {
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isCategoriesModalOpen, setIsCategoriesModalOpen] = useState(false);
+  const [isSubCategoriesExpanded, setIsSubCategoriesExpanded] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
@@ -355,32 +357,76 @@ export function Offers() {
           
           {/* Sub Categories (Shows only when a main category is selected) */}
           {selectedCategory && selectedCategory !== 'الكل' && getSubCats(selectedCategory).length > 0 && (
-            <div className="relative">
-              <div className="pointer-events-none absolute left-0 top-0 bottom-3 w-8 bg-gradient-to-r from-[#fdfcfb] to-transparent z-10 sm:hidden" />
-              <div className="flex overflow-x-auto gap-2.5 pb-3 mt-2 -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-hide snap-x" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+            <div className="mt-3 mb-2">
+              <div className="flex items-start sm:items-center gap-2">
+                <div className="relative flex-1 min-w-0">
+                  {isSubCategoriesExpanded ? (
+                    <div className="flex flex-wrap gap-2 sm:gap-2.5 animate-in fade-in slide-in-from-top-1 duration-200">
+                      <button
+                        onClick={() => setSelectedSubCategory('')}
+                        className={`snap-start shrink-0 whitespace-nowrap px-4 sm:px-5 py-2 sm:py-2.5 rounded-full text-xs sm:text-sm font-bold transition-all duration-200 border cursor-pointer ${
+                          selectedSubCategory === ''
+                            ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white border-transparent shadow-md shadow-red-500/10'
+                            : 'bg-white text-stone-600 border-[#e5e1da] hover:border-red-300 hover:bg-stone-50'
+                        }`}
+                      >
+                        عرض الكل الفرعي
+                      </button>
+                      {getSubCats(selectedCategory).map((subCat) => (
+                        <button
+                          key={subCat}
+                          onClick={() => setSelectedSubCategory(subCat)}
+                          className={`snap-start shrink-0 whitespace-nowrap px-4 sm:px-5 py-2 sm:py-2.5 rounded-full text-xs sm:text-sm font-bold transition-all duration-200 border cursor-pointer ${
+                            selectedSubCategory === subCat
+                              ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white border-transparent shadow-md shadow-red-500/10'
+                              : 'bg-white text-stone-600 border-[#e5e1da] hover:border-red-300 hover:bg-stone-50'
+                          }`}
+                        >
+                          {subCat}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-[#fdfcfb] to-transparent z-10 sm:hidden" />
+                      <div className="flex overflow-x-auto gap-2 sm:gap-2.5 pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-hide snap-x items-center" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                        <button
+                          onClick={() => setSelectedSubCategory('')}
+                          className={`snap-start shrink-0 whitespace-nowrap px-4 sm:px-5 py-2 sm:py-2.5 rounded-full text-xs sm:text-sm font-bold transition-all duration-200 border cursor-pointer ${
+                            selectedSubCategory === ''
+                              ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white border-transparent shadow-md shadow-red-500/10'
+                              : 'bg-white text-stone-600 border-[#e5e1da] hover:border-red-300 hover:bg-stone-50'
+                          }`}
+                        >
+                          عرض الكل الفرعي
+                        </button>
+                        {getSubCats(selectedCategory).map((subCat) => (
+                          <button
+                            key={subCat}
+                            onClick={() => setSelectedSubCategory(subCat)}
+                            className={`snap-start shrink-0 whitespace-nowrap px-4 sm:px-5 py-2 sm:py-2.5 rounded-full text-xs sm:text-sm font-bold transition-all duration-200 border cursor-pointer ${
+                              selectedSubCategory === subCat
+                                ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white border-transparent shadow-md shadow-red-500/10'
+                                : 'bg-white text-stone-600 border-[#e5e1da] hover:border-red-300 hover:bg-stone-50'
+                            }`}
+                          >
+                            {subCat}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Fixed circular expand/collapse button */}
                 <button
-                  onClick={() => setSelectedSubCategory('')}
-                  className={`snap-start shrink-0 whitespace-nowrap px-5 py-2.5 rounded-full text-sm font-bold transition-all duration-200 border ${
-                    selectedSubCategory === ''
-                      ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white border-transparent shadow-md shadow-red-500/10'
-                      : 'bg-white text-stone-600 border-[#e5e1da] hover:border-red-300 hover:bg-stone-50'
-                  }`}
+                  onClick={() => setIsSubCategoriesExpanded(!isSubCategoriesExpanded)}
+                  className="shrink-0 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white border border-stone-200 hover:border-orange-500/40 hover:bg-stone-50 text-stone-600 hover:text-stone-900 shadow-xs flex items-center justify-center transition-all duration-300 cursor-pointer"
+                  title={isSubCategoriesExpanded ? "عرض كشريط أفقي" : "تمديد للأسفل"}
+                  aria-label={isSubCategoriesExpanded ? "عرض كشريط أفقي" : "تمديد للأسفل"}
                 >
-                  عرض الكل الفرعي
+                  <ChevronDown className={`h-4.5 w-4.5 sm:h-5 sm:w-5 transition-transform duration-300 ${isSubCategoriesExpanded ? 'rotate-180 text-orange-600' : ''}`} />
                 </button>
-                {getSubCats(selectedCategory).map((subCat) => (
-                  <button
-                    key={subCat}
-                    onClick={() => setSelectedSubCategory(subCat)}
-                    className={`snap-start shrink-0 whitespace-nowrap px-5 py-2.5 rounded-full text-sm font-bold transition-all duration-200 border ${
-                      selectedSubCategory === subCat
-                        ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white border-transparent shadow-md shadow-red-500/10'
-                        : 'bg-white text-stone-600 border-[#e5e1da] hover:border-red-300 hover:bg-stone-50'
-                    }`}
-                  >
-                    {subCat}
-                  </button>
-                ))}
               </div>
             </div>
           )}
@@ -583,11 +629,8 @@ export function Offers() {
 
       {/* Add Offer Modal */}
       {isAddModalOpen && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 overflow-y-auto" dir="rtl">
-          <div className="bg-white rounded-t-[32px] sm:rounded-3xl max-w-xl w-full max-h-[92vh] overflow-y-auto p-6 sm:p-8 shadow-2xl border border-stone-200 space-y-5 animate-in slide-in-from-bottom-8 sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-200">
-            {/* Mobile Drag Handle */}
-            <div className="w-12 h-1.5 bg-stone-200 rounded-full mx-auto -mt-2 mb-3 sm:hidden" />
-
+        <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto" dir="rtl">
+          <div className="bg-white rounded-3xl max-w-xl w-full max-h-[88vh] flex flex-col overflow-hidden p-6 sm:p-8 shadow-2xl border border-stone-200 space-y-5 relative my-auto animate-in fade-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between border-b border-stone-100 pb-3">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 bg-orange-100 text-orange-600 rounded-xl">
@@ -598,7 +641,7 @@ export function Offers() {
                   <p className="text-xs text-stone-500">ليصل عرضك إلى آلاف الزوار والطلبة في إربد</p>
                 </div>
               </div>
-              <button onClick={() => setIsAddModalOpen(false)} className="p-2 text-stone-400 hover:text-stone-600 rounded-xl">
+              <button onClick={() => setIsAddModalOpen(false)} className="p-2 text-stone-400 hover:text-stone-600 rounded-xl hover:bg-stone-100 transition-colors cursor-pointer">
                 <X className="h-5 w-5" />
               </button>
             </div>

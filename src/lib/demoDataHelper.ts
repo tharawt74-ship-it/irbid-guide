@@ -19,8 +19,10 @@ export interface AppConfig {
   priceSponsored?: number;
   pricePushNotifications?: number;
   priceHomepageBanner?: number;
-  priceNfcStands?: number;
-  priceSocialMedia?: number;
+  priceMessaging1Month?: number;
+  priceMessaging3Months?: number;
+  priceMessaging6Months?: number;
+  priceMessaging1Year?: number;
 }
 
 export const DEFAULT_APP_CONFIG: AppConfig = {
@@ -31,8 +33,10 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   priceSponsored: 15,
   pricePushNotifications: 10,
   priceHomepageBanner: 25,
-  priceNfcStands: 8,
-  priceSocialMedia: 50
+  priceMessaging1Month: 5,
+  priceMessaging3Months: 12,
+  priceMessaging6Months: 20,
+  priceMessaging1Year: 35
 };
 
 export async function getAppConfig(): Promise<AppConfig> {
@@ -195,9 +199,9 @@ export const DEMO_SEED_DATA = {
     },
     {
       isDemo: true,
-      name: 'مركز ابن سينا الطبي الشامل',
-      category: 'عيادات ومراكز طبية',
-      description: 'مركز طبي متكامل يضم عيادات طب عام، أسنان، جلاดยة، ومختبر تحاليل طبية على مدار 24 ساعة.',
+      name: 'محلات الشرق لمواد البناء والأدوات الصحية',
+      category: 'مواد بناء وتجهيزات منزلية',
+      description: 'أفضل مواد البناء والدهانات والأدوات الصحية ومستلزمات السباكة والكهرباء الأصلية بأسعار منافسة.',
       address: 'شارع الحصن، بالقرب من دوار القبة، إربد',
       phone: '0792233445',
       whatsapp: '962792233445',
@@ -208,8 +212,8 @@ export const DEMO_SEED_DATA = {
       isVerified: true,
       isFeatured: false,
       packagePlan: 'golden',
-      imageUrl: 'https://images.unsplash.com/photo-1629909613654-28e377c37b09?auto=format&fit=crop&q=80&w=800',
-      image: 'https://images.unsplash.com/photo-1629909613654-28e377c37b09?auto=format&fit=crop&q=80&w=800',
+      imageUrl: 'https://images.unsplash.com/photo-1581783342308-f792dbdd27c5?auto=format&fit=crop&q=80&w=800',
+      image: 'https://images.unsplash.com/photo-1581783342308-f792dbdd27c5?auto=format&fit=crop&q=80&w=800',
       createdAt: Date.now() - 86400000 * 6
     },
     {
@@ -290,10 +294,10 @@ export const DEMO_SEED_DATA = {
     },
     {
       isDemo: true,
-      name: 'صيدلية فارماسي بلس (Pharmacy Plus)',
-      category: 'صيدليات ورعاية صحية',
-      description: 'صيدلية حديثة توفر جميع الأدوية، مستحضرات التجميل العالمية، والمستلزمات الطبية مع خدمة التوصيل.',
-      address: 'شارع الثلاثين، بجانب مستشفى الراهبات الوردية، إربد',
+      name: 'مركز النجم لغسيل والعناية بالسيارات والبولش',
+      category: 'سيارات ومركبات وخدمات صيانة',
+      description: 'غسيل بخار متقدم، بولش نانو سيراميك، تنظيف الفرش والفرش الداخلي بأفضل المواد الألمانية.',
+      address: 'شارع الثلاثين، بجانب إشارة الإسكان، إربد',
       phone: '0787788990',
       whatsapp: '962787788990',
       rating: 4.9,
@@ -303,8 +307,8 @@ export const DEMO_SEED_DATA = {
       isVerified: true,
       isFeatured: false,
       packagePlan: 'golden',
-      imageUrl: 'https://images.unsplash.com/photo-1587854692152-cbe660dbde88?auto=format&fit=crop&q=80&w=800',
-      image: 'https://images.unsplash.com/photo-1587854692152-cbe660dbde88?auto=format&fit=crop&q=80&w=800',
+      imageUrl: 'https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?auto=format&fit=crop&q=80&w=800',
+      image: 'https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?auto=format&fit=crop&q=80&w=800',
       createdAt: Date.now() - 86400000 * 3
     },
     {

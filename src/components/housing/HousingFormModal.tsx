@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   X, Building2, Sparkles, Send, DollarSign, Clock, Calendar, 
-  Crown, Shield, Check, Phone, MessageSquare, Plus, AlertCircle
+  Crown, Shield, Check, Phone, Plus, AlertCircle
 } from 'lucide-react';
+import { WhatsAppIcon } from '../common/WhatsAppIcon';
 import { collection, addDoc, updateDoc, doc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { HousingItem } from '../../types';
@@ -246,7 +247,7 @@ export function HousingFormModal({
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[99999] bg-white sm:bg-black/60 sm:backdrop-blur-sm flex flex-col sm:items-center sm:justify-center sm:p-4 overflow-y-auto" dir="rtl">
+    <div className="fixed inset-0 z-[100000] bg-white sm:bg-black/60 sm:backdrop-blur-sm flex flex-col sm:items-center sm:justify-center sm:p-4 overflow-y-auto" dir="rtl">
       <div className="bg-white w-full min-h-screen sm:min-h-0 sm:max-w-xl sm:rounded-3xl sm:shadow-2xl overflow-hidden sm:my-8 border-t sm:border border-stone-200 animate-in fade-in sm:zoom-in-95 flex flex-col">
         
         {/* Header */}
@@ -620,8 +621,9 @@ export function HousingFormModal({
               </div>
 
               <div className="space-y-1">
-                <label className="block text-stone-600 font-bold">
-                  الواتساب {formData.contactMode === 'phone_only' ? '(اختياري)' : '*'}
+                <label className="text-stone-600 font-bold flex items-center gap-1">
+                  <WhatsAppIcon className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span>الواتساب {formData.contactMode === 'phone_only' ? '(اختياري)' : '*'}</span>
                 </label>
                 <input
                   type="tel"

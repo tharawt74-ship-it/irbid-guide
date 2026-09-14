@@ -20,11 +20,13 @@ service cloud.firestore {
     function isAdmin() {
       return isSignedIn() && (
         exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        exists(/databases/$(database)/documents/supervisors/$(request.auth.uid)) ||
         (
-          request.auth.token.email_verified == true && (
-            request.auth.token.email == "princessofx2344@gmail.com" ||
-            request.auth.token.email == "admin@shoofiirbid.com" ||
-            request.auth.token.email == "irbid.admin@gmail.com"
+          ('email' in request.auth.token) && (
+            request.auth.token.email.lower() == "princessofx2344@gmail.com" ||
+            request.auth.token.email.lower() == "admin@shoofiirbid.com" ||
+            request.auth.token.email.lower() == "irbid.admin@gmail.com" ||
+            request.auth.token.email.matches(".*@shoofiirbid\\.com$")
           )
         )
       );
@@ -66,24 +68,29 @@ service cloud.firestore {
         !incoming().keys().hasAny([
           'isVip', 'vip', 'vipStatus', 'isFeatured', 'featured', 
           'rating', 'reviewCount', 'vipStartDate', 'vipEndDate',
-          'featuredStartDate', 'featuredExpiryDate', 'approved'
+          'featuredStartDate', 'featuredExpiryDate', 'approved',
+          'packagePlan', 'vipSubscriptionStartsAt', 'vipSubscriptionExpiresAt',
+          'isVipTrial', 'isVipScheduled', 'tier'
         ])
       );
-      allow update: if isSignedIn() && (
-        isAdmin() || 
-        (
+      allow update: if (
+        (isSignedIn() && (
+          isAdmin() || 
           (
-            (existing().userId != null && existing().userId == request.auth.uid) ||
-            (existing().ownerId != null && existing().ownerId == request.auth.uid)
-          ) &&
-          !incoming().diff(existing()).affectedKeys().hasAny([
-            'approved', 'vipStatus', 'isVip', 'vip', 'sponsored', 'isFeatured', 'featured', 
-            'ownerId', 'userId', 'rating', 'reviewCount', 'vipStartDate', 'vipEndDate',
-            'featuredStartDate', 'featuredExpiryDate'
-          ])
-        ) ||
-        // Allow public view incrementing safely
-        incoming().diff(existing()).affectedKeys().hasOnly(['views'])
+            (
+              (existing().userId != null && existing().userId == request.auth.uid) ||
+              (existing().ownerId != null && existing().ownerId == request.auth.uid)
+            ) &&
+            !incoming().diff(existing()).affectedKeys().hasAny([
+              'approved', 'vipStatus', 'isVip', 'vip', 'sponsored', 'isFeatured', 'featured', 
+              'ownerId', 'userId', 'rating', 'reviewCount', 'vipStartDate', 'vipEndDate',
+              'featuredStartDate', 'featuredExpiryDate', 'packagePlan', 'vipSubscriptionStartsAt',
+              'vipSubscriptionExpiresAt', 'isVipTrial', 'isVipScheduled', 'tier'
+            ])
+          )
+        )) ||
+        // Allow public view incrementing safely (no sign in required)
+        incoming().diff(existing()).affectedKeys().hasOnly(['views', 'analytics', 'whatsappClicks', 'phoneClicks', 'directionsClicks'])
       );
       allow delete: if isAdmin() || (
         isSignedIn() && (
@@ -111,8 +118,19 @@ service cloud.firestore {
       allow create: if isSignedIn() && incoming().userId == request.auth.uid;
       allow update: if isAdmin() || (
         isSignedIn() && 
-        existing().userId == request.auth.uid &&
-        !incoming().diff(existing()).affectedKeys().hasAny(['userId', 'businessId'])
+        (
+          (
+            existing().userId == request.auth.uid &&
+            !incoming().diff(existing()).affectedKeys().hasAny(['userId', 'businessId', 'reply'])
+          ) ||
+          (
+            (
+              get(/databases/$(database)/documents/businesses/$(existing().businessId)).data.userId == request.auth.uid ||
+              get(/databases/$(database)/documents/businesses/$(existing().businessId)).data.ownerId == request.auth.uid
+            ) &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['reply'])
+          )
+        )
       );
       allow delete: if isAdmin() || (isSignedIn() && existing().userId == request.auth.uid);
     }
@@ -210,7 +228,7 @@ service cloud.firestore {
     match /marketingRequests/{marketingId} {
       allow read: if isSignedIn() && (isAdmin() || existing().userId == request.auth.uid);
       allow create: if isSignedIn() && incoming().userId == request.auth.uid;
-      allow update, delete: if isAdmin();
+      allow update, delete: if isAdmin() || (isSignedIn() && existing().userId == request.auth.uid);
     }
 
     // 10. Banner Booking Requests Collection

@@ -14,7 +14,8 @@ import {
   Megaphone, Rocket, Check, Briefcase, Plus, Flame, MapPin, DollarSign, 
   Trash2, ExternalLink, Clock, Users, Award, Crown, BarChart3, UtensilsCrossed,
   Lock, Tag, Info, Sparkles, ChevronLeft, ChevronRight, Phone, MessageCircle, Star,
-  Home, Copy, ShieldCheck, Key, Heart, MessageSquareText, Building2, Shield, Printer, QrCode, Calendar, ArrowLeft, ShieldAlert, LogOut
+  Home, Copy, ShieldCheck, Key, Heart, MessageSquareText, Building2, Shield, Printer, QrCode, Calendar, ArrowLeft, ShieldAlert, LogOut,
+  Stethoscope
 } from 'lucide-react';
 import { JobFormModal } from '../components/jobs/JobFormModal';
 import { VipAnalyticsModal } from '../components/vip/VipAnalyticsModal';
@@ -25,6 +26,7 @@ import { VipUpgradeRequestModal } from '../components/vip/VipUpgradeRequestModal
 import { getBusinessVipStatus } from '../lib/vipHelper';
 import { ensureBusinessAnalyticsSaved } from '../lib/analyticsTracker';
 import { sanitizeFirestorePayload, compressAndSanitizeFirestorePayload } from '../lib/firestoreHelper';
+import { sanitizeInput } from '../lib/security';
 import { invalidateCache } from '../lib/dataCache';
 import { BUSINESS_CATEGORIES, MainCategory, IRBID_REGIONS_CATEGORIZED } from '../lib/categories';
 import { SearchableSelect } from '../components/ui/SearchableSelect';
@@ -36,6 +38,8 @@ import { SocialLinks, WorkingHours } from '../types';
 import { VisitorFavoritesTab } from '../components/profile/VisitorFavoritesTab';
 import { VisitorReviewsTab } from '../components/profile/VisitorReviewsTab';
 import { VisitorHousingsTab } from '../components/profile/VisitorHousingsTab';
+import { MedicalFacilitiesTab } from '../components/profile/MedicalFacilitiesTab';
+import { isMedicalBusiness } from '../lib/medicalHelper';
 import { RoiCampaignTracker } from '../components/profile/RoiCampaignTracker';
 import { PrintableQrPosterModal } from '../components/profile/PrintableQrPosterModal';
 import { MultiBranchModal } from '../components/profile/MultiBranchModal';
@@ -49,8 +53,17 @@ export function Profile() {
   const [userJobs, setUserJobs] = useState<JobOffer[]>([]);
   const [userHousings, setUserHousings] = useState<HousingItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [profileMainTab, setProfileMainTab] = useState<'visitor' | 'merchant' | 'housing' | 'staff'>('visitor');
+  const [profileMainTab, setProfileMainTab] = useState<'visitor' | 'merchant' | 'medical' | 'housing' | 'staff'>('visitor');
   const [visitorSubTab, setVisitorSubTab] = useState<'favorites' | 'reviews' | 'account'>('favorites');
+  
+  // Categorize businesses into commercial stores vs medical clinics/facilities
+  const medicalBusinesses = React.useMemo(() => {
+    return businesses.filter(b => isMedicalBusiness(b) || !!b.medicalProfile || b.requestType === 'medical_facility_registration');
+  }, [businesses]);
+
+  const commercialBusinesses = React.useMemo(() => {
+    return businesses.filter(b => !(isMedicalBusiness(b) || !!b.medicalProfile || b.requestType === 'medical_facility_registration'));
+  }, [businesses]);
   const [editingBusiness, setEditingBusiness] = useState<Business | null>(null);
   const [editForm, setEditForm] = useState<Partial<Business>>({});
   
@@ -337,27 +350,53 @@ export function Profile() {
   };
 
   const fetchBannerRequestForBusiness = async (businessId: string) => {
-    if (!db) return;
+    if (!db || !currentUser) {
+      setCurrentBannerRequest(null);
+      return;
+    }
     setLoadingBannerRequest(true);
     try {
-      const q = query(
-        collection(db, 'marketingRequests'), 
-        where('businessId', '==', businessId), 
-        where('serviceType', '==', 'homepage_banner')
-      );
-      const snap = await getDocs(q);
-      if (!snap.empty) {
+      let snap: any = null;
+      
+      // If admin, first attempt to query by businessId
+      if (isAdmin) {
+        try {
+          const qAdmin = query(
+            collection(db, 'marketingRequests'), 
+            where('businessId', '==', businessId), 
+            where('serviceType', '==', 'homepage_banner')
+          );
+          snap = await getDocs(qAdmin);
+        } catch (adminErr) {
+          // If admin query has permissions issues, fall back to owner-scoped query
+          snap = null;
+        }
+      }
+
+      // If not admin or admin query yielded no results, query scoped to current user as required by security rules
+      if (!snap || snap.empty) {
+        const qUser = query(
+          collection(db, 'marketingRequests'), 
+          where('userId', '==', currentUser.uid),
+          where('businessId', '==', businessId), 
+          where('serviceType', '==', 'homepage_banner')
+        );
+        snap = await getDocs(qUser);
+      }
+
+      if (snap && !snap.empty) {
         const docs: any[] = [];
-        snap.forEach(d => {
+        snap.forEach((d: any) => {
           docs.push({ id: d.id, ...d.data() });
         });
-        docs.sort((a, b) => b.createdAt - a.createdAt);
+        docs.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
         setCurrentBannerRequest(docs[0]);
       } else {
         setCurrentBannerRequest(null);
       }
     } catch (err) {
-      console.error("Error fetching banner request:", err);
+      console.warn("Could not fetch banner request for business:", err);
+      setCurrentBannerRequest(null);
     } finally {
       setLoadingBannerRequest(false);
     }
@@ -371,9 +410,13 @@ export function Profile() {
 
   useEffect(() => {
     if (selectedBusiness && activeSectionTab === 'homepage_banner') {
-      fetchBannerRequestForBusiness(selectedBusiness.id);
+      if (currentUser) {
+        fetchBannerRequestForBusiness(selectedBusiness.id);
+      } else {
+        setCurrentBannerRequest(null);
+      }
     }
-  }, [selectedBusiness, activeSectionTab]);
+  }, [selectedBusiness, activeSectionTab, currentUser, isAdmin]);
 
   useEffect(() => {
     if (selectedBusiness) {
@@ -462,8 +505,12 @@ export function Profile() {
       // 1. Delete marketing request
       await deleteDoc(doc(db, 'marketingRequests', currentBannerRequest.id));
       
-      // 2. Delete the approved live banner if any exists
-      await deleteDoc(doc(db, 'banners', `business_banner_${selectedBusiness.id}`));
+      // 2. Delete the approved live banner if any exists (admins only, safe catch)
+      try {
+        await deleteDoc(doc(db, 'banners', `business_banner_${selectedBusiness.id}`));
+      } catch (liveBannerErr) {
+        // Safe to ignore if user lacks admin permission to delete directly from banners collection
+      }
       
       alert("تم حذف وإلغاء طلب البانر الإعلاني بنجاح.");
       setCurrentBannerRequest(null);
@@ -516,15 +563,17 @@ export function Profile() {
       }
 
       const offerData: any = {
-        title: newOfferForm.title,
-        businessName: selectedBusiness.name,
+        title: sanitizeInput(newOfferForm.title),
+        businessName: sanitizeInput(selectedBusiness.name),
         businessId: selectedBusiness.id,
+        userId: currentUser.uid,
+        status: 'pending',
         category: selectedBusiness.category,
         discountType: newOfferForm.discountType,
-        discountPercentage: newOfferForm.discountPercentage || '10%',
-        oldPrice: newOfferForm.oldPrice || '',
-        newPrice: newOfferForm.newPrice || '',
-        code: newOfferForm.code || '',
+        discountPercentage: sanitizeInput(newOfferForm.discountPercentage || '10%'),
+        oldPrice: sanitizeInput(newOfferForm.oldPrice || ''),
+        newPrice: sanitizeInput(newOfferForm.newPrice || ''),
+        code: sanitizeInput(newOfferForm.code || ''),
         expiresIn: computedExpiresIn,
         durationMode: newOfferForm.durationMode,
         durationHours: newOfferForm.durationHours,
@@ -533,10 +582,10 @@ export function Profile() {
         endDate: newOfferForm.endDate,
         recurringDays: newOfferForm.recurringDays,
         expiresAt: expiresAt,
-        description: newOfferForm.description,
-        location: selectedBusiness.district ? `${selectedBusiness.district} - ${selectedBusiness.address}` : selectedBusiness.address,
-        phone: newOfferForm.phone || selectedBusiness.phone || '',
-        whatsapp: newOfferForm.whatsapp || selectedBusiness.phone || '',
+        description: sanitizeInput(newOfferForm.description),
+        location: sanitizeInput(selectedBusiness.district ? `${selectedBusiness.district} - ${selectedBusiness.address}` : selectedBusiness.address),
+        phone: sanitizeInput(newOfferForm.phone || selectedBusiness.phone || ''),
+        whatsapp: sanitizeInput(newOfferForm.whatsapp || selectedBusiness.phone || ''),
         image: newOfferForm.image || 'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&q=80&w=800',
         isHot: Boolean(newOfferForm.isHot),
         isStudent: Boolean(newOfferForm.isStudent)
@@ -609,15 +658,19 @@ export function Profile() {
     }
   }, [businesses]);
 
-  const handleOpenMarketingModal = (serviceType: string, serviceName: string, successMessage: string) => {
-    if (!currentUser || !selectedBusinessIdForService) {
-      alert("يرجى اختيار المحل المستهدف أولاً");
+  const handleOpenMarketingModal = (serviceType: string, serviceName: string, successMessage: string, targetBusinessId?: string) => {
+    const bizId = targetBusinessId || selectedBusinessIdForService;
+    if (!currentUser || !bizId) {
+      alert("يرجى اختيار المنشأة المستهدفة أولاً");
       return;
     }
-    const business = businesses.find(b => b.id === selectedBusinessIdForService);
+    if (targetBusinessId) {
+      setSelectedBusinessIdForService(targetBusinessId);
+    }
+    const business = businesses.find(b => b.id === bizId);
     if (!business) return;
     if (business.userId !== currentUser.uid && !isAdmin) {
-      alert("غير مصرح لك بإرسال طلبات تسويق لغير محلك!");
+      alert("غير مصرح لك بإرسال طلبات تسويق لغير منشأتك!");
       return;
     }
 
@@ -702,14 +755,6 @@ export function Profile() {
         basePayload.durationWeeks = marketingForm.durationWeeks;
         basePayload.publishTimeOption = marketingForm.publishTimeOption;
         basePayload.publishStartDate = marketingForm.publishTimeOption === 'scheduled' ? marketingForm.publishStartDate : '';
-      } else if (activeMarketingModalType === 'nfc_stands') {
-        basePayload.quantity = marketingForm.quantity;
-        basePayload.address = marketingForm.address.trim();
-        basePayload.logoInstructions = marketingForm.logoInstructions.trim();
-      } else if (activeMarketingModalType === 'social_media') {
-        basePayload.campaignGoal = marketingForm.campaignGoal.trim();
-        basePayload.preferredFilmingDate = marketingForm.preferredFilmingDate;
-        basePayload.highlightPoints = marketingForm.highlightPoints.trim();
       }
 
       await addDoc(collection(db, "marketingRequests"), basePayload);
@@ -808,46 +853,66 @@ export function Profile() {
     }
   };
 
-  useEffect(() => {
-    async function fetchUserBusinesses() {
-      if (!currentUser || !db) return;
-      try {
-        // Strict Data Isolation: Users only query their own stores where userId == currentUser.uid
-        const q = query(collection(db, 'businesses'), where('userId', '==', currentUser.uid));
-        const snapshot = await getDocs(q);
-        const userBusinesses: Business[] = [];
-        snapshot.forEach(doc => {
-          userBusinesses.push({ id: doc.id, ...doc.data() } as Business);
-        });
+  const fetchUserBusinesses = async () => {
+    if (!currentUser || !db) return;
+    try {
+      // Strict Data Isolation: Users only query their own stores where userId == currentUser.uid
+      const q = query(collection(db, 'businesses'), where('userId', '==', currentUser.uid));
+      const snapshot = await getDocs(q);
+      const userBusinesses: Business[] = [];
+      snapshot.forEach(doc => {
+        userBusinesses.push({ id: doc.id, ...doc.data() } as Business);
+      });
 
-        // Or where they are added as a delegated staff member in staffEmails array
-        if (currentUser.email) {
-          const qStaff = query(collection(db, 'businesses'), where('staffEmails', 'array-contains', currentUser.email.trim().toLowerCase()));
-          const snapStaff = await getDocs(qStaff);
-          snapStaff.forEach(doc => {
-            if (!userBusinesses.some(b => b.id === doc.id)) {
-              userBusinesses.push({ id: doc.id, ...doc.data() } as Business);
-            }
-          });
-        }
-        
-        setBusinesses(userBusinesses);
-        if (userBusinesses.length > 0) {
-          setSelectedBusiness(userBusinesses[0]);
-          setProfileMainTab('merchant');
-        } else if (isStaff) {
-          setProfileMainTab('staff');
-        } else {
-          setProfileMainTab('visitor');
-        }
-        fetchUserJobs(userBusinesses);
-        fetchUserHousings();
-      } catch (err) {
-        console.error("Error fetching profile businesses:", err);
-      } finally {
-        setLoading(false);
+      // Or where they are added as a delegated staff member in staffEmails array
+      if (currentUser.email) {
+        const qStaff = query(collection(db, 'businesses'), where('staffEmails', 'array-contains', currentUser.email.trim().toLowerCase()));
+        const snapStaff = await getDocs(qStaff);
+        snapStaff.forEach(doc => {
+          if (!userBusinesses.some(b => b.id === doc.id)) {
+            userBusinesses.push({ id: doc.id, ...doc.data() } as Business);
+          }
+        });
       }
+      
+      setBusinesses(userBusinesses);
+      const medList = userBusinesses.filter(b => isMedicalBusiness(b) || !!b.medicalProfile || b.requestType === 'medical_facility_registration');
+      const commList = userBusinesses.filter(b => !(isMedicalBusiness(b) || !!b.medicalProfile || b.requestType === 'medical_facility_registration'));
+
+      const queryParams = new URLSearchParams(window.location.search);
+      const requestedTab = queryParams.get('tab');
+
+      if (requestedTab === 'medical') {
+        setProfileMainTab('medical');
+        if (medList.length > 0) setSelectedBusiness(medList[0]);
+      } else if (requestedTab === 'housing') {
+        setProfileMainTab('housing');
+      } else if (requestedTab === 'visitor') {
+        setProfileMainTab('visitor');
+      } else if (requestedTab === 'merchant') {
+        setProfileMainTab('merchant');
+        if (commList.length > 0) setSelectedBusiness(commList[0]);
+      } else if (commList.length > 0) {
+        setSelectedBusiness(commList[0]);
+        setProfileMainTab('merchant');
+      } else if (medList.length > 0) {
+        setSelectedBusiness(medList[0]);
+        setProfileMainTab('medical');
+      } else if (isStaff) {
+        setProfileMainTab('staff');
+      } else {
+        setProfileMainTab('visitor');
+      }
+      fetchUserJobs(userBusinesses);
+      fetchUserHousings();
+    } catch (err) {
+      console.error("Error fetching profile businesses:", err);
+    } finally {
+      setLoading(false);
     }
+  };
+
+  useEffect(() => {
     fetchUserBusinesses();
   }, [currentUser, isStaff]);
 
@@ -1221,7 +1286,7 @@ export function Profile() {
       </div>
 
       {/* Main Profile Tabs Selector */}
-      <div className="bg-white p-1.5 sm:p-2 rounded-2xl border border-[#e5e1da] shadow-xs grid grid-cols-2 lg:grid-cols-4 gap-1.5 sm:gap-2 min-w-0">
+      <div className={`bg-white p-1.5 sm:p-2 rounded-2xl border border-[#e5e1da] shadow-xs grid grid-cols-2 ${isStaff ? 'sm:grid-cols-3 lg:grid-cols-5' : 'sm:grid-cols-2 lg:grid-cols-4'} gap-1.5 sm:gap-2 min-w-0`}>
         <button
           type="button"
           onClick={() => setProfileMainTab('visitor')}
@@ -1245,7 +1310,20 @@ export function Profile() {
           }`}
         >
           <Store className="h-5 w-5 sm:h-4 sm:w-4 shrink-0" />
-          <span className="text-center sm:text-right leading-tight">محلاتي ({businesses.length})</span>
+          <span className="text-center sm:text-right leading-tight">محلاتي ({commercialBusinesses.length})</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setProfileMainTab('medical')}
+          className={`py-2.5 sm:py-3 px-2 sm:px-4 rounded-xl text-[11px] sm:text-xs font-black transition-all flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 cursor-pointer ${
+            profileMainTab === 'medical'
+              ? 'bg-teal-700 text-white shadow-xs'
+              : 'text-teal-900 bg-teal-50/50 hover:bg-teal-100/70'
+          }`}
+        >
+          <Stethoscope className={`h-5 w-5 sm:h-4 sm:w-4 shrink-0 ${profileMainTab === 'medical' ? 'text-teal-200' : 'text-teal-600'}`} />
+          <span className="text-center sm:text-right leading-tight">منشآتي الطبية ({medicalBusinesses.length})</span>
         </button>
 
         <button
@@ -1377,6 +1455,22 @@ export function Profile() {
         </div>
       )}
 
+      {/* TAB: MEDICAL FACILITIES HUB */}
+      {profileMainTab === 'medical' && (
+        <MedicalFacilitiesTab
+          businesses={businesses}
+          onRefresh={fetchUserBusinesses}
+          onUpdateBusiness={(updatedBiz) => {
+            setBusinesses(prev => prev.map(b => b.id === updatedBiz.id ? updatedBiz : b));
+            if (selectedBusiness?.id === updatedBiz.id) {
+              setSelectedBusiness(updatedBiz);
+            }
+          }}
+          onDeleteBusiness={handleDeleteBusiness}
+          onOpenMarketingModal={handleOpenMarketingModal}
+        />
+      )}
+
       {/* TAB 2: MERCHANT HUB */}
       {profileMainTab === 'merchant' && (
         <div className="space-y-6 sm:space-y-8 min-w-0">
@@ -1412,7 +1506,7 @@ export function Profile() {
             <span className="flex items-center gap-1.5 flex-col sm:flex-row text-center sm:text-right">
               محلاتي وأفرعي
               <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${merchantSubTab === 'businesses' ? 'bg-[#1a4d2e]/10 text-[#1a4d2e]' : 'bg-stone-200 text-stone-500'}`}>
-                {businesses.length}
+                {commercialBusinesses.length}
               </span>
             </span>
           </button>
@@ -1439,20 +1533,37 @@ export function Profile() {
         {/* SUB-TAB 1: BUSINESSES MANAGEMENT */}
         {merchantSubTab === 'businesses' && (
           <>
-        {businesses.length === 0 ? (
-          <div className="text-center py-12 bg-stone-50 rounded-2xl border border-dashed border-[#e5e1da]">
-            <Store className="h-12 w-12 text-[#1a4d2e]/30 mx-auto mb-3" />
-            <p className="text-stone-500 font-bold mb-4">لم تقم بإضافة أي محلات مسجلة في إربد بعد.</p>
-            <Link to="/contact" className="inline-flex px-6 py-3 bg-[#1a4d2e] text-white rounded-xl font-bold hover:bg-[#133b22] transition-colors">
-              ابدأ قصة نجاح محلك الآن
-            </Link>
+        {commercialBusinesses.length === 0 ? (
+          <div className="text-center py-12 bg-stone-50 rounded-2xl border border-dashed border-[#e5e1da] space-y-4">
+            <Store className="h-12 w-12 text-[#1a4d2e]/30 mx-auto mb-1" />
+            <p className="text-stone-500 font-bold">لم تقم بإضافة أي محلات تجارية مسجلة في إربد بعد.</p>
+            {medicalBusinesses.length > 0 && (
+              <div>
+                <div className="p-3 bg-teal-50 border border-teal-200 rounded-xl inline-flex items-center gap-2 text-xs font-bold text-teal-800">
+                  <Stethoscope className="h-4 w-4 text-teal-600" />
+                  <span>لديك ({medicalBusinesses.length}) منشأة طبية مسجلة!</span>
+                  <button
+                    type="button"
+                    onClick={() => setProfileMainTab('medical')}
+                    className="underline font-black text-teal-900 hover:text-teal-700 cursor-pointer"
+                  >
+                    الانتقال لتاب منشآتي الطبية
+                  </button>
+                </div>
+              </div>
+            )}
+            <div>
+              <Link to="/contact" className="inline-flex px-6 py-3 bg-[#1a4d2e] text-white rounded-xl font-bold hover:bg-[#133b22] transition-colors">
+                ابدأ قصة نجاح محلك الآن
+              </Link>
+            </div>
           </div>
         ) : (
           <div className="space-y-6">
             {/* Hierarchical Business & Branch Selector */}
-            {businesses.length > 0 && (() => {
-              const primaryBusinesses = businesses.filter(b => !b.parentBusinessId || !businesses.some(p => p.id === b.parentBusinessId));
-              const hasMultiple = businesses.length > 1;
+            {commercialBusinesses.length > 0 && (() => {
+              const primaryBusinesses = commercialBusinesses.filter(b => !b.parentBusinessId || !commercialBusinesses.some(p => p.id === b.parentBusinessId));
+              const hasMultiple = commercialBusinesses.length > 1;
 
               return (
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-white border border-stone-200/80 p-3 sm:p-4 rounded-2xl shadow-2xs gap-3">
@@ -1467,7 +1578,7 @@ export function Profile() {
                           <select
                             value={selectedBusiness?.id || ''}
                             onChange={(e) => {
-                              const biz = businesses.find(b => b.id === e.target.value);
+                              const biz = commercialBusinesses.find(b => b.id === e.target.value);
                               if (biz) {
                                 setSelectedBusiness(biz);
                                 setActiveSectionTab('overview');
@@ -1478,7 +1589,7 @@ export function Profile() {
                             dir="rtl"
                           >
                             {primaryBusinesses.map(pBiz => {
-                              const branches = businesses.filter(b => b.id === pBiz.id || b.parentBusinessId === pBiz.id);
+                              const branches = commercialBusinesses.filter(b => b.id === pBiz.id || b.parentBusinessId === pBiz.id);
                               return (
                                 <optgroup key={pBiz.id} label={pBiz.name.split(' - ')[0].trim()}>
                                   {branches.map((branch, idx) => {
@@ -2204,36 +2315,43 @@ export function Profile() {
                                 {offers.map((offer) => (
                                   <div 
                                     key={offer.id}
-                                    className="border-2 border-dashed border-stone-200 bg-[#fdfcfb] rounded-2xl p-4.5 relative overflow-hidden flex flex-col justify-between text-right shadow-2xs hover:border-amber-400/40 transition-colors"
+                                    className="border border-stone-200 bg-white rounded-2xl overflow-hidden relative flex flex-col justify-between text-right shadow-xs hover:border-amber-400/50 hover:shadow-sm transition-all"
                                   >
-                                    <div className="absolute top-1/2 -translate-y-1/2 -right-2.5 w-5 h-5 rounded-full bg-white border-l-2 border-dashed border-stone-200"></div>
-                                    <div className="absolute top-1/2 -translate-y-1/2 -left-2.5 w-5 h-5 rounded-full bg-white border-r-2 border-dashed border-stone-200"></div>
-
-                                    <div>
-                                      <div className="flex justify-between items-start gap-2 mb-2">
-                                        <span className="text-[10px] font-black bg-amber-100 text-amber-800 px-2 py-0.5 rounded-md shadow-3xs">
+                                    {/* Offer Image Header */}
+                                    <div className="relative h-32 w-full bg-stone-100 overflow-hidden shrink-0">
+                                      <img 
+                                        src={offer.image || 'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&q=80&w=800'} 
+                                        alt={offer.title} 
+                                        className="w-full h-full object-cover"
+                                      />
+                                      <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-transparent" />
+                                      <div className="absolute top-2.5 right-2.5 z-10 flex gap-1">
+                                        <span className="text-[10px] font-black bg-amber-400 text-stone-900 px-2 py-0.5 rounded-lg border border-amber-300 shadow-sm">
                                           خصم {offer.discountPercentage}
                                         </span>
-                                        <div className="flex gap-1">
-                                          {offer.isHot && <span className="text-[9px] font-black bg-red-100 text-red-700 px-1.5 py-0.5 rounded">عاجل 🔥</span>}
-                                          {offer.isStudent && <span className="text-[9px] font-black bg-sky-100 text-sky-700 px-1.5 py-0.5 rounded">طلاب 🎓</span>}
-                                        </div>
                                       </div>
-
-                                      <h4 className="text-xs font-black text-stone-900 mb-1">{offer.title}</h4>
-                                      <p className="text-[11px] text-stone-500 line-clamp-2 mb-3 leading-relaxed">{offer.description}</p>
+                                      <div className="absolute top-2.5 left-2.5 z-10 flex gap-1">
+                                        {offer.isHot && <span className="text-[9px] font-black bg-red-600 text-white px-1.5 py-0.5 rounded-lg shadow-sm">عاجل 🔥</span>}
+                                        {offer.isStudent && <span className="text-[9px] font-black bg-sky-600 text-white px-1.5 py-0.5 rounded-lg shadow-sm">طلاب 🎓</span>}
+                                      </div>
                                     </div>
 
-                                    <div className="pt-3 border-t border-dashed border-stone-200/80 mt-auto flex justify-between items-center">
-                                      <div className="text-xs">
-                                        {offer.newPrice && (
-                                          <div className="flex items-center gap-1">
-                                            <span className="text-stone-400 line-through text-[10px]">{offer.oldPrice}</span>
-                                            <span className="text-emerald-700 font-black">{offer.newPrice}</span>
-                                          </div>
-                                        )}
-                                        {offer.code && <span className="text-[10px] bg-stone-100 text-stone-600 px-1.5 py-0.5 rounded font-mono">كود: {offer.code}</span>}
+                                    <div className="p-4 flex-1 flex flex-col justify-between">
+                                      <div>
+                                        <h4 className="text-sm font-black text-stone-900 mb-1 line-clamp-1">{offer.title}</h4>
+                                        <p className="text-[11px] text-stone-500 line-clamp-2 mb-3 leading-relaxed">{offer.description}</p>
                                       </div>
+
+                                      <div className="pt-3 border-t border-stone-200 mt-auto flex justify-between items-center">
+                                        <div className="text-xs">
+                                          {offer.newPrice && (
+                                            <div className="flex items-center gap-1">
+                                              <span className="text-stone-400 line-through text-[10px]">{offer.oldPrice}</span>
+                                              <span className="text-emerald-700 font-black">{offer.newPrice}</span>
+                                            </div>
+                                          )}
+                                          {offer.code && <span className="text-[10px] bg-stone-100 text-stone-600 px-1.5 py-0.5 rounded font-mono">كود: {offer.code}</span>}
+                                        </div>
 
                                       <div className="flex flex-wrap items-center gap-1.5 justify-end">
                                         <button
@@ -2316,7 +2434,8 @@ export function Profile() {
                                       </div>
                                     </div>
                                   </div>
-                                ))}
+                                </div>
+                              ))}
                               </div>
                             )}
                           </div>
@@ -3408,8 +3527,8 @@ export function Profile() {
 
       {/* Shop Edit Modal */}
       {editingBusiness && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto" dir="rtl">
-          <div className="bg-white rounded-3xl p-6 md:p-8 w-full max-w-2xl max-h-[92vh] overflow-y-auto shadow-2xl border border-stone-200 relative my-auto animate-in fade-in zoom-in-95">
+        <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto" dir="rtl">
+          <div className="bg-white rounded-3xl p-6 md:p-8 w-full max-w-2xl max-h-[88vh] overflow-y-auto shadow-2xl border border-stone-200 relative my-auto animate-in fade-in zoom-in-95">
             <button 
               onClick={() => setEditingBusiness(null)}
               className="absolute top-6 left-6 p-2 bg-stone-100 text-stone-500 hover:bg-stone-200 rounded-full transition-colors z-10"
@@ -3456,7 +3575,7 @@ export function Profile() {
 
       {/* Delete Job Confirmation */}
       {deleteJobConfirmId && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto" dir="rtl">
+        <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto" dir="rtl">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-red-100 space-y-4 my-auto animate-in fade-in zoom-in-95 text-center">
             <div className="w-14 h-14 bg-red-100 text-red-600 rounded-2xl flex items-center justify-center mx-auto">
               <Trash2 className="h-7 w-7" />
@@ -3598,8 +3717,8 @@ export function Profile() {
 
       {/* Marketing Form Popup Modal */}
       {isMarketingModalOpen && activeMarketingModalType && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto animate-in fade-in" dir="rtl">
-          <div className="bg-white rounded-3xl p-6 md:p-8 w-full max-w-2xl max-h-[92vh] overflow-y-auto shadow-2xl border border-stone-200 relative my-auto animate-in fade-in zoom-in-95">
+        <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto animate-in fade-in" dir="rtl">
+          <div className="bg-white rounded-3xl p-6 md:p-8 w-full max-w-2xl max-h-[88vh] overflow-y-auto shadow-2xl border border-stone-200 relative my-auto animate-in fade-in zoom-in-95">
             <button 
               type="button"
               onClick={() => setIsMarketingModalOpen(false)}
@@ -4292,91 +4411,7 @@ export function Profile() {
               )}
 
               {/* 4. NFC Stands */}
-              {activeMarketingModalType === 'nfc_stands' && (
-                <div className="space-y-4 pt-2 border-t border-stone-100">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold text-stone-700 mb-1.5 font-black">الكمية المطلوبة:</label>
-                      <select
-                        value={marketingForm.quantity}
-                        onChange={e => setMarketingForm(prev => ({ ...prev, quantity: e.target.value }))}
-                        className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs font-bold text-stone-700"
-                      >
-                        <option value="1">ستاند واحد (8 دنانير)</option>
-                        <option value="3">3 ستاندات (20 دينار - خصم خاص)</option>
-                        <option value="5">5 ستاندات (30 دينار - توصيل وبرمجة مجانية)</option>
-                        <option value="10">10 ستاندات (55 دينار - العرض الأقوى)</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-stone-700 mb-1.5 font-black">عنوان التوصيل في إربد: <span className="text-red-500">*</span></label>
-                      <input
-                        type="text"
-                        required
-                        value={marketingForm.address}
-                        onChange={e => setMarketingForm(prev => ({ ...prev, address: e.target.value }))}
-                        placeholder="مثال: شارع الجامعة، بجانب مبنى..."
-                        className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-stone-700 mb-1.5 font-black">تعليمات التصميم أو الشعار المفضل طباعته:</label>
-                    <textarea
-                      value={marketingForm.logoInstructions}
-                      onChange={e => setMarketingForm(prev => ({ ...prev, logoInstructions: e.target.value }))}
-                      rows={3}
-                      placeholder="هل تريد طباعة باركود جوجل مابس أم لوجو المحل أم كلاهما؟ اذكر رغبتك هنا..."
-                      className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-xs font-semibold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
-                    />
-                  </div>
-                </div>
-              )}
-
               {/* 5. Social Media */}
-              {activeMarketingModalType === 'social_media' && (
-                <div className="space-y-4 pt-2 border-t border-stone-100">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold text-stone-700 mb-1.5 font-black">هدف التغطية الرئيسي: <span className="text-red-500">*</span></label>
-                      <select
-                        value={marketingForm.campaignGoal}
-                        onChange={e => setMarketingForm(prev => ({ ...prev, campaignGoal: e.target.value }))}
-                        className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs font-bold text-stone-700"
-                      >
-                        <option value="إشهار وجذب زوار جدد للمحل">إشهار وجذب زوار جدد للمحل</option>
-                        <option value="إطلاق صنف أو منتج جديد">إطلاق صنف أو منتج جديد بالكامل</option>
-                        <option value="إعلان خصومات وعروض نهاية الموسم">إعلان خصومات وعروض محدودة</option>
-                        <option value="صناعة براند وهوية بصرية ممتازة">تعزيز اسم البراند وهوية المحل</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-stone-700 mb-1.5 font-black">تاريخ التصوير المفضل:</label>
-                      <input
-                        type="date"
-                        value={marketingForm.preferredFilmingDate}
-                        onChange={e => setMarketingForm(prev => ({ ...prev, preferredFilmingDate: e.target.value }))}
-                        className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-stone-700 mb-1.5 font-black">تفاصيل المنتجات والنقاط التي تريد تسليط الضوء عليها: <span className="text-red-500">*</span></label>
-                    <textarea
-                      required
-                      value={marketingForm.highlightPoints}
-                      onChange={e => setMarketingForm(prev => ({ ...prev, highlightPoints: e.target.value }))}
-                      rows={3}
-                      placeholder="اذكر الأصناف الأكثر مبيعاً، الجو العائلي، الأسعار المنافسة التي تريد من المصوّر والمقدّم التركيز عليها وإبرازها..."
-                      className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-xs font-semibold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
-                    />
-                  </div>
-                </div>
-              )}
 
               {/* Action Buttons */}
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-stone-100">

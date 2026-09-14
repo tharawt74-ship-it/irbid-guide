@@ -24,7 +24,7 @@ import {
   BookOpen, Building2, Landmark, HeartPulse, 
   Shirt, Smartphone, ShoppingCart, Scissors, Dumbbell, Car, Sparkles,
   Heart, Compass, Crown, TrendingUp, Clock, SlidersHorizontal,
-  Hammer, Sprout, GraduationCap, Laptop
+  Hammer, Sprout, GraduationCap, Laptop, ChevronDown
 } from 'lucide-react';
 
 
@@ -103,6 +103,7 @@ export function Home() {
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [activeTab, setActiveTab] = useState<'all' | 'featured' | 'popular' | 'recent'>('all');
   const [isCategoriesModalOpen, setIsCategoriesModalOpen] = useState(false);
+  const [isSubCategoriesExpanded, setIsSubCategoriesExpanded] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
@@ -143,7 +144,7 @@ export function Home() {
           if (data.isHidden) {
             return;
           }
-          if (!appConfig.showDemoData && data.isDemo) {
+          if (data.isDemo) {
             return;
           }
           fetchedBusinesses.push({ id: docSnap.id, ...data } as Business);
@@ -384,10 +385,33 @@ export function Home() {
     let matchesCategory = true;
     if (categoryFilter) {
       const validSubCats = getSubCats(categoryFilter);
+      const bizCat = b.category || "";
+      const bizSubCat = (b as any).subCategory || (b as any).subcategory || "";
+
       if (subCategoryFilter) {
-        matchesCategory = b.category === subCategoryFilter;
+        if (subCategoryFilter.includes('أسنان') || subCategoryFilter.includes('اسنان')) {
+          matchesCategory = bizCat.includes('أسنان') || bizCat.includes('اسنان') || bizSubCat.includes('أسنان') || bizSubCat.includes('اسنان');
+        } else if (subCategoryFilter.includes('مستشفيات')) {
+          matchesCategory = bizCat.includes('مستشف') || bizSubCat.includes('مستشف');
+        } else if (subCategoryFilter.includes('صيدل')) {
+          matchesCategory = bizCat.includes('صيدل') || bizSubCat.includes('صيدل');
+        } else if (subCategoryFilter.includes('مختبر')) {
+          matchesCategory = bizCat.includes('مختبر') || bizCat.includes('أشعة') || bizCat.includes('بصر') || bizSubCat.includes('مختبر');
+        } else if (subCategoryFilter.includes('عيادات أطباء')) {
+          matchesCategory = (bizCat.includes('عياد') || bizCat.includes('طبيب') || bizCat.includes('دكتور')) && !bizCat.includes('أسنان') && !bizCat.includes('اسنان') && !bizCat.includes('بيطر');
+        } else if (subCategoryFilter.includes('علاج طبيعي')) {
+          matchesCategory = bizCat.includes('علاج') || bizSubCat.includes('علاج');
+        } else if (subCategoryFilter.includes('بيطر')) {
+          matchesCategory = bizCat.includes('بيطر') || bizSubCat.includes('بيطر');
+        } else {
+          matchesCategory = bizCat === subCategoryFilter || bizSubCat === subCategoryFilter;
+        }
       } else {
-        matchesCategory = b.category === categoryFilter || validSubCats.includes(b.category);
+        if (categoryFilter.includes('صحة وطب')) {
+          matchesCategory = bizCat.includes('صحة') || bizCat.includes('طب') || bizCat.includes('عياد') || bizCat.includes('مستشف') || bizCat.includes('صيدل') || bizCat.includes('مختبر') || bizCat.includes('علاج') || bizCat.includes('أسنان') || bizCat.includes('اسنان') || bizCat.includes('بيطر') || validSubCats.includes(bizCat);
+        } else {
+          matchesCategory = bizCat === categoryFilter || validSubCats.includes(bizCat) || validSubCats.includes(bizSubCat);
+        }
       }
     }
     
@@ -681,32 +705,76 @@ export function Home() {
           
           {/* Sub Categories (Shows only when a main category is selected) */}
           {categoryFilter && getSubCats(categoryFilter).length > 0 && (
-            <div className="relative">
-              <div className="pointer-events-none absolute left-0 top-0 bottom-3 w-8 bg-gradient-to-r from-[#fdfcfb] to-transparent z-10 sm:hidden" />
-              <div className="flex overflow-x-auto gap-2.5 pb-3 mt-4 -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-hide snap-x" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+            <div className="mt-4 mb-2">
+              <div className="flex items-start sm:items-center gap-2">
+                <div className="relative flex-1 min-w-0">
+                  {isSubCategoriesExpanded ? (
+                    <div className="flex flex-wrap gap-2 sm:gap-2.5 animate-in fade-in slide-in-from-top-1 duration-200">
+                      <button
+                        onClick={() => setSubCategoryFilter('')}
+                        className={`snap-start shrink-0 whitespace-nowrap px-4 sm:px-5 py-2 sm:py-2.5 rounded-full text-xs sm:text-sm font-bold transition-all duration-200 border cursor-pointer ${
+                          subCategoryFilter === ''
+                            ? 'bg-[#1a4d2e] text-white border-[#1a4d2e] shadow-md shadow-[#1a4d2e]/20'
+                            : 'bg-white text-stone-600 border-[#e5e1da] hover:border-[#1a4d2e]/30 hover:bg-stone-50'
+                        }`}
+                      >
+                        عرض الكل
+                      </button>
+                      {getSubCats(categoryFilter).map((subCat) => (
+                        <button
+                          key={subCat}
+                          onClick={() => setSubCategoryFilter(subCat)}
+                          className={`snap-start shrink-0 whitespace-nowrap px-4 sm:px-5 py-2 sm:py-2.5 rounded-full text-xs sm:text-sm font-bold transition-all duration-200 border cursor-pointer ${
+                            subCategoryFilter === subCat
+                              ? 'bg-[#1a4d2e] text-white border-[#1a4d2e] shadow-md shadow-[#1a4d2e]/20'
+                              : 'bg-white text-stone-600 border-[#e5e1da] hover:border-[#1a4d2e]/30 hover:bg-stone-50'
+                          }`}
+                        >
+                          {subCat}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-[#fdfcfb] to-transparent z-10 sm:hidden" />
+                      <div className="flex overflow-x-auto gap-2 sm:gap-2.5 pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-hide snap-x items-center" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                        <button
+                          onClick={() => setSubCategoryFilter('')}
+                          className={`snap-start shrink-0 whitespace-nowrap px-4 sm:px-5 py-2 sm:py-2.5 rounded-full text-xs sm:text-sm font-bold transition-all duration-200 border cursor-pointer ${
+                            subCategoryFilter === ''
+                              ? 'bg-[#1a4d2e] text-white border-[#1a4d2e] shadow-md shadow-[#1a4d2e]/20'
+                              : 'bg-white text-stone-600 border-[#e5e1da] hover:border-[#1a4d2e]/30 hover:bg-stone-50'
+                          }`}
+                        >
+                          عرض الكل
+                        </button>
+                        {getSubCats(categoryFilter).map((subCat) => (
+                          <button
+                            key={subCat}
+                            onClick={() => setSubCategoryFilter(subCat)}
+                            className={`snap-start shrink-0 whitespace-nowrap px-4 sm:px-5 py-2 sm:py-2.5 rounded-full text-xs sm:text-sm font-bold transition-all duration-200 border cursor-pointer ${
+                              subCategoryFilter === subCat
+                                ? 'bg-[#1a4d2e] text-white border-[#1a4d2e] shadow-md shadow-[#1a4d2e]/20'
+                                : 'bg-white text-stone-600 border-[#e5e1da] hover:border-[#1a4d2e]/30 hover:bg-stone-50'
+                            }`}
+                          >
+                            {subCat}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Fixed circular expand/collapse button */}
                 <button
-                  onClick={() => setSubCategoryFilter('')}
-                  className={`snap-start shrink-0 whitespace-nowrap px-5 py-2.5 rounded-full text-sm font-bold transition-all duration-200 border ${
-                    subCategoryFilter === ''
-                      ? 'bg-[#1a4d2e] text-white border-[#1a4d2e] shadow-md shadow-[#1a4d2e]/20'
-                      : 'bg-white text-stone-600 border-[#e5e1da] hover:border-[#1a4d2e]/30 hover:bg-stone-50'
-                  }`}
+                  onClick={() => setIsSubCategoriesExpanded(!isSubCategoriesExpanded)}
+                  className="shrink-0 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white border border-stone-200 hover:border-[#1a4d2e]/40 hover:bg-stone-50 text-stone-600 hover:text-stone-900 shadow-xs flex items-center justify-center transition-all duration-300 cursor-pointer"
+                  title={isSubCategoriesExpanded ? "عرض كشريط أفقي" : "تمديد للأسفل"}
+                  aria-label={isSubCategoriesExpanded ? "عرض كشريط أفقي" : "تمديد للأسفل"}
                 >
-                  عرض الكل
+                  <ChevronDown className={`h-4.5 w-4.5 sm:h-5 sm:w-5 transition-transform duration-300 ${isSubCategoriesExpanded ? 'rotate-180 text-[#1a4d2e]' : ''}`} />
                 </button>
-                {getSubCats(categoryFilter).map((subCat) => (
-                  <button
-                    key={subCat}
-                    onClick={() => setSubCategoryFilter(subCat)}
-                    className={`snap-start shrink-0 whitespace-nowrap px-5 py-2.5 rounded-full text-sm font-bold transition-all duration-200 border ${
-                      subCategoryFilter === subCat
-                        ? 'bg-[#1a4d2e] text-white border-[#1a4d2e] shadow-md shadow-[#1a4d2e]/20'
-                        : 'bg-white text-stone-600 border-[#e5e1da] hover:border-[#1a4d2e]/30 hover:bg-stone-50'
-                    }`}
-                  >
-                    {subCat}
-                  </button>
-                ))}
               </div>
             </div>
           )}

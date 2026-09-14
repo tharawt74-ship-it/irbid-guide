@@ -442,7 +442,7 @@ export function Housing() {
       />
       {/* Toast popup */}
       {toastMessage && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[99999] bg-[#1a4d2e] text-white px-6 py-3 rounded-2xl shadow-xl flex items-center gap-3 border border-emerald-500/30 animate-in fade-in zoom-in-95">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100000] bg-[#1a4d2e] text-white px-6 py-3 rounded-2xl shadow-xl flex items-center gap-3 border border-emerald-500/30 animate-in fade-in zoom-in-95">
           <Check className="h-5 w-5 text-[#ff9f1c]" />
           <span className="font-bold text-sm">{toastMessage}</span>
         </div>
@@ -617,7 +617,7 @@ export function Housing() {
 
           {/* Mobile Overlay Filter Bottom Sheet */}
           {showFiltersMobile && createPortal(
-            <div className="fixed inset-0 z-[99999] lg:hidden bg-stone-900/60 backdrop-blur-xs flex items-end justify-center animate-in fade-in duration-200" dir="rtl">
+            <div className="fixed inset-0 z-[100000] lg:hidden bg-stone-900/60 backdrop-blur-xs flex items-end justify-center animate-in fade-in duration-200" dir="rtl">
               <div className="w-full bg-white max-h-[85vh] rounded-t-[2rem] flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-300 overflow-hidden">
                 {/* Fixed Header */}
                 <div className="p-6 pb-3 border-b border-stone-100 flex flex-col shrink-0">
@@ -1487,7 +1487,7 @@ export function Housing() {
                         rel="noreferrer"
                         className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition-colors cursor-pointer"
                       >
-                        <MessageSquare className="h-3.5 w-3.5" />
+                        <WhatsApp3DIcon className="h-3.5 w-3.5 text-white" />
                         <span>واتساب</span>
                       </a>
                     </div>
@@ -1662,7 +1662,7 @@ export function Housing() {
 
       {/* Roommate Posting Modal */}
       {isRoommateFormOpen && (
-        <div className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto" dir="rtl">
+        <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto" dir="rtl">
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-stone-200 relative my-auto space-y-6">
             <div className="flex items-center justify-between border-b border-stone-100 pb-3">
               <h3 className="text-lg font-black text-stone-900">🤝 انشر طلب رفيق سكن جديد</h3>
@@ -1772,7 +1772,7 @@ export function Housing() {
 
       {/* Booking / Appointment Modal */}
       {isBookingFormOpen && selectedHousingForBooking && (
-        <div className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto" dir="rtl">
+        <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto" dir="rtl">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-stone-200 relative my-auto space-y-6">
             <div className="flex items-center justify-between border-b border-stone-100 pb-3">
               <div className="space-y-0.5">

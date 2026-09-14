@@ -4,7 +4,6 @@ import {
   X, 
   Megaphone, 
   Phone, 
-  MessageSquare, 
   CheckCircle2, 
   XCircle, 
   Star, 
@@ -14,8 +13,10 @@ import {
   ExternalLink,
   ShieldCheck,
   Send,
-  Building2
+  Building2,
+  Store
 } from 'lucide-react';
+import { WhatsAppIcon } from '../common/WhatsAppIcon';
 import { MarketingRequest, Business } from '../../types';
 
 interface MarketingDetailsModalProps {
@@ -53,8 +54,7 @@ export function MarketingDetailsModal({
       case 'sponsored': return { price: '15 دينار / أسبوعياً', desc: 'ظهور المحل في صدارة نتائج البحث والتصنيفات وبانر مميز' };
       case 'push_notifications': return { price: '10 دنانير / إشعار', desc: 'إشعار فوري موجه لجميع مستخدمي المنصة في إربد' };
       case 'homepage_banner': return { price: '25 دينار / أسبوعياً', desc: 'إعلان رئيسي بارز في سلايدر أعلى الصفحة الرئيسية' };
-      case 'nfc_stands': return { price: '8 دنانير / للقطعة', desc: 'ستاند طاولة ذكي لتقييم جوجل مابس وزيادة المتابعين' };
-      case 'social_media': return { price: '50 دينار / تغطية', desc: 'تصوير فيديو ريل وتغطية احترافية عبر منصاتنا' };
+      case 'premium_messaging': return { price: '5 دنانير / شهرياً', desc: 'ترقية نظام استقبال الوسائط والمحادثات' };
       default: return { price: '15 دينار', desc: 'خدمة تسويقية مخصصة' };
     }
   };
@@ -74,8 +74,8 @@ export function MarketingDetailsModal({
   const whatsappUrl = generateWhatsAppUrl();
 
   return createPortal(
-    <div className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto" dir="rtl">
-      <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[92vh] overflow-y-auto p-6 sm:p-8 shadow-2xl border border-stone-200 space-y-6 relative my-auto animate-in fade-in zoom-in-95">
+    <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto" dir="rtl">
+      <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[88vh] overflow-y-auto p-6 sm:p-8 shadow-2xl border border-stone-200 space-y-6 relative my-auto animate-in fade-in zoom-in-95">
         
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[#e5e1da] pb-4">
@@ -315,77 +315,34 @@ export function MarketingDetailsModal({
             </div>
           )}
 
-          {/* Custom details for nfc_stands */}
-          {request.serviceType === 'nfc_stands' && (
-            <div className="bg-orange-50/40 p-5 rounded-2xl border border-orange-200/60 space-y-3 text-right">
-              <div className="font-black text-xs text-orange-950 border-b border-orange-100 pb-1.5 flex items-center gap-1.5">
-                <span>📱 تفاصيل طلب ستاندات وبطاقات NFC الذكية:</span>
+          {/* Custom details for homepage_banner */}
+          {request.serviceType === 'homepage_banner' && (
+            <div className="bg-amber-50/40 p-5 rounded-2xl border border-amber-200/60 space-y-3 text-right">
+              <div className="font-black text-xs text-amber-950 border-b border-amber-100 pb-1.5 flex items-center gap-1.5">
+                <span>🖼️ تفاصيل طلب بانر الصفحة الرئيسية:</span>
               </div>
-              <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="space-y-1.5 text-xs">
                 <div>
-                  <span className="text-stone-500 font-bold block mb-0.5">الكمية المطلوبة:</span>
-                  <span className="text-stone-800 font-bold">{request.quantity || 'غير محدد'}</span>
+                  <span className="text-stone-500 font-bold block">العنوان:</span>
+                  <span className="text-stone-950 font-bold text-sm">{request.bannerTitle || 'لا يوجد'}</span>
                 </div>
-                {request.contactWhatsapp && (
-                  <div>
-                    <span className="text-stone-500 font-bold block mb-0.5">رقم التواصل (واتساب):</span>
-                    <span className="text-stone-800 font-mono font-bold" dir="ltr">{request.contactWhatsapp}</span>
-                  </div>
-                )}
+                <div>
+                  <span className="text-stone-500 font-bold block">الوصف:</span>
+                  <span className="text-stone-700 leading-relaxed block">{request.bannerSubtitle || 'لا يوجد'}</span>
+                </div>
               </div>
-              {request.address && (
-                <div className="text-xs">
-                  <span className="text-stone-500 font-bold block">عنوان التوصيل المفضل:</span>
-                  <span className="text-stone-800 font-bold">{request.address}</span>
-                </div>
-              )}
-              {request.logoInstructions && (
-                <div className="text-xs">
-                  <span className="text-stone-500 font-bold block">شعار المحل أو تعليمات المطبوعات:</span>
-                  <span className="text-stone-700 leading-relaxed block">{request.logoInstructions}</span>
-                </div>
-              )}
             </div>
           )}
+        </div>
 
-          {/* Custom details for social_media */}
-          {request.serviceType === 'social_media' && (
-            <div className="bg-pink-50/40 p-5 rounded-2xl border border-pink-200/60 space-y-3 text-right">
-              <div className="font-black text-xs text-pink-950 border-b border-pink-100 pb-1.5 flex items-center gap-1.5">
-                <span>📹 تفاصيل طلب تغطية سوشيال ميديا شاملة:</span>
-              </div>
-              <div className="grid grid-cols-2 gap-3 text-xs">
-                <div>
-                  <span className="text-stone-500 font-bold block mb-0.5">تاريخ التصوير المفضل:</span>
-                  <span className="text-stone-800 font-bold">{request.preferredFilmingDate || 'غير محدد'}</span>
-                </div>
-                {request.contactWhatsapp && (
-                  <div>
-                    <span className="text-stone-500 font-bold block mb-0.5">رقم التواصل (واتساب):</span>
-                    <span className="text-stone-800 font-mono font-bold" dir="ltr">{request.contactWhatsapp}</span>
-                  </div>
-                )}
-              </div>
-              {request.campaignGoal && (
-                <div className="text-xs">
-                  <span className="text-stone-500 font-bold block">الهدف الرئيسي من الحملة:</span>
-                  <span className="text-stone-800 font-bold">{request.campaignGoal}</span>
-                </div>
-              )}
-              {request.highlightPoints && (
-                <div className="text-xs">
-                  <span className="text-stone-500 font-bold block">المنتجات أو النقاط التي تريد تسليط الضوء عليها:</span>
-                  <span className="text-stone-700 leading-relaxed block">{request.highlightPoints}</span>
-                </div>
-              )}
-            </div>
-          )}
+        {/* 3. Business & Contact Info Section */}
+        <div className="p-4 bg-stone-50 border-t border-stone-100 flex flex-col gap-3 text-xs font-bold shrink-0">
+          <h4 className="text-stone-800 font-black flex items-center gap-1.5 mb-1">
+            <Store className="h-4 w-4 text-stone-500" />
+            معلومات الاتصال والمحل
+          </h4>
 
-          {/* Contact Details */}
-          <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200 space-y-2 text-xs">
-            <div className="font-black text-stone-700 mb-1">بيانات التواصل مع التاجر:</div>
-            
-            {business?.phone && (
+          {business?.phone && (
               <div className="flex items-center justify-between">
                 <span className="text-stone-500">رقم هاتف المحل:</span>
                 <span className="font-mono font-bold text-stone-800" dir="ltr">{business.phone.replace(/\s+/g, '')}</span>
@@ -419,83 +376,79 @@ export function MarketingDetailsModal({
             )}
           </div>
 
-          {/* Quick Communication Actions */}
-          <div className="flex flex-wrap gap-2 pt-1">
-            {whatsappUrl && (
-              <a
-                href={whatsappUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="flex-1 min-w-[140px] bg-emerald-600 hover:bg-emerald-700 text-white p-2.5 rounded-xl text-xs font-bold transition-all inline-flex items-center justify-center gap-2 shadow-xs"
-              >
-                <MessageSquare className="h-4 w-4" />
-                <span>محادثة واتساب سريعة</span>
-              </a>
-            )}
-
-            {business?.phone && (
-              <a
-                href={`tel:${business.phone}`}
-                className="bg-stone-100 hover:bg-stone-200 text-stone-800 p-2.5 rounded-xl text-xs font-bold transition-all inline-flex items-center justify-center gap-1.5"
-              >
-                <Phone className="h-4 w-4" />
-                <span>اتصال هاتف</span>
-              </a>
-            )}
-          </div>
-
-          {/* Status Changer Actions */}
-          <div className="space-y-2 pt-2 border-t border-stone-200">
-            <div className="text-xs font-black text-stone-700">تغيير حالة الإعلان والتفعيل الفوري:</div>
-            
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={async () => {
-                  await onStatusChange(request.id!, 'completed', request.businessId, request.serviceType);
-                  onClose();
-                }}
-                className="bg-[#1a4d2e] hover:bg-[#143e25] text-white p-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
-              >
-                <CheckCircle2 className="h-4 w-4 text-[#ff9f1c]" />
-                <span>اعتماد وتفعيل الخدمة ⭐</span>
-              </button>
-
-              <button
-                onClick={async () => {
-                  await onStatusChange(request.id!, 'contacted', request.businessId, request.serviceType);
-                  onClose();
-                }}
-                className="bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 p-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <Clock className="h-4 w-4" />
-                <span>تم التواصل مع العميل</span>
-              </button>
-
-              <button
-                onClick={async () => {
-                  await onStatusChange(request.id!, 'rejected', request.businessId, request.serviceType);
-                  onClose();
-                }}
-                className="bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 p-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <XCircle className="h-4 w-4" />
-                <span>رفض أو إلغاء التفعيل</span>
-              </button>
-
-              <button
-                onClick={async () => {
-                  await onDelete(request.id!);
-                  onClose();
-                }}
-                className="bg-stone-50 hover:bg-red-50 text-stone-600 hover:text-red-700 border border-stone-200 p-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <span>حذف الطلب نهائياً 🗑️</span>
-              </button>
-            </div>
-          </div>
-
+        {/* Quick Communication Actions */}
+        <div className="flex flex-wrap gap-2 pt-1">
+          {whatsappUrl && (
+            <a
+              href={whatsappUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="flex-1 min-w-[140px] bg-emerald-600 hover:bg-emerald-700 text-white p-2.5 rounded-xl text-xs font-bold transition-all inline-flex items-center justify-center gap-2 shadow-xs"
+            >
+              <WhatsAppIcon className="h-4 w-4" />
+              <span>محادثة واتساب سريعة</span>
+            </a>
+          )}
+          {business?.phone && (
+            <a
+              href={`tel:${business.phone}`}
+              className="bg-stone-100 hover:bg-stone-200 text-stone-800 p-2.5 rounded-xl text-xs font-bold transition-all inline-flex items-center justify-center gap-1.5"
+            >
+              <Phone className="h-4 w-4" />
+              <span>اتصال هاتف</span>
+            </a>
+          )}
         </div>
 
+        {/* Status Changer Actions */}
+        <div className="space-y-2 pt-2 border-t border-stone-200">
+          <div className="text-xs font-black text-stone-700">تغيير حالة الإعلان والتفعيل الفوري:</div>
+          
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={async () => {
+                await onStatusChange(request.id!, 'completed', request.businessId, request.serviceType);
+                onClose();
+              }}
+              className="bg-[#1a4d2e] hover:bg-[#143e25] text-white p-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+            >
+              <CheckCircle2 className="h-4 w-4 text-[#ff9f1c]" />
+              <span>اعتماد وتفعيل الخدمة ⭐</span>
+            </button>
+
+            <button
+              onClick={async () => {
+                await onStatusChange(request.id!, 'contacted', request.businessId, request.serviceType);
+                onClose();
+              }}
+              className="bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 p-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <Clock className="h-4 w-4" />
+              <span>تم التواصل مع العميل</span>
+            </button>
+
+            <button
+              onClick={async () => {
+                await onStatusChange(request.id!, 'rejected', request.businessId, request.serviceType);
+                onClose();
+              }}
+              className="bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 p-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <XCircle className="h-4 w-4" />
+              <span>رفض أو إلغاء التفعيل</span>
+            </button>
+
+            <button
+              onClick={async () => {
+                await onDelete(request.id!);
+                onClose();
+              }}
+              className="bg-stone-50 hover:bg-red-50 text-stone-600 hover:text-red-700 border border-stone-200 p-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <span>حذف الطلب نهائياً 🗑️</span>
+            </button>
+          </div>
+        </div>
       </div>
     </div>,
     document.body

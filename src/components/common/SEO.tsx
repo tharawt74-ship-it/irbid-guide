@@ -63,8 +63,10 @@ export const SEO: React.FC<SEOProps> = ({
     setMetaTag('og:image', ogImage, true);
     setMetaTag('og:site_name', 'شو في بإربد - الدليل الشامل لمدينة إربد', true);
     setMetaTag('og:locale', 'ar_JO', true);
-    if (canonicalUrl) {
-      setMetaTag('og:url', canonicalUrl, true);
+    
+    const resolvedCanonical = canonicalUrl || (typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : '');
+    if (resolvedCanonical) {
+      setMetaTag('og:url', resolvedCanonical, true);
     }
 
     // 4. Twitter Card Meta
@@ -75,13 +77,13 @@ export const SEO: React.FC<SEOProps> = ({
 
     // 5. Canonical Link
     let linkCanonical = document.querySelector('link[rel="canonical"]') as HTMLLinkElement;
-    if (canonicalUrl) {
+    if (resolvedCanonical) {
       if (!linkCanonical) {
         linkCanonical = document.createElement('link');
         linkCanonical.setAttribute('rel', 'canonical');
         document.head.appendChild(linkCanonical);
       }
-      linkCanonical.setAttribute('href', canonicalUrl);
+      linkCanonical.setAttribute('href', resolvedCanonical);
     }
 
     // 6. Structured Data (JSON-LD) for Google & AI Search Engines (GEO)

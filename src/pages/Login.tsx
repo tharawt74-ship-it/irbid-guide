@@ -441,7 +441,7 @@ export function Login() {
                     <path d="M12,6.5c1.31,0 2.49,0.45 3.42,1.34l2.56,-2.56C16.43,3.75 14.39,3 12,3c-3.59,0 -6.66,2.04 -8.15,5.01l4.07,3.12c0.71,-2.13 2.7,-3.71 5.04,-3.71Z" fill="#ea4335" />
                   </g>
                 </svg>
-                <span>تسجيل الدخول السريع باستخدام حساب جوجل</span>
+                <span>تسجيل الدخول باستخدام حساب جوجل</span>
               </button>
             </div>
           </div>
@@ -461,7 +461,7 @@ export function Login() {
       {/* Unverified Email Link Modal */}
       {isUnverifiedModalOpen && unverifiedEmail && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <div className="bg-white rounded-t-[32px] sm:rounded-3xl max-w-md w-full p-6 shadow-2xl border border-stone-200 space-y-5 animate-in slide-in-from-bottom-8 sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-200 max-h-[92vh] overflow-y-auto">
+          <div className="bg-white rounded-t-[32px] sm:rounded-3xl max-w-md w-full p-6 shadow-2xl border border-stone-200 space-y-5 animate-in slide-in-from-bottom-8 sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-200 max-h-[88vh] overflow-y-auto">
             <div className="w-12 h-1.5 bg-stone-200 rounded-full mx-auto -mt-2 mb-3 sm:hidden" />
 
             <div className="flex items-center justify-between border-b border-stone-100 pb-3">
@@ -527,7 +527,7 @@ export function Login() {
       {/* Forgot Password Modal */}
       {isResetModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <div className="bg-white rounded-t-[32px] sm:rounded-3xl max-w-md w-full p-6 shadow-2xl border border-stone-200 space-y-5 animate-in slide-in-from-bottom-8 sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-200 max-h-[92vh] overflow-y-auto">
+          <div className="bg-white rounded-t-[32px] sm:rounded-3xl max-w-md w-full p-6 shadow-2xl border border-stone-200 space-y-5 animate-in slide-in-from-bottom-8 sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-200 max-h-[88vh] overflow-y-auto">
             {/* Mobile Drag Indicator */}
             <div className="w-12 h-1.5 bg-stone-200 rounded-full mx-auto -mt-2 mb-3 sm:hidden" />
 

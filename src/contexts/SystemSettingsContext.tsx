@@ -10,6 +10,7 @@ import {
   StoryConfig
 } from '../types';
 import { BUSINESS_CATEGORIES, IRBID_REGIONS_CATEGORIZED, IrbidAreaGroup } from '../lib/categories';
+import { MEDICAL_SPECIALTIES } from '../lib/medicalCategories';
 
 
 const DEFAULT_STORIES: StoryConfig[] = [
@@ -92,8 +93,73 @@ const DEFAULT_VIP_PLANS: VipPlanConfig[] = [
 
 const DEFAULT_STATIC_PAGES: StaticPagesConfig = {
   aboutUsText: 'منصة "شو في بإربد؟" هي الدليل الرقمي والخدمي الأضخم لمدينة ومحافظة إربد. تهدف للربط السلس بين المحلات التجارية والخدمية وسكان وزوار إربد.',
-  termsText: 'باستخدامك للمنصة، فإنك توافق على الالتزام بالقوانين والشروط المعمول بها لضمان تجربة صحية وآمنة لجميع المستخدمين.',
-  privacyText: 'نحن نلتزم بحماية خصوصية بيانات جميع زوار وأصحاب المحلات وعدم مشاركتها مع أي أطراف ثالثة.',
+  termsText: `الشروط والأحكام لاتفاقية استخدام منصة "شو في بإربد؟"
+
+مقدمة:
+تُعد منصة "شو في بإربد؟" (المشار إليها فيما بعد بـ "المنصة") دليلاً رقمياً ووسيطاً إعلانياً ومعلوماتياً يهدف إلى تسهيل الوصول إلى المحلات التجارية، السكنات والعقارات، المنشآت الطبية، والوظائف في محافظة إربد. لا تمثل المنصة أياً من الجهات المدرجة فيها، وتقتصر مسؤوليتها على توفير مساحة إعلانية ومعلوماتية فقط.
+
+1. إخلاء المسؤولية العامة (المعاملات التجارية والمالية):
+المنصة وإدارتها ومُلّاكها ومطوروها يخلون مسؤوليتهم القانونية والمالية والأخلاقية بشكل كامل ومطلق عن أي تعاملات، اتفاقيات، حجوزات، أو مدفوعات تتم بين المستخدمين (الزوار/الزبائن) وبين أصحاب المحلات، أو العقارات، أو المنشآت الطبية، أو أصحاب العمل. أي نزاع مالي أو تجاري ينشأ بين الأطراف هو مسؤوليتهم المباشرة والشخصية، ولا يحق لأي طرف الرجوع على المنصة بأي مطالبة أو تعويض.
+
+2. قطاع السكنات والعقارات:
+تقتصر مسؤولية المنصة على عرض الإعلانات العقارية والسكنية كما يزودنا بها أصحابها. المنصة غير مسؤولة عن جودة العقار، مدى مطابقته للصور أو الوصف، أو أي خلافات تعاقدية، تأمينات، أو شروط تأجيرية وبيع بين المؤجر والمستأجر، أو البائع والمشتري. يتعين على المستخدمين معاينة العقارات والتأكد من صفتها القانونية وتوقيع العقود بشكل مستقل خارج المنصة.
+
+3. قطاع المنشآت الطبية والصحية (العيادات والمراكز والمستشفيات):
+- المنصة لا تقدم أي استشارات طبية أو رعاية صحية. 
+- تقع المسؤولية الطبية، المهنية، والجنائية كاملة على عاتق المنشآت الطبية المدرجة (الأطباء، العيادات، المختبرات، وغيرها) فيما يخص صحة التراخيص، جودة التشخيص والعلاج، والأخطاء الطبية.
+- لا تضمن المنصة دقة المواعيد الطبية أو صحة الأسعار (الكشفيات) المذكورة، وهي خاضعة للتغيير من قبل المنشأة الطبية المعنية. المنصة تُخلي مسؤوليتها التامة عن أي ضرر جسدي، أو نفسي، أو مادي يلحق بالمراجعين نتيجة تعاملهم مع هذه المنشآت.
+
+4. قطاع الوظائف:
+إعلانات الوظائف المعروضة تعود مسؤوليتها لأصحاب العمل. المنصة لا تضمن التوظيف، ولا تتحمل أي مسؤولية عن طبيعة بيئة العمل، الرواتب، عقود العمل، أو أي خلافات عمالية قد تنشأ بين الموظف وصاحب العمل. يجب على المتقدمين للوظائف التحقق من صحة وقانونية العروض بأنفسهم.
+
+5. دقة ومصداقية المحتوى (المنيو، العروض، الأسعار):
+يلتزم أصحاب الصفحات والمحلات بتوفير معلومات دقيقة ومحدثة. مع ذلك، لا تتحمل المنصة مسؤولية أي أخطاء، تغيير في الأسعار، انتهاء للعروض، أو اختلاف في الخدمات والمنتجات المقدمة على أرض الواقع عما هو معروض في المنصة. 
+
+6. المحتوى الذي ينشئه المستخدمون (التقييمات والتعليقات):
+التقييمات والمراجعات تعبر عن آراء أصحابها فقط ولا تمثل رأي المنصة. تحتفظ المنصة بالحق المطلق في حذف أو تعديل أي محتوى يتضمن إساءة، تشهير، أو مخالفة للقوانين والآداب العامة، دون الحاجة لتقديم أي مبرر، وللمنصة الحق في إيقاف أو حظر حسابات المخالفين.
+
+7. حدود المسؤولية والتعويض:
+بموافقتك على استخدام هذه المنصة، فإنك كزائر أو كمعلن (صاحب منشأة/عقار) تقر وتوافق على تعويض منصة "شو في بإربد؟" وإدارتها عن أي خسائر، أضرار، أو مطالبات قانونية (بما في ذلك أتعاب المحاماة) تنتج عن سوء استخدامك للمنصة أو مخالفتك لهذه الشروط والأحكام أو تعديك على حقوق أي طرف ثالث. المنصة مقدمة "كما هي" دون أي ضمانات صريحة أو ضمنية من أي نوع.
+
+8. التعديلات على الشروط والأحكام:
+تحتفظ إدارة المنصة بالحق في تعديل، إضافة، أو إزالة أي جزء من هذه الشروط والأحكام في أي وقت دون إشعار مسبق. يُعتبر استمرارك في استخدام المنصة بعد أي تعديلات بمثابة موافقة صريحة وقانونية منك على الشروط الجديدة.
+
+* يعتبر دخولك واستخدامك لمنصة "شو في بإربد؟" أو تسجيلك كصاحب منشأة أو عقار أو عيادة إقراراً تاماً ونهائياً وموافقة قانونية ملزمة منك على كافة الشروط والأحكام المذكورة أعلاه.`,
+  privacyText: `سياسة الخصوصية لمنصة "شو في بإربد؟"
+
+مقدمة:
+نحن في منصة "شو في بإربد؟" نولي أهمية بالغة لخصوصية زوارنا ومستخدمينا (سواء كانوا زواراً عاديين أو أصحاب محلات، عقارات، منشآت طبية، أو باحثين عن وظائف). تشرح هذه السياسة كيفية جمعنا للمعلومات، استخدامها، والحدود القانونية لمسؤوليتنا تجاه حماية تلك البيانات.
+
+1. المعلومات التي يتم جمعها:
+- بيانات التسجيل: عند إنشاء حساب (سواء كصاحب منشأة أو مستخدم)، قد نقوم بجمع معلومات أساسية مثل الاسم، البريد الإلكتروني، ورقم الهاتف.
+- بيانات المنشآت: المعلومات العامة التي يقدمها أصحاب الأعمال والمحلات والعقارات والمنشآت الطبية بهدف عرضها للجمهور (مثل أرقام الهواتف، مواقع العيادات، صور السكنات، المنيو، وقوائم الأسعار).
+- معلومات الاستخدام: نقوم بجمع بيانات تقنية غير تحديدية حول كيفية استخدام الزوار للمنصة (مثل الصفحات المزورة والروابط المنقورة) لتحسين جودة وتجربة الاستخدام.
+
+2. كيفية استخدام البيانات:
+- تُستخدم بيانات المنشآت الطبية، العقارية، والمحلات بغرض عرضها للعامة كدليل إعلاني ورقمي لتسهيل وصول الزوار إليها.
+- نستخدم بيانات التواصل الخاصة بالزوار وأصحاب المنشآت لأغراض الدعم الفني والإشعارات الإدارية.
+- لا نقوم ببيع أو تأجير بيانات المستخدمين الشخصية (مثل البريد الإلكتروني وكلمات المرور) لأي أطراف خارجية أو شركات تسويق.
+
+3. حدود المسؤولية عن مشاركة البيانات مع جهات خارجية:
+المنصة تعمل كدليل للربط بين المستخدم وصاحب المنشأة، وعليه:
+- التواصل المباشر: أي معلومات يشاركها المستخدم (الزائر أو الزبون) مباشرةً مع صاحب المحل، أو مالك العقار، أو المنشأة الطبية (سواء عبر مكالمات الهاتف، رسائل الواتساب، أو الروابط الخارجية المدرجة في المنصة) تقع خارج نطاق سيطرتنا ومسؤوليتنا تماماً.
+- القطاع الطبي والصحي: المنصة ليست مسؤولة قانونياً عن سرية أي بيانات صحية أو طبية شخصية يشاركها المريض مع الأطباء والعيادات المدرجة عبر وسائل التواصل المتوفرة في المنصة. العلاقة بين المريض والمنشأة الطبية هي علاقة مستقلة، ولا تضمن المنصة أي حماية (مثل HIPAA أو ما يعادلها) للمراسلات الطبية الخارجية.
+- قطاع الوظائف: أي سيرة ذاتية (CV) أو بيانات شخصية يرسلها الباحث عن عمل لصاحب العمل بناءً على إعلان وظيفي في المنصة تكون تحت مسؤولية المتقدم وصاحب العمل حصراً، ولا نتحمل أي مسؤولية عن كيفية معالجة أصحاب العمل لهذه البيانات.
+
+4. حماية البيانات وأمن المعلومات:
+نتخذ إجراءات أمنية وتقنية معقولة لحماية المنصة وقواعد البيانات من الاختراق أو الوصول غير المصرح به. ومع ذلك، نُخلي مسؤوليتنا الكاملة عن أي تسريب للبيانات ينتج عن أطراف ثالثة (مثل مزودي خدمات الاستضافة)، أو اختراقات سيبرانية خارجة عن سيطرتنا، أو نتيجة إهمال المستخدم في حماية معلومات حسابه وكلمة المرور الخاصة به.
+
+5. المحتوى العام والمراجعات (التقييمات):
+أي تقييمات أو تعليقات يكتبها المستخدم في المنصة تُعتبر معلومات عامة وغير سرية. بمجرد نشرها، يحق للجميع قراءتها، وتخلي المنصة مسؤوليتها عن أي تبعات لانتشار هذه المعلومات العامة.
+
+6. حقوق المستخدم:
+- يحق لأي مستخدم أو صاحب منشأة طلب تعديل بياناته المعروضة للعامة أو حذف حسابه بالكامل من المنصة في أي وقت عبر إعدادات الحساب أو بالتواصل مع الدعم الفني.
+- بمجرد حذف الحساب، سيتم إخفاء بيانات المنشأة أو المستخدم من العرض العام، لكن قد نحتفظ ببعض السجلات الداخلية لأغراض أمنية وقانونية لفترة محدودة.
+
+7. التعديلات على سياسة الخصوصية:
+نحتفظ بالحق الكامل في تعديل أو تحديث "سياسة الخصوصية" في أي وقت لتتوافق مع الخدمات الجديدة أو المتطلبات القانونية. استخدامك المستمر للمنصة بعد أي تعديل يُعد إقراراً وقبولاً ملزماً منك بالنسخة المحدثة.
+
+* استخدامك لمنصة "شو في بإربد؟" أو تصفحك لها أو تسجيلك كصاحب عمل أو مستخدم يُعد موافقة صريحة وقانونية على جميع بنود سياسة الخصوصية وإخلاء المسؤولية المذكورة أعلاه.`,
   emergencyNumbers: [
     { id: '1', title: 'طوارئ الدفاع المدني والأمن العام', number: '911' },
     { id: '2', title: 'طوارئ كهرباء إربد', number: '027201000' },
@@ -135,6 +201,11 @@ interface SystemSettingsContextType {
   addCampaign: (camp: SeasonalCampaign) => Promise<void>;
   updateCampaign: (id: string, updated: Partial<SeasonalCampaign>) => Promise<void>;
   deleteCampaign: (id: string) => Promise<void>;
+
+  medicalCategories: any[];
+  addMedicalCategory: (cat: any) => Promise<void>;
+  updateMedicalCategory: (id: string, updated: any) => Promise<void>;
+  deleteMedicalCategory: (id: string) => Promise<void>;
 }
 
 const SystemSettingsContext = createContext<SystemSettingsContextType | undefined>(undefined);
@@ -147,6 +218,20 @@ export function SystemSettingsProvider({ children }: { children: React.ReactNode
       iconName: 'Folder',
       description: `جميع ${catName} في إربد`,
       subcategories: subcats,
+      active: true
+    }));
+  });
+
+  const [medicalCategories, setMedicalCategories] = useState<any[]>(() => {
+    return MEDICAL_SPECIALTIES.map(spec => ({
+      id: spec.id,
+      name: spec.name,
+      description: spec.description,
+      iconName: spec.id === 'dentistry' ? 'Tooth' : (spec.id === 'hospitals' ? 'Building2' : spec.id === 'pharmacies' ? 'Pill' : spec.id === 'laboratories' ? 'Microscope' : spec.id === 'internal' ? 'Heart' : spec.id === 'surgery' ? 'Activity' : spec.id === 'pediatrics' ? 'Baby' : spec.id === 'obgyn' ? 'User' : spec.id === 'minors' ? 'Eye' : spec.id === 'rehab' ? 'Zap' : spec.id === 'psych-neuro' ? 'Brain' : 'Stethoscope'),
+      isFemale: spec.isFemale || false,
+      subspecialties: spec.subspecialties || [],
+      keywords: spec.keywords || [],
+      defaultProcedures: spec.defaultProcedures || [],
       active: true
     }));
   });
@@ -196,6 +281,12 @@ export function SystemSettingsProvider({ children }: { children: React.ReactNode
                 return {
                   ...c,
                   subcategories: c.subcategories.filter(sc => sc !== 'معلمون ومعلمات ودروس خصوصية')
+                };
+              }
+              if (c.name.includes('صحة وطب') || c.name === '🏥 صحة وطب') {
+                return {
+                  ...c,
+                  subcategories: BUSINESS_CATEGORIES["🏥 صحة وطب"]
                 };
               }
               return c;
@@ -254,9 +345,29 @@ export function SystemSettingsProvider({ children }: { children: React.ReactNode
               // ignore
             }
           }
-          if (data.staticPages) setStaticPages(data.staticPages);
+          if (data.staticPages) {
+            let loadedPages = data.staticPages;
+            let needsUpdate = false;
+            if (!loadedPages.termsText || loadedPages.termsText.includes('باستخدامك للمنصة، فإنك توافق على الالتزام بالقوانين والشروط المعمول بها')) {
+              loadedPages.termsText = DEFAULT_STATIC_PAGES.termsText;
+              needsUpdate = true;
+            }
+            if (!loadedPages.privacyText || loadedPages.privacyText.includes('نحن نلتزم بحماية خصوصية بيانات جميع زوار وأصحاب المحلات وعدم مشاركتها مع أي أطراف ثالثة.')) {
+              loadedPages.privacyText = DEFAULT_STATIC_PAGES.privacyText;
+              needsUpdate = true;
+            }
+            if (needsUpdate) {
+              try {
+                await updateDoc(doc(db, 'systemConfig', 'settings'), { staticPages: loadedPages });
+              } catch (fsErr) {
+                console.warn('Failed to auto-migrate static pages in Firestore:', fsErr);
+              }
+            }
+            setStaticPages(loadedPages);
+          }
           if (data.seasonalCampaigns) setSeasonalCampaigns(data.seasonalCampaigns);
           if (data.stories) setStories(data.stories);
+          if (data.medicalCategories) setMedicalCategories(data.medicalCategories);
         }
       } catch (err) {
         console.warn('Could not load system config from Firestore:', err);
@@ -372,6 +483,24 @@ export function SystemSettingsProvider({ children }: { children: React.ReactNode
     await saveAllToFirestore({ categories: updated });
   };
 
+  const addMedicalCategory = async (cat: any) => {
+    const updated = [...medicalCategories, cat];
+    setMedicalCategories(updated);
+    await saveAllToFirestore({ medicalCategories: updated });
+  };
+
+  const updateMedicalCategory = async (id: string, updatedFields: any) => {
+    const updated = medicalCategories.map(c => c.id === id ? { ...c, ...updatedFields } : c);
+    setMedicalCategories(updated);
+    await saveAllToFirestore({ medicalCategories: updated });
+  };
+
+  const deleteMedicalCategory = async (id: string) => {
+    const updated = medicalCategories.filter(c => c.id !== id);
+    setMedicalCategories(updated);
+    await saveAllToFirestore({ medicalCategories: updated });
+  };
+
   const updateNeighborhoods = async (groups: IrbidAreaGroup[]) => {
     setNeighborhoods(groups);
     await saveAllToFirestore({ neighborhoods: groups });
@@ -449,7 +578,11 @@ export function SystemSettingsProvider({ children }: { children: React.ReactNode
         updateStaticPages,
         addCampaign,
         updateCampaign,
-        deleteCampaign
+        deleteCampaign,
+        medicalCategories,
+        addMedicalCategory,
+        updateMedicalCategory,
+        deleteMedicalCategory
       }}
     >
       {children}

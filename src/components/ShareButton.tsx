@@ -7,7 +7,7 @@ interface ShareButtonProps {
   url?: string;
   className?: string;
   size?: 'sm' | 'md' | 'lg';
-  variant?: 'ghost' | 'solid' | 'outline' | 'pill';
+  variant?: 'ghost' | 'solid' | 'outline' | 'pill' | 'circle';
   showText?: boolean;
 }
 
@@ -54,9 +54,9 @@ export function ShareButton({
   };
 
   const sizeStyles = {
-    sm: 'px-2 py-1 text-xs gap-1',
-    md: 'px-2.5 py-1.5 text-xs gap-1.5',
-    lg: 'px-3.5 py-2 text-sm gap-2',
+    sm: variant === 'circle' ? 'w-8 h-8 p-0' : 'px-2 py-1 text-xs gap-1',
+    md: variant === 'circle' ? 'w-9 h-9 p-0' : 'px-2.5 py-1.5 text-xs gap-1.5',
+    lg: variant === 'circle' ? 'w-10 h-10 p-0' : 'px-3.5 py-2 text-sm gap-2',
   };
 
   const variantStyles = {
@@ -64,6 +64,7 @@ export function ShareButton({
     outline: 'border border-stone-200 text-stone-700 hover:bg-stone-50 hover:border-stone-300 rounded-xl',
     solid: 'bg-stone-900 hover:bg-black text-white rounded-xl shadow-2xs',
     pill: 'bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-full font-bold border border-stone-200/80',
+    circle: 'rounded-full',
   };
 
   return (

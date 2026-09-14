@@ -30,7 +30,8 @@ import {
   Clock,
   Bus,
   Settings,
-  Bot
+  Bot,
+  Stethoscope
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -51,6 +52,7 @@ import { FloatingCartWidget } from '../cart/FloatingCartWidget';
 import { CartConflictModal } from '../cart/CartConflictModal';
 import { AiSiteAssistant } from '../ai/AiSiteAssistant';
 import { ShoppingBag } from 'lucide-react';
+import { WhatsAppIcon } from '../common/WhatsAppIcon';
 
 export function Layout() {
   const { currentUser, userProfile, refreshUserData, isAdmin, isSupervisor, isStaff, isMerchant, userRole, logout } = useAuth();
@@ -79,19 +81,17 @@ export function Layout() {
     };
   }, [moreMenuOpen]);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
-  const [showMenuTooltip, setShowMenuTooltip] = useState(false);
-  const [showDesktopMoreTooltip, setShowDesktopMoreTooltip] = useState(false);
-  const [touchStartX, setTouchStartX] = useState<number | null>(null);
-
-  // Email verification lock states
   const [resendingEmail, setResendingEmail] = useState(false);
   const [resendEmailSuccess, setResendEmailSuccess] = useState(false);
-  const [checkingEmail, setCheckingEmail] = useState(false);
   const [verificationError, setVerificationError] = useState('');
+  const [checkingEmail, setCheckingEmail] = useState(false);
   const [showStatusSuccess, setShowStatusSuccess] = useState(false);
-
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const [showMenuTooltip, setShowMenuTooltip] = useState(false);
+  const [showDesktopMoreTooltip, setShowDesktopMoreTooltip] = useState(false);
   const isBootstrapAdmin = currentUser && ['princessofx2344@gmail.com', 'admin@shoofiirbid.com', 'irbid.admin@gmail.com'].includes(currentUser.email?.toLowerCase().trim() || '');
   const isEmailVerified = currentUser?.emailVerified || userProfile?.customEmailVerified || isBootstrapAdmin;
+  const isMedicalPage = location.pathname.startsWith('/medical');
 
   // Active polling to check verification status automatically every 3 seconds
   useEffect(() => {
@@ -318,6 +318,7 @@ export function Layout() {
   ];
 
   const moreItems = [
+    { path: '/medical', label: 'الرعاية الطبية والصحة', icon: Stethoscope },
     { path: '/transportation', label: 'دليل المواصلات والمجمعات', icon: Bus },
     { path: '/news', label: 'أخبار إربد', icon: Newspaper },
     { path: '/tourism', label: 'أماكن سياحية وترفيهية', icon: Compass },
@@ -556,13 +557,23 @@ export function Layout() {
               </button>
             )}
 
-            <Link 
-              to="/contact" 
-              className="flex h-8.5 items-center gap-1 text-xs font-bold bg-[#1a4d2e] hover:bg-[#133b22] text-white px-2.5 rounded-xl transition-all shadow-xs"
-            >
-              <PlusCircle className="h-3.5 w-3.5 text-[#ff9f1c]" />
-              <span>ضاعف زبائنك</span>
-            </Link>
+            {isMedicalPage ? (
+              <Link 
+                to="/medical/register"
+                className="flex h-8.5 items-center gap-1.5 text-xs font-black bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white px-3 rounded-xl transition-all shadow-xs cursor-pointer active:scale-95"
+              >
+                <Stethoscope className="h-4 w-4 text-emerald-200 animate-pulse" />
+                <span>أضف منشأتك</span>
+              </Link>
+            ) : (
+              <Link 
+                to="/contact" 
+                className="flex h-8.5 items-center gap-1 text-xs font-bold bg-[#1a4d2e] hover:bg-[#133b22] text-white px-2.5 rounded-xl transition-all shadow-xs"
+              >
+                <PlusCircle className="h-3.5 w-3.5 text-[#ff9f1c]" />
+                <span>ضاعف زبائنك</span>
+              </Link>
+            )}
 
             {isStaff && (
               <Link 
@@ -880,19 +891,35 @@ export function Layout() {
               {/* Section: Main App Grid */}
               <div className="space-y-3 pt-1">
                 {/* Always show "Add your business" button as it's a primary action of the site */}
-                <Link
-                  to="/contact"
-                  onClick={closeMenu}
-                  className="w-full p-3.5 rounded-2xl bg-emerald-50 hover:bg-emerald-100 text-[#1a4d2e] border border-emerald-200/80 font-black text-xs flex items-center justify-between transition-all"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <PlusCircle className="h-4.5 w-4.5 text-[#1a4d2e]" />
-                    <span>هل تملك محلاً في إربد؟</span>
-                  </div>
-                  <span className="text-[10px] bg-[#1a4d2e] text-white font-bold px-2.5 py-1 rounded-md">
-                    ضاعف زبائنك
-                  </span>
-                </Link>
+                {isMedicalPage ? (
+                  <Link
+                    to="/medical/register"
+                    onClick={closeMenu}
+                    className="w-full p-3.5 rounded-2xl bg-emerald-50 hover:bg-emerald-100 text-[#1a4d2e] border border-emerald-300 font-black text-xs flex items-center justify-between transition-all"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Stethoscope className="h-4.5 w-4.5 text-[#1a4d2e]" />
+                      <span>طبيب، صيدلي أو تملك منشأة طبية؟</span>
+                    </div>
+                    <span className="text-[10px] bg-[#1a4d2e] text-white font-bold px-2.5 py-1 rounded-md">
+                      أضف منشأتك
+                    </span>
+                  </Link>
+                ) : (
+                  <Link
+                    to="/contact"
+                    onClick={closeMenu}
+                    className="w-full p-3.5 rounded-2xl bg-emerald-50 hover:bg-emerald-100 text-[#1a4d2e] border border-emerald-200/80 font-black text-xs flex items-center justify-between transition-all"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <PlusCircle className="h-4.5 w-4.5 text-[#1a4d2e]" />
+                      <span>هل تملك محلاً في إربد؟</span>
+                    </div>
+                    <span className="text-[10px] bg-[#1a4d2e] text-white font-bold px-2.5 py-1 rounded-md">
+                      ضاعف زبائنك
+                    </span>
+                  </Link>
+                )}
 
                 <p className="text-xs font-black text-stone-400 px-1">تصفح أقسام المنصة</p>
                 <nav className="grid grid-cols-2 gap-3">
@@ -950,6 +977,15 @@ export function Layout() {
                   >
                     <Newspaper className="h-4.5 w-4.5 text-purple-600" />
                     <span>أخبار إربد</span>
+                  </Link>
+
+                  <Link
+                    to="/medical"
+                    onClick={closeMenu}
+                    className="p-3.5 rounded-2xl bg-white border border-stone-200/90 text-stone-800 hover:bg-stone-100 flex items-center gap-2.5 font-bold text-xs transition-all"
+                  >
+                    <Stethoscope className="h-4.5 w-4.5 text-red-500" />
+                    <span>الرعاية الطبية</span>
                   </Link>
 
                   <Link
@@ -1212,7 +1248,7 @@ export function Layout() {
                     aria-label="واتساب"
                     className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center hover:scale-110 hover:bg-emerald-100 transition-all shadow-3xs"
                   >
-                    <MessageSquare className="h-4 w-4" />
+                    <WhatsAppIcon className="h-4 w-4" />
                   </a>
                 )}
               </div>

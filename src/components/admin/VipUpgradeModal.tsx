@@ -192,12 +192,12 @@ export function VipUpgradeModal({
 
   return typeof document !== 'undefined' ? createPortal(
     <div 
-      className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto" 
+      className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto" 
       dir="rtl"
       onClick={onClose}
     >
       <div 
-        className="bg-white rounded-3xl max-w-xl w-full max-h-[92vh] overflow-y-auto p-5 sm:p-7 shadow-2xl border border-stone-200 my-auto relative animate-in fade-in zoom-in-95 text-right space-y-6"
+        className="bg-white rounded-3xl max-w-xl w-full max-h-[88vh] overflow-y-auto p-5 sm:p-7 shadow-2xl border border-stone-200 my-auto relative animate-in fade-in zoom-in-95 text-right space-y-6"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}

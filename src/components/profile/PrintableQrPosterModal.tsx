@@ -31,7 +31,7 @@ export function PrintableQrPosterModal({ business, isOpen, onClose }: PrintableQ
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 overflow-y-auto" dir="rtl">
+    <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 overflow-y-auto" dir="rtl">
       
       {/* Printable CSS style rule injected when printing */}
       <style>{`
@@ -57,7 +57,7 @@ export function PrintableQrPosterModal({ business, isOpen, onClose }: PrintableQ
         }
       `}</style>
 
-      <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[92vh] overflow-y-auto p-6 shadow-2xl border border-stone-200 space-y-6 relative my-auto animate-in fade-in zoom-in-95">
+      <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[88vh] overflow-y-auto p-6 shadow-2xl border border-stone-200 space-y-6 relative my-auto animate-in fade-in zoom-in-95">
         
         {/* Header */}
         <div className="flex items-center justify-between border-b border-stone-200 pb-4">

@@ -1,5 +1,5 @@
 import { useConfirm } from '../contexts/ConfirmContext';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, Link, useLocation, useNavigate } from 'react-router';
 import DOMPurify from 'dompurify';
@@ -12,9 +12,10 @@ import {
   User as UserIcon, Store, Share2, Copy, Check, 
   Clock, ShieldCheck, Tag, Info, Sparkles,
   ExternalLink, EyeOff, Settings, Edit3, X, CheckCircle,
-  Crown, BarChart3, UtensilsCrossed, Lock as LockIcon, Globe, Facebook, Instagram, Twitter, Youtube, Smartphone, Send,
-  Video, Play, Trash2, Plus, Camera, Image as ImageIcon, ArrowLeft, ChevronLeft, ChevronRight, ChevronDown, AtSign,
-  Briefcase, Building2, Flame, DollarSign, Award, Users
+  Crown, BarChart3, UtensilsCrossed, Lock as LockIcon, Percent, Globe, Facebook, Instagram, Twitter, Youtube, Smartphone, Send,
+  Video, Play, Trash2, Plus, Camera, Image as ImageIcon, ArrowLeft, ChevronLeft, ChevronRight, ChevronDown,
+  Briefcase, Building2, Flame, DollarSign, Award, Users, Calendar, Stethoscope, HeartPulse, Activity,
+  Pill, Shield
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { formatDistanceToNow } from 'date-fns';
@@ -40,8 +41,13 @@ import { DEMO_SEED_DATA } from '../lib/demoDataHelper';
 import { trackBusinessInteraction } from '../lib/analyticsTracker';
 import { SEO } from '../components/common/SEO';
 import { isBotSubmission, checkSubmissionRateLimit, recordSubmissionTime, sanitizeInput, executeReCaptcha } from '../lib/security';
-import { WhatsApp3DIcon, Phone3DIcon } from '../components/common/PremiumContactButtons';
+import { WhatsApp3DIcon, WhatsAppIcon, Phone3DIcon } from '../components/common/PremiumContactButtons';
 import { WorkingHoursEditor } from '../components/ui/WorkingHoursEditor';
+import { isMedicalBusiness, getMedicalProfile, isStaffTabEligible } from '../lib/medicalHelper';
+import { MedicalBusinessDetailView } from '../components/medical/MedicalBusinessDetailView';
+import { MedicalAppointmentModal } from '../components/medical/MedicalAppointmentModal';
+import { MedicalInsurancesTab } from '../components/medical/MedicalInsurancesTab';
+import { MedicalStaffTab } from '../components/medical/MedicalStaffTab';
 
 function getLiveWorkingStatus(hours?: WorkingHours) {
   if (!hours || (!hours.isOpen24Hours && !hours.openTime && !hours.closeTime)) {
@@ -177,6 +183,30 @@ export function BusinessDetail() {
   }, [business?.workingHours, business?.id]);
 
   // Custom Feature Modals & Form States
+  const isMedical = useMemo(() => isMedicalBusiness(business), [business]);
+  const isStaffEligible = useMemo(() => isMedical && isStaffTabEligible(business), [isMedical, business]);
+  const isPharmacy = useMemo(() => {
+    if (!business) return false;
+    const cat = business.category || '';
+    const sub = business.subCategory || '';
+    const name = business.name || '';
+    return business.facilityType === 'pharmacy' || 
+           cat.includes('صيدل') || 
+           sub.includes('صيدل') || 
+           name.includes('صيدلية') || 
+           name.includes('صيدليات');
+  }, [business]);
+  const pharmacyWhatsAppUrl = useMemo(() => {
+    const raw = business?.socialLinks?.whatsapp || business?.whatsapp || business?.phone || '';
+    if (!raw) return '';
+    let clean = raw.replace(/[^0-9]/g, '');
+    if (clean.startsWith('07')) {
+      clean = '962' + clean.substring(1);
+    }
+    return `https://wa.me/${clean}?text=${encodeURIComponent('مرحباً، أود الاستفسار عن توفر دواء أو إرسال وصفة طبية للصيدلية عبر تطبيق بلدك إربد.')}`;
+  }, [business?.socialLinks?.whatsapp, business?.whatsapp, business?.phone]);
+  const medicalProfile = useMemo(() => getMedicalProfile(business), [business]);
+  const [isMedicalBookingOpen, setIsMedicalBookingOpen] = useState(false);
   const [activeOffers, setActiveOffers] = useState<any[]>([]);
   const [activeJobs, setActiveJobs] = useState<JobOffer[]>([]);
   const [selectedDetailJob, setSelectedDetailJob] = useState<JobOffer | null>(null);
@@ -184,7 +214,7 @@ export function BusinessDetail() {
   const [newOfferForm, setNewOfferForm] = useState({
     title: '',
     discountType: 'percentage', // 'percentage' | 'fixed'
-    discountPercentage: '',
+    discountPercentage: '10%',
     oldPrice: '',
     newPrice: '',
     code: '',
@@ -200,8 +230,41 @@ export function BusinessDetail() {
     whatsapp: '',
     image: '',
     isHot: false,
-    isStudent: false
+    isStudent: false,
+    selectedScope: 'none' as 'none' | 'all' | 'categories' | 'custom',
+    selectedCategories: [] as string[],
+    selectedMenuItemIds: [] as string[]
   });
+
+  // Extract unique menu categories for category discount scope
+  const menuCategories = useMemo(() => {
+    if (!business?.menuItems || business.menuItems.length === 0) return [];
+    const catSet = new Set<string>();
+    if (business.menuCategories) {
+      business.menuCategories.forEach(c => catSet.add(c));
+    }
+    business.menuItems.forEach(i => {
+      catSet.add(i.category || 'عام');
+    });
+    return Array.from(catSet);
+  }, [business?.menuItems, business?.menuCategories]);
+
+  // Bulk discount flag (if menu, categories, or multiple items chosen)
+  const isBulkDiscount = newOfferForm.selectedScope === 'all' || 
+    newOfferForm.selectedScope === 'categories' || 
+    (newOfferForm.selectedScope === 'custom' && newOfferForm.selectedMenuItemIds.length > 1);
+
+  // Available item images for gallery selector
+  const availableMenuImages = useMemo(() => {
+    if (!business?.menuItems || business.menuItems.length === 0) return [];
+    const selectedSet = new Set(newOfferForm.selectedMenuItemIds);
+    const itemsWithImages = business.menuItems.filter(i => !!i.imageUrl);
+    if (selectedSet.size > 0) {
+      const selectedImages = itemsWithImages.filter(i => selectedSet.has(i.id));
+      if (selectedImages.length > 0) return selectedImages;
+    }
+    return itemsWithImages;
+  }, [business?.menuItems, newOfferForm.selectedMenuItemIds]);
 
   useEffect(() => {
     // Attempt parsing of numeric prices
@@ -286,7 +349,6 @@ export function BusinessDetail() {
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
   const [isVipWelcomePopupOpen, setIsVipWelcomePopupOpen] = useState(false);
   const [isVipPopupManagerOpen, setIsVipPopupManagerOpen] = useState(false);
-  const [copiedHandle, setCopiedHandle] = useState(false);
   const [hpValue, setHpValue] = useState('');
   const [familyBranches, setFamilyBranches] = useState<Business[]>([]);
   const [isBranchDropdownOpen, setIsBranchDropdownOpen] = useState(false);
@@ -616,8 +678,10 @@ export function BusinessDetail() {
   useEffect(() => {
     if (business && !vipInfo.isVip && ['menu', 'products', 'offers', 'reels', 'gallery', 'analytics'].includes(activeTab)) {
       setActiveTab('about');
+    } else if (business && isMedical && activeTab === 'offers') {
+      setActiveTab('about');
     }
-  }, [business?.id, vipInfo.isVip, activeTab]);
+  }, [business?.id, vipInfo.isVip, isMedical, activeTab]);
 
   // Automatic VIP Welcome Popup Trigger for visitors (Displays 1 out of every 5 visits: 1st, 6th, 11th, etc.)
   useEffect(() => {
@@ -1016,7 +1080,7 @@ export function BusinessDetail() {
     setSubmittingOffer(true);
     try {
       let computedExpiresIn = newOfferForm.expiresIn || 'لفترة محدودة';
-      let expiresAt = null;
+      let expiresAt: number | null = null;
 
       if (newOfferForm.durationMode === 'hours') {
         const hours = parseFloat(newOfferForm.durationHours) || 24;
@@ -1041,44 +1105,106 @@ export function BusinessDetail() {
         }
       }
 
-      const offerData = {
+      // Pick default cover image from gallery if not manually set
+      const defaultImg = (availableMenuImages && availableMenuImages.length > 0) 
+        ? availableMenuImages[0].imageUrl 
+        : 'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&q=80&w=800';
+
+      const offerData: Record<string, any> = {
         title: sanitizeInput(newOfferForm.title),
         businessName: business.name,
         businessId: business.id,
         category: business.category,
-        discountType: newOfferForm.discountType,
+        discountType: newOfferForm.discountType || 'percentage',
         discountPercentage: sanitizeInput(newOfferForm.discountPercentage) || '10%',
-        oldPrice: newOfferForm.oldPrice ? sanitizeInput(newOfferForm.oldPrice) : undefined,
-        newPrice: newOfferForm.newPrice ? sanitizeInput(newOfferForm.newPrice) : undefined,
-        code: newOfferForm.code ? sanitizeInput(newOfferForm.code) : undefined,
         expiresIn: computedExpiresIn,
         durationMode: newOfferForm.durationMode,
         durationHours: newOfferForm.durationHours,
         durationDays: newOfferForm.durationDays,
-        startDate: newOfferForm.startDate,
-        endDate: newOfferForm.endDate,
-        recurringDays: newOfferForm.recurringDays,
-        expiresAt: expiresAt,
-        description: sanitizeInput(newOfferForm.description),
+        startDate: newOfferForm.startDate || '',
+        endDate: newOfferForm.endDate || '',
+        recurringDays: newOfferForm.recurringDays || [],
+        description: sanitizeInput(newOfferForm.description || ''),
         location: business.district ? `${business.district} - ${business.address}` : business.address,
         phone: sanitizeInput(newOfferForm.phone || business.phone || ''),
         whatsapp: sanitizeInput(newOfferForm.whatsapp || business.phone || ''),
-        image: newOfferForm.image || 'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&q=80&w=800',
+        image: newOfferForm.image || defaultImg,
         isHot: Boolean(newOfferForm.isHot),
         isStudent: Boolean(newOfferForm.isStudent),
+        targetMenuItems: newOfferForm.selectedMenuItemIds || [],
+        selectedScope: newOfferForm.selectedScope || 'none',
+        selectedCategories: newOfferForm.selectedCategories || [],
+        applyToAllMenu: newOfferForm.selectedScope === 'all',
         createdAt: Date.now()
       };
-      const docRef = await addDoc(collection(db, 'offers'), offerData);
-      setActiveOffers(prev => [{ id: docRef.id, ...offerData }, ...prev]);
+
+      if (newOfferForm.oldPrice) offerData.oldPrice = sanitizeInput(newOfferForm.oldPrice);
+      if (newOfferForm.newPrice) offerData.newPrice = sanitizeInput(newOfferForm.newPrice);
+      if (newOfferForm.code) offerData.code = sanitizeInput(newOfferForm.code);
+      if (expiresAt) offerData.expiresAt = expiresAt;
+
+      // Apply discounts to selected menu items if applicable
+      if (business.menuItems && business.menuItems.length > 0 && newOfferForm.selectedMenuItemIds.length > 0) {
+        const selectedSet = new Set(newOfferForm.selectedMenuItemIds);
+        const cleanNumber = (val: string) => {
+          if (!val) return NaN;
+          const match = val.match(/[\d.]+/);
+          return match ? parseFloat(match[0]) : NaN;
+        };
+
+        const oldVal = cleanNumber(newOfferForm.oldPrice);
+        const newVal = cleanNumber(newOfferForm.newPrice);
+        const pctVal = cleanNumber(newOfferForm.discountPercentage);
+
+        const updatedMenuItems = business.menuItems.map(item => {
+          if (!selectedSet.has(item.id)) return item;
+
+          const basePriceNum = parseFloat(item.price) || 0;
+          const origPriceNum = parseFloat(item.originalPrice || '') || basePriceNum;
+          if (origPriceNum <= 0) return item;
+
+          let newCalculatedPrice = item.price;
+          let newOrigPrice = item.originalPrice || item.price;
+
+          if (!isBulkDiscount && !isNaN(oldVal) && !isNaN(newVal) && oldVal > newVal && newOfferForm.selectedMenuItemIds.length === 1) {
+            newCalculatedPrice = newVal.toString();
+            newOrigPrice = oldVal.toString();
+          } else if (!isNaN(pctVal) && pctVal > 0 && pctVal < 100) {
+            const discounted = origPriceNum * (1 - pctVal / 100);
+            newCalculatedPrice = discounted.toFixed(2).replace(/\.00$/, '');
+            newOrigPrice = origPriceNum.toString();
+          }
+
+          return {
+            ...item,
+            originalPrice: newOrigPrice,
+            price: newCalculatedPrice
+          };
+        });
+
+        try {
+          const bizRef = doc(db, 'businesses', business.id);
+          const sanitizedPayload = await compressAndSanitizeFirestorePayload({ menuItems: updatedMenuItems }, true);
+          await updateDoc(bizRef, sanitizedPayload);
+          setBusiness(prev => prev ? { ...prev, menuItems: updatedMenuItems } : null);
+        } catch (mErr) {
+          console.error("Error updating menu items with discounts:", mErr);
+        }
+      }
+
+      // Sanitize and save offer document to Firestore
+      const sanitizedOfferPayload = await compressAndSanitizeFirestorePayload(offerData, true);
+      const docRef = await addDoc(collection(db, 'offers'), sanitizedOfferPayload);
+      setActiveOffers(prev => [{ id: docRef.id, ...sanitizedOfferPayload }, ...prev]);
       
-      // 4. Record successful submission timestamp for rate limiting
+      // Record successful submission timestamp for rate limiting
       recordSubmissionTime('offer_submit');
 
       setIsOfferModalOpen(false);
       setNewOfferForm({
         title: '',
         discountType: 'percentage',
-        discountPercentage: '',
+        discountPercentage: '10%',
         oldPrice: '',
         newPrice: '',
         code: '',
@@ -1094,10 +1220,15 @@ export function BusinessDetail() {
         whatsapp: '',
         image: '',
         isHot: false,
-        isStudent: false
+        isStudent: false,
+        selectedScope: 'none',
+        selectedCategories: [],
+        selectedMenuItemIds: []
       });
+      alert('تم نشر العرض الترويجي في المنصة بنجاح! 🎉');
     } catch (err) {
       console.error("Error adding offer:", err);
+      alert('حدث خطأ أثناء نشر العرض. يرجى المحاولة مرة أخرى.');
     } finally {
       setSubmittingOffer(false);
     }
@@ -1256,14 +1387,16 @@ export function BusinessDetail() {
     );
   }
 
-  if (!business && !error) {
+  if (error || !business) {
     return (
-      <div className="text-center py-20 bg-white rounded-3xl sm:rounded-[32px] border border-[#e5e1da] p-6">
+      <div className="text-center py-20 bg-white rounded-3xl sm:rounded-[32px] border border-[#e5e1da] p-6 max-w-2xl mx-auto my-8">
         <div className="bg-stone-50 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6">
           <Store className="h-10 w-10 text-stone-400" />
         </div>
-        <h2 className="text-2xl font-bold text-stone-900 mb-2">المحل غير موجود</h2>
-        <p className="text-stone-500 mb-8 max-w-md mx-auto">قد يكون تم حذفه، أو أن الرابط غير صحيح، أو بانتظار موافقة الإدارة.</p>
+        <h2 className="text-2xl font-bold text-stone-900 mb-2">{error || "المحل غير موجود"}</h2>
+        <p className="text-stone-500 mb-8 max-w-md mx-auto">
+          {error ? error : "قد يكون تم حذفه، أو أن الرابط غير صحيح، أو بانتظار موافقة الإدارة."}
+        </p>
         <Link to="/" className="inline-flex items-center justify-center px-6 py-3 bg-[#1a4d2e] text-white rounded-xl font-bold hover:bg-[#133b22] transition-colors gap-2">
           <ArrowRight className="h-5 w-5" />
           العودة للرئيسية
@@ -1308,7 +1441,7 @@ export function BusinessDetail() {
             else if (platform === "website") href = `https://${link}`;
           }
 
-          let Icon = Globe;
+          let Icon: any = Globe;
           let colorClass = "text-stone-700 bg-stone-100 hover:bg-stone-200 border-stone-200";
           let label = "الموقع";
 
@@ -1341,7 +1474,7 @@ export function BusinessDetail() {
             colorClass = "text-red-600 bg-red-50 hover:bg-red-100 border-red-200";
             label = "يوتيوب";
           } else if (platform === "whatsapp") {
-            Icon = MessageSquare;
+            Icon = WhatsAppIcon;
             colorClass = "text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border-emerald-200";
             label = "واتساب";
           }
@@ -1500,8 +1633,8 @@ export function BusinessDetail() {
                     onClick={() => setIsMenuManagerOpen(true)}
                     className="inline-flex items-center gap-1.5 bg-[#1a4d2e] text-white hover:bg-[#133b22] transition-colors text-xs font-black px-3.5 py-2 rounded-xl shadow-xs cursor-pointer"
                   >
-                    <UtensilsCrossed className="h-4 w-4" />
-                    <span>المنيو والكتالوج</span>
+                    {isMedical ? <Activity className="h-4 w-4" /> : <UtensilsCrossed className="h-4 w-4" />}
+                    <span>{isMedical ? 'الخدمات والإجراءات' : 'المنيو والكتالوج'}</span>
                   </button>
                 </>
               ) : (
@@ -1693,23 +1826,6 @@ export function BusinessDetail() {
                       </h1>
                       {vipInfo.isVip && (
                         <VerifiedBadge size="lg" businessName={business.name} />
-                      )}
-                      {business.username && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const url = `${window.location.origin}/@${business.username}`;
-                            navigator.clipboard.writeText(url);
-                            setCopiedHandle(true);
-                            setTimeout(() => setCopiedHandle(false), 2000);
-                          }}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-lg text-xs font-mono font-bold transition-all shadow-2xs cursor-pointer border border-stone-200/80"
-                          title="اضغط لنسخ رابط صفحة السوشيال ميديا للمحل"
-                        >
-                          <AtSign className="h-3.5 w-3.5 text-[#1a4d2e]" />
-                          <span>{business.username}</span>
-                          {copiedHandle ? <Check className="h-3 w-3 text-emerald-600 ml-0.5" /> : <Copy className="h-3 w-3 text-stone-400 ml-0.5" />}
-                        </button>
                       )}
                     </div>
 
@@ -1916,17 +2032,67 @@ export function BusinessDetail() {
               <div className="absolute top-0 bottom-0 left-0 w-8 bg-gradient-to-r from-stone-50/90 to-transparent z-10 pointer-events-none md:hidden" />
               
               <div className="flex overflow-x-auto gap-3 md:gap-8 scrollbar-hide px-4 sm:px-8 py-3 md:py-0 snap-x snap-mandatory" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-              <button 
-                onClick={() => setActiveTab('about')}
-                className={`whitespace-nowrap transition-all flex items-center gap-1.5 snap-start font-bold text-sm md:text-base px-4 py-2 md:px-0 md:py-4 rounded-full md:rounded-none border md:border-0 md:border-b-2 ${
-                  activeTab === 'about' 
-                    ? 'bg-[#1a4d2e]/10 border-[#1a4d2e]/20 text-[#1a4d2e] md:bg-transparent md:border-b-[#1a4d2e]' 
-                    : 'bg-white border-stone-200/60 text-stone-600 shadow-xs md:bg-transparent md:border-b-transparent md:text-stone-500 md:shadow-none hover:text-[#2d2a26]'
-                }`}
-              >
-                <Info className="h-4 w-4" />
-                عن المحل
-              </button>
+              {isMedical ? (
+                <>
+                  <button 
+                    onClick={() => setActiveTab('about')}
+                    className={`whitespace-nowrap transition-all flex items-center gap-1.5 snap-start font-bold text-sm md:text-base px-4 py-2 md:px-0 md:py-4 rounded-full md:rounded-none border md:border-0 md:border-b-2 ${
+                      activeTab === 'about' 
+                        ? 'bg-emerald-50 border-emerald-600 text-[#1a4d2e] md:bg-transparent md:border-b-[#1a4d2e]' 
+                        : 'bg-white border-stone-200/60 text-stone-600 shadow-xs md:bg-transparent md:border-b-transparent md:text-stone-500 md:shadow-none hover:text-[#2d2a26]'
+                    }`}
+                  >
+                    {isPharmacy ? <Pill className="h-4 w-4 text-emerald-700" /> : <Stethoscope className="h-4 w-4 text-emerald-700" />}
+                    <span>{isPharmacy ? 'الملف الصيدلاني' : 'الملف الطبي'}</span>
+                  </button>
+                  <button 
+                    onClick={() => setActiveTab('insurances')}
+                    className={`whitespace-nowrap transition-all flex items-center gap-1.5 snap-start font-bold text-sm md:text-base px-4 py-2 md:px-0 md:py-4 rounded-full md:rounded-none border md:border-0 md:border-b-2 ${
+                      activeTab === 'insurances' 
+                        ? 'bg-blue-50 border-blue-600 text-blue-800 md:bg-transparent md:border-b-blue-600' 
+                        : 'bg-white border-stone-200/60 text-stone-600 shadow-xs md:bg-transparent md:border-b-transparent md:text-stone-500 md:shadow-none hover:text-[#2d2a26]'
+                    }`}
+                  >
+                    <Shield className="h-4 w-4 text-blue-600" />
+                    <span>شركات التأمين والنقابات</span>
+                    {medicalProfile.insurances && medicalProfile.insurances.length > 0 && (
+                      <span className="bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded-full font-bold">
+                        {medicalProfile.insurances.length}
+                      </span>
+                    )}
+                  </button>
+                  {isStaffEligible && medicalProfile.showMedicalStaff !== false && (
+                    <button 
+                      onClick={() => setActiveTab('staff')}
+                      className={`whitespace-nowrap transition-all flex items-center gap-1.5 snap-start font-bold text-sm md:text-base px-4 py-2 md:px-0 md:py-4 rounded-full md:rounded-none border md:border-0 md:border-b-2 ${
+                        activeTab === 'staff' 
+                          ? 'bg-emerald-50 border-emerald-600 text-[#1a4d2e] md:bg-transparent md:border-b-[#1a4d2e]' 
+                          : 'bg-white border-stone-200/60 text-stone-600 shadow-xs md:bg-transparent md:border-b-transparent md:text-stone-500 md:shadow-none hover:text-[#2d2a26]'
+                      }`}
+                    >
+                      <Users className="h-4 w-4 text-emerald-700" />
+                      <span>{isPharmacy ? 'الكادر الصيدلاني' : 'الكادر الطبي'}</span>
+                      {medicalProfile.doctorsList && medicalProfile.doctorsList.length > 0 && (
+                        <span className="bg-emerald-100 text-emerald-800 text-xs px-2 py-0.5 rounded-full font-bold">
+                          {medicalProfile.doctorsList.length}
+                        </span>
+                      )}
+                    </button>
+                  )}
+                </>
+              ) : (
+                <button 
+                  onClick={() => setActiveTab('about')}
+                  className={`whitespace-nowrap transition-all flex items-center gap-1.5 snap-start font-bold text-sm md:text-base px-4 py-2 md:px-0 md:py-4 rounded-full md:rounded-none border md:border-0 md:border-b-2 ${
+                    activeTab === 'about' 
+                      ? 'bg-[#1a4d2e]/10 border-[#1a4d2e]/20 text-[#1a4d2e] md:bg-transparent md:border-b-[#1a4d2e]' 
+                      : 'bg-white border-stone-200/60 text-stone-600 shadow-xs md:bg-transparent md:border-b-transparent md:text-stone-500 md:shadow-none hover:text-[#2d2a26]'
+                  }`}
+                >
+                  <Info className="h-4 w-4" />
+                  عن المحل
+                </button>
+              )}
 
               {vipInfo.isVip && (
                 <button 
@@ -1937,8 +2103,12 @@ export function BusinessDetail() {
                       : 'bg-white border-stone-200/60 text-stone-600 shadow-xs md:bg-transparent md:border-b-transparent md:text-stone-500 md:shadow-none hover:text-[#2d2a26]'
                   }`}
                 >
-                  <UtensilsCrossed className="h-4 w-4 text-[#1a4d2e]" />
-                  <span>المنيو والكتالوج الرقمي</span>
+                  {isMedical ? (
+                    <Activity className="h-4 w-4 text-[#1a4d2e]" />
+                  ) : (
+                    <UtensilsCrossed className="h-4 w-4 text-[#1a4d2e]" />
+                  )}
+                  <span>{isMedical ? 'الخدمات والأسعار' : 'المنيو والكتالوج الرقمي'}</span>
                   {business.menuItems && business.menuItems.length > 0 && (
                     <span className="bg-[#1a4d2e]/10 text-[#1a4d2e] text-xs px-2 py-0.5 rounded-full font-bold">
                       {business.menuItems.length}
@@ -1961,7 +2131,7 @@ export function BusinessDetail() {
                 </button>
               )}
 
-              {vipInfo.isVip && (
+              {vipInfo.isVip && !isMedical && (
                 <button 
                   onClick={() => setActiveTab('offers')}
                   className={`whitespace-nowrap transition-all flex items-center gap-1.5 snap-start font-bold text-sm md:text-base px-4 py-2 md:px-0 md:py-4 rounded-full md:rounded-none border md:border-0 md:border-b-2 ${
@@ -2002,7 +2172,7 @@ export function BusinessDetail() {
                   }`}
                 >
                   <Video className="h-4 w-4 text-purple-500" />
-                  <span>ريلزات المحل</span>
+                  <span>{isMedical ? 'ريلزت' : 'ريلزات المحل'}</span>
                   {business.reels && business.reels.length > 0 && (
                     <span className="bg-purple-100 text-purple-700 text-xs px-2 py-0.5 rounded-full font-bold">
                       {business.reels.length}
@@ -2021,7 +2191,7 @@ export function BusinessDetail() {
                   }`}
                 >
                   <Camera className="h-4 w-4 text-emerald-500" />
-                  <span>صور وجو المحل</span>
+                  <span>{isMedical ? 'معرض الصور' : 'صور وجو المحل'}</span>
                   {business.gallery && business.gallery.length > 0 && (
                     <span className="bg-emerald-100 text-emerald-700 text-xs px-2 py-0.5 rounded-full font-bold">
                       {business.gallery.length}
@@ -2066,77 +2236,115 @@ export function BusinessDetail() {
               {/* Tab Content Box */}
               <div className="bg-white rounded-2xl sm:rounded-3xl border border-[#e5e1da] p-6 sm:p-8 shadow-xs">
                 {activeTab === 'about' && (
-                  <div className="space-y-6">
-                    <div>
-                      <h2 className="text-lg sm:text-xl font-bold text-[#2d2a26] mb-3 flex items-center gap-2">
-                        <Info className="h-5 w-5 text-[#1a4d2e]" />
-                        نبذة عن المحل والخدمات
-                      </h2>
-                      {business.description && /<[a-z][\s\S]*>/i.test(business.description) ? (
-                        <div 
-                          className="text-stone-600 text-base sm:text-lg leading-relaxed break-words space-y-3 font-medium select-text [&_strong]:font-black [&_strong]:text-stone-900 [&_em]:italic [&_ul]:list-disc [&_ul]:list-inside [&_ul]:mr-4 [&_ul]:space-y-1.5 [&_ul]:my-2 [&_ol]:list-decimal [&_ol]:list-inside [&_ol]:mr-4 [&_ol]:space-y-1.5 [&_ol]:my-2 [&_li]:text-stone-700 [&_li]:font-medium [&_span]:inline-block [&_u]:underline"
-                          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(business.description) }}
-                        />
-                      ) : (
-                        <div className="text-stone-600 text-base sm:text-lg leading-relaxed whitespace-pre-line break-words select-text font-medium">
-                          {business.description || "لا يوجد وصف متوفر حالياً لهذا المحل."}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* About Media (Video or Image for all accounts) */}
-                    {(() => {
-                      const rawUrl = (business.aboutMedia?.url || business.aboutVideoUrl || business.aboutImageUrl || '').trim();
-                      const rawType = business.aboutMedia?.type || (business.aboutVideoUrl ? 'video' : business.aboutImageUrl ? 'image' : null);
-                      const mediaCaption = business.aboutMedia?.caption;
-
-                      if (!rawUrl) return null;
-
-                      const isKnownVideo = rawUrl.includes('youtube') || 
-                        rawUrl.includes('youtu.be') || 
-                        rawUrl.includes('vimeo') || 
-                        rawUrl.includes('reel') || 
-                        rawUrl.includes('tiktok') || 
-                        rawUrl.includes('facebook') ||
-                        rawUrl.includes('drive.google.com') ||
-                        /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(rawUrl);
-
-                      const mediaType: 'video' | 'image' = rawType || (isKnownVideo ? 'video' : 'image');
-
-                      return (
-                        <div className="pt-5 border-t border-[#e5e1da]/60 space-y-3">
-                          <div className="flex items-center justify-between">
-                            <h3 className="text-sm sm:text-base font-black text-stone-800 flex items-center gap-2">
-                              {mediaType === 'video' ? (
-                                <>
-                                  <Video className="h-4 w-4 text-[#1a4d2e]" />
-                                  <span>{mediaCaption || 'مقطع فيديو تعريفي عن المحل'}</span>
-                                </>
-                              ) : (
-                                <>
-                                  <ImageIcon className="h-4 w-4 text-[#1a4d2e]" />
-                                  <span>{mediaCaption || 'صورة تعريفية عن المحل'}</span>
-                                </>
-                              )}
-                            </h3>
-                            {mediaType === 'video' && (
-                              <span className="text-[11px] bg-[#1a4d2e]/10 text-[#1a4d2e] font-bold px-2.5 py-0.5 rounded-md">
-                                مشغل فيديو تفاعلي
-                              </span>
-                            )}
-                          </div>
-
-                          <MediaRenderer
-                            type={mediaType}
-                            url={rawUrl}
-                            caption={undefined}
-                            aspectRatio="video"
-                            className="w-full rounded-2xl overflow-hidden shadow-xs border border-stone-200/80"
+                  isMedical ? (
+                    <MedicalBusinessDetailView 
+                      business={business} 
+                      medicalProfile={medicalProfile} 
+                      onOpenBookingModal={() => setIsMedicalBookingOpen(true)} 
+                      onNavigateToInsurances={() => {
+                        setActiveTab('insurances');
+                        window.scrollTo({ top: 300, behavior: 'smooth' });
+                      }}
+                      onNavigateToServices={() => {
+                        setActiveTab('menu');
+                        window.scrollTo({ top: 300, behavior: 'smooth' });
+                      }}
+                      onNavigateToStaff={() => {
+                        setActiveTab('staff');
+                        window.scrollTo({ top: 300, behavior: 'smooth' });
+                      }}
+                    />
+                  ) : (
+                    <div className="space-y-6">
+                      <div>
+                        <h2 className="text-lg sm:text-xl font-bold text-[#2d2a26] mb-3 flex items-center gap-2">
+                          <Info className="h-5 w-5 text-[#1a4d2e]" />
+                          نبذة عن المحل والخدمات
+                        </h2>
+                        {business.description && /<[a-z][\s\S]*>/i.test(business.description) ? (
+                          <div 
+                            className="text-stone-600 text-base sm:text-lg leading-relaxed break-words space-y-3 font-medium select-text [&_strong]:font-black [&_strong]:text-stone-900 [&_em]:italic [&_ul]:list-disc [&_ul]:list-inside [&_ul]:mr-4 [&_ul]:space-y-1.5 [&_ul]:my-2 [&_ol]:list-decimal [&_ol]:list-inside [&_ol]:mr-4 [&_ol]:space-y-1.5 [&_ol]:my-2 [&_li]:text-stone-700 [&_li]:font-medium [&_span]:inline-block [&_u]:underline"
+                            dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(business.description) }}
                           />
-                        </div>
-                      );
-                    })()}
-                  </div>
+                        ) : (
+                          <div className="text-stone-600 text-base sm:text-lg leading-relaxed whitespace-pre-line break-words select-text font-medium">
+                            {business.description || "لا يوجد وصف متوفر حالياً لهذا المحل."}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* About Media (Video or Image for all accounts) */}
+                      {(() => {
+                        const rawUrl = (business.aboutMedia?.url || business.aboutVideoUrl || business.aboutImageUrl || '').trim();
+                        const rawType = business.aboutMedia?.type || (business.aboutVideoUrl ? 'video' : business.aboutImageUrl ? 'image' : null);
+                        const mediaCaption = business.aboutMedia?.caption;
+
+                        if (!rawUrl) return null;
+
+                        const isKnownVideo = rawUrl.includes('youtube') || 
+                          rawUrl.includes('youtu.be') || 
+                          rawUrl.includes('vimeo') || 
+                          rawUrl.includes('reel') || 
+                          rawUrl.includes('tiktok') || 
+                          rawUrl.includes('facebook') ||
+                          rawUrl.includes('drive.google.com') ||
+                          /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(rawUrl);
+
+                        const mediaType: 'video' | 'image' = rawType || (isKnownVideo ? 'video' : 'image');
+
+                        return (
+                          <div className="pt-5 border-t border-[#e5e1da]/60 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <h3 className="text-sm sm:text-base font-black text-stone-800 flex items-center gap-2">
+                                {mediaType === 'video' ? (
+                                  <>
+                                    <Video className="h-4 w-4 text-[#1a4d2e]" />
+                                    <span>{mediaCaption || 'مقطع فيديو تعريفي عن المحل'}</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <ImageIcon className="h-4 w-4 text-[#1a4d2e]" />
+                                    <span>{mediaCaption || 'صورة تعريفية عن المحل'}</span>
+                                  </>
+                                )}
+                              </h3>
+                              {mediaType === 'video' && (
+                                <span className="text-[11px] bg-[#1a4d2e]/10 text-[#1a4d2e] font-bold px-2.5 py-0.5 rounded-md">
+                                  مشغل فيديو تفاعلي
+                                </span>
+                              )}
+                            </div>
+
+                            <MediaRenderer
+                              type={mediaType}
+                              url={rawUrl}
+                              caption={undefined}
+                              aspectRatio="video"
+                              className="w-full rounded-2xl overflow-hidden shadow-xs border border-stone-200/80"
+                            />
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )
+                )}
+
+                {activeTab === 'insurances' && isMedical && (
+                  <MedicalInsurancesTab
+                    business={business}
+                    medicalProfile={medicalProfile}
+                    onBackToAbout={() => setActiveTab('about')}
+                    onOpenBooking={!isPharmacy ? () => setIsMedicalBookingOpen(true) : undefined}
+                  />
+                )}
+
+                {activeTab === 'staff' && isMedical && (
+                  <MedicalStaffTab
+                    business={business}
+                    medicalProfile={medicalProfile}
+                    onBackToAbout={() => setActiveTab('about')}
+                    onOpenBooking={!isPharmacy ? () => setIsMedicalBookingOpen(true) : undefined}
+                  />
                 )}
 
                 {(activeTab === 'menu' || activeTab === 'products') && (
@@ -2151,9 +2359,13 @@ export function BusinessDetail() {
                       <div className="w-14 h-14 bg-amber-100 text-amber-700 rounded-2xl flex items-center justify-center mx-auto mb-3">
                         <Crown className="h-7 w-7 fill-amber-500 text-amber-600" />
                       </div>
-                      <h3 className="text-lg font-black text-stone-800 mb-1">المنيو والكتالوج الرقمي</h3>
+                      <h3 className="text-lg font-black text-stone-800 mb-1">
+                        {isMedical ? 'الخدمات والأسعار' : 'المنيو والكتالوج الرقمي'}
+                      </h3>
                       <p className="text-stone-600 text-sm max-w-md mx-auto mb-4">
-                        عرض المنيو والكتالوج الرقمي التفاعلي متاح حصرياً للأنشطة التجارية المشتركة في الباقة الذهبية VIP.
+                        {isMedical 
+                          ? 'عرض دليل الخدمات والأسعار متاح حصرياً للمنشآت الطبية المشتركة في الباقة الذهبية VIP.'
+                          : 'عرض المنيو والكتالوج الرقمي التفاعلي متاح حصرياً للأنشطة التجارية المشتركة في الباقة الذهبية VIP.'}
                       </p>
                       {isOwner && (
                         <button
@@ -2162,7 +2374,7 @@ export function BusinessDetail() {
                           className="inline-flex items-center gap-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs font-black px-5 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
                         >
                           <Crown className="h-4 w-4 fill-white" />
-                          <span>ترقية محلك إلى VIP الآن</span>
+                          <span>{isMedical ? 'ترقية المنشأة إلى VIP الآن' : 'ترقية محلك إلى VIP الآن'}</span>
                         </button>
                       )}
                     </div>
@@ -2181,7 +2393,7 @@ export function BusinessDetail() {
                   </div>
                 )}
 
-                {activeTab === 'offers' && (
+                {activeTab === 'offers' && !isMedical && (
                   <div className="space-y-6">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-stone-100 pb-4">
                       <div>
@@ -2224,66 +2436,103 @@ export function BusinessDetail() {
                         {activeOffers.map((offer) => (
                           <div
                             key={offer.id}
-                            className="bg-[#fdfcfb] rounded-2xl border border-stone-200/80 overflow-hidden shadow-xs hover:shadow-md transition-all duration-300 flex flex-col justify-between"
+                            className="bg-white rounded-2xl border border-stone-200/90 overflow-hidden shadow-xs hover:shadow-md transition-all duration-300 flex flex-col justify-between group"
                           >
-                            <div className="p-5 space-y-3">
-                              <div className="flex items-center justify-between flex-wrap gap-2">
-                                <span className="bg-amber-400 text-stone-900 font-black text-xs px-2.5 py-1 rounded-lg border border-amber-300 shadow-2xs">
+                            {/* Offer Image Header */}
+                            <div className="relative h-48 sm:h-52 w-full overflow-hidden bg-stone-100 shrink-0">
+                              <img
+                                src={offer.image || business?.coverImage || business?.image || 'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&q=80&w=800'}
+                                alt={offer.title}
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                              />
+                              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+                              
+                              {/* Discount & Special Status Badges */}
+                              <div className="absolute top-3 right-3 z-10 flex flex-wrap items-center gap-1.5">
+                                <span className="bg-amber-400 text-stone-900 font-black text-xs px-3 py-1 rounded-xl border border-amber-300 shadow-md">
                                   خصم {offer.discountPercentage}
                                 </span>
-                                {offer.expiresIn && (
-                                  <span className="text-[10px] font-bold text-orange-600 bg-orange-50 border border-orange-200/50 px-2 py-0.5 rounded-md flex items-center gap-1">
-                                    <Clock className="h-3 w-3" />
-                                    <span>{offer.expiresIn}</span>
+                                {offer.isHot && (
+                                  <span className="bg-red-600 text-white font-black text-xs px-2.5 py-1 rounded-xl shadow-md">
+                                    عاجل 🔥
+                                  </span>
+                                )}
+                                {offer.isStudent && (
+                                  <span className="bg-sky-600 text-white font-black text-xs px-2.5 py-1 rounded-xl shadow-md">
+                                    طلاب 🎓
                                   </span>
                                 )}
                               </div>
 
-                              <h4 className="text-base font-bold text-stone-900 leading-snug">
-                                {offer.title}
-                              </h4>
-                              
-                              <p className="text-xs text-stone-600 line-clamp-2 leading-relaxed">
-                                {offer.description}
-                              </p>
-
-                              {(offer.newPrice || offer.oldPrice) && (
-                                <div className="flex items-baseline gap-2 bg-stone-50 p-2 rounded-lg border border-stone-100 w-fit">
-                                  {offer.newPrice && (
-                                    <span className="text-base font-black text-emerald-700">{offer.newPrice}</span>
-                                  )}
-                                  {offer.oldPrice && (
-                                    <span className="text-xs text-stone-400 line-through">{offer.oldPrice}</span>
-                                  )}
-                                </div>
-                              )}
-
-                              {offer.code && (
-                                <div className="bg-red-50/50 border border-red-100 p-2 rounded-xl flex items-center justify-between">
-                                  <span className="text-[11px] font-bold text-stone-600">الكود: <code className="bg-white px-1.5 py-0.5 rounded text-red-600 font-mono font-bold border border-red-200">{offer.code}</code></span>
-                                  <button
-                                    onClick={() => {
-                                      navigator.clipboard.writeText(offer.code);
-                                      alert("تم نسخ كود الخصم: " + offer.code);
-                                    }}
-                                    className="bg-white hover:bg-stone-100 text-stone-700 text-[10px] font-bold px-2 py-1 rounded-lg border border-stone-200 transition-colors"
-                                  >
-                                    نسخ الكود
-                                  </button>
+                              {/* Expiration Tag */}
+                              {offer.expiresIn && (
+                                <div className="absolute bottom-3 right-3 z-10">
+                                  <span className="text-[10px] font-bold text-white bg-black/60 backdrop-blur-xs border border-white/20 px-2.5 py-1 rounded-lg flex items-center gap-1 shadow-xs">
+                                    <Clock className="h-3 w-3 text-orange-300" />
+                                    <span>{offer.expiresIn}</span>
+                                  </span>
                                 </div>
                               )}
                             </div>
 
-                            <div className="p-4 bg-stone-50 border-t border-stone-100 flex items-center gap-2">
-                              <a
-                                href={getWhatsAppUrl(offer.whatsapp || offer.phone || business.phone || '', `مرحباً، أود الاستفسار عن عرضكم: ${offer.title}`)}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="flex-1 inline-flex items-center justify-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2 px-3 rounded-lg text-xs font-bold transition-colors"
-                              >
-                                <MessageSquare className="h-3.5 w-3.5" />
-                                <span>استفسار واتساب</span>
-                              </a>
+                            <div className="p-4 sm:p-5 space-y-3 flex-1 flex flex-col justify-between">
+                              <div className="space-y-2">
+                                <h4 className="text-base font-black text-stone-900 leading-snug group-hover:text-amber-700 transition-colors">
+                                  {offer.title}
+                                </h4>
+                                
+                                {offer.description && (
+                                  <p className="text-xs text-stone-600 line-clamp-2 leading-relaxed">
+                                    {offer.description}
+                                  </p>
+                                )}
+
+                                {(offer.newPrice || offer.oldPrice) && (
+                                  <div className="flex items-baseline gap-2 bg-emerald-50/80 px-3 py-1.5 rounded-xl border border-emerald-100 w-fit">
+                                    {offer.newPrice && (
+                                      <span className="text-base font-black text-emerald-800">{offer.newPrice}</span>
+                                    )}
+                                    {offer.oldPrice && (
+                                      <span className="text-xs text-stone-400 line-through">{offer.oldPrice}</span>
+                                    )}
+                                  </div>
+                                )}
+
+                                {offer.code && (
+                                  <div className="bg-amber-50/60 border border-amber-200/80 p-2 rounded-xl flex items-center justify-between">
+                                    <span className="text-[11px] font-bold text-stone-700">الكود: <code className="bg-white px-2 py-0.5 rounded text-amber-900 font-mono font-black border border-amber-300">{offer.code}</code></span>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(offer.code);
+                                        alert("تم نسخ كود الخصم: " + offer.code);
+                                      }}
+                                      className="bg-white hover:bg-stone-50 text-stone-700 text-[10px] font-bold px-2.5 py-1 rounded-lg border border-stone-200 transition-colors shadow-2xs"
+                                    >
+                                      نسخ الكود
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="pt-3 border-t border-stone-100 flex items-center gap-2">
+                                <a
+                                  href={getWhatsAppUrl(offer.whatsapp || offer.phone || business.phone || '', `مرحباً، أود الاستفسار عن عرضكم: ${offer.title}`)}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="flex-1 inline-flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white py-2 px-3 rounded-xl text-xs font-bold transition-colors shadow-2xs"
+                                >
+                                  <WhatsAppIcon className="h-3.5 w-3.5" />
+                                  <span>استفسار واتساب</span>
+                                </a>
+                                <Link
+                                  to={`/offers/${offer.id}`}
+                                  className="bg-stone-100 hover:bg-stone-200 text-stone-800 py-2 px-3 rounded-xl text-xs font-bold transition-colors flex items-center gap-1"
+                                >
+                                  <span>التفاصيل</span>
+                                  <ChevronLeft className="h-3.5 w-3.5" />
+                                </Link>
+                              </div>
                             </div>
                           </div>
                         ))}
@@ -2299,9 +2548,13 @@ export function BusinessDetail() {
                         <div>
                           <h3 className="text-lg font-black text-[#2d2a26] flex items-center gap-2">
                             <Video className="h-5 w-5 text-purple-600" />
-                            <span>ريلزات وفيديوهات المحل التفاعلية</span>
+                            <span>{isMedical ? 'ريلزت' : 'ريلزات وفيديوهات المحل التفاعلية'}</span>
                           </h3>
-                          <p className="text-xs text-stone-500">شاهد اللقطات والفيديوهات الحصرية لهذا المحل لتعيش التجربة التفاعلية</p>
+                          <p className="text-xs text-stone-500">
+                            {isMedical 
+                              ? 'شاهد المقاطع الطبية والتوعوية والإرشادات واللقطات التعريفية' 
+                              : 'شاهد اللقطات والفيديوهات الحصرية لهذا المحل لتعيش التجربة التفاعلية'}
+                          </p>
                         </div>
                         {isOwner && (
                           <button
@@ -2309,7 +2562,7 @@ export function BusinessDetail() {
                             className="inline-flex items-center justify-center gap-1.5 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
                           >
                             <Plus className="h-4 w-4" />
-                            <span>إضافة فيديو ريلز جديد</span>
+                            <span>{isMedical ? 'إضافة فيديو ريلزت جديد' : 'إضافة فيديو ريلز جديد'}</span>
                           </button>
                         )}
                       </div>
@@ -2317,7 +2570,9 @@ export function BusinessDetail() {
                       {/* Add Reel Form */}
                       {isOwner && isAddReelOpen && (
                         <form onSubmit={handleSaveReel} className="bg-stone-50 border border-stone-200 p-5 rounded-2xl space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
-                          <h4 className="text-xs font-black text-stone-800 uppercase tracking-wider">إضافة فيديو ترويجي جديد (ريلز)</h4>
+                          <h4 className="text-xs font-black text-stone-800 uppercase tracking-wider">
+                            {isMedical ? 'إضافة فيديو ريلزت جديد' : 'إضافة فيديو ترويجي جديد (ريلز)'}
+                          </h4>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="space-y-1">
                               <label className="block text-xs font-bold text-stone-700">عنوان توضيحي للفيديو</label>
@@ -2325,7 +2580,7 @@ export function BusinessDetail() {
                                 type="text"
                                 value={newReelTitle}
                                 onChange={(e) => setNewReelTitle(e.target.value)}
-                                placeholder="مثال: استعراض تشكيلة الملابس الجديدة أو أجواء المحل"
+                                placeholder={isMedical ? "مثال: نصيحة طبية، جولة داخل العيادة، أو شرح إجراء علاجي" : "مثال: استعراض تشكيلة الملابس الجديدة أو أجواء المحل"}
                                 className="w-full text-xs px-3.5 py-2 rounded-xl border border-stone-200 bg-white focus:outline-none focus:border-purple-600 text-right"
                               />
                             </div>
@@ -2382,9 +2637,13 @@ export function BusinessDetail() {
                           <div className="w-14 h-14 bg-purple-50 text-purple-600 rounded-2xl flex items-center justify-center mx-auto">
                             <Video className="h-6 w-6" />
                           </div>
-                          <h4 className="text-base font-bold text-stone-800">لا توجد ريلزات ترويجية للمحل بعد</h4>
+                          <h4 className="text-base font-bold text-stone-800">
+                            {isMedical ? 'لا توجد فيديوهات ريلزت منشورة بعد' : 'لا توجد ريلزات ترويجية للمحل بعد'}
+                          </h4>
                           <p className="text-stone-500 text-xs max-w-sm mx-auto">
-                            {isOwner ? "قم بإضافة أول فيديو ريلز لعرض منتجاتك وجذب العملاء بطريقة مرئية وتفاعلية مذهلة!" : "لم يقم صاحب المحل بإضافة لقطات ريلز تفاعلية بعد."}
+                            {isOwner 
+                              ? (isMedical ? "قم بإضافة أول فيديو ريلزت لنشر التوعية والتعريف بخدمات المنشأة الطبية!" : "قم بإضافة أول فيديو ريلز لعرض منتجاتك وجذب العملاء بطريقة مرئية وتفاعلية مذهلة!") 
+                              : (isMedical ? "لم تقم المنشأة الطبية بنشر فيديوهات ريلزت بعد." : "لم يقم صاحب المحل بإضافة لقطات ريلز تفاعلية بعد.")}
                           </p>
                         </div>
                       ) : (
@@ -2483,9 +2742,13 @@ export function BusinessDetail() {
                       <div className="w-14 h-14 bg-amber-100 text-amber-700 rounded-2xl flex items-center justify-center mx-auto mb-3">
                         <Crown className="h-7 w-7 fill-amber-500 text-amber-600" />
                       </div>
-                      <h3 className="text-lg font-black text-stone-800 mb-1">منصة ريلزات المحل التفاعلية 🎬</h3>
+                      <h3 className="text-lg font-black text-stone-800 mb-1">
+                        {isMedical ? 'منصة ريلزت الطبية التفاعلية 🎬' : 'منصة ريلزات المحل التفاعلية 🎬'}
+                      </h3>
                       <p className="text-stone-600 text-sm max-w-md mx-auto mb-5">
-                        عرض فيديوهات ريلز ترويجية من فيسبوك وإنستغرام ويوتيوب شورتس متاح حصرياً للمشتركين في الباقة الذهبية VIP لتقديم تجربة تسوق تفاعلية تضاعف الطلبات!
+                        {isMedical 
+                          ? 'عرض فيديوهات ريلزت الطبية والتوعوية من فيسبوك وإنستغرام ويوتيوب متاح حصرياً للمنشآت الطبية المشتركة في الباقة الذهبية VIP.'
+                          : 'عرض فيديوهات ريلز ترويجية من فيسبوك وإنستغرام ويوتيوب شورتس متاح حصرياً للمشتركين في الباقة الذهبية VIP لتقديم تجربة تسوق تفاعلية تضاعف الطلبات!'}
                       </p>
                       {isOwner && (
                         <button
@@ -2494,7 +2757,7 @@ export function BusinessDetail() {
                           className="inline-flex items-center gap-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs font-black px-5 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
                         >
                           <Crown className="h-4 w-4 fill-white" />
-                          <span>ترقية محلك إلى VIP لتفعيل ريلزاتك</span>
+                          <span>{isMedical ? 'ترقية المنشأة إلى VIP لتفعيل ريلزت' : 'ترقية محلك إلى VIP لتفعيل ريلزاتك'}</span>
                         </button>
                       )}
                     </div>
@@ -2598,9 +2861,13 @@ export function BusinessDetail() {
                         <div>
                           <h3 className="text-lg font-black text-[#2d2a26] flex items-center gap-2">
                             <Camera className="h-5 w-5 text-emerald-600" />
-                            <span>صور وجو المحل من الداخل والخارج</span>
+                            <span>{isMedical ? 'معرض الصور' : 'صور وجو المحل من الداخل والخارج'}</span>
                           </h3>
-                          <p className="text-xs text-stone-500">استعرض المعرض الحقيقي لتعيش تفاصيل وأجواء المكان بالكامل</p>
+                          <p className="text-xs text-stone-500">
+                            {isMedical 
+                              ? 'استعرض مرافق المنشأة، غرف الفحص، الأجهزة والبيئة الطبية المريحة' 
+                              : 'استعرض المعرض الحقيقي لتعيش تفاصيل وأجواء المكان بالكامل'}
+                          </p>
                         </div>
                         {isOwner && (
                           <div className="bg-stone-50 border border-stone-200 p-2.5 rounded-xl text-[11px] font-bold text-stone-600 flex items-center gap-1.5">
@@ -2615,17 +2882,17 @@ export function BusinessDetail() {
                         <form onSubmit={handleAddGalleryImage} className="bg-stone-50 border border-stone-200 p-5 rounded-2xl space-y-4 animate-in fade-in duration-200">
                           <h4 className="text-xs font-black text-stone-800 uppercase tracking-wider flex items-center gap-1">
                             <Plus className="h-3.5 w-3.5 text-emerald-600" />
-                            <span>إضافة صورة جديدة للمعرض والجو العام</span>
+                            <span>{isMedical ? 'إضافة صورة جديدة لمعرض الصور والمرافق' : 'إضافة صورة جديدة للمعرض والجو العام'}</span>
                           </h4>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="space-y-1 md:col-span-2">
                               <ImageUploader
-                                label="صورة المعرض (رفع ملف من الجهاز أو اختيار رابط)"
+                                label={isMedical ? "صورة المنشأة أو العيادة (رفع ملف من الجهاز أو اختيار رابط)" : "صورة المعرض (رفع ملف من الجهاز أو اختيار رابط)"}
                                 folder="gallery"
                                 value={newGalleryUrl}
                                 onChange={(url) => setNewGalleryUrl(url)}
                                 aspectRatio="cover"
-                                placeholder="اختر صورة للمعرض من جهازك"
+                                placeholder={isMedical ? "اختر صورة العيادة أو المرفق الطبي من جهازك" : "اختر صورة للمعرض من جهازك"}
                               />
                             </div>
                             <div className="space-y-1">
@@ -2634,7 +2901,7 @@ export function BusinessDetail() {
                                 type="text"
                                 value={newGalleryCaption}
                                 onChange={(e) => setNewGalleryCaption(e.target.value)}
-                                placeholder="مثال: جلسات الطابق الثاني الهادئة أو تفاصيل الديكور الخارجي"
+                                placeholder={isMedical ? "مثال: غرفة المعاينة، جهاز التصوير، صالة انتظار المراجعين" : "مثال: جلسات الطابق الثاني الهادئة أو تفاصيل الديكور الخارجي"}
                                 className="w-full text-xs px-3.5 py-2 rounded-xl border border-stone-200 bg-white focus:outline-none focus:border-emerald-600 text-right"
                               />
                             </div>
@@ -2657,7 +2924,14 @@ export function BusinessDetail() {
                         const galleryItems = business.gallery && business.gallery.length > 0 
                           ? business.gallery 
                           : [
-                              ...((business.category || '').includes('مطاعم') || (business.category || '').includes('كافيهات') || (business.category || '').includes('أكل') || (business.category || '').includes('حلويات')
+                              ...(isMedical
+                                ? [
+                                    { url: 'https://images.unsplash.com/photo-1629909613654-28e377c37b09?auto=format&fit=crop&q=80&w=800', caption: 'صالة الاستقبال والانتظار المجهزة لراحة المراجعين' },
+                                    { url: 'https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&q=80&w=800', caption: 'عيادة الفحص السريري المجهزة بأحدث المستلزمات الطبية' },
+                                    { url: 'https://images.unsplash.com/photo-1579684385127-1ef15d508118?auto=format&fit=crop&q=80&w=800', caption: 'الأجهزة والتقنيات التشخيصية والعلاجية المعتمدة' },
+                                    { url: 'https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?auto=format&fit=crop&q=80&w=800', caption: 'بيئة صحية معقمة ومطابقة لأعلى معايير السلامة والجودة' }
+                                  ]
+                                : ((business.category || '').includes('مطاعم') || (business.category || '').includes('كافيهات') || (business.category || '').includes('أكل') || (business.category || '').includes('حلويات')
                                 ? [
                                     { url: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&q=80&w=800', caption: 'صالة الاستقبال الرئيسية والترتيب الأنيق للمكان' },
                                     { url: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&q=80&w=800', caption: 'جلسات عائلية مريحة وراقية للأفراد والمجموعات' },
@@ -2682,7 +2956,7 @@ export function BusinessDetail() {
                                     { url: 'https://images.unsplash.com/photo-1497215728101-856f4ea42174?auto=format&fit=crop&q=80&w=800', caption: 'مساحات الاستقبال والراحة المصممة بعناية لخدمتكم' },
                                     { url: 'https://images.unsplash.com/photo-1497366811353-6870744d04b2?auto=format&fit=crop&q=80&w=800', caption: 'البيئة العصرية المجهزة بأحدث المرافق والخدمات المتنوعة' }
                                   ]
-                              )
+                              ))
                             ];
 
                         // Ensure current slide index is within bounds of possibly updated gallery items
@@ -2855,9 +3129,13 @@ export function BusinessDetail() {
                       <div className="w-14 h-14 bg-amber-100 text-amber-700 rounded-2xl flex items-center justify-center mx-auto mb-3">
                         <Crown className="h-7 w-7 fill-amber-500 text-amber-600" />
                       </div>
-                      <h3 className="text-xl font-black text-stone-800 mb-1 text-center">معرض صور وجو المحل (VIP)</h3>
+                      <h3 className="text-xl font-black text-stone-800 mb-1 text-center">
+                        {isMedical ? 'معرض الصور والمرافق الطبية (VIP)' : 'معرض صور وجو المحل (VIP)'}
+                      </h3>
                       <p className="text-stone-600 text-sm max-w-md mx-auto leading-relaxed text-center">
-                        ميزة حصرية وخاصة بمشتركي الباقة الذهبية VIP! تتيح هذه الميزة لزبائن إربد استكشاف أجواء محلك، تفاصيل الجلسات، جودة الديكور والبيئة المحيطة من الداخل والخارج قبل الحضور الفعلي.
+                        {isMedical 
+                          ? 'ميزة حصرية وخاصة بالمنشآت الطبية المشتركة بالباقة الذهبية VIP! تتيح للمراجعين والمرضى استكشاف غرف الكشف، الأجهزة الطبية، ومرافق المنشأة قبل الزيارة.'
+                          : 'ميزة حصرية وخاصة بمشتركي الباقة الذهبية VIP! تتيح هذه الميزة لزبائن إربد استكشاف أجواء محلك، تفاصيل الجلسات، جودة الديكور والبيئة المحيطة من الداخل والخارج قبل الحضور الفعلي.'}
                       </p>
                       
                       {/* Blurred gallery mockup */}
@@ -2874,12 +3152,12 @@ export function BusinessDetail() {
                             className="inline-flex items-center gap-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs font-black px-6 py-3 rounded-xl shadow-md transition-all cursor-pointer"
                           >
                             <Crown className="h-4 w-4 fill-white" />
-                            <span>ترقية هذا المحل إلى VIP لتفعيل معرض الصور الخاص بك</span>
+                            <span>{isMedical ? 'ترقية المنشأة إلى VIP لتفعيل معرض الصور' : 'ترقية هذا المحل إلى VIP لتفعيل معرض الصور الخاص بك'}</span>
                           </button>
                         </div>
                       ) : (
                         <p className="text-stone-400 text-xs italic text-center">
-                          لم يقم هذا المحل بتفعيل الباقة الذهبية لعرض الصور بعد.
+                          {isMedical ? 'لم تقم المنشأة بتفعيل الباقة الذهبية لعرض الصور والمرافق بعد.' : 'لم يقم هذا المحل بتفعيل الباقة الذهبية لعرض الصور بعد.'}
                         </p>
                       )}
                     </div>
@@ -3014,7 +3292,10 @@ export function BusinessDetail() {
                           <div className="flex flex-wrap gap-1.5">
                             {[
                               { label: 'الكل', value: 0 },
+                              { label: '5 ⭐', value: 5 },
                               { label: '4 فأكثر ⭐', value: 4 },
+                              { label: '3 فأكثر ⭐', value: 3 },
+                              { label: '2 فأكثر ⭐', value: 2 },
                               { label: '1 فأكثر ⭐', value: 1 }
                             ].map((tab) => (
                               <button
@@ -3337,8 +3618,43 @@ export function BusinessDetail() {
                 </h3>
 
                 {/* Call & WhatsApp Buttons */}
-                {business.phone ? (
+                {business?.phone ? (
                   <div className="space-y-2">
+                    {/* Medical Quick Appointment Booking Button (Not for Pharmacies) */}
+                    {isMedical && !isPharmacy && (
+                      <button
+                        type="button"
+                        onClick={() => setIsMedicalBookingOpen(true)}
+                        className="w-full flex items-center justify-center gap-2 bg-gradient-to-l from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-stone-950 py-3.5 px-4 rounded-xl font-black text-sm transition-all shadow-md hover:shadow-lg cursor-pointer transform hover:scale-[1.01] active:scale-98"
+                      >
+                        <Calendar className="h-4.5 w-4.5 text-stone-950" />
+                        <span>احجز موعد كشفية واستشارة 📅</span>
+                      </button>
+                    )}
+
+                    {/* Pharmacy Quick WhatsApp / Order Button */}
+                    {isMedical && isPharmacy && (
+                      pharmacyWhatsAppUrl ? (
+                        <a
+                          href={pharmacyWhatsAppUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="w-full flex items-center justify-center gap-2 bg-gradient-to-l from-emerald-600 to-[#1a4d2e] hover:from-emerald-700 hover:to-[#133b22] text-white py-3.5 px-4 rounded-xl font-black text-sm transition-all shadow-md hover:shadow-lg cursor-pointer"
+                        >
+                          <Pill className="h-4.5 w-4.5 text-emerald-200" />
+                          <span>طلب دواء أو استفسار عبر واتساب 💊</span>
+                        </a>
+                      ) : (
+                        <a
+                          href={`tel:${business.phone}`}
+                          className="w-full flex items-center justify-center gap-2 bg-gradient-to-l from-emerald-600 to-[#1a4d2e] hover:from-emerald-700 hover:to-[#133b22] text-white py-3.5 px-4 rounded-xl font-black text-sm transition-all shadow-md hover:shadow-lg cursor-pointer"
+                        >
+                          <Phone className="h-4.5 w-4.5 text-emerald-200" />
+                          <span>اتصال مباشر بالصيدلية 📞</span>
+                        </a>
+                      )
+                    )}
+
                     {/* Live Chat Feature for Gold/VIP stores */}
                     {vipInfo.isVip ? (
                       currentUser ? (
@@ -3602,11 +3918,13 @@ export function BusinessDetail() {
               </div>
             )}
           </div>
+        </>
+      )}
 
           {/* Business Owner Quick Edit / Privacy Settings Modal */}
           {isEditModalOpen && typeof document !== 'undefined' && createPortal(
-            <div className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 overflow-y-auto" dir="rtl">
-              <div className="bg-white rounded-t-[32px] sm:rounded-3xl max-w-xl w-full max-h-[90vh] overflow-y-auto p-5 sm:p-8 shadow-2xl border border-stone-200 sm:my-auto relative animate-in slide-in-from-bottom-8 sm:zoom-in-95 duration-200">
+            <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 overflow-y-auto" dir="rtl">
+              <div className="bg-white rounded-t-[32px] sm:rounded-3xl max-w-xl w-full max-h-[88vh] flex flex-col overflow-y-auto p-5 sm:p-8 shadow-2xl border border-stone-200 sm:my-auto relative animate-in slide-in-from-bottom-8 sm:zoom-in-95 duration-200">
                 {/* Mobile Drag Indicator */}
                 <div className="w-12 h-1 bg-stone-200 rounded-full mx-auto -mt-1 mb-3 sm:hidden" />
                 
@@ -3867,25 +4185,23 @@ export function BusinessDetail() {
           )}
 
           {/* 1. Add Promo Deal Modal (For Business Owners) */}
-          {business && isOwner && isOfferModalOpen && (
-            <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-              <div className="bg-white rounded-2xl border border-stone-200 shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 space-y-4">
-                <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+          {business && isOwner && isOfferModalOpen && typeof document !== 'undefined' && createPortal(
+            <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto" dir="rtl">
+              <div className="bg-white rounded-3xl border border-stone-200 shadow-2xl max-w-lg w-full max-h-[88vh] flex flex-col overflow-hidden relative my-auto animate-in fade-in zoom-in-95 duration-200">
+                <div className="flex items-center justify-between border-b border-stone-100 p-4 sm:p-5 bg-stone-50/80 shrink-0">
                   <div className="flex items-center gap-2">
                     <Tag className="h-5 w-5 text-emerald-700" />
                     <h3 className="text-lg font-bold text-stone-900">إضافة عرض ترويجي أو خصم جديد</h3>
                   </div>
                   <button
                     onClick={() => setIsOfferModalOpen(false)}
-                    className="p-1.5 hover:bg-stone-100 rounded-lg transition-colors text-stone-400 hover:text-stone-700 cursor-pointer"
+                    className="p-1.5 hover:bg-stone-200/80 rounded-xl transition-colors text-stone-500 hover:text-stone-800 cursor-pointer"
                   >
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
+                    <X className="h-5 w-5" />
                   </button>
                 </div>
 
-                <form onSubmit={handleAddOffer} className="space-y-4">
+                <form id="add-offer-form" onSubmit={handleAddOffer} className="overflow-y-auto p-4 sm:p-6 space-y-4 flex-1">
                   {/* Honeypot field - 100% hidden from humans, bots will fill it */}
                   <div className="absolute opacity-0 -z-50 pointer-events-none" style={{ width: 0, height: 0, overflow: 'hidden' }}>
                     <label htmlFor="offer_website_hp">لا تقم بتعبئة هذا الحقل إذا كنت بشراً</label>
@@ -3911,73 +4227,319 @@ export function BusinessDetail() {
                     />
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-bold text-stone-700 mb-1">نوع شارة الخصم</label>
-                      <div className="flex gap-2">
+                  {/* Menu Selection for Discount */}
+                  {business?.menuItems && business.menuItems.length > 0 && (
+                    <div className="bg-[#1a4d2e]/5 p-3.5 rounded-2xl border border-[#1a4d2e]/20 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-xs font-black text-[#1a4d2e] flex items-center gap-1.5">
+                          <UtensilsCrossed className="h-4 w-4" />
+                          <span>ربط الخصم بالكتالوج / المنيو</span>
+                        </label>
+                        <span className="text-[10px] bg-[#1a4d2e]/10 text-[#1a4d2e] font-bold px-2 py-0.5 rounded-full">
+                          {business.menuItems.length} صنف متوفر
+                        </span>
+                      </div>
+
+                      {/* 4 Scope Selector Buttons */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                         <button
                           type="button"
-                          onClick={() => setNewOfferForm(prev => ({ ...prev, discountType: 'percentage' }))}
+                          onClick={() => {
+                            setNewOfferForm(prev => ({
+                              ...prev,
+                              selectedScope: 'none',
+                              selectedCategories: [],
+                              selectedMenuItemIds: []
+                            }));
+                          }}
                           className={cn(
-                            "flex-1 py-1.5 px-3 rounded-xl border text-[11px] font-bold transition-all cursor-pointer",
-                            newOfferForm.discountType === 'percentage'
-                              ? "bg-amber-100 border-amber-300 text-amber-800 shadow-xs font-black"
-                              : "bg-white border-stone-200 text-stone-600 hover:bg-stone-50"
+                            "py-2 px-2 rounded-xl border text-[11px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1 text-center",
+                            newOfferForm.selectedScope === 'none'
+                              ? "bg-[#1a4d2e] text-white border-transparent shadow-xs"
+                              : "bg-white border-stone-200 text-stone-700 hover:bg-stone-50"
                           )}
                         >
-                          نسبة مئوية (%)
+                          <span>بدون ربط (عرض عام)</span>
                         </button>
+
                         <button
                           type="button"
-                          onClick={() => setNewOfferForm(prev => ({ ...prev, discountType: 'fixed' }))}
+                          onClick={() => {
+                            const allIds = business.menuItems!.map(i => i.id);
+                            setNewOfferForm(prev => ({
+                              ...prev,
+                              selectedScope: 'all',
+                              selectedCategories: [],
+                              selectedMenuItemIds: allIds,
+                              title: prev.title || `خصم خاص على كامل الكتالوج والمنيو`
+                            }));
+                          }}
                           className={cn(
-                            "flex-1 py-1.5 px-3 rounded-xl border text-[11px] font-bold transition-all cursor-pointer",
-                            newOfferForm.discountType === 'fixed'
-                              ? "bg-amber-100 border-amber-300 text-amber-800 shadow-xs font-black"
-                              : "bg-white border-stone-200 text-stone-600 hover:bg-stone-50"
+                            "py-2 px-2 rounded-xl border text-[11px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1 text-center",
+                            newOfferForm.selectedScope === 'all'
+                              ? "bg-[#1a4d2e] text-white border-transparent shadow-xs"
+                              : "bg-white border-stone-200 text-stone-700 hover:bg-stone-50"
                           )}
                         >
-                          مبلغ ثابت (د.أ)
+                          <span>المنيو كامل ({business.menuItems.length})</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNewOfferForm(prev => ({
+                              ...prev,
+                              selectedScope: 'categories',
+                              selectedCategories: prev.selectedCategories,
+                              selectedMenuItemIds: business.menuItems!
+                                .filter(i => prev.selectedCategories.includes(i.category || 'عام'))
+                                .map(i => i.id)
+                            }));
+                          }}
+                          className={cn(
+                            "py-2 px-2 rounded-xl border text-[11px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1 text-center",
+                            newOfferForm.selectedScope === 'categories'
+                              ? "bg-amber-600 text-white border-transparent shadow-xs"
+                              : "bg-white border-stone-200 text-stone-700 hover:bg-stone-50"
+                          )}
+                        >
+                          <span>قسم / عدة أقسام</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNewOfferForm(prev => ({
+                              ...prev,
+                              selectedScope: 'custom',
+                              selectedMenuItemIds: prev.selectedScope === 'custom' ? prev.selectedMenuItemIds : []
+                            }));
+                          }}
+                          className={cn(
+                            "py-2 px-2 rounded-xl border text-[11px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1 text-center",
+                            newOfferForm.selectedScope === 'custom'
+                              ? "bg-amber-600 text-white border-transparent shadow-xs"
+                              : "bg-white border-stone-200 text-stone-700 hover:bg-stone-50"
+                          )}
+                        >
+                          <span>صنف أو أصناف محددة</span>
                         </button>
                       </div>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-stone-700 mb-1">شارة الخصم المحسوبة</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="توليد تلقائي للشارة"
-                        value={newOfferForm.discountPercentage}
-                        onChange={(e) => setNewOfferForm(prev => ({ ...prev, discountPercentage: e.target.value }))}
-                        className="w-full px-3.5 py-2 rounded-xl bg-amber-50 border border-amber-200 font-black text-amber-800 focus:ring-2 focus:ring-amber-500/20 outline-none text-xs"
-                      />
-                    </div>
-                  </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-bold text-stone-700 mb-1">السعر الأصلي قبل الخصم</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="مثال: 12 دينار"
-                        value={newOfferForm.oldPrice}
-                        onChange={(e) => setNewOfferForm(prev => ({ ...prev, oldPrice: e.target.value }))}
-                        className="w-full px-3.5 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-xs font-medium"
-                      />
+                      {/* Categories Sub-Selection */}
+                      {newOfferForm.selectedScope === 'categories' && (
+                        <div className="space-y-2 bg-white p-2.5 rounded-xl border border-stone-200 animate-in fade-in duration-200">
+                          <label className="block text-[11px] font-black text-stone-700">اختر الأقسام المراد الخصم عليها:</label>
+                          <div className="flex flex-wrap gap-1.5">
+                            {menuCategories.map(cat => {
+                              const isSelected = newOfferForm.selectedCategories.includes(cat);
+                              return (
+                                <button
+                                  key={cat}
+                                  type="button"
+                                  onClick={() => {
+                                    const exists = newOfferForm.selectedCategories.includes(cat);
+                                    const updatedCats = exists
+                                      ? newOfferForm.selectedCategories.filter(c => c !== cat)
+                                      : [...newOfferForm.selectedCategories, cat];
+                                    
+                                    const matchingItemIds = business.menuItems!
+                                      .filter(i => updatedCats.includes(i.category || 'عام'))
+                                      .map(i => i.id);
+
+                                    setNewOfferForm(prev => ({
+                                      ...prev,
+                                      selectedCategories: updatedCats,
+                                      selectedMenuItemIds: matchingItemIds,
+                                      title: prev.title || (updatedCats.length > 0 ? `خصم خاص على قسم ${updatedCats.join(' و ')}` : prev.title)
+                                    }));
+                                  }}
+                                  className={cn(
+                                    "px-3 py-1.5 rounded-lg border text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5",
+                                    isSelected
+                                      ? "bg-amber-500 text-white border-amber-600 shadow-xs"
+                                      : "bg-stone-50 text-stone-700 border-stone-200 hover:bg-stone-100"
+                                  )}
+                                >
+                                  <span>{cat}</span>
+                                  <span className="text-[10px] opacity-80 bg-black/10 px-1.5 py-0.2 rounded-full">
+                                    {business.menuItems!.filter(i => (i.category || 'عام') === cat).length}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Custom Item Checkboxes */}
+                      {newOfferForm.selectedScope === 'custom' && (
+                        <div className="max-h-44 overflow-y-auto space-y-1 bg-white p-2 rounded-xl border border-stone-200 divide-y divide-stone-100 animate-in fade-in duration-200">
+                          {business.menuItems.map(item => {
+                            const isSelected = newOfferForm.selectedMenuItemIds.includes(item.id);
+                            return (
+                              <label
+                                key={item.id}
+                                className="flex items-center justify-between pt-1 first:pt-0 cursor-pointer hover:bg-stone-50 p-1.5 rounded-lg transition-colors"
+                              >
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => {
+                                      setNewOfferForm(prev => {
+                                        const exists = prev.selectedMenuItemIds.includes(item.id);
+                                        const updatedIds = exists
+                                          ? prev.selectedMenuItemIds.filter(id => id !== item.id)
+                                          : [...prev.selectedMenuItemIds, item.id];
+                                        
+                                        const singleItem = updatedIds.length === 1 ? business.menuItems?.find(i => i.id === updatedIds[0]) : null;
+                                        return {
+                                          ...prev,
+                                          selectedMenuItemIds: updatedIds,
+                                          oldPrice: singleItem ? singleItem.price : prev.oldPrice,
+                                          title: singleItem && !prev.title ? `عرض خصم على ${singleItem.name}` : prev.title
+                                        };
+                                      });
+                                    }}
+                                    className="h-4 w-4 text-[#1a4d2e] focus:ring-[#1a4d2e] border-stone-300 rounded cursor-pointer"
+                                  />
+                                  <span className="text-xs font-bold text-stone-800 truncate">{item.name}</span>
+                                </div>
+                                <span className="text-xs font-mono font-bold text-[#1a4d2e] shrink-0">{item.price} د.أ</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
-                    <div>
-                      <label className="block text-xs font-bold text-stone-700 mb-1">السعر الجديد بعد الخصم</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="مثال: 8.5 دينار"
-                        value={newOfferForm.newPrice}
-                        onChange={(e) => setNewOfferForm(prev => ({ ...prev, newPrice: e.target.value }))}
-                        className="w-full px-3.5 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-xs font-medium"
-                      />
+                  )}
+
+                  {/* Dynamic Price & Discount Inputs */}
+                  {isBulkDiscount ? (
+                    <div className="bg-amber-50/80 p-3.5 rounded-2xl border border-amber-200/80 space-y-2 animate-in fade-in duration-200">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-xs font-black text-amber-900 flex items-center gap-1.5">
+                          <Percent className="h-4 w-4 text-amber-700" />
+                          <span>قيمة / نسبة الخصم المئوية المطلوبة (%) *</span>
+                        </label>
+                        <span className="text-[10px] bg-amber-200/60 text-amber-900 font-black px-2 py-0.5 rounded-full">
+                          سيتم التطبيق على {newOfferForm.selectedMenuItemIds.length} صنف
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          required
+                          placeholder="مثال: 15% أو 20%"
+                          value={newOfferForm.discountPercentage}
+                          onChange={(e) => setNewOfferForm(prev => ({ ...prev, discountPercentage: e.target.value }))}
+                          className="w-full px-3.5 py-2 rounded-xl bg-white border border-amber-300 font-black text-amber-900 focus:ring-2 focus:ring-amber-500/20 outline-none text-sm"
+                        />
+                        <div className="flex items-center gap-1 shrink-0">
+                          {['10%', '15%', '20%', '25%', '30%', '50%'].map(preset => (
+                            <button
+                              key={preset}
+                              type="button"
+                              onClick={() => setNewOfferForm(prev => ({ ...prev, discountPercentage: preset }))}
+                              className={cn(
+                                "px-2 py-1 rounded-lg border text-[10px] font-black transition-all cursor-pointer",
+                                newOfferForm.discountPercentage === preset
+                                  ? "bg-amber-600 text-white border-amber-600"
+                                  : "bg-white text-amber-900 border-amber-200 hover:bg-amber-100"
+                              )}
+                            >
+                              {preset}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-amber-800 font-medium leading-relaxed">
+                        💡 تم دمج حقل قيمة الخصم وتلقائياً لن يطلب سعر أصلي وسعر جديد مفرد، لأن الأسعار مختلفة للأصناف المختارة.
+                      </p>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-bold text-stone-700 mb-1">نوع شارة الخصم</label>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setNewOfferForm(prev => ({ ...prev, discountType: 'percentage' }))}
+                              className={cn(
+                                "flex-1 py-1.5 px-3 rounded-xl border text-[11px] font-bold transition-all cursor-pointer",
+                                newOfferForm.discountType === 'percentage'
+                                  ? "bg-amber-100 border-amber-300 text-amber-800 shadow-xs font-black"
+                                  : "bg-white border-stone-200 text-stone-600 hover:bg-stone-50"
+                              )}
+                            >
+                              نسبة مئوية (%)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setNewOfferForm(prev => ({ ...prev, discountType: 'fixed' }))}
+                              className={cn(
+                                "flex-1 py-1.5 px-3 rounded-xl border text-[11px] font-bold transition-all cursor-pointer",
+                                newOfferForm.discountType === 'fixed'
+                                  ? "bg-amber-100 border-amber-300 text-amber-800 shadow-xs font-black"
+                                  : "bg-white border-stone-200 text-stone-600 hover:bg-stone-50"
+                              )}
+                            >
+                              مبلغ ثابت (د.أ)
+                            </button>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-stone-700 mb-1">شارة الخصم المحسوبة</label>
+                          <input
+                            type="text"
+                            placeholder="توليد تلقائي للشارة"
+                            value={newOfferForm.discountPercentage}
+                            onChange={(e) => setNewOfferForm(prev => ({ ...prev, discountPercentage: e.target.value }))}
+                            className="w-full px-3.5 py-2 rounded-xl bg-amber-50 border border-amber-200 font-black text-amber-800 focus:ring-2 focus:ring-amber-500/20 outline-none text-xs"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-bold text-stone-700 mb-1 flex items-center justify-between">
+                            <span>السعر الأصلي قبل الخصم</span>
+                            {newOfferForm.selectedScope === 'custom' && newOfferForm.selectedMenuItemIds.length === 1 && (
+                              <span className="text-[10px] text-amber-700 font-bold flex items-center gap-0.5">
+                                <LockIcon className="h-3 w-3 inline" /> ثابت من المنيو
+                              </span>
+                            )}
+                          </label>
+                          <input
+                            type="text"
+                            readOnly={newOfferForm.selectedScope === 'custom' && newOfferForm.selectedMenuItemIds.length === 1}
+                            placeholder="مثال: 12.00 د.أ"
+                            value={newOfferForm.oldPrice}
+                            onChange={(e) => setNewOfferForm(prev => ({ ...prev, oldPrice: e.target.value }))}
+                            className={cn(
+                              "w-full px-3.5 py-2 rounded-xl border outline-none text-xs font-bold transition-all",
+                              newOfferForm.selectedScope === 'custom' && newOfferForm.selectedMenuItemIds.length === 1
+                                ? "bg-stone-100 border-stone-200 text-stone-500 cursor-not-allowed"
+                                : "border-stone-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                            )}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-stone-700 mb-1">السعر الجديد بعد الخصم</label>
+                          <input
+                            type="text"
+                            placeholder="مثال: 8.50 د.أ"
+                            value={newOfferForm.newPrice}
+                            onChange={(e) => setNewOfferForm(prev => ({ ...prev, newPrice: e.target.value }))}
+                            className="w-full px-3.5 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-xs font-bold"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
@@ -4150,8 +4712,53 @@ export function BusinessDetail() {
                     />
                   </div>
 
+                  {/* Menu Images Gallery Selector */}
+                  {availableMenuImages.length > 0 && (
+                    <div className="bg-stone-50 p-3 rounded-2xl border border-stone-200 space-y-2 animate-in fade-in duration-200">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-xs font-black text-stone-800 flex items-center gap-1.5">
+                          <ImageIcon className="h-4 w-4 text-emerald-700" />
+                          <span>اختر صورة العرض من صور الكتالوج والمنيو 📸</span>
+                        </label>
+                        <span className="text-[10px] text-stone-500 font-bold">
+                          {availableMenuImages.length} صورة متاحة
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-0.5 scrollbar-thin">
+                        {availableMenuImages.map(imgItem => {
+                          const isSelected = newOfferForm.image === imgItem.imageUrl;
+                          return (
+                            <button
+                              key={imgItem.id}
+                              type="button"
+                              onClick={() => setNewOfferForm(prev => ({ ...prev, image: imgItem.imageUrl! }))}
+                              className={cn(
+                                "relative group shrink-0 rounded-xl overflow-hidden border-2 transition-all cursor-pointer p-0.5",
+                                isSelected
+                                  ? "border-emerald-600 ring-2 ring-emerald-500/30 scale-105"
+                                  : "border-stone-200 hover:border-emerald-400 opacity-80 hover:opacity-100"
+                              )}
+                              title={imgItem.name}
+                            >
+                              <img src={imgItem.imageUrl} alt={imgItem.name} className="w-14 h-14 object-cover rounded-lg" />
+                              <span className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[9px] font-bold truncate px-1 text-center">
+                                {imgItem.name}
+                              </span>
+                              {isSelected && (
+                                <div className="absolute top-1 right-1 w-4 h-4 bg-emerald-600 text-white rounded-full flex items-center justify-center text-[10px] font-black shadow-xs">
+                                  ✓
+                                </div>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                   <div>
-                    <label className="block text-xs font-bold text-stone-700 mb-1.5">تحميل صورة العرض</label>
+                    <label className="block text-xs font-bold text-stone-700 mb-1.5">أو تحميل صورة مخصصة للعرض من جهازك</label>
                     <ImageUploader 
                       value={newOfferForm.image}
                       onChange={(url) => setNewOfferForm(prev => ({ ...prev, image: url }))}
@@ -4160,47 +4767,48 @@ export function BusinessDetail() {
                       placeholder="اختر صورة للعرض من جهازك لتصميم بطاقة متميزة"
                     />
                   </div>
-
-                  <div className="flex items-center justify-end gap-3 pt-3 border-t border-stone-100">
-                    <button
-                      type="button"
-                      onClick={() => setIsOfferModalOpen(false)}
-                      className="px-4 py-2 rounded-xl border border-stone-200 text-stone-600 text-xs font-bold hover:bg-stone-50 cursor-pointer"
-                    >
-                      إلغاء
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={submittingOffer}
-                      className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold disabled:opacity-50 transition-colors cursor-pointer"
-                    >
-                      {submittingOffer ? 'جاري النشر...' : 'نشر العرض في المنصة'}
-                    </button>
-                  </div>
                 </form>
+
+                <div className="p-4 sm:p-5 border-t border-stone-100 bg-stone-50/80 flex items-center justify-end gap-3 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setIsOfferModalOpen(false)}
+                    className="px-4 py-2 rounded-xl border border-stone-200 text-stone-600 text-xs font-bold hover:bg-stone-100 cursor-pointer"
+                  >
+                    إلغاء
+                  </button>
+                  <button
+                    type="submit"
+                    form="add-offer-form"
+                    disabled={submittingOffer}
+                    className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold disabled:opacity-50 transition-colors shadow-xs cursor-pointer"
+                  >
+                    {submittingOffer ? 'جاري النشر...' : 'نشر العرض في المنصة'}
+                  </button>
+                </div>
               </div>
-            </div>
+            </div>,
+            document.body
           )}
 
           {/* 2. Suggest an Edit Modal */}
-          {business && isEditSuggestionOpen && (
-            <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-              <div className="bg-white rounded-2xl border border-stone-200 shadow-2xl max-w-md w-full p-6 space-y-4">
-                <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+          {business && isEditSuggestionOpen && typeof document !== 'undefined' && createPortal(
+            <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto" dir="rtl">
+              <div className="bg-white rounded-3xl border border-stone-200 shadow-2xl max-w-md w-full max-h-[88vh] flex flex-col overflow-hidden relative my-auto animate-in fade-in zoom-in-95 duration-200">
+                <div className="flex items-center justify-between border-b border-stone-100 p-4 sm:p-5 bg-stone-50/80 shrink-0">
                   <div className="flex items-center gap-2">
                     <Edit3 className="h-5 w-5 text-amber-600" />
                     <h3 className="text-base sm:text-lg font-bold text-stone-900">اقتراح تعديل في معلومات المحل</h3>
                   </div>
                   <button
                     onClick={() => setIsEditSuggestionOpen(false)}
-                    className="p-1.5 hover:bg-stone-100 rounded-lg transition-colors text-stone-400 hover:text-stone-700 cursor-pointer"
+                    className="p-1.5 hover:bg-stone-200/80 rounded-xl transition-colors text-stone-500 hover:text-stone-800 cursor-pointer"
                   >
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
+                    <X className="h-5 w-5" />
                   </button>
                 </div>
 
+                <div className="overflow-y-auto p-5 sm:p-6 space-y-4 flex-1">
                 {suggestionSuccess ? (
                   <div className="py-8 text-center space-y-3">
                     <div className="w-12 h-12 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center mx-auto animate-bounce">
@@ -4212,8 +4820,8 @@ export function BusinessDetail() {
                     </p>
                   </div>
                 ) : (
-                  <form onSubmit={handleSuggestEdit} className="space-y-4">
-                    {/* Honeypot field - 100% hidden from humans, bots will fill it */}
+                  <form id="suggest-edit-form" onSubmit={handleSuggestEdit} className="space-y-4">
+                    {/* Honeypot field */}
                     <div className="absolute opacity-0 -z-50 pointer-events-none" style={{ width: 0, height: 0, overflow: 'hidden' }}>
                       <label htmlFor="suggest_website_hp">لا تقم بتعبئة هذا الحقل إذا كنت بشراً</label>
                       <input
@@ -4273,37 +4881,39 @@ export function BusinessDetail() {
                         className="w-full px-3.5 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-xs font-medium resize-none"
                       />
                     </div>
-
-                    <div className="flex items-center justify-end gap-3 pt-3 border-t border-stone-100">
-                      <button
-                        type="button"
-                        onClick={() => setIsEditSuggestionOpen(false)}
-                        className="px-4 py-2 rounded-xl border border-stone-200 text-stone-600 text-xs font-bold hover:bg-stone-50 cursor-pointer"
-                      >
-                        إلغاء
-                      </button>
-                      <button
-                        type="submit"
-                        disabled={submittingSuggestion}
-                        className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold disabled:opacity-50 transition-colors shadow-xs cursor-pointer"
-                      >
-                        {submittingSuggestion ? 'جاري الإرسال...' : 'إرسال الاقتراح'}
-                      </button>
-                    </div>
                   </form>
                 )}
+                </div>
+
+                {!suggestionSuccess && (
+                  <div className="p-4 sm:p-5 border-t border-stone-100 bg-stone-50/80 flex items-center justify-end gap-3 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setIsEditSuggestionOpen(false)}
+                      className="px-4 py-2 rounded-xl border border-stone-200 text-stone-600 text-xs font-bold hover:bg-stone-100 cursor-pointer"
+                    >
+                      إلغاء
+                    </button>
+                    <button
+                      type="submit"
+                      form="suggest-edit-form"
+                      disabled={submittingSuggestion}
+                      className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold disabled:opacity-50 transition-colors shadow-xs cursor-pointer"
+                    >
+                      {submittingSuggestion ? 'جاري الإرسال...' : 'إرسال الاقتراح'}
+                    </button>
+                  </div>
+                )}
               </div>
-            </div>
+            </div>,
+            document.body
           )}
 
           {/* 3. Report Review Modal (Review Moderation / Anti-Spam) */}
-          {business && isReportModalOpen && selectedReviewForReport && (
-            <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 z-50 animate-in fade-in duration-200">
-              <div className="bg-white rounded-t-[28px] sm:rounded-2xl border border-stone-200 shadow-2xl max-w-md w-full p-5 sm:p-6 space-y-4 max-h-[90vh] overflow-y-auto animate-in slide-in-from-bottom-6 sm:zoom-in-95 duration-200">
-                {/* Mobile Drag Handle */}
-                <div className="w-10 h-1 bg-stone-200 rounded-full mx-auto -mt-1 mb-2 sm:hidden" />
-                
-                <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+          {business && isReportModalOpen && selectedReviewForReport && typeof document !== 'undefined' && createPortal(
+            <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto" dir="rtl">
+              <div className="bg-white rounded-3xl border border-stone-200 shadow-2xl max-w-md w-full max-h-[88vh] flex flex-col overflow-hidden relative my-auto animate-in fade-in zoom-in-95 duration-200">
+                <div className="flex items-center justify-between border-b border-stone-100 p-4 sm:p-5 bg-stone-50/80 shrink-0">
                   <div className="flex items-center gap-2">
                     <EyeOff className="h-5 w-5 text-red-600" />
                     <h3 className="text-base sm:text-lg font-bold text-stone-900">مكافحة التقييمات الكيدية والإبلاغ</h3>
@@ -4313,14 +4923,13 @@ export function BusinessDetail() {
                       setIsReportModalOpen(false);
                       setSelectedReviewForReport(null);
                     }}
-                    className="p-1.5 hover:bg-stone-100 rounded-lg transition-colors text-stone-400 hover:text-stone-700 cursor-pointer"
+                    className="p-1.5 hover:bg-stone-200/80 rounded-xl transition-colors text-stone-500 hover:text-stone-800 cursor-pointer"
                   >
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
+                    <X className="h-5 w-5" />
                   </button>
                 </div>
 
+                <div className="overflow-y-auto p-5 sm:p-6 space-y-4 flex-1">
                 {reportSuccess ? (
                   <div className="py-8 text-center space-y-3">
                     <div className="w-12 h-12 bg-red-100 text-red-700 rounded-full flex items-center justify-center mx-auto">
@@ -4332,8 +4941,8 @@ export function BusinessDetail() {
                     </p>
                   </div>
                 ) : (
-                  <form onSubmit={handleReportReview} className="space-y-4">
-                    {/* Honeypot field - 100% hidden from humans, bots will fill it */}
+                  <form id="report-review-form" onSubmit={handleReportReview} className="space-y-4">
+                    {/* Honeypot field */}
                     <div className="absolute opacity-0 -z-50 pointer-events-none" style={{ width: 0, height: 0, overflow: 'hidden' }}>
                       <label htmlFor="report_website_hp">لا تقم بتعبئة هذا الحقل إذا كنت بشراً</label>
                       <input
@@ -4369,34 +4978,39 @@ export function BusinessDetail() {
                         ))}
                       </div>
                     </div>
-
-                    <div className="flex items-center justify-end gap-3 pt-3 border-t border-stone-100">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsReportModalOpen(false);
-                          setSelectedReviewForReport(null);
-                        }}
-                        className="px-4 py-2 rounded-xl border border-stone-200 text-stone-600 text-xs font-bold hover:bg-stone-50 cursor-pointer"
-                      >
-                        إلغاء
-                      </button>
-                      <button
-                        type="submit"
-                        disabled={submittingReport}
-                        className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold disabled:opacity-50 transition-colors shadow-xs cursor-pointer"
-                      >
-                        {submittingReport ? 'جاري الإبلاغ...' : 'تسجيل الإبلاغ'}
-                      </button>
-                    </div>
                   </form>
                 )}
+                </div>
+
+                {!reportSuccess && (
+                  <div className="p-4 sm:p-5 border-t border-stone-100 bg-stone-50/80 flex items-center justify-end gap-3 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsReportModalOpen(false);
+                        setSelectedReviewForReport(null);
+                      }}
+                      className="px-4 py-2 rounded-xl border border-stone-200 text-stone-600 text-xs font-bold hover:bg-stone-100 cursor-pointer"
+                    >
+                      إلغاء
+                    </button>
+                    <button
+                      type="submit"
+                      form="report-review-form"
+                      disabled={submittingReport}
+                      className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold disabled:opacity-50 transition-colors shadow-xs cursor-pointer"
+                    >
+                      {submittingReport ? 'جاري الإبلاغ...' : 'تسجيل الإبلاغ'}
+                    </button>
+                  </div>
+                )}
               </div>
-            </div>
+            </div>,
+            document.body
           )}
           {/* 1️⃣ شريط الاتصال العائم والسريع على الجوال (Floating Quick Action Bar) */}
           <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-t border-[#e5e1da] p-3 px-4 shadow-[0_-8px_30px_rgba(0,0,0,0.08)] flex items-center justify-between gap-2.5 animate-in slide-in-from-bottom-5 duration-300">
-            {business.phone ? (
+            {business?.phone ? (
               <>
                 <a
                   href={`tel:${business.phone}`}
@@ -4454,8 +5068,8 @@ export function BusinessDetail() {
           </div>
 
           {/* Lightbox Modal for Gallery Images */}
-          {fullScreenImageUrl && (
-            <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex flex-col items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+          {fullScreenImageUrl && typeof document !== 'undefined' && createPortal(
+            <div className="fixed inset-0 z-[100000] bg-black/95 backdrop-blur-md flex flex-col items-center justify-center p-4">
               <button
                 onClick={() => setFullScreenImageUrl(null)}
                 className="absolute top-4 right-4 bg-white/10 hover:bg-white/20 text-white p-3 rounded-full transition-colors cursor-pointer"
@@ -4485,13 +5099,14 @@ export function BusinessDetail() {
                   </div>
                 );
               })()}
-            </div>
+            </div>,
+            document.body
           )}
 
           {/* Comprehensive Job Details Modal */}
           {selectedDetailJob && typeof document !== 'undefined' && createPortal(
-            <div className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto" dir="rtl">
-              <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[92vh] overflow-y-auto p-6 sm:p-8 shadow-2xl border border-stone-200 space-y-6 relative my-auto animate-in fade-in zoom-in-95">
+            <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto" dir="rtl">
+              <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[88vh] overflow-y-auto p-6 sm:p-8 shadow-2xl border border-stone-200 space-y-6 relative my-auto animate-in fade-in zoom-in-95">
                 
                 {/* Header */}
                 <div className="flex items-start justify-between border-b border-[#e5e1da] pb-4">
@@ -4650,7 +5265,7 @@ export function BusinessDetail() {
                       rel="noreferrer"
                       className="flex-1 sm:flex-initial inline-flex justify-center items-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm rounded-xl transition-all shadow-md cursor-pointer"
                     >
-                      <MessageSquare className="h-4 w-4" />
+                      <WhatsAppIcon className="h-4 w-4" />
                       <span>قدم عبر الواتساب الآن</span>
                     </a>
 
@@ -4668,8 +5283,6 @@ export function BusinessDetail() {
             </div>,
             document.body
           )}
-        </>
-      )}
 
       {/* Visitor VIP Interactive Welcome Popup */}
       {business && business.vipPopup?.enabled && (
@@ -4692,6 +5305,16 @@ export function BusinessDetail() {
           onUpdated={(newPopup) => {
             setBusiness(prev => prev ? { ...prev, vipPopup: newPopup } : null);
           }}
+        />
+      )}
+
+      {/* Medical Facility Appointment Booking Modal */}
+      {business && isMedical && (
+        <MedicalAppointmentModal
+          isOpen={isMedicalBookingOpen}
+          onClose={() => setIsMedicalBookingOpen(false)}
+          business={business}
+          medicalProfile={medicalProfile}
         />
       )}
     </div>

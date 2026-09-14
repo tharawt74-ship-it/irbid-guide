@@ -1,3 +1,11 @@
+export interface MenuItemVersion {
+  id: string;
+  name: string; // e.g., "حجم صغير", "حجم كبير", "وجبة كومبو", "دبل لحمة"
+  priceType: 'fixed' | 'additional' | 'free'; // 'fixed' = سعر محدد للنسخة, 'additional' = زيادة إضافية على السعر, 'free' = مجانية بدون تكلفة
+  price?: string | number; // e.g., "3.50" or "0.75"
+  description?: string; // Optional subtitle or details (e.g. "تكفي شخصين", "مع بطاطا ومشروب")
+}
+
 export interface MenuItem {
   id: string;
   name: string;
@@ -9,7 +17,10 @@ export interface MenuItem {
   isPopular?: boolean;
   isAvailable?: boolean;
   badge?: 'popular' | 'new' | 'spicy' | 'vegetarian' | 'none'; // World-class badge tags
-  options?: string[]; // Customized choices or add-ons (e.g., extra cheese, spicy sauce)
+  options?: string[]; // Customized choices or add-ons (backward compatible)
+  versions?: MenuItemVersion[]; // New: Multiple versions / sizes / add-on tiers with custom pricing
+  versionType?: 'sizes' | 'addons'; // 'sizes' = أحجام (يبدأ من أقل حجم ويتجاهل سعر التاب الأساسي)، 'addons' = إضافات (يظهر السعر الأصلي بدون يبدأ من)
+  createdAt?: number; // Creation timestamp in milliseconds
 }
 
 export interface SocialLinks {
@@ -128,6 +139,7 @@ export interface Business {
   name: string;
   description: string;
   category: string;
+  subCategory?: string;
   address: string;
   district?: string;
   phone?: string;
@@ -137,10 +149,13 @@ export interface Business {
   reviewCount: number;
   createdAt: number;
   userId?: string;
+  ownerId?: string;
   ownerName?: string;
+  ownerEmail?: string;
   username?: string; // e.g. "alkhiyam_cafe" or "irbid_burger" for custom social media profile URL
   isHidden?: boolean; // Hide / unpublish business page from public directory
-  status?: 'active' | 'hidden' | 'pending' | 'rejected';
+  status?: 'active' | 'hidden' | 'pending' | 'rejected' | 'approved';
+  requestId?: string;
   googlePlaceUrl?: string;
   hideSiteReviews?: boolean;
   isFeatured?: boolean;
@@ -159,6 +174,7 @@ export interface Business {
   
   // Package & Verification
   packagePlan?: 'basic' | 'golden' | 'vip' | 'pay_per_use';
+  billingPeriod?: 'monthly' | 'yearly';
   isVerified?: boolean;
   isVipTrial?: boolean;
   vipSubscriptionStartsAt?: number; // timestamp in ms
@@ -200,6 +216,108 @@ export interface Business {
   aboutMedia?: AboutMediaConfig;
   aboutVideoUrl?: string;
   aboutImageUrl?: string;
+
+  // Medical Facility Profile (Specialized for clinics, hospitals, labs, pharmacies)
+  medicalProfile?: MedicalFacilityInfo;
+  facilityType?: string;
+  whatsapp?: string;
+  requestType?: string;
+  phoneClicks?: number;
+  directionsClicks?: number;
+}
+
+export interface MedicalInsurance {
+  name: string;
+  type?: 'نقابة' | 'شركة تأمين' | 'حكومي' | 'خاص' | string;
+  coverageDetails?: string; // e.g., "تغطية كاملة للكشفية", "خصم 20%"
+  logoUrl?: string;
+  isDirectBilling?: boolean;
+}
+
+export interface MedicalDoctor {
+  name: string;
+  title: string; // e.g. "استشاري أول جراحة القلب والقسطرة"
+  degrees: string[]; // e.g. ["البورد الأردني", "زميل الكلية الملكية البريطانية FRCS", "استشاري سابق بمستشفى الملك المؤسس"]
+  subspecialty?: string;
+  experienceYears?: number;
+  licenseNumber?: string;
+  avatarUrl?: string;
+  bio?: string;
+}
+
+export interface MedicalProcedure {
+  id: string;
+  name: string;
+  category?: string; // e.g. "فحوصات تشخيصية", "إجراءات علاجية", "عمليات اليوم الواحد"
+  description?: string;
+  duration?: string; // e.g. "30 دقيقة", "جلسة واحدة"
+  price?: string | number; // e.g. "25 دينار" or "حسب تعرفة النقابة"
+  insuranceCovered?: boolean;
+  preparationNotes?: string; // e.g. "يشترط الصيام 8 ساعات"
+  isPopular?: boolean;
+}
+
+export interface MedicalEquipment {
+  name: string;
+  description?: string;
+  brandOrOrigin?: string; // e.g. "ألماني Candela GentleLase Pro"
+  imageUrl?: string;
+}
+
+export interface MedicalFacilityInfo {
+  // نبذة عن المنشأة
+  aboutFacility?: string;
+
+  // 1. شركات التأمين الصحي المعتمدة
+  insurances?: (string | MedicalInsurance)[];
+  acceptsInsuranceDirectBilling?: boolean;
+  insuranceNotes?: string;
+
+  // 2. المؤهلات والدرجة العلمية والترخيص
+  doctorProfile?: MedicalDoctor;
+  doctorsList?: MedicalDoctor[];
+  showMedicalStaff?: boolean;
+  licenseNumber?: string;
+  accreditationBody?: string; // e.g. "مرخص ومعتمد من وزارة الصحة ونقابة الأطباء الأردنية"
+
+  // 3. نظام الكشف والمواعيد
+  consultationFee?: string; // e.g. "15 - 20 دينار (أو تعرفة النقابة)"
+  followUpPolicy?: string; // e.g. "المراجعة مجانية خلال 14 يوماً من تاريخ الكشف"
+  appointmentDurationMinutes?: number;
+  appointmentTypes?: ('in_clinic' | 'telemedicine' | 'urgent' | 'home_visit')[];
+  bookingNotice?: string;
+
+  // 4. الإجراءات والخدمات الطبية
+  procedures?: MedicalProcedure[];
+
+  // 5. طوارئ 24 ساعة والتواصل العاجل
+  has24Emergency?: boolean;
+  emergencyPhone?: string;
+  onCallService?: boolean;
+  offersHomeVisits?: boolean;
+  homeVisitPhone?: string;
+
+  // 6. الأجهزة والتقنيات الطبية المستخدمة
+  showEquipments?: boolean;
+  equipments?: MedicalEquipment[];
+
+  // 7. تسهيلات الوصول للمرضى وكبار السن
+  showAmenities?: boolean;
+  hasWheelchairAccess?: boolean;
+  hasElevator?: boolean;
+  hasParking?: boolean;
+  hasFemaleStaff?: boolean;
+  hasKidsArea?: boolean;
+  hasElectronicPayment?: boolean;
+  paymentMethods?: string[]; // e.g. ["نقد", "فيزا / ماستركارد", "كليك CliQ", "أقساط بنكية"]
+
+  // 8. معايير التقييمات الطبية الموثوقة
+  medicalRatingMetrics?: {
+    waitingTimeScore?: number; // e.g. 4.8
+    doctorListeningScore?: number; // e.g. 4.9
+    cleanlinessScore?: number; // e.g. 5.0
+    staffFriendlinessScore?: number; // e.g. 4.7
+  };
 }
 
 export interface VipPopupConfig {
@@ -344,7 +462,7 @@ export interface JobOffer {
   contactEmail?: string;
   howToApply?: string;
   isUrgent?: boolean;
-  status?: 'active' | 'closed';
+  status?: 'active' | 'closed' | 'pending';
   createdAt: number;
   userId?: string;
   views?: number;

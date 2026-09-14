@@ -78,18 +78,22 @@ import { EditSuggestionsPanel } from '../components/admin/EditSuggestionsPanel';
 import { ReviewReportsPanel } from '../components/admin/ReviewReportsPanel';
 import { ClaimVerificationPanel } from '../components/admin/ClaimVerificationPanel';
 import { CategoriesManager } from '../components/admin/CategoriesManager';
+import { MedicalCategoriesManager } from '../components/admin/MedicalCategoriesManager';
 import { VipPlansManager } from '../components/admin/VipPlansManager';
 import { GlobalSettingsManager } from '../components/admin/GlobalSettingsManager';
 import { NeighborhoodsManager } from '../components/admin/NeighborhoodsManager';
 import { StaticPagesManager } from '../components/admin/StaticPagesManager';
 import { BannersManager } from '../components/admin/BannersManager';
 import { UpgradeRequestsManager } from '../components/admin/UpgradeRequestsManager';
+import { MedicalFacilitiesManager } from '../components/admin/MedicalFacilitiesManager';
+import { RequestDetailsModal } from '../components/admin/RequestDetailsModal';
 import { recordAuditLog } from '../lib/auditLogHelper';
 import { getBusinessVipStatus } from '../lib/vipHelper';
 import { sanitizeFirestorePayload, compressAndSanitizeFirestorePayload } from '../lib/firestoreHelper';
 import { invalidateCache } from '../lib/dataCache';
-import { getAppConfig, setAppConfig, seedDemoDataToFirestore, clearDemoDataFromFirestore } from '../lib/demoDataHelper';
 import { getWhatsAppUrl } from '../lib/contactHelper';
+import { WhatsAppIcon } from '../components/common/WhatsAppIcon';
+import { getAppConfig, setAppConfig } from '../lib/demoDataHelper';
 
 export function AdminDashboard() {
   const { confirm } = useConfirm();
@@ -218,13 +222,28 @@ export function AdminDashboard() {
   const [isMarketingDetailsOpen, setIsMarketingDetailsOpen] = useState(false);
   const [selectedMarketingRequest, setSelectedMarketingRequest] = useState<MarketingRequest | null>(null);
 
-  // Demo Data Management State
-  const [showDemoData, setShowDemoData] = useState(false);
-  const [isDemoWorking, setIsDemoWorking] = useState(false);
+  const [isRequestDetailsOpen, setIsRequestDetailsOpen] = useState(false);
+  const [selectedRequestForDetails, setSelectedRequestForDetails] = useState<any | null>(null);
+
 
   // Announcement Bar Settings State (Local + Firestore optional)
   const [announcementText, setAnnouncementText] = useState('🌟 مرحباً بكم في منصة شو في بإربد | دليل إربد التجاري والسياحي الشامل');
   const [announcementActive, setAnnouncementActive] = useState(true);
+
+  const [appConfigState, setAppConfigState] = useState<any>(null);
+  const [isEditingPrices, setIsEditingPrices] = useState(false);
+  const [editPricesData, setEditPricesData] = useState<any>({});
+
+  const handleSavePrices = async () => {
+    try {
+      await setAppConfig(editPricesData);
+      setAppConfigState(editPricesData);
+      setIsEditingPrices(false);
+      showToast('تم حفظ أسعار الخدمات التسويقية بنجاح');
+    } catch (err) {
+      showToast('حدث خطأ أثناء حفظ الأسعار', 'error');
+    }
+  };
 
   // Admin management
   const [newAdminEmail, setNewAdminEmail] = useState('');
@@ -323,35 +342,63 @@ export function AdminDashboard() {
     try {
       // Config
       const config = await getAppConfig();
-      setShowDemoData(config.showDemoData);
+      setAppConfigState(config);
 
       // 1. Fetch Requests
-      const reqQuery = query(collection(db, 'businessRequests'), orderBy('createdAt', 'desc'));
-      const reqSnap = await getDocs(reqQuery);
-      const fetchedReqs: any[] = [];
-      reqSnap.forEach(d => fetchedReqs.push({ id: d.id, ...d.data() }));
-      setRequests(fetchedReqs);
+      try {
+        let reqSnap;
+        try {
+          const reqQuery = query(collection(db, 'businessRequests'), orderBy('createdAt', 'desc'));
+          reqSnap = await getDocs(reqQuery);
+        } catch (idxErr) {
+          reqSnap = await getDocs(collection(db, 'businessRequests'));
+        }
+        const fetchedReqs: any[] = [];
+        reqSnap.forEach(d => fetchedReqs.push({ id: d.id, ...d.data() }));
+        fetchedReqs.sort((a, b) => (b.createdAt || b.submittedAt || 0) - (a.createdAt || a.submittedAt || 0));
+        setRequests(fetchedReqs);
+      } catch (reqErr) {
+        console.warn("Could not fetch business requests:", reqErr);
+      }
 
       // 2. Fetch Businesses
-      const busQuery = query(collection(db, 'businesses'), orderBy('createdAt', 'desc'));
-      const busSnap = await getDocs(busQuery);
-      const fetchedBus: Business[] = [];
-      busSnap.forEach(d => fetchedBus.push({ id: d.id, ...d.data() } as Business));
-      setBusinesses(fetchedBus);
+      try {
+        let busSnap;
+        try {
+          const busQuery = query(collection(db, 'businesses'), orderBy('createdAt', 'desc'));
+          busSnap = await getDocs(busQuery);
+        } catch (idxErr) {
+          busSnap = await getDocs(collection(db, 'businesses'));
+        }
+        const fetchedBus: Business[] = [];
+        busSnap.forEach(d => fetchedBus.push({ id: d.id, ...d.data() } as Business));
+        fetchedBus.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        setBusinesses(fetchedBus);
+      } catch (busErr) {
+        console.warn("Could not fetch businesses:", busErr);
+      }
 
       // 3. Fetch Marketing Requests
-      const mktQuery = query(collection(db, 'marketingRequests'), orderBy('createdAt', 'desc'));
-      const mktSnap = await getDocs(mktQuery);
-      const fetchedMkt: MarketingRequest[] = [];
-      mktSnap.forEach(d => fetchedMkt.push({ id: d.id, ...d.data() } as MarketingRequest));
-      setMarketingRequests(fetchedMkt);
+      try {
+        const mktQuery = query(collection(db, 'marketingRequests'), orderBy('createdAt', 'desc'));
+        const mktSnap = await getDocs(mktQuery);
+        const fetchedMkt: MarketingRequest[] = [];
+        mktSnap.forEach(d => fetchedMkt.push({ id: d.id, ...d.data() } as MarketingRequest));
+        setMarketingRequests(fetchedMkt);
+      } catch (mktErr) {
+        console.warn("Could not fetch marketing requests:", mktErr);
+      }
 
       // 4. Fetch Jobs
-      const jobsQuery = query(collection(db, 'jobs'), orderBy('createdAt', 'desc'));
-      const jobsSnap = await getDocs(jobsQuery);
-      const fetchedJobs: JobOffer[] = [];
-      jobsSnap.forEach(d => fetchedJobs.push({ id: d.id, ...d.data() } as JobOffer));
-      setJobs(fetchedJobs);
+      try {
+        const jobsQuery = query(collection(db, 'jobs'), orderBy('createdAt', 'desc'));
+        const jobsSnap = await getDocs(jobsQuery);
+        const fetchedJobs: JobOffer[] = [];
+        jobsSnap.forEach(d => fetchedJobs.push({ id: d.id, ...d.data() } as JobOffer));
+        setJobs(fetchedJobs);
+      } catch (jobsErr) {
+        console.warn("Could not fetch jobs:", jobsErr);
+      }
 
       // 5. Fetch Banner Booking Requests
       try {
@@ -439,49 +486,6 @@ export function AdminDashboard() {
     } finally {
       setLoading(false);
       setIsRefreshing(false);
-    }
-  };
-
-  const handleToggleDemoData = async () => {
-    setIsDemoWorking(true);
-    const nextState = !showDemoData;
-    try {
-      await setAppConfig({ showDemoData: nextState });
-      setShowDemoData(nextState);
-      showToast(nextState ? 'تم تفعيل إظهار البيانات التجريبية للمستخدمين' : 'تم إخفاء البيانات التجريبية من التطبيق بالكامل');
-    } catch (e) {
-      showToast('تعذر تغيير حالة البيانات التجريبية', 'error');
-    } finally {
-      setIsDemoWorking(false);
-    }
-  };
-
-  const handleSeedDemoData = async () => {
-    setIsDemoWorking(true);
-    try {
-      const res = await seedDemoDataToFirestore();
-      setShowDemoData(true);
-      await fetchData();
-      showToast(`تم زرع ${res.count} عناصر بيانات تجريبية في قاعدة البيانات وتفعيل إظهارها بنجاح! 🎉`);
-    } catch (e) {
-      console.error("Error seeding demo data:", e);
-      showToast('فشل في زرع البيانات التجريبية، يرجى التحقق من اتصال قاعدة البيانات', 'error');
-    } finally {
-      setIsDemoWorking(false);
-    }
-  };
-
-  const handleClearDemoData = async () => {
-    setIsDemoWorking(true);
-    try {
-      const res = await clearDemoDataFromFirestore();
-      await fetchData();
-      showToast(`تم حذف ${res.count} عنصر بيانات تجريبية من قاعدة البيانات بنجاح`);
-    } catch (e) {
-      console.error("Error clearing demo data:", e);
-      showToast('فشل في إزالة البيانات التجريبية', 'error');
-    } finally {
-      setIsDemoWorking(false);
     }
   };
 
@@ -1439,9 +1443,46 @@ export function AdminDashboard() {
     showToast('تم تصدير ملف النسخة الاحتياطية بنجاح 📥');
   };
 
+  // Helper to identify medical businesses or requests
+  const isMedicalItem = (item: any) => {
+    if (!item) return false;
+    if (item.medicalProfile) return true;
+    if (item.requestType === 'medical_facility_registration') return true;
+    const cat = (item.category || item.subCategory || '').toLowerCase();
+    const name = (item.name || '').toLowerCase();
+    const desc = (item.description || '').toLowerCase();
+    return (
+      cat.includes('طب') ||
+      cat.includes('صحة') ||
+      cat.includes('عياد') ||
+      cat.includes('مستشف') ||
+      cat.includes('مختبر') ||
+      cat.includes('صيدل') ||
+      cat.includes('علاج طبيعي') ||
+      cat.includes('أسنان') ||
+      cat.includes('تجميل') ||
+      cat.includes('رعاية') ||
+      name.includes('دكتور') ||
+      name.includes('عيادة') ||
+      name.includes('مركز طبي') ||
+      name.includes('صيدلية') ||
+      name.includes('مختبر') ||
+      desc.includes('طبيب') ||
+      desc.includes('طبي')
+    );
+  };
+
+  const nonMedicalBusinesses = useMemo(() => {
+    return businesses.filter(b => !isMedicalItem(b));
+  }, [businesses]);
+
+  const nonMedicalRequests = useMemo(() => {
+    return requests.filter(r => !isMedicalItem(r));
+  }, [requests]);
+
   // Filtered Businesses
   const filteredBusinesses = useMemo(() => {
-    return businesses.filter(b => {
+    return nonMedicalBusinesses.filter(b => {
       if (businessCategoryFilter !== 'الكل' && b.category !== businessCategoryFilter) return false;
       if (businessFeaturedFilter === 'featured' && !b.isFeatured) return false;
       if (businessFeaturedFilter === 'regular' && b.isFeatured) return false;
@@ -1463,11 +1504,11 @@ export function AdminDashboard() {
       }
       return true;
     });
-  }, [businesses, businessCategoryFilter, businessFeaturedFilter, businessVipFilter, businessSearch]);
+  }, [nonMedicalBusinesses, businessCategoryFilter, businessFeaturedFilter, businessVipFilter, businessSearch]);
 
   // Filtered Requests
   const filteredRequests = useMemo(() => {
-    return requests.filter(r => {
+    return nonMedicalRequests.filter(r => {
       if (requestStatusFilter !== 'all' && r.status !== requestStatusFilter) return false;
       if (requestSearch.trim()) {
         const q = requestSearch.toLowerCase().trim();
@@ -1479,7 +1520,7 @@ export function AdminDashboard() {
       }
       return true;
     });
-  }, [requests, requestStatusFilter, requestSearch]);
+  }, [nonMedicalRequests, requestStatusFilter, requestSearch]);
 
   // Filtered Marketing Requests
   const filteredMarketing = useMemo(() => {
@@ -1537,9 +1578,98 @@ export function AdminDashboard() {
   // Categories list for filters
   const uniqueCategories = useMemo(() => {
     const cats = new Set<string>();
-    businesses.forEach(b => { if (b.category) cats.add(b.category); });
+    nonMedicalBusinesses.forEach(b => { if (b.category) cats.add(b.category); });
     return Array.from(cats);
+  }, [nonMedicalBusinesses]);
+
+  // Medical Facilities Count
+  const medicalFacilitiesCount = useMemo(() => {
+    return businesses.filter(b => {
+      if (b.medicalProfile) return true;
+      const cat = (b.category || '').toLowerCase();
+      const name = (b.name || '').toLowerCase();
+      return (
+        cat.includes('طب') ||
+        cat.includes('صحة') ||
+        cat.includes('عياد') ||
+        cat.includes('مستشف') ||
+        cat.includes('مختبر') ||
+        cat.includes('صيدل') ||
+        name.includes('دكتور') ||
+        name.includes('عيادة') ||
+        name.includes('مركز طبي') ||
+        name.includes('صيدلية')
+      );
+    }).length;
   }, [businesses]);
+
+  // Pending Medical Requests Count
+  const pendingMedicalRequestsCount = useMemo(() => {
+    const fromReqs = requests.filter(r => {
+      if (r.status !== 'pending') return false;
+      if (r.requestType === 'medical_facility_registration') return true;
+      if (r.medicalProfile) return true;
+      const cat = (r.category || r.subCategory || '').toLowerCase();
+      const name = (r.name || '').toLowerCase();
+      const desc = (r.description || '').toLowerCase();
+      return (
+        cat.includes('طب') ||
+        cat.includes('صحة') ||
+        cat.includes('عياد') ||
+        cat.includes('مستشف') ||
+        cat.includes('مختبر') ||
+        cat.includes('صيدل') ||
+        cat.includes('علاج طبيعي') ||
+        cat.includes('أسنان') ||
+        cat.includes('تجميل') ||
+        cat.includes('رعاية') ||
+        name.includes('دكتور') ||
+        name.includes('عيادة') ||
+        name.includes('مركز طبي') ||
+        name.includes('صيدلية') ||
+        name.includes('مختبر') ||
+        desc.includes('طبيب') ||
+        desc.includes('طبي')
+      );
+    });
+
+    const fromBiz = businesses.filter(b => {
+      if (b.status !== 'pending') return false;
+      if (b.medicalProfile) return true;
+      const cat = (b.category || b.subCategory || '').toLowerCase();
+      const name = (b.name || '').toLowerCase();
+      const desc = (b.description || '').toLowerCase();
+      return (
+        cat.includes('طب') ||
+        cat.includes('صحة') ||
+        cat.includes('عياد') ||
+        cat.includes('مستشف') ||
+        cat.includes('مختبر') ||
+        cat.includes('صيدل') ||
+        cat.includes('علاج طبيعي') ||
+        cat.includes('أسنان') ||
+        cat.includes('تجميل') ||
+        cat.includes('رعاية') ||
+        name.includes('دكتور') ||
+        name.includes('عيادة') ||
+        name.includes('مركز طبي') ||
+        name.includes('صيدلية') ||
+        name.includes('مختبر') ||
+        desc.includes('طبيب') ||
+        desc.includes('طبي')
+      );
+    });
+
+    const setIds = new Set<string>();
+    fromReqs.forEach(r => setIds.add(r.id));
+    fromBiz.forEach(b => {
+      if (!setIds.has(b.id) && !setIds.has(b.requestId)) {
+        setIds.add(b.id);
+      }
+    });
+
+    return setIds.size;
+  }, [requests, businesses]);
 
   if (!isStaff) {
     return (
@@ -1604,13 +1734,15 @@ export function AdminDashboard() {
       <AdminHeader
         activeTab={activeTab}
         setActiveTab={setActiveTab}
-        pendingRequestsCount={requests.filter(r => r.status === 'pending').length}
+        pendingRequestsCount={nonMedicalRequests.filter(r => r.status === 'pending').length}
         pendingMarketingCount={marketingRequests.filter(m => m.status === 'pending').length}
-        businessesCount={businesses.length}
+        businessesCount={nonMedicalBusinesses.length}
         jobsCount={jobs.length}
         pendingSuggestionsCount={editSuggestions.filter(s => s.status === 'pending').length}
         pendingReportsCount={reviewReports.filter(r => r.status === 'pending').length}
         pendingHousingCount={housings.filter(h => h.status === 'pending').length}
+        medicalFacilitiesCount={medicalFacilitiesCount}
+        pendingMedicalRequestsCount={pendingMedicalRequestsCount}
         onRefresh={fetchData}
         onOpenAddBusiness={() => setIsAddBusinessOpen(true)}
         onOpenBroadcastModal={() => setIsBroadcastModalOpen(true)}
@@ -1621,61 +1753,6 @@ export function AdminDashboard() {
       {/* TAB 1: OVERVIEW & ANALYTICS */}
       {activeTab === 'overview' && (
         <div className="space-y-6">
-          {/* DEMO DATA CONTROL CARD */}
-          <div className="p-5 rounded-3xl border border-amber-200/90 bg-amber-50/60 shadow-xs space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-amber-200/70">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-amber-500/10 text-amber-800 flex items-center justify-center font-bold">
-                  <Sparkles className="h-5 w-5 text-amber-600" />
-                </div>
-                <div>
-                  <h4 className="text-base font-black text-stone-900">التحكم بالبيانات التجريبية (Demo Data)</h4>
-                  <p className="text-xs text-stone-600">زرع، مسح، أو التبديل في إظهار البيانات التجريبية للمستخدمين في أرجاء الموقع</p>
-                </div>
-              </div>
-
-              {/* Toggle Button */}
-              <button
-                onClick={handleToggleDemoData}
-                disabled={isDemoWorking}
-                className={`inline-flex items-center gap-2.5 px-5 py-2.5 rounded-2xl font-black text-xs transition-all shadow-xs cursor-pointer ${
-                  showDemoData 
-                    ? 'bg-amber-600 hover:bg-amber-700 text-white' 
-                    : 'bg-stone-200 hover:bg-stone-300 text-stone-800'
-                }`}
-              >
-                {showDemoData ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-                <span>{showDemoData ? 'البيانات التجريبية: مفعّلة (ظاهرة)' : 'البيانات التجريبية: مخفية (البيانات الحقيقية فقط)'}</span>
-              </button>
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-              <p className="text-xs text-stone-600 max-w-xl leading-relaxed">
-                تستند المنصة إلى قاعدة بيانات Firestore. يمكنك زرع بيانات تجريبية (20 محل + 20 عقار وسكن + 20 فرصة عمل) لاستعراض جميع واجهات المنصة، أو مسحها نهائياً بضغطة زر.
-              </p>
-
-              <div className="flex flex-wrap items-center gap-2.5">
-                <button
-                  onClick={handleSeedDemoData}
-                  disabled={isDemoWorking}
-                  className="inline-flex items-center gap-2 bg-stone-900 hover:bg-black text-white px-4 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer shadow-xs"
-                >
-                  <Plus className="h-4 w-4 text-amber-400" />
-                  <span>زرع بيانات تجريبية (20 محل + 20 عقار + 20 وظيفة)</span>
-                </button>
-
-                <button
-                  onClick={handleClearDemoData}
-                  disabled={isDemoWorking}
-                  className="inline-flex items-center gap-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-4 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer"
-                >
-                  <Trash2 className="h-4 w-4 text-rose-600" />
-                  <span>مسح كافة البيانات التجريبية</span>
-                </button>
-              </div>
-            </div>
-          </div>
-
           <AdminStatsOverview
             businesses={businesses}
             requests={requests}
@@ -1735,6 +1812,9 @@ export function AdminDashboard() {
       {/* TAB 2: CATEGORIES MANAGER */}
       {activeTab === 'categories' && <CategoriesManager showToast={showToast} />}
 
+      {/* TAB: MEDICAL CATEGORIES MANAGER */}
+      {activeTab === 'medical_categories' && <MedicalCategoriesManager showToast={showToast} />}
+
       {/* TAB: VIP PLANS MANAGER */}
       {activeTab === 'vipPlans' && <VipPlansManager showToast={showToast} />}
 
@@ -1782,8 +1862,8 @@ export function AdminDashboard() {
               className={`flex-1 py-3 text-sm font-black rounded-xl transition-all flex items-center justify-center gap-2 ${activeBusinessSubTab === 'requests' ? 'bg-[#1a4d2e] text-white shadow-md' : 'text-stone-600 hover:bg-stone-100 hover:text-stone-900'}`}
             >
               طلبات إضافة المحلات
-              {requests.filter(r => r.status === 'pending').length > 0 && (
-                <span className="bg-amber-500 text-white text-[10px] px-2 py-0.5 rounded-full animate-pulse">{requests.filter(r => r.status === 'pending').length}</span>
+              {nonMedicalRequests.filter(r => r.status === 'pending').length > 0 && (
+                <span className="bg-amber-500 text-white text-[10px] px-2 py-0.5 rounded-full animate-pulse">{nonMedicalRequests.filter(r => r.status === 'pending').length}</span>
               )}
             </button>
             <button
@@ -1855,7 +1935,7 @@ export function AdminDashboard() {
                   onChange={e => setBusinessCategoryFilter(e.target.value)}
                   className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-1.5 text-xs font-bold text-stone-700 focus:outline-none focus:ring-1 focus:ring-[#1a4d2e]"
                 >
-                  <option value="الكل">جميع الأقسام ({businesses.length})</option>
+                  <option value="الكل">جميع الأقسام ({nonMedicalBusinesses.length})</option>
                   {uniqueCategories.map(cat => (
                     <option key={cat} value={cat}>{cat}</option>
                   ))}
@@ -1868,8 +1948,8 @@ export function AdminDashboard() {
                   className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-1.5 text-xs font-bold text-stone-700 focus:outline-none focus:ring-1 focus:ring-[#1a4d2e]"
                 >
                   <option value="all">كل التمييز</option>
-                  <option value="featured">المميزة فقط ⭐ ({businesses.filter(b => b.isFeatured).length})</option>
-                  <option value="regular">غير المميزة ({businesses.filter(b => !b.isFeatured).length})</option>
+                  <option value="featured">المميزة فقط ⭐ ({nonMedicalBusinesses.filter(b => b.isFeatured).length})</option>
+                  <option value="regular">غير المميزة ({nonMedicalBusinesses.filter(b => !b.isFeatured).length})</option>
                 </select>
 
                 {/* VIP Package Filter */}
@@ -1879,13 +1959,13 @@ export function AdminDashboard() {
                   className="bg-amber-50/60 border border-amber-200 text-amber-950 rounded-xl px-3 py-1.5 text-xs font-black focus:outline-none focus:ring-1 focus:ring-amber-500"
                 >
                   <option value="all">جميع الباقات</option>
-                  <option value="vip">👑 مشتركي VIP الذهبي ({businesses.filter(b => getBusinessVipStatus(b).isVip).length})</option>
-                  <option value="regular">الباقة الأساسية ({businesses.filter(b => !getBusinessVipStatus(b).isVip).length})</option>
+                  <option value="vip">👑 مشتركي VIP الذهبي ({nonMedicalBusinesses.filter(b => getBusinessVipStatus(b).isVip).length})</option>
+                  <option value="regular">الباقة الأساسية ({nonMedicalBusinesses.filter(b => !getBusinessVipStatus(b).isVip).length})</option>
                 </select>
               </div>
 
               <div className="text-xs font-bold text-stone-500">
-                النتائج المعروضة: <span className="text-[#1a4d2e] font-black">{filteredBusinesses.length}</span> من أصل {businesses.length}
+                النتائج المعروضة: <span className="text-[#1a4d2e] font-black">{filteredBusinesses.length}</span> من أصل {nonMedicalBusinesses.length}
               </div>
             </div>
           </div>
@@ -2294,10 +2374,10 @@ export function AdminDashboard() {
             {/* Status Filter Chips */}
             <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto">
               {[
-                { id: 'all', label: `الكل (${requests.length})` },
-                { id: 'pending', label: `قيد الانتظار (${requests.filter(r => r.status === 'pending').length})` },
-                { id: 'approved', label: `مقبول (${requests.filter(r => r.status === 'approved').length})` },
-                { id: 'rejected', label: `مرفوض (${requests.filter(r => r.status === 'rejected').length})` }
+                { id: 'all', label: `الكل (${nonMedicalRequests.length})` },
+                { id: 'pending', label: `قيد الانتظار (${nonMedicalRequests.filter(r => r.status === 'pending').length})` },
+                { id: 'approved', label: `مقبول (${nonMedicalRequests.filter(r => r.status === 'approved').length})` },
+                { id: 'rejected', label: `مرفوض (${nonMedicalRequests.filter(r => r.status === 'rejected').length})` }
               ].map(status => (
                 <button
                   key={status.id}
@@ -2397,6 +2477,17 @@ export function AdminDashboard() {
 
                   {/* Actions */}
                   <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto pt-2 lg:pt-0 border-t lg:border-t-0 border-stone-100">
+                    <button
+                      onClick={() => {
+                        setSelectedRequestForDetails(req);
+                        setIsRequestDetailsOpen(true);
+                      }}
+                      className="flex-1 lg:flex-none inline-flex items-center justify-center gap-1.5 bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-200 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      <Eye className="h-4 w-4 text-emerald-700" />
+                      <span>عرض النموذج والتفاصيل</span>
+                    </button>
+
                     {req.status === 'pending' ? (
                       <>
                         <button
@@ -2452,10 +2543,10 @@ export function AdminDashboard() {
           {/* Marketing Header Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {[
-              { title: 'صدارة البحث والتصنيف', price: '15 د.أ / أسبوع', desc: 'ظهور المحل في أعلى نتائج البحث وبانر مميز', type: 'sponsored', count: marketingRequests.filter(m => m.serviceType === 'sponsored').length },
-              { title: 'إشعار جماعي مباشر', price: '10 د.أ / إشعار', desc: 'إشعار فوري لجميع مستخدمي المنصة في إربد', type: 'push_notifications', count: marketingRequests.filter(m => m.serviceType === 'push_notifications').length },
-              { title: 'بانر الصفحة الرئيسية', price: '25 د.أ / أسبوع', desc: 'إعلان رئيسي بارز في سلايدر أعلى الصفحة', type: 'homepage_banner', count: marketingRequests.filter(m => m.serviceType === 'homepage_banner').length },
-              { title: 'ستاند طاولة NFC الذكي', price: '8 د.أ / للقطعة', desc: 'ستاند ذكي لتقييم جوجل مابس وزيادة الزبائن', type: 'nfc_stands', count: marketingRequests.filter(m => m.serviceType === 'nfc_stands').length },
+              { title: 'صدارة البحث والتصنيف', price: `${appConfigState?.priceSponsored ?? 15} د.أ`, desc: 'ظهور المحل في أعلى نتائج البحث وبانر مميز', type: 'sponsored', count: marketingRequests.filter(m => m.serviceType === 'sponsored').length },
+              { title: 'إشعار جماعي مباشر', price: `${appConfigState?.pricePushNotifications ?? 10} د.أ`, desc: 'إشعار فوري لجميع مستخدمي المنصة في إربد', type: 'push_notifications', count: marketingRequests.filter(m => m.serviceType === 'push_notifications').length },
+              { title: 'بانر الصفحة الرئيسية', price: `${appConfigState?.priceHomepageBanner ?? 25} د.أ`, desc: 'إعلان رئيسي بارز في سلايدر أعلى الصفحة', type: 'homepage_banner', count: marketingRequests.filter(m => m.serviceType === 'homepage_banner').length },
+              { title: 'ترقية نظام الرسائل', price: `يبدأ من ${appConfigState?.priceMessaging1Month ?? 5} د.أ`, desc: 'ترقية نظام استقبال الوسائط والمحادثات', type: 'premium_messaging', count: marketingRequests.filter(m => m.serviceType === 'premium_messaging').length },
             ].map(pkg => (
               <div key={pkg.type} className="bg-white p-4.5 rounded-3xl border border-[#e5e1da] shadow-xs space-y-2">
                 <div className="flex items-center justify-between">
@@ -2466,6 +2557,107 @@ export function AdminDashboard() {
                 <p className="text-[11px] text-stone-500 leading-relaxed">{pkg.desc}</p>
               </div>
             ))}
+          </div>
+
+          {/* Edit Marketing Prices Form */}
+          <div className="bg-white p-5 rounded-3xl border border-[#e5e1da] shadow-xs">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-black text-[#2d2a26]">تسعير الخدمات التسويقية</h3>
+              {!isEditingPrices ? (
+                <button
+                  onClick={() => {
+                    setEditPricesData(appConfigState || {});
+                    setIsEditingPrices(true);
+                  }}
+                  className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold rounded-xl transition-colors"
+                >
+                  تعديل الأسعار
+                </button>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setIsEditingPrices(false)}
+                    className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold rounded-xl transition-colors"
+                  >
+                    إلغاء
+                  </button>
+                  <button
+                    onClick={handleSavePrices}
+                    className="px-4 py-2 bg-[#1a4d2e] hover:bg-[#143a23] text-white text-xs font-bold rounded-xl transition-colors"
+                  >
+                    حفظ التغييرات
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {isEditingPrices && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-stone-500">صدارة البحث (د.أ)</label>
+                  <input
+                    type="number"
+                    value={editPricesData.priceSponsored || 15}
+                    onChange={(e) => setEditPricesData({ ...editPricesData, priceSponsored: Number(e.target.value) })}
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-stone-500">إشعار جماعي (د.أ)</label>
+                  <input
+                    type="number"
+                    value={editPricesData.pricePushNotifications || 10}
+                    onChange={(e) => setEditPricesData({ ...editPricesData, pricePushNotifications: Number(e.target.value) })}
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-stone-500">بانر رئيسي (د.أ)</label>
+                  <input
+                    type="number"
+                    value={editPricesData.priceHomepageBanner || 25}
+                    onChange={(e) => setEditPricesData({ ...editPricesData, priceHomepageBanner: Number(e.target.value) })}
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-stone-500">نظام الرسائل (1 شهر)</label>
+                  <input
+                    type="number"
+                    value={editPricesData.priceMessaging1Month || 5}
+                    onChange={(e) => setEditPricesData({ ...editPricesData, priceMessaging1Month: Number(e.target.value) })}
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-stone-500">نظام الرسائل (3 أشهر)</label>
+                  <input
+                    type="number"
+                    value={editPricesData.priceMessaging3Months || 12}
+                    onChange={(e) => setEditPricesData({ ...editPricesData, priceMessaging3Months: Number(e.target.value) })}
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-stone-500">نظام الرسائل (6 أشهر)</label>
+                  <input
+                    type="number"
+                    value={editPricesData.priceMessaging6Months || 20}
+                    onChange={(e) => setEditPricesData({ ...editPricesData, priceMessaging6Months: Number(e.target.value) })}
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-stone-500">نظام الرسائل (سنة)</label>
+                  <input
+                    type="number"
+                    value={editPricesData.priceMessaging1Year || 35}
+                    onChange={(e) => setEditPricesData({ ...editPricesData, priceMessaging1Year: Number(e.target.value) })}
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Filters Bar */}
@@ -2587,6 +2779,19 @@ export function AdminDashboard() {
             </div>
           )}
         </div>
+      )}
+
+      {/* TAB: MEDICAL FACILITIES & REQUESTS MANAGEMENT */}
+      {(activeTab === 'medical' || activeTab === 'medical_requests') && (
+        <MedicalFacilitiesManager 
+          businesses={businesses}
+          requests={requests}
+          initialSubTab={activeTab === 'medical_requests' ? 'requests' : 'facilities'}
+          onRefresh={fetchData}
+          showToast={showToast}
+          currentUserEmail={currentUser?.email || undefined}
+          userRole={userRole || undefined}
+        />
       )}
 
       {/* TAB 5: JOBS MANAGEMENT */}
@@ -3586,7 +3791,7 @@ export function AdminDashboard() {
                         rel="noreferrer"
                         className="inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl text-xs font-black shadow-xs transition-all cursor-pointer w-full"
                       >
-                        <MessageSquare className="h-4 w-4" />
+                        <WhatsAppIcon className="h-4 w-4" />
                         <span>تواصل واتساب مع المعلن</span>
                       </a>
 
@@ -4007,61 +4212,6 @@ export function AdminDashboard() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               
-              {/* DEMO DATA CONTROL CARD */}
-              <div className="p-5 rounded-2xl border border-amber-200 bg-amber-50/40 space-y-4 md:col-span-2">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-amber-200/60">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-2xl bg-amber-500/10 text-amber-800 flex items-center justify-center font-bold">
-                      <Sparkles className="h-5 w-5 text-amber-600" />
-                    </div>
-                    <div>
-                      <h4 className="text-base font-black text-stone-900">التحكم بالبيانات التجريبية (Demo Data)</h4>
-                      <p className="text-xs text-stone-600">إظهار أو إخفاء البيانات التجريبية للمستخدمين في جميع صفحات الموقع</p>
-                    </div>
-                  </div>
-
-                  {/* Toggle Button */}
-                  <button
-                    onClick={handleToggleDemoData}
-                    disabled={isDemoWorking}
-                    className={`inline-flex items-center gap-2.5 px-5 py-2.5 rounded-2xl font-black text-xs transition-all shadow-sm cursor-pointer ${
-                      showDemoData 
-                        ? 'bg-amber-600 hover:bg-amber-700 text-white' 
-                        : 'bg-stone-200 hover:bg-stone-300 text-stone-800'
-                    }`}
-                  >
-                    {showDemoData ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-                    <span>{showDemoData ? 'البيانات التجريبية: مفعّلة (ظاهرة)' : 'البيانات التجريبية: مخفية (فقط البيانات الحقيقية)'}</span>
-                  </button>
-                </div>
-
-                <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-                  <p className="text-xs text-stone-600 max-w-xl leading-relaxed">
-                    تستند المنصة بالكامل إلى قاعدة بيانات Firestore. يمكنك إضافة نموذج بيانات تجريبية (20 محل + 20 عقار + 20 وظيفة) لقاعدة البيانات لاستعراض شكل الواجهات، أو إزالتها نهائياً بضغطة زر.
-                  </p>
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      onClick={handleSeedDemoData}
-                      disabled={isDemoWorking}
-                      className="inline-flex items-center gap-2 bg-stone-900 hover:bg-black text-white px-4 py-2 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-                    >
-                      <Plus className="h-3.5 w-3.5 text-amber-400" />
-                      <span>زرع بيانات تجريبية (20 محل + 20 عقار + 20 وظيفة)</span>
-                    </button>
-
-                    <button
-                      onClick={handleClearDemoData}
-                      disabled={isDemoWorking}
-                      className="inline-flex items-center gap-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-4 py-2 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      <span>مسح كافة البيانات التجريبية</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-
               {/* Backup Card */}
               <div className="p-5 rounded-2xl border border-stone-200 bg-stone-50/50 space-y-3">
                 <div className="flex items-center gap-2 text-stone-900 font-black text-sm">
@@ -4151,6 +4301,18 @@ export function AdminDashboard() {
           setIsVipUpgradeModalOpen(false);
           setSelectedBusinessForVip(null);
         }}
+      />
+
+      {/* 6. Request Details Modal */}
+      <RequestDetailsModal
+        isOpen={isRequestDetailsOpen}
+        onClose={() => {
+          setIsRequestDetailsOpen(false);
+          setSelectedRequestForDetails(null);
+        }}
+        request={selectedRequestForDetails}
+        onApprove={(req) => handleApproveRequest(req)}
+        onReject={(reqId, reqName) => handleRejectRequest(reqId)}
       />
 
     </div>

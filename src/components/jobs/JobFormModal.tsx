@@ -13,7 +13,6 @@ import {
   Check, 
   Flame, 
   Phone, 
-  MessageSquare, 
   Mail, 
   Users, 
   GraduationCap, 
@@ -25,6 +24,7 @@ import {
   CheckCircle2,
   Store
 } from 'lucide-react';
+import { WhatsAppIcon } from '../common/WhatsAppIcon';
 import { JobOffer, Business } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { db } from '../../lib/firebase';
@@ -409,7 +409,7 @@ export function JobFormModal({
       contactEmail: contactEmail.trim() ? sanitizeInput(contactEmail) : undefined,
       howToApply: howToApply.trim() ? sanitizeInput(howToApply) : undefined,
       isUrgent,
-      status: 'active',
+      status: isAdmin ? 'active' : 'pending',
       userId: currentUser?.uid || undefined,
       createdAt: editingJob?.createdAt || now
     };
@@ -485,8 +485,8 @@ export function JobFormModal({
   if (!isOpen || typeof document === 'undefined') return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto" dir="rtl">
-      <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[92vh] overflow-y-auto shadow-2xl border border-stone-200 relative my-auto animate-in fade-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto" dir="rtl">
+      <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[88vh] overflow-y-auto shadow-2xl border border-stone-200 relative my-auto animate-in fade-in zoom-in-95 duration-200">
         
         {/* Sticky Header */}
         <div className="sticky top-0 z-20 bg-white/95 backdrop-blur-md px-6 py-4 border-b border-stone-100 flex items-center justify-between">
@@ -897,7 +897,7 @@ export function JobFormModal({
                   placeholder="07XXXXXXXX"
                   className="w-full p-3 pr-9 bg-white border border-stone-200 rounded-xl text-sm font-bold text-[#2d2a26] text-right focus:border-[#1a4d2e] outline-none"
                 />
-                <MessageSquare className="h-4 w-4 text-emerald-600 absolute right-3 top-1/2 -translate-y-1/2" />
+                <WhatsAppIcon className="h-4 w-4 text-emerald-600 absolute right-3 top-1/2 -translate-y-1/2" />
               </div>
             </div>
 

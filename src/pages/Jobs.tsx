@@ -4,7 +4,7 @@ import {
   Briefcase, Search, Plus, MapPin, Clock, DollarSign, 
   Phone, MessageSquare, Building2, CheckCircle2, Flame, 
   Filter, Sparkles, X, Send, GraduationCap, Check, Trash2, 
-  Pencil, RefreshCw, Share2, Eye, Store, ExternalLink, Users, Award
+  Pencil, RefreshCw, Share2, Eye, Store, ExternalLink, Users, Award, ChevronDown
 } from 'lucide-react';
 import { collection, getDocs, doc, deleteDoc, query, orderBy } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -55,6 +55,7 @@ export function Jobs() {
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCategoriesModalOpen, setIsCategoriesModalOpen] = useState(false);
+  const [isSubCategoriesExpanded, setIsSubCategoriesExpanded] = useState(false);
   const [editingJob, setEditingJob] = useState<JobOffer | null>(null);
   const [selectedDetailJob, setSelectedDetailJob] = useState<JobOffer | null>(null);
 
@@ -353,32 +354,76 @@ export function Jobs() {
           
           {/* Sub Categories (Shows only when a main category is selected) */}
           {selectedCategory && selectedCategory !== 'الكل' && getSubCats(selectedCategory).length > 0 && (
-            <div className="relative">
-              <div className="pointer-events-none absolute left-0 top-0 bottom-3 w-8 bg-gradient-to-r from-[#fdfcfb] to-transparent z-10 sm:hidden" />
-              <div className="flex overflow-x-auto gap-2.5 pb-3 mt-2 -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-hide snap-x" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+            <div className="mt-3 mb-2">
+              <div className="flex items-start sm:items-center gap-2">
+                <div className="relative flex-1 min-w-0">
+                  {isSubCategoriesExpanded ? (
+                    <div className="flex flex-wrap gap-2 sm:gap-2.5 animate-in fade-in slide-in-from-top-1 duration-200">
+                      <button
+                        onClick={() => setSelectedSubCategory('')}
+                        className={`snap-start shrink-0 whitespace-nowrap px-4 sm:px-5 py-2 sm:py-2.5 rounded-full text-xs sm:text-sm font-bold transition-all duration-200 border cursor-pointer ${
+                          selectedSubCategory === ''
+                            ? 'bg-gradient-to-r from-[#1a4d2e] to-[#276e43] text-white border-transparent shadow-md shadow-emerald-900/10'
+                            : 'bg-white text-stone-600 border-[#e5e1da] hover:border-emerald-300 hover:bg-stone-50'
+                        }`}
+                      >
+                        عرض الكل الفرعي
+                      </button>
+                      {getSubCats(selectedCategory).map((subCat) => (
+                        <button
+                          key={subCat}
+                          onClick={() => setSelectedSubCategory(selectedSubCategory === subCat ? '' : subCat)}
+                          className={`snap-start shrink-0 whitespace-nowrap px-4 sm:px-5 py-2 sm:py-2.5 rounded-full text-xs sm:text-sm font-bold transition-all duration-200 border cursor-pointer ${
+                            selectedSubCategory === subCat
+                              ? 'bg-gradient-to-r from-[#1a4d2e] to-[#276e43] text-white border-transparent shadow-md shadow-emerald-900/10'
+                              : 'bg-white text-stone-600 border-[#e5e1da] hover:border-emerald-300 hover:bg-stone-50'
+                          }`}
+                        >
+                          {subCat}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-[#fdfcfb] to-transparent z-10 sm:hidden" />
+                      <div className="flex overflow-x-auto gap-2 sm:gap-2.5 pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-hide snap-x items-center" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                        <button
+                          onClick={() => setSelectedSubCategory('')}
+                          className={`snap-start shrink-0 whitespace-nowrap px-4 sm:px-5 py-2 sm:py-2.5 rounded-full text-xs sm:text-sm font-bold transition-all duration-200 border cursor-pointer ${
+                            selectedSubCategory === ''
+                              ? 'bg-gradient-to-r from-[#1a4d2e] to-[#276e43] text-white border-transparent shadow-md shadow-emerald-900/10'
+                              : 'bg-white text-stone-600 border-[#e5e1da] hover:border-emerald-300 hover:bg-stone-50'
+                          }`}
+                        >
+                          عرض الكل الفرعي
+                        </button>
+                        {getSubCats(selectedCategory).map((subCat) => (
+                          <button
+                            key={subCat}
+                            onClick={() => setSelectedSubCategory(selectedSubCategory === subCat ? '' : subCat)}
+                            className={`snap-start shrink-0 whitespace-nowrap px-4 sm:px-5 py-2 sm:py-2.5 rounded-full text-xs sm:text-sm font-bold transition-all duration-200 border cursor-pointer ${
+                              selectedSubCategory === subCat
+                                ? 'bg-gradient-to-r from-[#1a4d2e] to-[#276e43] text-white border-transparent shadow-md shadow-emerald-900/10'
+                                : 'bg-white text-stone-600 border-[#e5e1da] hover:border-emerald-300 hover:bg-stone-50'
+                            }`}
+                          >
+                            {subCat}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Fixed circular expand/collapse button */}
                 <button
-                  onClick={() => setSelectedSubCategory('')}
-                  className={`snap-start shrink-0 whitespace-nowrap px-5 py-2.5 rounded-full text-sm font-bold transition-all duration-200 border cursor-pointer ${
-                    selectedSubCategory === ''
-                      ? 'bg-gradient-to-r from-[#1a4d2e] to-[#276e43] text-white border-transparent shadow-md shadow-emerald-900/10'
-                      : 'bg-white text-stone-600 border-[#e5e1da] hover:border-emerald-300 hover:bg-stone-50'
-                  }`}
+                  onClick={() => setIsSubCategoriesExpanded(!isSubCategoriesExpanded)}
+                  className="shrink-0 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white border border-stone-200 hover:border-emerald-500/40 hover:bg-stone-50 text-stone-600 hover:text-stone-900 shadow-xs flex items-center justify-center transition-all duration-300 cursor-pointer"
+                  title={isSubCategoriesExpanded ? "عرض كشريط أفقي" : "تمديد للأسفل"}
+                  aria-label={isSubCategoriesExpanded ? "عرض كشريط أفقي" : "تمديد للأسفل"}
                 >
-                  عرض الكل الفرعي
+                  <ChevronDown className={`h-4.5 w-4.5 sm:h-5 sm:w-5 transition-transform duration-300 ${isSubCategoriesExpanded ? 'rotate-180 text-[#1a4d2e]' : ''}`} />
                 </button>
-                {getSubCats(selectedCategory).map((subCat) => (
-                  <button
-                    key={subCat}
-                    onClick={() => setSelectedSubCategory(selectedSubCategory === subCat ? '' : subCat)}
-                    className={`snap-start shrink-0 whitespace-nowrap px-5 py-2.5 rounded-full text-sm font-bold transition-all duration-200 border cursor-pointer ${
-                      selectedSubCategory === subCat
-                        ? 'bg-gradient-to-r from-[#1a4d2e] to-[#276e43] text-white border-transparent shadow-md shadow-emerald-900/10'
-                        : 'bg-white text-stone-600 border-[#e5e1da] hover:border-emerald-300 hover:bg-stone-50'
-                    }`}
-                  >
-                    {subCat}
-                  </button>
-                ))}
               </div>
             </div>
           )}
@@ -626,8 +671,8 @@ export function Jobs() {
 
       {/* Comprehensive Job Details Modal */}
       {selectedDetailJob && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto" dir="rtl">
-          <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[92vh] overflow-y-auto p-6 sm:p-8 shadow-2xl border border-stone-200 space-y-6 relative my-auto animate-in fade-in zoom-in-95">
+        <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto" dir="rtl">
+          <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[88vh] overflow-y-auto p-6 sm:p-8 shadow-2xl border border-stone-200 space-y-6 relative my-auto animate-in fade-in zoom-in-95">
             
             {/* Header */}
             <div className="flex items-start justify-between border-b border-[#e5e1da] pb-4">

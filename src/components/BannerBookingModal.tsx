@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   X, Megaphone, Send, Sparkles, CheckCircle2, 
   Calendar, Phone, Building2, Image as ImageIcon,
@@ -179,9 +180,15 @@ export function BannerBookingModal({ isOpen, onClose, defaultBusiness }: BannerB
       if (businessId) requestData.businessId = businessId;
 
       if (db) {
-        // Save to marketing requests so admin can approve directly into banners collection
-        await addDoc(collection(db, 'marketingRequests'), requestData);
-        // Also save to bannerBookingRequests for legacy compatibility
+        // Save to marketing requests so admin can approve directly into banners collection if authenticated
+        if (currentUser) {
+          try {
+            await addDoc(collection(db, 'marketingRequests'), requestData);
+          } catch (mErr) {
+            console.warn("Could not save to marketingRequests:", mErr);
+          }
+        }
+        // Also save to bannerBookingRequests for legacy compatibility and guest bookings
         await addDoc(collection(db, 'bannerBookingRequests'), requestData);
       }
 
@@ -199,18 +206,22 @@ export function BannerBookingModal({ isOpen, onClose, defaultBusiness }: BannerB
     }
   };
 
+  if (!isOpen) return null;
+
   const filteredBusinesses = searchQuery
     ? allBusinesses.filter(b => b.name?.toLowerCase().includes(searchQuery.toLowerCase()) || b.category?.toLowerCase().includes(searchQuery.toLowerCase()))
     : [];
 
-  return (
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <div 
-      className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-200" 
+      className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-200" 
       dir="rtl"
       onClick={onClose}
     >
       <div 
-        className="bg-white rounded-3xl max-w-3xl w-full shadow-2xl border border-stone-200 overflow-hidden relative max-h-[92vh] flex flex-col text-right animate-in zoom-in-95 duration-200 my-auto"
+        className="bg-white rounded-3xl max-w-3xl w-full shadow-2xl border border-stone-200 overflow-hidden relative max-h-[88vh] flex flex-col text-right animate-in zoom-in-95 duration-200 my-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
@@ -699,6 +710,7 @@ export function BannerBookingModal({ isOpen, onClose, defaultBusiness }: BannerB
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

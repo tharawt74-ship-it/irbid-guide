@@ -650,7 +650,7 @@ export function VisitorHousingsTab({ housings, onRefresh }: VisitorHousingsTabPr
 
       {/* Custom Delete Confirmation Modal */}
       {itemToDelete && (
-        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs" dir="rtl">
+        <div className="fixed inset-0 z-[100000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs" dir="rtl">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-rose-100 animate-in fade-in zoom-in-95">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center font-black shrink-0">
@@ -688,7 +688,7 @@ export function VisitorHousingsTab({ housings, onRefresh }: VisitorHousingsTabPr
 
       {/* VIP Upgrade Info Modal */}
       {showVipModal && (
-        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs" dir="rtl">
+        <div className="fixed inset-0 z-[100000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs" dir="rtl">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-amber-200 animate-in fade-in zoom-in-95">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center font-black">

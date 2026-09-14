@@ -220,7 +220,7 @@ export function HousingDetail() {
 
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[99999] bg-stone-900 text-white px-5 py-3 rounded-2xl text-xs font-bold shadow-2xl flex items-center gap-2 border border-stone-700 animate-bounce">
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[100000] bg-stone-900 text-white px-5 py-3 rounded-2xl text-xs font-bold shadow-2xl flex items-center gap-2 border border-stone-700 animate-bounce">
           <Sparkles className="h-4 w-4 text-[#ff9f1c]" />
           <span>{toastMessage}</span>
         </div>
@@ -464,7 +464,7 @@ export function HousingDetail() {
                     className="w-full inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-3.5 px-4 rounded-2xl text-xs font-black transition-colors shadow-xs cursor-pointer"
                   >
                     <WhatsApp3DIcon className="h-4 w-4 text-white" />
-                    <span>تواصل عبر واتساب فوراً 💬</span>
+                    <span>تواصل عبر واتساب فوراً</span>
                   </a>
                 )}
 
@@ -577,7 +577,7 @@ export function HousingDetail() {
           className="flex-1 inline-flex items-center justify-center gap-1.5 bg-emerald-600 active:bg-emerald-700 text-white py-3 px-2 rounded-xl text-xs font-black shadow-xs min-w-0"
         >
           <WhatsApp3DIcon className="h-4 w-4 text-white shrink-0" />
-          <span className="truncate">واتساب 💬</span>
+          <span className="truncate">واتساب</span>
         </a>
 
         <a
@@ -591,7 +591,7 @@ export function HousingDetail() {
 
       {/* Inspection Visit Booking Modal */}
       {isBookingModalOpen && (
-        <div className="fixed inset-0 z-[99999] bg-stone-950/80 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto" dir="rtl">
+        <div className="fixed inset-0 z-[100000] bg-stone-950/80 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto" dir="rtl">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-stone-200 relative my-auto space-y-5">
             <div className="flex items-center justify-between border-b border-stone-100 pb-3">
               <div>

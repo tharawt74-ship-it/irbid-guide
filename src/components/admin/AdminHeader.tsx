@@ -29,7 +29,9 @@ import {
   MapPin,
   FileText,
   Image as ImageIcon,
-  Flame
+  Flame,
+  Stethoscope,
+  Building2
 } from 'lucide-react';
 import { Link } from 'react-router';
 
@@ -43,6 +45,8 @@ interface AdminHeaderProps {
   pendingSuggestionsCount?: number;
   pendingReportsCount?: number;
   pendingHousingCount?: number;
+  medicalFacilitiesCount?: number;
+  pendingMedicalRequestsCount?: number;
   onRefresh: () => void;
   onOpenAddBusiness: () => void;
   onOpenBroadcastModal: () => void;
@@ -60,6 +64,8 @@ export function AdminHeader({
   pendingSuggestionsCount = 0,
   pendingReportsCount = 0,
   pendingHousingCount = 0,
+  medicalFacilitiesCount = 0,
+  pendingMedicalRequestsCount = 0,
   onRefresh,
   onOpenAddBusiness,
   onOpenBroadcastModal,
@@ -85,6 +91,15 @@ export function AdminHeader({
         { id: 'editSuggestions', label: 'اقتراحات التعديل', icon: Edit3, count: pendingSuggestionsCount, isAlert: pendingSuggestionsCount > 0 },
         { id: 'ownershipClaims', label: 'إثبات ملكية المحلات', icon: ShieldCheck, count: null },
         { id: 'reviewReports', label: 'بلاغات التقييمات', icon: ShieldAlert, count: pendingReportsCount, isAlert: pendingReportsCount > 0 },
+      ]
+    },
+    {
+      id: 'medical_main',
+      label: 'الرعاية والقطاع الطبي',
+      icon: Stethoscope,
+      tabs: [
+        { id: 'medical', label: 'إدارة المنشآت الطبية', icon: Stethoscope, count: medicalFacilitiesCount || null },
+        { id: 'medical_requests', label: 'طلبات تسجيل المنشآت الطبية', icon: Building2, count: pendingMedicalRequestsCount || null, isAlert: (pendingMedicalRequestsCount || 0) > 0 },
       ]
     },
     {
@@ -115,6 +130,7 @@ export function AdminHeader({
       icon: Settings,
       tabs: [
         { id: 'categories', label: 'إدارة التصنيفات', icon: FolderTree, count: null },
+        { id: 'medical_categories', label: 'تصنيفات الرعاية الطبية', icon: Stethoscope, count: null },
         { id: 'neighborhoods', label: 'أحياء ومناطق إربد', icon: MapPin, count: null },
         { id: 'vipPlans', label: 'أسعار باقات VIP', icon: DollarSign, count: null },
         { id: 'globalSettings', label: 'هوية وإعدادات المنصة', icon: Globe, count: null },
@@ -224,7 +240,7 @@ export function AdminHeader({
       <div className="space-y-4" dir="rtl">
         <div>
           <span className="text-xs font-black text-stone-400 block mb-2 mr-1">الأقسام الرئيسية للوحة الإدارة</span>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 w-full">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 w-full">
             {groups.map((group) => {
               const GroupIcon = group.icon;
               const isGroupActive = activeGroup.id === group.id;

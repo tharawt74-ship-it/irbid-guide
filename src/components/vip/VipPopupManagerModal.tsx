@@ -113,12 +113,12 @@ export function VipPopupManagerModal({
 
   return createPortal(
     <div 
-      className="fixed inset-0 z-[99999] bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto"
+      className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto"
       dir="rtl"
       onClick={onClose}
     >
       <div 
-        className="bg-white rounded-3xl max-w-2xl w-full overflow-hidden shadow-2xl border border-stone-200 relative my-auto animate-in fade-in zoom-in-95"
+        className="bg-white rounded-3xl max-w-2xl w-full max-h-[88vh] flex flex-col overflow-hidden shadow-2xl border border-stone-200 relative my-auto animate-in fade-in zoom-in-95"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}

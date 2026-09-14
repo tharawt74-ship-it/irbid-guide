@@ -51,11 +51,11 @@ export function CategoriesModal({
 
   const modalContent = (
     <div 
-      className="fixed inset-0 z-[99999] bg-black/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto animate-in fade-in duration-200"
+      className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div 
-        className="bg-[#fdfcfb] w-full sm:max-w-2xl rounded-t-3xl sm:rounded-3xl shadow-2xl border border-[#e5e1da]/80 relative flex flex-col max-h-[85vh] sm:max-h-[90vh] overflow-hidden animate-in slide-in-from-bottom duration-300"
+        className="bg-[#fdfcfb] w-full max-w-2xl rounded-3xl shadow-2xl border border-[#e5e1da]/80 relative flex flex-col max-h-[88vh] overflow-hidden my-auto animate-in fade-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
         dir="rtl"
       >

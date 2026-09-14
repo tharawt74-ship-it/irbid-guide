@@ -5,6 +5,7 @@ import {
   BarChart3, Calendar, Users, Zap, ShieldCheck, 
   Clock, Target, Flame, Award, Lightbulb, TrendingDown, Star, CheckCircle2
 } from 'lucide-react';
+import { WhatsAppIcon } from '../common/WhatsAppIcon';
 import { Business, BusinessAnalytics } from '../../types';
 import { getDefaultAnalytics } from '../../lib/analyticsTracker';
 
@@ -321,7 +322,7 @@ export function VipAnalyticsDashboard({ business }: VipAnalyticsDashboardProps) 
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-bold text-stone-500">نقرات محادثة الواتساب</span>
             <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
-              <MessageSquare className="h-4 w-4" />
+              <WhatsAppIcon className="h-4 w-4" />
             </div>
           </div>
           <div className="text-2xl sm:text-3xl font-black text-emerald-700">{whatsapp.toLocaleString('ar-JO')}</div>

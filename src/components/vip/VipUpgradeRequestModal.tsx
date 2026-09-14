@@ -137,8 +137,8 @@ export function VipUpgradeRequestModal({
     : (cycle === 'yearly' ? '119' : '19');
 
   return createPortal(
-    <div className="fixed inset-0 z-[99999] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto" dir="rtl">
-      <div className="bg-white rounded-3xl p-6 sm:p-8 w-full max-w-md shadow-2xl relative my-auto animate-in fade-in zoom-in-95">
+    <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto" dir="rtl">
+      <div className="bg-white rounded-3xl p-6 sm:p-8 w-full max-w-md max-h-[88vh] flex flex-col overflow-y-auto shadow-2xl relative my-auto animate-in fade-in zoom-in-95">
         
         {/* Header */}
         <div className="flex items-center justify-between mb-6">

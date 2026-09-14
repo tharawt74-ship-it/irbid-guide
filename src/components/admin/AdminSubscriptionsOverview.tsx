@@ -4,9 +4,9 @@ import {
   Crown, 
   Search, 
   Building2, 
-  MessageSquare, 
   HelpCircle
 } from 'lucide-react';
+import { WhatsAppIcon } from '../common/WhatsAppIcon';
 import { Business } from '../../types';
 import { getBusinessVipStatus } from '../../lib/vipHelper';
 import { useSystemSettings } from '../../contexts/SystemSettingsContext';
@@ -296,7 +296,7 @@ export function AdminSubscriptionsOverview({
                             onClick={() => handleSendWhatsappReminder(b)}
                             className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl font-bold text-[11px] transition-colors inline-flex items-center gap-1 cursor-pointer"
                           >
-                            <MessageSquare className="h-3 w-3" />
+                            <WhatsAppIcon className="h-3 w-3" />
                             <span>تذكير الواتساب</span>
                           </button>
                         )}

@@ -1,5 +1,6 @@
 import React from 'react';
-import { ShoppingBag, Trash2, MessageCircle, Phone, ArrowRight, Store, Plus, Minus, Check, ChevronLeft } from 'lucide-react';
+import { ShoppingBag, Trash2, Phone, ArrowRight, Store, Plus, Minus, Check, ChevronLeft } from 'lucide-react';
+import { WhatsAppIcon } from '../components/common/WhatsAppIcon';
 import { useCart } from '../contexts/CartContext';
 import { Link, useNavigate } from 'react-router';
 import { SEO } from '../components/common/SEO';
@@ -139,6 +140,13 @@ export function CartPage() {
                           <p className="text-xs font-mono text-[#1a4d2e] font-bold">
                             {p.toFixed(2)} د.أ <span className="text-[10px] text-stone-400 font-sans">للعنصر</span>
                           </p>
+                          {cartItem.selectedVersion && (
+                            <div className="pt-0.5">
+                              <span className="inline-block text-[10px] bg-amber-50 text-amber-900 border border-amber-200 px-2 py-0.5 rounded-md font-bold">
+                                {cartItem.selectedVersion.name} ({cartItem.selectedVersion.priceType === 'fixed' ? 'سعر محدد' : cartItem.selectedVersion.priceType === 'additional' ? `+${cartItem.selectedVersion.price} د.أ` : 'مجاناً'})
+                              </span>
+                            </div>
+                          )}
                           {cartItem.options && cartItem.options.length > 0 && (
                             <p className="text-[10px] text-stone-500 font-medium">
                               خيارات: {cartItem.options.join(', ')}
@@ -216,7 +224,7 @@ export function CartPage() {
                     onClick={sendOrderViaWhatsapp}
                     className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-3 px-4 rounded-2xl text-xs flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer"
                   >
-                    <MessageCircle className="h-4 w-4" />
+                    <WhatsAppIcon className="h-4 w-4" />
                     <span>تأكيد الطلب والحجز عبر الواتساب</span>
                   </button>
 

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useSystemSettings } from '../../contexts/SystemSettingsContext';
-import { Globe, Save, Phone, Mail, MessageSquare, Facebook, Instagram, Share2, Image as ImageIcon, LayoutGrid, CheckCircle2, Bot, Sparkles, Power, Zap, AlertCircle } from 'lucide-react';
+import { Globe, Save, Phone, Mail, Facebook, Instagram, Share2, Image as ImageIcon, LayoutGrid, CheckCircle2, Bot, Sparkles, Power, Zap, AlertCircle } from 'lucide-react';
+import { WhatsAppIcon } from '../common/WhatsAppIcon';
 import { ImageUploader } from '../ui/ImageUploader';
 
 interface GlobalSettingsManagerProps {
@@ -301,7 +302,7 @@ export function GlobalSettingsManager({ showToast }: GlobalSettingsManagerProps)
 
           <div>
             <label className="block text-xs font-bold text-stone-700 mb-1 flex items-center gap-1">
-              <MessageSquare className="h-3.5 w-3.5 text-emerald-600" />
+              <WhatsAppIcon className="h-3.5 w-3.5 text-emerald-600" />
               <span>رقم واتساب الإدارة الرسمية</span>
             </label>
             <input

@@ -91,6 +91,7 @@ export function Search() {
   const [selectedLocation, setSelectedLocation] = useState<string>('الكل');
   const [selectedMainCategory, setSelectedMainCategory] = useState<string>('الكل');
   const [selectedSubCategory, setSelectedSubCategory] = useState<string>('الكل');
+  const [showFiltersDropdown, setShowFiltersDropdown] = useState(false);
   const [businessPage, setBusinessPage] = useState(1);
 
   useEffect(() => {
@@ -114,10 +115,11 @@ export function Search() {
           getDocs(query(collection(db, 'news'), orderBy('createdAt', 'desc'))).catch(() => ({ docs: [] } as any))
         ]);
 
-        setBusinesses(bizSnap.docs.map(d => ({ id: d.id, ...d.data() } as Business)));
-        setOffers(offersSnap.docs.map(d => ({ id: d.id, ...d.data() } as OfferItem)));
-        setJobs(jobsSnap.docs.map(d => ({ id: d.id, ...d.data() } as JobOffer)));
-        setHousings(housingsSnap.docs.map(d => ({ id: d.id, ...d.data() } as HousingItem)));
+        const bizDocs = bizSnap.docs.map(d => ({ id: d.id, ...d.data() } as Business)).filter(b => !(b as any).isDemo);
+        setBusinesses(bizDocs);
+        setOffers(offersSnap.docs.map(d => ({ id: d.id, ...d.data() } as OfferItem)).filter(o => !o.isDemo));
+        setJobs(jobsSnap.docs.map(d => ({ id: d.id, ...d.data() } as JobOffer)).filter(j => !j.isDemo));
+        setHousings(housingsSnap.docs.map(d => ({ id: d.id, ...d.data() } as HousingItem)).filter(h => !h.isDemo));
         setNews(newsSnap.docs.map(d => ({ id: d.id, ...d.data() } as NewsArticle)));
       } catch (err) {
         console.error('Error loading search datasets:', err);
@@ -320,11 +322,11 @@ export function Search() {
     (activeTab === 'all' || activeTab === 'news' ? filteredNews.length : 0);
 
   // Dynamic filter dropdown options based on Active Tab
-  const showMainCategoryFilter = activeTab !== 'all' && activeTab !== 'news';
-  const showSubCategoryFilter = showMainCategoryFilter && selectedMainCategory !== 'الكل' && (activeTab === 'businesses' || activeTab === 'products' || activeTab === 'offers');
+  const showMainCategoryFilter = activeTab !== 'news';
+  const showSubCategoryFilter = showMainCategoryFilter && selectedMainCategory !== 'الكل' && (activeTab === 'all' || activeTab === 'businesses' || activeTab === 'products' || activeTab === 'offers');
 
   let mainCategoryOptions: string[] = [];
-  if (activeTab === 'businesses' || activeTab === 'products' || activeTab === 'offers') {
+  if (activeTab === 'all' || activeTab === 'businesses' || activeTab === 'products' || activeTab === 'offers') {
     mainCategoryOptions = Object.keys(BUSINESS_CATEGORIES);
   } else if (activeTab === 'jobs') {
     mainCategoryOptions = jobCategories;
@@ -338,86 +340,148 @@ export function Search() {
 
   const filtersActive = selectedLocation !== 'الكل' || selectedMainCategory !== 'الكل' || selectedSubCategory !== 'الكل';
 
+  const renderFiltersContent = () => (
+    <>
+      <div className="flex items-center gap-1.5 shrink-0 mb-1">
+        <SlidersHorizontal className="h-4 w-4 text-stone-400" />
+        <span className="text-[11px] font-bold text-stone-500">تصفية حسب:</span>
+      </div>
+      
+      {/* Location Filter */}
+      <select
+        value={selectedLocation}
+        onChange={(e) => setSelectedLocation(e.target.value)}
+        className={`w-full text-xs font-bold rounded-xl px-3 py-2.5 border outline-none appearance-none cursor-pointer bg-no-repeat bg-[url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3E%3C/svg%3E")] bg-[position:left_0.5rem_center] bg-[size:1.25em_1.25em] pl-8 transition-colors ${
+          selectedLocation !== 'الكل' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-white border-stone-200 text-stone-700 hover:bg-stone-50'
+        }`}
+      >
+        {ALL_IRBID_DISTRICTS.map(loc => (
+          <option key={loc} value={loc}>{loc === 'الكل' ? 'الموقع (الكل)' : loc}</option>
+        ))}
+      </select>
+
+      {/* Main Category Filter */}
+      {showMainCategoryFilter && mainCategoryOptions.length > 0 && (
+        <select
+          value={selectedMainCategory}
+          onChange={(e) => {
+            setSelectedMainCategory(e.target.value);
+            setSelectedSubCategory('الكل'); // Reset sub on main change
+          }}
+          className={`w-full text-xs font-bold rounded-xl px-3 py-2.5 border outline-none appearance-none cursor-pointer bg-no-repeat bg-[url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3E%3C/svg%3E")] bg-[position:left_0.5rem_center] bg-[size:1.25em_1.25em] pl-8 transition-colors ${
+            selectedMainCategory !== 'الكل' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-white border-stone-200 text-stone-700 hover:bg-stone-50'
+          }`}
+        >
+          <option value="الكل">القسم الرئيسي (الكل)</option>
+          {mainCategoryOptions.map(cat => (
+            <option key={cat} value={cat}>{cat}</option>
+          ))}
+        </select>
+      )}
+
+      {/* Sub Category Filter */}
+      {showSubCategoryFilter && subCategoryOptions.length > 0 && (
+        <select
+          value={selectedSubCategory}
+          onChange={(e) => setSelectedSubCategory(e.target.value)}
+          className={`w-full text-xs font-bold rounded-xl px-3 py-2.5 border outline-none appearance-none cursor-pointer bg-no-repeat bg-[url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3E%3C/svg%3E")] bg-[position:left_0.5rem_center] bg-[size:1.25em_1.25em] pl-8 transition-colors ${
+            selectedSubCategory !== 'الكل' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-white border-stone-200 text-stone-700 hover:bg-stone-50'
+          }`}
+        >
+          <option value="الكل">القسم الفرعي (الكل)</option>
+          {subCategoryOptions.map(cat => (
+            <option key={cat} value={cat}>{cat}</option>
+          ))}
+        </select>
+      )}
+
+      {/* Clear Filters Button */}
+      {filtersActive && (
+        <button
+          onClick={handleClearFilters}
+          className="w-full flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 border border-red-200/50 transition-colors cursor-pointer mt-1"
+        >
+          <FilterX className="h-4 w-4" />
+          <span>مسح الفلاتر</span>
+        </button>
+      )}
+    </>
+  );
+
   return (
-    <div className="w-full bg-[#fdfcfb] min-h-screen pb-20 font-sans" dir="rtl">
+    <div className="w-full bg-[#fdfcfb] min-h-screen pb-28 font-sans" dir="rtl">
       <SEO 
         title={`نتائج البحث عن ${searchQuery || 'محلات ووظائف وعقارات'} | دليل إربد الشامل`}
         description="استخدم المحرك الذكي للبحث والفلترة الفورية لكافة المحلات، المطاعم، المقاهي، السكنات، الوظائف الشاغرة، العروض ونبض الأخبار في مدينة إربد."
       />
 
       {/* SEARCH HEADER & TABS (Sticky to Layout Header) */}
-      <div className={`sticky top-[62px] sm:top-[68px] md:top-[72px] z-30 bg-white border-b border-stone-200/80 shadow-xs flex flex-col pt-3 pb-0 transition-all duration-300 ${!isHeaderExpanded ? 'shadow-sm' : ''}`}>
+      <div className="sticky top-[62px] sm:top-[68px] md:top-[72px] z-30 bg-[#fdfcfb]/95 backdrop-blur-md sm:bg-white border-b border-transparent sm:border-stone-200/80 sm:shadow-xs flex flex-col pt-0 pb-0 transition-all duration-300">
         
-        {/* Minimized View (Visible only on mobile when collapsed) */}
-        {!isHeaderExpanded && (
-          <div className="sm:hidden px-4 pb-3 flex items-center justify-between w-full" onClick={() => setIsHeaderExpanded(true)}>
-            <div className="flex items-center gap-3 w-full">
+        {/* Full Header Content (Desktop Search Bar) */}
+        <div className="hidden sm:flex flex-col transition-all duration-300 overflow-visible pt-0">
+          {/* Search Input Row - Rounded Design with Filter Button */}
+          <div className="w-full px-3 sm:px-6 max-w-4xl mx-auto mt-3 sm:mt-4 mb-3 sm:mb-4">
+            <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={(e) => { e.stopPropagation(); navigate('/'); }}
-                className="w-9 h-9 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-600 flex items-center justify-center shrink-0 border border-stone-200/50 transition-colors cursor-pointer"
+                onClick={() => navigate('/')}
+                className="w-12 h-12 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-600 flex items-center justify-center shrink-0 border border-stone-200/50 transition-colors cursor-pointer"
+                title="العودة للصفحة الرئيسية"
               >
-                <ChevronRight className="h-5 w-5" />
+                <ChevronRight className="h-6 w-6" />
               </button>
-              <div className="flex-1 bg-stone-50 border border-stone-200/80 rounded-xl py-2 px-3 flex items-center gap-2 cursor-text">
-                <SearchIcon className="h-4 w-4 text-stone-400" />
-                <span className="text-xs font-bold text-stone-600 truncate">
-                  {inputVal || 'بحث في إربد...'}
-                </span>
+              
+              <form onSubmit={handleFormSubmit} className="flex-1 relative h-12">
+                <SearchIcon className="h-5 w-5 text-stone-400 absolute right-4 top-1/2 -translate-y-1/2" />
+                <input
+                  type="search"
+                  value={inputVal}
+                  onChange={(e) => {
+                    setInputVal(e.target.value);
+                    triggerSearch(e.target.value, true);
+                  }}
+                  placeholder="ابحث عن أي شيء في إربد..."
+                  className="w-full h-full bg-white border border-stone-200 rounded-full pr-11 pl-12 text-sm sm:text-base font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/50 shadow-sm transition-all [&::-webkit-search-cancel-button]:appearance-none"
+                  autoFocus
+                />
+                {inputVal && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setInputVal('');
+                      triggerSearch('', true);
+                    }}
+                    className="absolute left-1 top-1/2 -translate-y-1/2 p-2.5 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-full transition-colors cursor-pointer"
+                  >
+                    <X className="h-4.5 w-4.5" />
+                  </button>
+                )}
+              </form>
+
+              <div className="relative">
+                <button 
+                  type="button"
+                  onClick={() => setShowFiltersDropdown(!showFiltersDropdown)}
+                  className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 border transition-all cursor-pointer shadow-sm ${showFiltersDropdown ? 'bg-emerald-500 border-emerald-600 text-white' : 'bg-white border-stone-200 text-stone-600 hover:bg-stone-50'} ${(selectedLocation !== 'الكل' || selectedMainCategory !== 'الكل' || selectedSubCategory !== 'الكل') ? 'ring-2 ring-emerald-500/50' : ''}`}
+                  title="تصفية النتائج"
+                >
+                  <SlidersHorizontal className="h-5 w-5" />
+                </button>
+                
+                {/* Filters Dropdown */}
+                {showFiltersDropdown && (
+                  <div className="absolute top-14 left-0 w-[280px] sm:w-[320px] bg-white rounded-2xl shadow-xl border border-stone-100 p-4 z-50 flex flex-col gap-3 origin-top-left">
+                    {renderFiltersContent()}
+                  </div>
+                )}
               </div>
-              <button 
-                className="w-9 h-9 flex items-center justify-center text-stone-500 bg-stone-50 hover:bg-stone-100 border border-stone-200/80 rounded-xl"
-              >
-                <ChevronDown className="h-4 w-4" />
-              </button>
             </div>
           </div>
-        )}
+        </div> {/* Close Desktop Search Bar */}
 
-        {/* Full Header Content */}
-        <div className={`flex flex-col transition-all duration-300 overflow-hidden ${!isHeaderExpanded ? 'max-h-0 sm:max-h-[1000px] opacity-0 sm:opacity-100' : 'max-h-[1000px] opacity-100'}`}>
-          {/* Search Input Row */}
-          <div className="px-3 sm:px-6 w-full max-w-7xl mx-auto mb-3">
-          <form onSubmit={handleFormSubmit} className="flex items-center gap-2 max-w-3xl">
-            <button
-              type="button"
-              onClick={() => navigate('/')}
-              className="w-11 h-11 rounded-2xl bg-stone-100 hover:bg-stone-200 text-stone-600 flex items-center justify-center shrink-0 border border-stone-200/50 transition-colors cursor-pointer"
-            >
-              <ChevronRight className="h-6 w-6" />
-            </button>
-            <div className="relative flex-1">
-              <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-stone-400 pointer-events-none">
-                <SearchIcon className="h-5 w-5" />
-              </span>
-              <input
-                type="search"
-                value={inputVal}
-                onChange={(e) => {
-                  setInputVal(e.target.value);
-                  triggerSearch(e.target.value, true);
-                }}
-                placeholder="ابحث عن..."
-                className="w-full bg-stone-50 border border-stone-200/80 text-sm sm:text-base font-bold text-stone-800 rounded-2xl py-3 pr-10 pl-10 focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/50 focus:bg-white transition-all shadow-2xs outline-none [&::-webkit-search-cancel-button]:appearance-none"
-              />
-              {inputVal && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setInputVal('');
-                    triggerSearch('', true);
-                  }}
-                  className="absolute left-1.5 top-1/2 -translate-y-1/2 p-2 text-stone-400 hover:text-stone-700 bg-stone-100/0 hover:bg-stone-200/50 rounded-full transition-colors cursor-pointer"
-                >
-                  <X className="h-4.5 w-4.5" />
-                </button>
-              )}
-            </div>
-          </form>
-        </div>
-
-        {/* Tabs Row */}
-        <div className="px-1 sm:px-4 w-full max-w-7xl mx-auto">
+        {/* Tabs Row (Visible on all devices) */}
+        <div className="px-1 sm:px-4 w-full max-w-7xl mx-auto sm:mt-0 pt-2 sm:pt-0">
           <div className="flex items-center gap-1 overflow-x-auto pb-2 scrollbar-none snap-x px-2">
             {[
               { id: 'all', label: 'الكل', count: (filteredBusinesses.length + filteredProducts.length + filteredOffers.length + filteredHousings.length + filteredJobs.length + filteredNews.length) },
@@ -453,77 +517,6 @@ export function Search() {
           </div>
         </div>
 
-        {/* Filters Bar (Only show if needed) */}
-        <div className="bg-stone-50/50 border-t border-stone-100 py-3 px-3 sm:px-6 w-full shadow-inner-sm">
-          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center gap-3">
-            <div className="flex items-center gap-1.5 shrink-0 hidden sm:flex">
-              <SlidersHorizontal className="h-4 w-4 text-stone-400" />
-              <span className="text-[11px] font-bold text-stone-500">تصفية حسب:</span>
-            </div>
-            
-            <div className="grid grid-cols-2 sm:flex sm:flex-row sm:flex-wrap gap-2 w-full">
-              {/* Location Filter */}
-              <select
-                value={selectedLocation}
-                onChange={(e) => setSelectedLocation(e.target.value)}
-                className={`col-span-1 w-full sm:w-auto text-xs font-bold rounded-xl px-3 py-2.5 border outline-none appearance-none cursor-pointer bg-no-repeat bg-[url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3E%3C/svg%3E")] bg-[position:left_0.5rem_center] bg-[size:1.25em_1.25em] pl-8 transition-colors ${
-                  selectedLocation !== 'الكل' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-white border-stone-200 text-stone-700 hover:bg-stone-50'
-                }`}
-              >
-                {ALL_IRBID_DISTRICTS.map(loc => (
-                  <option key={loc} value={loc}>{loc === 'الكل' ? 'الموقع (الكل)' : loc}</option>
-                ))}
-              </select>
-
-              {/* Main Category Filter */}
-              {showMainCategoryFilter && mainCategoryOptions.length > 0 && (
-                <select
-                  value={selectedMainCategory}
-                  onChange={(e) => {
-                    setSelectedMainCategory(e.target.value);
-                    setSelectedSubCategory('الكل'); // Reset sub on main change
-                  }}
-                  className={`col-span-1 w-full sm:w-auto text-xs font-bold rounded-xl px-3 py-2.5 border outline-none appearance-none cursor-pointer bg-no-repeat bg-[url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3E%3C/svg%3E")] bg-[position:left_0.5rem_center] bg-[size:1.25em_1.25em] pl-8 transition-colors ${
-                    selectedMainCategory !== 'الكل' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-white border-stone-200 text-stone-700 hover:bg-stone-50'
-                  }`}
-                >
-                  <option value="الكل">القسم الرئيسي (الكل)</option>
-                  {mainCategoryOptions.map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
-              )}
-
-              {/* Sub Category Filter */}
-              {showSubCategoryFilter && subCategoryOptions.length > 0 && (
-                <select
-                  value={selectedSubCategory}
-                  onChange={(e) => setSelectedSubCategory(e.target.value)}
-                  className={`col-span-2 sm:col-span-1 w-full sm:w-auto text-xs font-bold rounded-xl px-3 py-2.5 border outline-none appearance-none cursor-pointer bg-no-repeat bg-[url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3E%3C/svg%3E")] bg-[position:left_0.5rem_center] bg-[size:1.25em_1.25em] pl-8 transition-colors ${
-                    selectedSubCategory !== 'الكل' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-white border-stone-200 text-stone-700 hover:bg-stone-50'
-                  }`}
-                >
-                  <option value="الكل">القسم الفرعي (الكل)</option>
-                  {subCategoryOptions.map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
-              )}
-
-              {/* Clear Filters Button */}
-              {filtersActive && (
-                <button
-                  onClick={handleClearFilters}
-                  className="col-span-2 sm:col-span-1 w-full sm:w-auto flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 border border-red-200/50 transition-colors cursor-pointer"
-                >
-                  <FilterX className="h-4 w-4" />
-                  <span>مسح الفلاتر</span>
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-        </div>
       </div>
 
       {/* Loading State */}
@@ -716,7 +709,7 @@ export function Search() {
                 {filteredOffers.map(o => (
                   <Link key={o.id} to="/offers" className="bg-white rounded-2xl overflow-hidden border border-stone-200 hover:border-red-500/50 hover:shadow-md transition-all flex flex-col group">
                     <div className="relative aspect-[16/9] w-full bg-stone-100 overflow-hidden shrink-0">
-                      <img src={o.image} alt={o.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                      <img src={o.image || 'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&q=80&w=800'} alt={o.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                       <div className="absolute top-3 right-3 bg-red-600 text-white font-black text-xs px-3 py-1.5 rounded-full shadow-md flex items-center gap-1.5">
                         <Flame className="h-4 w-4 animate-pulse" />
                         <span>خصم %{o.discountPercentage}</span>
@@ -853,6 +846,59 @@ export function Search() {
 
         </div>
       )}
+
+      {/* Mobile Bottom Search Bar */}
+      <div 
+        className="sm:hidden fixed bottom-4 left-3 right-3 z-[100] flex items-center justify-center gap-2 max-w-[420px] mx-auto pointer-events-auto"
+        dir="rtl"
+      >
+        {/* Filter Button (Replaces AI Button) */}
+        <div className="relative">
+          <button 
+            type="button"
+            onClick={() => setShowFiltersDropdown(!showFiltersDropdown)}
+            className={`relative shrink-0 w-14 h-14 rounded-full flex flex-col items-center justify-center border shadow-lg transition-all cursor-pointer ${showFiltersDropdown ? 'bg-emerald-500 border-emerald-600 text-white' : 'bg-[#1a4d2e] hover:bg-[#143e24] text-white border-[#143e24]'} ${(selectedLocation !== 'الكل' || selectedMainCategory !== 'الكل' || selectedSubCategory !== 'الكل') ? 'ring-2 ring-emerald-400/50' : ''}`}
+            title="تصفية النتائج"
+          >
+             <SlidersHorizontal className="w-5.5 h-5.5" />
+             <span className="text-[10px] font-bold text-emerald-100 mt-0.5 leading-none">تصفية</span>
+          </button>
+          
+          {/* Filters Dropdown Mobile */}
+          {showFiltersDropdown && (
+            <div className="absolute bottom-16 right-0 w-[280px] bg-white rounded-2xl shadow-xl border border-stone-100 p-4 z-50 flex flex-col gap-3 origin-bottom-right">
+              {renderFiltersContent()}
+            </div>
+          )}
+        </div>
+
+        {/* Search Input */}
+        <form onSubmit={handleFormSubmit} className="flex-1 h-14 bg-white border border-stone-200 shadow-lg rounded-full relative overflow-visible">
+          <SearchIcon className="h-5 w-5 text-stone-400 absolute right-4 top-1/2 -translate-y-1/2" />
+          <input
+            type="search"
+            value={inputVal}
+            onChange={(e) => {
+              setInputVal(e.target.value);
+              triggerSearch(e.target.value, true);
+            }}
+            placeholder="ابحث في إربد..."
+            className="w-full h-full bg-transparent pr-11 pl-12 text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/50 rounded-full transition-all [&::-webkit-search-cancel-button]:appearance-none"
+          />
+          {inputVal && (
+            <button
+              type="button"
+              onClick={() => {
+                setInputVal('');
+                triggerSearch('', true);
+              }}
+              className="absolute left-1 top-1/2 -translate-y-1/2 p-2.5 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-full transition-colors cursor-pointer"
+            >
+              <X className="h-4.5 w-4.5" />
+            </button>
+          )}
+        </form>
+      </div>
     </div>
   );
 }

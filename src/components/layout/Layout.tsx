@@ -343,9 +343,9 @@ export function Layout() {
               className="flex items-center gap-2 group shrink-0 focus:outline-none py-0.5" 
               onClick={closeMenu}
             >
-              {globalSettings.logoUrl ? (
+              {(globalSettings.logoUrl || '/logo.png') ? (
                 <img 
-                  src={globalSettings.logoUrl} 
+                  src={globalSettings.logoUrl || '/logo.png'} 
                   alt={globalSettings.siteName} 
                   style={{ height: `${Math.min(64, Math.max(28, globalSettings.logoHeight || 52))}px` }}
                   className="max-h-[64px] max-w-[280px] md:max-w-[380px] object-contain group-hover:scale-102 transition-all duration-200" 
@@ -677,9 +677,9 @@ export function Layout() {
               className="flex items-center gap-2 group shrink-0 focus:outline-none py-1 h-full max-h-full" 
               onClick={closeMenu}
             >
-              {globalSettings.logoUrl ? (
+              {(globalSettings.logoUrl || '/logo.png') ? (
                 <img 
-                  src={globalSettings.logoUrl} 
+                  src={globalSettings.logoUrl || '/logo.png'} 
                   alt={globalSettings.siteName} 
                   style={{ height: `${Math.min(48, Math.max(28, globalSettings.logoHeight || 42))}px` }}
                   className="max-h-[48px] max-w-[220px] object-contain group-hover:scale-102 transition-transform" 
@@ -1161,9 +1161,9 @@ export function Layout() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
             <div className="md:col-span-2">
               <Link to="/" className="text-2xl sm:text-3xl font-black tracking-tighter text-[#1a4d2e] flex items-center gap-2.5 mb-4 group">
-                {globalSettings.logoUrl ? (
+                {(globalSettings.logoUrl || '/logo.png') ? (
                   <img 
-                    src={globalSettings.logoUrl} 
+                    src={globalSettings.logoUrl || '/logo.png'} 
                     alt={globalSettings.siteName} 
                     style={{ height: `${Math.min(65, Math.max(44, globalSettings.logoHeight || 55))}px` }}
                     className="max-h-[65px] max-w-[280px] object-contain group-hover:scale-102 transition-transform" 

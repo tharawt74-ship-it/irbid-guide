@@ -22,7 +22,7 @@ const DEFAULT_STORIES: StoryConfig[] = [
 const DEFAULT_GLOBAL_SETTINGS: GlobalSiteSettings = {
   siteName: 'شو في بإربد؟',
   siteSubtitle: 'دليل عروس الشمال والمحلات والخدمات الشامل',
-  logoUrl: '',
+  logoUrl: '/logo.png',
   useFullLogo: true,
   logoHeight: 68,
   contactPhone: '0790000000',
@@ -357,9 +357,14 @@ export function SystemSettingsProvider({ children }: { children: React.ReactNode
             }
           }
           if (data.globalSettings) {
-            setGlobalSettings(data.globalSettings);
+            const mergedSettings = {
+              ...DEFAULT_GLOBAL_SETTINGS,
+              ...data.globalSettings,
+              logoUrl: data.globalSettings.logoUrl || DEFAULT_GLOBAL_SETTINGS.logoUrl || '/logo.png'
+            };
+            setGlobalSettings(mergedSettings);
             try {
-              localStorage.setItem('shoof_global_settings', JSON.stringify(data.globalSettings));
+              localStorage.setItem('shoof_global_settings', JSON.stringify(mergedSettings));
             } catch {
               // ignore
             }

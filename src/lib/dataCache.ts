@@ -6,7 +6,10 @@ interface CachedData<T> {
   timestamp: number;
 }
 
-const CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes fresh cache
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes fresh in-memory cache
+const PERSISTENT_TTL_MS = 30 * 60 * 1000; // 30 minutes persistent cache
+const BIZ_STORAGE_KEY = 'shoof_cached_businesses_v2';
+const BANNERS_STORAGE_KEY = 'shoof_cached_banners_v2';
 
 // Memory cache
 let cachedBusinesses: CachedData<Business[]> | null = null;
@@ -17,14 +20,41 @@ export function getCachedBusinesses(): Business[] | null {
   if (cachedBusinesses && (Date.now() - cachedBusinesses.timestamp < CACHE_TTL_MS)) {
     return cachedBusinesses.data;
   }
+
+  // Fallback to local storage for instant cold-start presentation
+  if (typeof window !== 'undefined') {
+    try {
+      const stored = localStorage.getItem(BIZ_STORAGE_KEY);
+      if (stored) {
+        const parsed: CachedData<Business[]> = JSON.parse(stored);
+        if (parsed && Array.isArray(parsed.data) && parsed.data.length > 0 && (Date.now() - parsed.timestamp < PERSISTENT_TTL_MS)) {
+          cachedBusinesses = parsed;
+          return parsed.data;
+        }
+      }
+    } catch {
+      // ignore storage error
+    }
+  }
+
   return null;
 }
 
 export function setCachedBusinesses(data: Business[]) {
-  cachedBusinesses = {
+  const entry = {
     data,
     timestamp: Date.now()
   };
+  cachedBusinesses = entry;
+
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(BIZ_STORAGE_KEY, JSON.stringify(entry));
+    } catch {
+      // ignore storage quota errors
+    }
+  }
+
   // Also populate individual business detail cache
   data.forEach(b => {
     businessDetailsMap.set(b.id, { data: b, timestamp: Date.now() });
@@ -38,14 +68,39 @@ export function getCachedBanners(): HomepageBanner[] | null {
   if (cachedBanners && (Date.now() - cachedBanners.timestamp < CACHE_TTL_MS)) {
     return cachedBanners.data;
   }
+
+  if (typeof window !== 'undefined') {
+    try {
+      const stored = localStorage.getItem(BANNERS_STORAGE_KEY);
+      if (stored) {
+        const parsed: CachedData<HomepageBanner[]> = JSON.parse(stored);
+        if (parsed && Array.isArray(parsed.data) && (Date.now() - parsed.timestamp < PERSISTENT_TTL_MS)) {
+          cachedBanners = parsed;
+          return parsed.data;
+        }
+      }
+    } catch {
+      // ignore storage error
+    }
+  }
+
   return null;
 }
 
 export function setCachedBanners(data: HomepageBanner[]) {
-  cachedBanners = {
+  const entry = {
     data,
     timestamp: Date.now()
   };
+  cachedBanners = entry;
+
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(BANNERS_STORAGE_KEY, JSON.stringify(entry));
+    } catch {
+      // ignore storage quota errors
+    }
+  }
 }
 
 export function getCachedBusinessDetail(key: string): any | null {

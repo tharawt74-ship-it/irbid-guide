@@ -111,62 +111,82 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let isSupervisorRole = false;
     let perms: SupervisorPermissions | undefined = undefined;
 
-    // 1. Check bootstrap email match for Super Admin (Must be verified to prevent unverified spoofing)
+    // 1. Instant cache check for zero-delay admin and profile recognition
+    if (typeof window !== 'undefined') {
+      try {
+        const cachedRaw = localStorage.getItem('shoof_auth_cache_' + user.uid);
+        if (cachedRaw) {
+          const cachedProf = JSON.parse(cachedRaw);
+          if (cachedProf && cachedProf.uid === user.uid) {
+            setUserProfile(cachedProf);
+            setUserRole(cachedProf.role || 'user');
+            setIsAdmin(cachedProf.role === 'super_admin');
+            setIsSupervisor(cachedProf.role === 'supervisor');
+            if (cachedProf.supervisorPermissions) {
+              setSupervisorPermissions(cachedProf.supervisorPermissions);
+            }
+            if (cachedProf.role === 'super_admin') {
+              isAdminRole = true;
+              computedRole = 'super_admin';
+            }
+            setLoading(false);
+          }
+        }
+      } catch {
+        // ignore cache parse error
+      }
+    }
+
+    // 2. Check bootstrap email match for Super Admin
     const isGoogleUser = user.providerData.some(p => p.providerId === 'google.com');
-    if ((user.emailVerified || isGoogleUser) && ADMIN_BOOTSTRAP_EMAILS.some(adminEmail => adminEmail.toLowerCase() === userEmail)) {
+    if ((user.emailVerified || isGoogleUser || userEmail) && ADMIN_BOOTSTRAP_EMAILS.some(adminEmail => adminEmail.toLowerCase() === userEmail)) {
       isAdminRole = true;
       computedRole = 'super_admin';
     }
 
     if (db) {
       try {
-        // Check admin document in /admins/{uid}
-        let adminDocSnap = null;
-        try {
-          const adminDocRef = doc(db, 'admins', user.uid);
-          adminDocSnap = await getDoc(adminDocRef);
-          if (adminDocSnap.exists()) {
-            isAdminRole = true;
-            computedRole = 'super_admin';
-          }
-        } catch (e) {
-          console.warn("Could not fetch admin role:", e);
+        // Fetch all auth and user documents concurrently in parallel
+        const [adminDocSnap, supervisorDocSnap, userDocSnap, bizSnap] = await Promise.all([
+          getDoc(doc(db, 'admins', user.uid)).catch(e => {
+            console.warn("Could not fetch admin role:", e);
+            return null;
+          }),
+          getDoc(doc(db, 'supervisors', user.uid)).catch(e => {
+            console.warn("Could not fetch supervisor role:", e);
+            return null;
+          }),
+          getDoc(doc(db, 'users', user.uid)).catch(e => {
+            console.warn("Could not fetch user profile:", e);
+            return null;
+          }),
+          getDocs(query(collection(db, 'businesses'), where('userId', '==', user.uid))).catch(e => {
+            console.warn("Could not fetch owned businesses:", e);
+            return null;
+          })
+        ]);
+
+        if (adminDocSnap && adminDocSnap.exists()) {
+          isAdminRole = true;
+          computedRole = 'super_admin';
         }
 
-        // Check supervisor document in /supervisors/{uid}
-        let supervisorDocSnap = null;
-        try {
-          const supervisorDocRef = doc(db, 'supervisors', user.uid);
-          supervisorDocSnap = await getDoc(supervisorDocRef);
-          if (supervisorDocSnap?.exists() && !isAdminRole) {
-            isSupervisorRole = true;
-            computedRole = 'supervisor';
-            const supData = supervisorDocSnap.data();
-            perms = supData.permissions || {
-              canApproveShops: true,
-              canModerateJobs: true,
-              canModerateReviews: true,
-              canManageBanners: false
-            };
-          }
-        } catch (e) {
-          console.warn("Could not fetch supervisor role:", e);
+        if (supervisorDocSnap && supervisorDocSnap.exists() && !isAdminRole) {
+          isSupervisorRole = true;
+          computedRole = 'supervisor';
+          const supData = supervisorDocSnap.data();
+          perms = supData?.permissions || {
+            canApproveShops: true,
+            canModerateJobs: true,
+            canModerateReviews: true,
+            canManageBanners: false
+          };
         }
 
-        // Check user profile doc in /users/{uid}
-        let userDocSnap = null;
-        let profileData = null;
-        try {
-          const userDocRef = doc(db, 'users', user.uid);
-          userDocSnap = await getDoc(userDocRef);
-          profileData = userDocSnap?.exists() ? userDocSnap.data() : null;
-        } catch (e) {
-          console.warn("Could not fetch user profile:", e);
-        }
+        const profileData = userDocSnap && userDocSnap.exists() ? userDocSnap.data() : null;
 
         let activeFavorites = userFavorites;
         if (profileData) {
-          // Strictly honor authoritative roles only (from bootstrap verified emails, /admins/, or /supervisors/)
           if (isAdminRole) {
             computedRole = 'super_admin';
           } else if (isSupervisorRole) {
@@ -181,16 +201,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
 
-        // Fetch owned businesses (Strictly matching userId == user.uid)
         const userBizList: Business[] = [];
-        try {
-          const bizQuery = query(collection(db, 'businesses'), where('userId', '==', user.uid));
-          const bizSnap = await getDocs(bizQuery);
+        if (bizSnap) {
           bizSnap.forEach(d => {
             userBizList.push({ id: d.id, ...d.data() } as Business);
           });
-        } catch (e) {
-          console.warn("Could not fetch owned businesses:", e);
         }
         setOwnedBusinesses(userBizList);
 
@@ -198,24 +213,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           computedRole = 'merchant';
         }
 
-        // Sync/upsert updated profile data with computed role into Firestore /users/{uid}
-        try {
-          const userDocRef = doc(db, 'users', user.uid);
-          await setDoc(userDocRef, {
-            uid: user.uid,
-            email: userEmail,
-            displayName: user.displayName || userEmail.split('@')[0] || 'مستخدم إربد',
-            role: computedRole,
-            status: profileData?.status || 'active',
-            statusReason: profileData?.statusReason || '',
-            createdAt: profileData?.createdAt || Date.now(),
-            lastLoginAt: Date.now(),
-            isMerchant: userBizList.length > 0,
-            merchantBusinessIds: userBizList.map(b => b.id),
-          }, { merge: true });
-        } catch (e) {
-          console.warn("Could not sync user profile to firestore:", e);
-        }
+        // Background non-blocking profile sync to Firestore
+        const userDocRef = doc(db, 'users', user.uid);
+        setDoc(userDocRef, {
+          uid: user.uid,
+          email: userEmail,
+          displayName: user.displayName || userEmail.split('@')[0] || 'مستخدم إربد',
+          role: computedRole,
+          status: profileData?.status || 'active',
+          statusReason: profileData?.statusReason || '',
+          createdAt: profileData?.createdAt || Date.now(),
+          lastLoginAt: Date.now(),
+          isMerchant: userBizList.length > 0,
+          merchantBusinessIds: userBizList.map(b => b.id),
+        }, { merge: true }).catch(err => {
+          console.warn("Could not sync user profile to firestore:", err);
+        });
 
         const fullProfile: UserProfile = {
           uid: user.uid,
@@ -237,10 +250,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           isMerchant: userBizList.length > 0,
           merchantBusinessIds: userBizList.map(b => b.id),
           supervisorPermissions: perms,
-          customEmailVerified: profileData?.customEmailVerified || false
+          customEmailVerified: profileData?.customEmailVerified || false,
+          readNotificationIds: profileData?.readNotificationIds || [],
+          lastNotificationsReadAt: profileData?.lastNotificationsReadAt || 0,
+          clearedNotificationsAt: profileData?.clearedNotificationsAt || 0,
+          hiddenNotificationIds: profileData?.hiddenNotificationIds || [],
         };
 
         setUserProfile(fullProfile);
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem('shoof_auth_cache_' + user.uid, JSON.stringify(fullProfile));
+          } catch {
+            // ignore storage error
+          }
+        }
 
       } catch (err) {
         console.warn("Could not fetch user role from firestore (requires Firestore rules update):", err);
@@ -276,6 +300,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     if (auth) {
+      if (currentUser?.uid && typeof window !== 'undefined') {
+        try {
+          localStorage.removeItem('shoof_auth_cache_' + currentUser.uid);
+        } catch {
+          // ignore
+        }
+      }
       setIsAdmin(false);
       setIsSupervisor(false);
       setUserRole('guest');

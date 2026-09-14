@@ -340,94 +340,86 @@ export function AdminDashboard() {
     if (!db) return;
     setIsRefreshing(true);
     try {
-      // Config
-      const config = await getAppConfig();
-      setAppConfigState(config);
+      // Fetch all collections and configuration concurrently in parallel
+      const [
+        configRes,
+        reqRes,
+        busRes,
+        mktRes,
+        jobsRes,
+        bbRes,
+        newsRes,
+        housingsRes,
+        tourismRes,
+        esRes,
+        rrRes
+      ] = await Promise.allSettled([
+        getAppConfig(),
+        getDocs(query(collection(db, 'businessRequests'), orderBy('createdAt', 'desc'))).catch(() => getDocs(collection(db, 'businessRequests'))),
+        getDocs(query(collection(db, 'businesses'), orderBy('createdAt', 'desc'))).catch(() => getDocs(collection(db, 'businesses'))),
+        getDocs(query(collection(db, 'marketingRequests'), orderBy('createdAt', 'desc'))),
+        getDocs(query(collection(db, 'jobs'), orderBy('createdAt', 'desc'))),
+        getDocs(query(collection(db, 'bannerBookingRequests'), orderBy('createdAt', 'desc'))),
+        getDocs(query(collection(db, 'news'), orderBy('createdAt', 'desc'))),
+        getDocs(query(collection(db, 'housings'), orderBy('createdAt', 'desc'))),
+        getDocs(query(collection(db, 'tourism'))),
+        getDocs(query(collection(db, 'edit_suggestions'), orderBy('createdAt', 'desc'))),
+        getDocs(query(collection(db, 'review_reports'), orderBy('createdAt', 'desc')))
+      ]);
 
-      // 1. Fetch Requests
-      try {
-        let reqSnap;
-        try {
-          const reqQuery = query(collection(db, 'businessRequests'), orderBy('createdAt', 'desc'));
-          reqSnap = await getDocs(reqQuery);
-        } catch (idxErr) {
-          reqSnap = await getDocs(collection(db, 'businessRequests'));
-        }
+      // 1. Config
+      if (configRes.status === 'fulfilled' && configRes.value) {
+        setAppConfigState(configRes.value);
+      }
+
+      // 2. Requests
+      if (reqRes.status === 'fulfilled' && reqRes.value) {
         const fetchedReqs: any[] = [];
-        reqSnap.forEach(d => fetchedReqs.push({ id: d.id, ...d.data() }));
+        reqRes.value.forEach(d => fetchedReqs.push({ id: d.id, ...d.data() }));
         fetchedReqs.sort((a, b) => (b.createdAt || b.submittedAt || 0) - (a.createdAt || a.submittedAt || 0));
         setRequests(fetchedReqs);
-      } catch (reqErr) {
-        console.warn("Could not fetch business requests:", reqErr);
       }
 
-      // 2. Fetch Businesses
-      try {
-        let busSnap;
-        try {
-          const busQuery = query(collection(db, 'businesses'), orderBy('createdAt', 'desc'));
-          busSnap = await getDocs(busQuery);
-        } catch (idxErr) {
-          busSnap = await getDocs(collection(db, 'businesses'));
-        }
+      // 3. Businesses
+      if (busRes.status === 'fulfilled' && busRes.value) {
         const fetchedBus: Business[] = [];
-        busSnap.forEach(d => fetchedBus.push({ id: d.id, ...d.data() } as Business));
+        busRes.value.forEach(d => fetchedBus.push({ id: d.id, ...d.data() } as Business));
         fetchedBus.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
         setBusinesses(fetchedBus);
-      } catch (busErr) {
-        console.warn("Could not fetch businesses:", busErr);
       }
 
-      // 3. Fetch Marketing Requests
-      try {
-        const mktQuery = query(collection(db, 'marketingRequests'), orderBy('createdAt', 'desc'));
-        const mktSnap = await getDocs(mktQuery);
+      // 4. Marketing Requests
+      if (mktRes.status === 'fulfilled' && mktRes.value) {
         const fetchedMkt: MarketingRequest[] = [];
-        mktSnap.forEach(d => fetchedMkt.push({ id: d.id, ...d.data() } as MarketingRequest));
+        mktRes.value.forEach(d => fetchedMkt.push({ id: d.id, ...d.data() } as MarketingRequest));
         setMarketingRequests(fetchedMkt);
-      } catch (mktErr) {
-        console.warn("Could not fetch marketing requests:", mktErr);
       }
 
-      // 4. Fetch Jobs
-      try {
-        const jobsQuery = query(collection(db, 'jobs'), orderBy('createdAt', 'desc'));
-        const jobsSnap = await getDocs(jobsQuery);
+      // 5. Jobs
+      if (jobsRes.status === 'fulfilled' && jobsRes.value) {
         const fetchedJobs: JobOffer[] = [];
-        jobsSnap.forEach(d => fetchedJobs.push({ id: d.id, ...d.data() } as JobOffer));
+        jobsRes.value.forEach(d => fetchedJobs.push({ id: d.id, ...d.data() } as JobOffer));
         setJobs(fetchedJobs);
-      } catch (jobsErr) {
-        console.warn("Could not fetch jobs:", jobsErr);
       }
 
-      // 5. Fetch Banner Booking Requests
-      try {
-        const bbQuery = query(collection(db, 'bannerBookingRequests'), orderBy('createdAt', 'desc'));
-        const bbSnap = await getDocs(bbQuery);
+      // 6. Banner Booking Requests
+      if (bbRes.status === 'fulfilled' && bbRes.value) {
         const fetchedBB: BannerBookingRequest[] = [];
-        bbSnap.forEach(d => fetchedBB.push({ id: d.id, ...d.data() } as BannerBookingRequest));
+        bbRes.value.forEach(d => fetchedBB.push({ id: d.id, ...d.data() } as BannerBookingRequest));
         setBannerBookings(fetchedBB);
-      } catch (bbErr) {
-        console.warn("Could not fetch banner booking requests:", bbErr);
       }
 
-      // 6. Fetch News
-      try {
-        const newsQuery = query(collection(db, 'news'), orderBy('createdAt', 'desc'));
-        const newsSnap = await getDocs(newsQuery);
+      // 7. News
+      if (newsRes.status === 'fulfilled' && newsRes.value) {
         const fetchedNews: any[] = [];
-        newsSnap.forEach(d => fetchedNews.push({ id: d.id, ...d.data() }));
+        newsRes.value.forEach(d => fetchedNews.push({ id: d.id, ...d.data() }));
         setNews(fetchedNews);
-      } catch (newsErr) {
-        console.warn("Could not fetch news:", newsErr);
       }
 
-      // 7. Fetch Housings
-      try {
-        const housingsQuery = query(collection(db, 'housings'), orderBy('createdAt', 'desc'));
-        const housingsSnap = await getDocs(housingsQuery);
+      // 8. Housings
+      if (housingsRes.status === 'fulfilled' && housingsRes.value) {
         const fetchedHousings: any[] = [];
-        housingsSnap.forEach(d => {
+        housingsRes.value.forEach(d => {
           const data = d.data();
           if (data.isDemo || ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(d.id)) {
             deleteDoc(doc(db, 'housings', d.id)).catch(() => {});
@@ -436,16 +428,12 @@ export function AdminDashboard() {
           fetchedHousings.push({ id: d.id, ...data });
         });
         setHousings(fetchedHousings);
-      } catch (hErr) {
-        console.warn("Could not fetch housings:", hErr);
       }
 
-      // 8. Fetch Tourism Spots
-      try {
-        const tourismQuery = query(collection(db, 'tourism'));
-        const tourismSnap = await getDocs(tourismQuery);
+      // 9. Tourism Spots
+      if (tourismRes.status === 'fulfilled' && tourismRes.value) {
         const fetchedTourism: any[] = [];
-        tourismSnap.forEach(d => {
+        tourismRes.value.forEach(d => {
           const data = d.data();
           let category = data.category || 'أثري';
           if (category === 'طبيعي') category = 'طبيعة';
@@ -454,30 +442,20 @@ export function AdminDashboard() {
           fetchedTourism.push({ id: d.id, ...data, category });
         });
         setTourismSpots(fetchedTourism);
-      } catch (tErr) {
-        console.warn("Could not fetch tourism:", tErr);
       }
 
-      // 9. Fetch Edit Suggestions
-      try {
-        const esQuery = query(collection(db, 'edit_suggestions'), orderBy('createdAt', 'desc'));
-        const esSnap = await getDocs(esQuery);
+      // 10. Edit Suggestions
+      if (esRes.status === 'fulfilled' && esRes.value) {
         const fetchedEs: EditSuggestion[] = [];
-        esSnap.forEach(d => fetchedEs.push({ id: d.id, ...d.data() } as EditSuggestion));
+        esRes.value.forEach(d => fetchedEs.push({ id: d.id, ...d.data() } as EditSuggestion));
         setEditSuggestions(fetchedEs);
-      } catch (esErr) {
-        console.warn("Could not fetch edit suggestions:", esErr);
       }
 
-      // 10. Fetch Review Reports
-      try {
-        const rrQuery = query(collection(db, 'review_reports'), orderBy('createdAt', 'desc'));
-        const rrSnap = await getDocs(rrQuery);
+      // 11. Review Reports
+      if (rrRes.status === 'fulfilled' && rrRes.value) {
         const fetchedRr: ReviewReport[] = [];
-        rrSnap.forEach(d => fetchedRr.push({ id: d.id, ...d.data() } as ReviewReport));
+        rrRes.value.forEach(d => fetchedRr.push({ id: d.id, ...d.data() } as ReviewReport));
         setReviewReports(fetchedRr);
-      } catch (rrErr) {
-        console.warn("Could not fetch review reports:", rrErr);
       }
 
     } catch (err) {

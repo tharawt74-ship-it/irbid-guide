@@ -638,12 +638,19 @@ async function startServer() {
     }
   });
 
+  // Server-side in-memory cache for lightning-fast system settings delivery
+  let cachedSystemSettings: any = null;
+  let cachedSystemSettingsTime = 0;
+  const SYSTEM_SETTINGS_TTL = 30 * 1000; // 30 seconds cache
+
   // API Route for getting and setting system config with Admin bypass rules
   app.get("/api/system-settings", async (req, res) => {
     try {
-      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-      res.setHeader('Pragma', 'no-cache');
-      res.setHeader('Expires', '0');
+      res.setHeader('Cache-Control', 'public, max-age=30, s-maxage=30');
+
+      if (cachedSystemSettings && (Date.now() - cachedSystemSettingsTime < SYSTEM_SETTINGS_TTL)) {
+        return res.json({ success: true, settings: cachedSystemSettings });
+      }
 
       const appInstance = getAdminApp();
       if (!appInstance) {
@@ -653,7 +660,14 @@ async function startServer() {
       const docRef = adminDb.collection("systemConfig").doc("settings");
       const docSnap = await docRef.get();
       if (docSnap.exists) {
-        return res.json({ success: true, settings: docSnap.data() });
+        const data = docSnap.data();
+        // Sanitize if huge base64 was sent
+        if (data?.globalSettings?.logoUrl?.startsWith('data:image')) {
+          data.globalSettings.logoUrl = '/logo.png';
+        }
+        cachedSystemSettings = data;
+        cachedSystemSettingsTime = Date.now();
+        return res.json({ success: true, settings: data });
       } else {
         return res.json({ success: true, settings: null });
       }
@@ -708,6 +722,8 @@ async function startServer() {
       const cleanedSettings = JSON.parse(JSON.stringify(newSettings));
       
       await docRef.set(cleanedSettings, { merge: true });
+      cachedSystemSettings = cleanedSettings;
+      cachedSystemSettingsTime = Date.now();
       return res.json({ success: true });
     } catch (err: any) {
       console.error("Error saving system settings server-side:", err);

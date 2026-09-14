@@ -422,6 +422,10 @@ export interface UserProfile {
   emailVerified?: boolean;
   customEmailVerified?: boolean;
   verificationCode?: string;
+  readNotificationIds?: string[];
+  lastNotificationsReadAt?: number;
+  clearedNotificationsAt?: number;
+  hiddenNotificationIds?: string[];
 }
 
 export interface NewsArticle {

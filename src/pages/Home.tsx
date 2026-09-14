@@ -135,9 +135,17 @@ export function Home() {
       }
       
       try {
-        const appConfig = await getAppConfig();
         const q = query(collection(db, 'businesses'), orderBy('createdAt', 'desc'));
-        const querySnapshot = await getDocs(q);
+        const bannersQuery = query(collection(db, 'banners'));
+
+        const [querySnapshot, bannersSnap] = await Promise.all([
+          getDocs(q),
+          getDocs(bannersQuery).catch(bErr => {
+            console.warn("Could not fetch banners:", bErr);
+            return null;
+          })
+        ]);
+
         const fetchedBusinesses: Business[] = [];
         querySnapshot.forEach((docSnap) => {
           const data = docSnap.data();
@@ -163,10 +171,8 @@ export function Home() {
           }
         });
 
-        // Fetch custom banners from Firestore
-        try {
-          const bannersQuery = query(collection(db, 'banners'));
-          const bannersSnap = await getDocs(bannersQuery);
+        // Process custom banners from fetched bannersSnap
+        if (bannersSnap) {
           const activeBanners: HomepageBanner[] = [];
           
           bannersSnap.forEach((docSnap) => {
@@ -270,8 +276,7 @@ export function Home() {
           const finalBanners = activeBanners.length > 0 ? activeBanners : [BOOK_YOUR_AD_BANNER];
           setBanners(finalBanners);
           setCachedBanners(finalBanners);
-        } catch (bannersErr) {
-          console.error("Error fetching homepage banners:", bannersErr);
+        } else {
           setBanners([BOOK_YOUR_AD_BANNER]);
         }
       } catch (err: any) {

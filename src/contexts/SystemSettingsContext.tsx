@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { db } from '../lib/firebase';
+import { db, auth } from '../lib/firebase';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import {
   CategoryConfig,
@@ -266,15 +266,32 @@ export function SystemSettingsProvider({ children }: { children: React.ReactNode
   // Load settings from Firestore on mount
   useEffect(() => {
     async function loadSettings() {
-      if (!db) {
-        setIsSettingsLoaded(true);
-        return;
-      }
       try {
-        const docRef = doc(db, 'systemConfig', 'settings');
-        const snap = await getDoc(docRef);
-        if (snap.exists()) {
-          const data = snap.data();
+        let data: any = null;
+        
+        // 1. Try to fetch from server-side API (guarantees bypass of client-side rules/permissions)
+        try {
+          const apiRes = await fetch('/api/system-settings');
+          if (apiRes.ok) {
+            const resJson = await apiRes.json();
+            if (resJson.success && resJson.settings) {
+              data = resJson.settings;
+            }
+          }
+        } catch (apiErr) {
+          console.warn('Could not fetch settings from server API, falling back to direct Firestore:', apiErr);
+        }
+
+        // 2. Fallback to direct client-side Firestore read
+        if (!data && db) {
+          const docRef = doc(db, 'systemConfig', 'settings');
+          const snap = await getDoc(docRef);
+          if (snap.exists()) {
+            data = snap.data();
+          }
+        }
+
+        if (data) {
           if (data.categories) {
             const sanitizedCats = (data.categories as CategoryConfig[]).map(c => {
               if (c.name.includes('تعليم وتدريب') || c.name === '🎓 تعليم وتدريب') {
@@ -332,7 +349,9 @@ export function SystemSettingsProvider({ children }: { children: React.ReactNode
             });
             setVipPlans(sanitizedPlans);
             try {
-              await updateDoc(doc(db, 'systemConfig', 'settings'), { vipPlans: sanitizedPlans });
+              if (db) {
+                await updateDoc(doc(db, 'systemConfig', 'settings'), { vipPlans: sanitizedPlans });
+              }
             } catch (fsErr) {
               console.warn('Failed to auto-migrate vipPlans in Firestore:', fsErr);
             }
@@ -358,7 +377,9 @@ export function SystemSettingsProvider({ children }: { children: React.ReactNode
             }
             if (needsUpdate) {
               try {
-                await updateDoc(doc(db, 'systemConfig', 'settings'), { staticPages: loadedPages });
+                if (db) {
+                  await updateDoc(doc(db, 'systemConfig', 'settings'), { staticPages: loadedPages });
+                }
               } catch (fsErr) {
                 console.warn('Failed to auto-migrate static pages in Firestore:', fsErr);
               }
@@ -368,6 +389,24 @@ export function SystemSettingsProvider({ children }: { children: React.ReactNode
           if (data.seasonalCampaigns) setSeasonalCampaigns(data.seasonalCampaigns);
           if (data.stories) setStories(data.stories);
           if (data.medicalCategories) setMedicalCategories(data.medicalCategories);
+        } else {
+          // Auto-seed Firestore with default configuration if it is empty
+          if (db) {
+            try {
+              await setDoc(doc(db, 'systemConfig', 'settings'), {
+                globalSettings: DEFAULT_GLOBAL_SETTINGS,
+                vipPlans: DEFAULT_VIP_PLANS,
+                staticPages: DEFAULT_STATIC_PAGES,
+                seasonalCampaigns: DEFAULT_SEASONAL_CAMPAIGNS,
+                stories: DEFAULT_STORIES,
+                categories: categories,
+                neighborhoods: neighborhoods
+              });
+              console.log('Successfully seeded Firestore with default system settings!');
+            } catch (seedErr) {
+              console.warn('Could not auto-seed system settings into Firestore (expected if write rules or auth is not set up):', seedErr);
+            }
+          }
         }
       } catch (err) {
         console.warn('Could not load system config from Firestore:', err);
@@ -455,11 +494,39 @@ export function SystemSettingsProvider({ children }: { children: React.ReactNode
 
   // Save current settings to Firestore
   const saveAllToFirestore = async (newConfig: any) => {
-    if (!db) return;
     try {
       // Remove undefined values from nested objects to prevent Firestore setDoc error
       const cleanedConfig = JSON.parse(JSON.stringify(newConfig));
-      await setDoc(doc(db, 'systemConfig', 'settings'), cleanedConfig, { merge: true });
+      
+      // 1. Try saving via the secure server-side API (bypasses direct write rules)
+      try {
+        const token = auth?.currentUser ? await auth.currentUser.getIdToken() : null;
+        if (token) {
+          const apiRes = await fetch('/api/system-settings', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(cleanedConfig)
+          });
+          if (apiRes.ok) {
+            const resJson = await apiRes.json();
+            if (resJson.success) {
+              console.log('Successfully saved system config via server API!');
+              return;
+            }
+          }
+        }
+      } catch (apiErr) {
+        console.warn('Failed to save config via server API, falling back to direct Firestore setDoc:', apiErr);
+      }
+
+      // 2. Fallback to direct client Firestore setDoc
+      if (db) {
+        await setDoc(doc(db, 'systemConfig', 'settings'), cleanedConfig, { merge: true });
+        console.log('Successfully saved system config via direct Firestore setDoc!');
+      }
     } catch (err) {
       console.error('Failed to save system config:', err);
     }

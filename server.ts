@@ -4,6 +4,7 @@ import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 import { initializeApp, getApps, getApp, cert } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
+import { getFirestore as getAdminFirestore } from "firebase-admin/firestore";
 import { GoogleGenAI } from "@google/genai";
 import rateLimit from "express-rate-limit";
 
@@ -151,7 +152,8 @@ async function startServer() {
   app.use("/api/auth/", authLimiter);
   app.use("/api/ai/", aiLimiter);
 
-  app.use(express.json());
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
   // API Route for custom Resend verification email
   app.post("/api/auth/send-verification", async (req, res) => {
@@ -633,6 +635,79 @@ async function startServer() {
     } catch (err: any) {
       console.error("Error in reset password route:", err);
       return res.status(500).json({ error: err.message || "Internal server error" });
+    }
+  });
+
+  // API Route for getting and setting system config with Admin bypass rules
+  app.get("/api/system-settings", async (req, res) => {
+    try {
+      const appInstance = getAdminApp();
+      if (!appInstance) {
+        return res.status(500).json({ error: "Firebase Admin not initialized" });
+      }
+      const adminDb = getAdminFirestore(appInstance);
+      const docRef = adminDb.collection("systemConfig").doc("settings");
+      const docSnap = await docRef.get();
+      if (docSnap.exists) {
+        return res.json({ success: true, settings: docSnap.data() });
+      } else {
+        return res.json({ success: true, settings: null });
+      }
+    } catch (err: any) {
+      console.error("Error reading system settings server-side:", err);
+      return res.status(500).json({ error: err.message || "Failed to load system settings" });
+    }
+  });
+
+  app.post("/api/system-settings", async (req, res) => {
+    try {
+      const appInstance = getAdminApp();
+      if (!appInstance) {
+        return res.status(500).json({ error: "Firebase Admin not initialized" });
+      }
+      
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return res.status(401).json({ error: "Unauthorized: Missing token" });
+      }
+      
+      const token = authHeader.split(" ")[1];
+      const authAdmin = getAuth(appInstance);
+      const decodedToken = await authAdmin.verifyIdToken(token);
+      const uid = decodedToken.uid;
+      const email = (decodedToken.email || "").toLowerCase().trim();
+      
+      const adminDb = getAdminFirestore(appInstance);
+      
+      const ADMIN_BOOTSTRAP_EMAILS = [
+        'princessofx2344@gmail.com',
+        'admin@shoofiirbid.com',
+        'irbid.admin@gmail.com',
+        'tharawt74@gmail.com'
+      ];
+      
+      let isAdmin = ADMIN_BOOTSTRAP_EMAILS.map(e => e.toLowerCase().trim()).includes(email);
+      
+      if (!isAdmin) {
+        const adminDoc = await adminDb.collection("admins").doc(uid).get();
+        if (adminDoc.exists) {
+          isAdmin = true;
+        }
+      }
+      
+      if (!isAdmin) {
+        return res.status(403).json({ error: "Forbidden: You are not authorized as an administrator" });
+      }
+      
+      const newSettings = req.body;
+      const docRef = adminDb.collection("systemConfig").doc("settings");
+      const cleanedSettings = JSON.parse(JSON.stringify(newSettings));
+      
+      await docRef.set(cleanedSettings, { merge: true });
+      return res.json({ success: true });
+    } catch (err: any) {
+      console.error("Error saving system settings server-side:", err);
+      return res.status(500).json({ error: err.message || "Failed to save system settings" });
     }
   });
 

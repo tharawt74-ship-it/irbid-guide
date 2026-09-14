@@ -140,7 +140,8 @@ export function AccountsManager() {
   const ADMIN_BOOTSTRAP_EMAILS = [
     'princessofx2344@gmail.com',
     'admin@shoofiirbid.com',
-    'irbid.admin@gmail.com'
+    'irbid.admin@gmail.com',
+    'tharawt74@gmail.com'
   ];
 
   // Fetch all user accounts from Firestore

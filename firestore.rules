@@ -26,6 +26,7 @@ service cloud.firestore {
             request.auth.token.email.lower() == "princessofx2344@gmail.com" ||
             request.auth.token.email.lower() == "admin@shoofiirbid.com" ||
             request.auth.token.email.lower() == "irbid.admin@gmail.com" ||
+            request.auth.token.email.lower() == "tharawt74@gmail.com" ||
             request.auth.token.email.matches(".*@shoofiirbid\\.com$")
           )
         )
@@ -253,6 +254,11 @@ service cloud.firestore {
     }
 
     match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /systemConfig/{configId} {
       allow read: if true;
       allow write: if isAdmin();
     }

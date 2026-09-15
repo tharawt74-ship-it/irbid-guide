@@ -2,21 +2,29 @@
 // 100% Free architecture with Smart Entity Search, Live Business Hours, Multi-Criteria Filtering,
 // Price Comparisons, Cart Integration, and Missing Place Lead Generation.
 
-import { collection, addDoc, getDocs, limit, query as firestoreQuery } from 'firebase/firestore';
+import { collection, addDoc, getDocs, limit, query as firestoreQuery, orderBy } from 'firebase/firestore';
 import { db } from './firebase';
-import { getCachedBusinesses, setCachedBusinesses } from './dataCache';
-import { DEMO_SEED_DATA } from './demoDataHelper';
+import { 
+  getCachedBusinesses, setCachedBusinesses, 
+  getCachedOffers, setCachedOffers,
+  getCachedJobs, setCachedJobs,
+  getCachedHousings, setCachedHousings,
+  getCachedProducts, setCachedProducts
+} from './dataCache';
+import { DEMO_SEED_DATA, getAppConfig } from './demoDataHelper';
 import { normalizeArabic } from './arabicSearch';
 import { Business, MenuItem } from '../types';
 import { getLiveWorkingStatus, LiveStatus } from './businessHoursHelper';
-import { FilterEngine, FilterParameters, ParsedFilterParams, parseNaturalLanguageQuery } from '../utils/filterEngine';
+import { FilterEngine, FilterParameters, ParsedFilterParams, parseNaturalLanguageQuery, isCategoryMatch, FilterDomain } from '../utils/filterEngine';
+import { SEED_TOURISM_SPOTS } from '../pages/Tourism';
 
-export { FilterEngine, parseNaturalLanguageQuery };
+export { FilterEngine, parseNaturalLanguageQuery, isCategoryMatch };
 export type { FilterParameters, ParsedFilterParams };
 
 export interface ActionLink {
   label: string;
   path: string;
+  query?: string;
   icon?: string;
   description?: string;
 }
@@ -70,6 +78,7 @@ export interface ChatMessage {
   actions?: ActionLink[];
   cards?: BusinessCardItem[];
   appliedFilters?: string[];
+  suggestedPrompts?: string[];
   timestamp: number;
   isMissingPlace?: boolean;
   missingPlaceName?: string;
@@ -628,13 +637,37 @@ export async function filterStructuredEntities(
   }
 
   const allCards: { card: BusinessCardItem; score: number; rawPrice: number; rawRating: number }[] = [];
+  const appConfig = await getAppConfig();
 
   // ==========================================
-  // 1. JOBS DOMAIN FILTERING
+  // 1. JOBS DOMAIN FILTERING (FIRESTORE DATABASE)
   // ==========================================
   if (targetDomain === 'job' || (targetDomain === 'all' && criteria.intent === 'job')) {
-    const demoJobs = (DEMO_SEED_DATA?.jobs || []) as any[];
-    for (const j of demoJobs) {
+    let allJobs: any[] = getCachedJobs() || [];
+    if (allJobs.length === 0) {
+      try {
+        if (db) {
+          const snap = await getDocs(firestoreQuery(collection(db, 'jobs'), limit(80)));
+          if (!snap.empty) {
+            allJobs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            if (!appConfig.showDemoData) {
+              allJobs = allJobs.filter(j => !j.isDemo);
+            }
+            setCachedJobs(allJobs);
+          }
+        }
+      } catch (err) {
+        console.warn("Could not query Firestore jobs:", err);
+      }
+    }
+    if (allJobs.length === 0 && appConfig.showDemoData && DEMO_SEED_DATA?.jobs) {
+      allJobs = DEMO_SEED_DATA.jobs || [];
+      setCachedJobs(allJobs);
+    }
+
+    for (const j of allJobs) {
+      if (j.status === 'closed' || j.isExpired) continue;
+
       const normTitle = normalizeArabic(j.title || '');
       const normCompany = normalizeArabic(j.company || '');
       const normCat = normalizeArabic(j.category || '');
@@ -658,14 +691,26 @@ export async function filterStructuredEntities(
         }
       }
 
-      let score = 50;
+      let termMatched = false;
+      let score = 0;
       if (normTerm.length > 1) {
-        if (normTitle.includes(normTerm)) score += 100;
-        if (normCompany.includes(normTerm)) score += 60;
-        if (normCat.includes(normTerm)) score += 40;
-      }
-      for (const token of termTokens) {
-        if (normTitle.includes(token)) score += 30;
+        if (normTitle.includes(normTerm)) { score += 120; termMatched = true; }
+        if (normDesc.includes(normTerm)) { score += 80; termMatched = true; }
+        if (normCompany.includes(normTerm)) { score += 60; termMatched = true; }
+        if (normCat.includes(normTerm)) { score += 40; termMatched = true; }
+        for (const token of termTokens) {
+          if (normTitle.includes(token)) { score += 35; termMatched = true; }
+          if (normDesc.includes(token)) { score += 20; termMatched = true; }
+        }
+        if (!termMatched && category && (normCat.includes(normalizeArabic(category)) || isCategoryMatch(j.category, category))) {
+          score += 60;
+          termMatched = true;
+        }
+        if (!termMatched) {
+          continue; // Job does not match requested field/role
+        }
+      } else {
+        score = 50;
       }
 
       allCards.push({
@@ -693,11 +738,34 @@ export async function filterStructuredEntities(
   }
 
   // ==========================================
-  // 2. HOUSING DOMAIN FILTERING
+  // 2. HOUSING DOMAIN FILTERING (FIRESTORE DATABASE)
   // ==========================================
   if (targetDomain === 'housing' || (targetDomain === 'all' && criteria.intent === 'housing')) {
-    const demoHousings = (DEMO_SEED_DATA?.housings || []) as any[];
-    for (const h of demoHousings) {
+    let allHousings: any[] = getCachedHousings() || [];
+    if (allHousings.length === 0) {
+      try {
+        if (db) {
+          const snap = await getDocs(firestoreQuery(collection(db, 'housings'), limit(80)));
+          if (!snap.empty) {
+            allHousings = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            if (!appConfig.showDemoData) {
+              allHousings = allHousings.filter(h => !h.isDemo);
+            }
+            setCachedHousings(allHousings);
+          }
+        }
+      } catch (err) {
+        console.warn("Could not query Firestore housings:", err);
+      }
+    }
+    if (allHousings.length === 0 && appConfig.showDemoData && DEMO_SEED_DATA?.housings) {
+      allHousings = DEMO_SEED_DATA.housings || [];
+      setCachedHousings(allHousings);
+    }
+
+    for (const h of allHousings) {
+      if (h.isOccupied || h.status === 'hidden' || h.isAvailable === false) continue;
+
       const normTitle = normalizeArabic(h.title || '');
       const normLoc = normalizeArabic(h.location || '');
       const normUni = normalizeArabic(h.university || '');
@@ -773,66 +841,266 @@ export async function filterStructuredEntities(
   }
 
   // ==========================================
-  // 3. PRODUCTS & OFFERS FILTERING
+  // 3. PRODUCTS & OFFERS FILTERING (FIRESTORE DATABASE)
   // ==========================================
   if (targetDomain === 'product' || targetDomain === 'offer' || (targetDomain === 'all' && (criteria.intent === 'product' || criteria.intent === 'offer'))) {
-    for (const p of FEATURED_PRODUCTS_CATALOG) {
-      const normName = normalizeArabic(p.name);
-      const normCat = normalizeArabic(p.category);
-      const normBiz = normalizeArabic(p.businessName);
+    // 3.1 REAL OFFERS FROM FIRESTORE
+    let allOffers: any[] = getCachedOffers() || [];
+    if (allOffers.length === 0) {
+      try {
+        if (db) {
+          const snap = await getDocs(firestoreQuery(collection(db, 'offers'), limit(80)));
+          if (!snap.empty) {
+            allOffers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            if (!appConfig.showDemoData) {
+              allOffers = allOffers.filter(o => !o.isDemo);
+            }
+            setCachedOffers(allOffers);
+          }
+        }
+      } catch {
+        // use fallback
+      }
+    }
+    if (allOffers.length === 0 && appConfig.showDemoData && DEMO_SEED_DATA?.offers) {
+      allOffers = DEMO_SEED_DATA.offers || [];
+      setCachedOffers(allOffers);
+    }
 
-      if (maxPrice && p.price > maxPrice) continue;
-      if (minPrice && p.price < minPrice) continue;
-      if (category && !normCat.includes(normalizeArabic(category))) continue;
+    const isFoodSearch = /أكل|اكل|طعام|مطعم|مطاعم|وجبة|وجبات|شاورما|بيتزا|برجر|مشاوي|سناك|حلويات|كنافة|قهوة/i.test(rawQuery || '') ||
+                         /أكل|اكل|طعام|مطعم|مطاعم|وجبة|وجبات/i.test(cleanTerm) ||
+                         category === 'مطاعم ومأكولات';
+
+    for (const offer of allOffers) {
+      if (offer.status === 'expired' || offer.isExpired) continue;
+
+      const normTitle = normalizeArabic(offer.title || '');
+      const normDesc = normalizeArabic(offer.description || '');
+      const normBiz = normalizeArabic(offer.businessName || '');
+      const normCat = normalizeArabic(offer.category || '');
+
+      const isOfferFood = /مطاعم|مأكولات|ماكولات|حلويات|مخابز|كافيه|شاورما|بيتزا|برجر/i.test(offer.category || '') ||
+                          /شاورما|بيتزا|برجر|وجبة|كنافة|معجنات|كافيه|قهوة/i.test(offer.title || '');
+
+      // Strict category filter when explicitly specified and not matching
+      if (category) {
+        const catMatched = isCategoryMatch(offer.category || '', category) || normCat.includes(normalizeArabic(category));
+        if (!catMatched) {
+          if (isFoodSearch && isOfferFood) {
+            // Food category match
+          } else {
+            continue;
+          }
+        }
+      } else if (isFoodSearch && !isOfferFood) {
+        // If user explicitly asked for food/eating offers, don't show fashion or gym offers
+        continue;
+      }
+
+      // Parse price if available
+      const rawNewPrice = parseFloat(String(offer.newPrice || '').replace(/[^\d\.]/g, '')) || 0;
+      if (maxPrice && rawNewPrice > 0 && rawNewPrice > maxPrice) continue;
+      if (minPrice && rawNewPrice > 0 && rawNewPrice < minPrice) continue;
 
       let score = 0;
-      if (normTerm.length > 1) {
+      if (normTerm.length > 1 && !/^(عرض|عروض|اكل|أكل|طعام|تخفيضات|خصومات)$/i.test(cleanTerm.trim())) {
+        if (normTitle.includes(normTerm)) score += 160;
+        if (normDesc.includes(normTerm)) score += 80;
+        if (normBiz.includes(normTerm)) score += 60;
+        if (normCat.includes(normTerm)) score += 50;
+      }
+
+      for (const token of termTokens) {
+        if (!/^(عرض|عروض|اكل|أكل|طعام|تخفيضات|خصومات)$/i.test(token)) {
+          if (normTitle.includes(token)) score += 45;
+          if (normDesc.includes(token)) score += 25;
+        }
+      }
+
+      // General intent boost
+      if (targetDomain === 'offer' || criteria.intent === 'offer') {
+        score += 80;
+        if (isFoodSearch && isOfferFood) score += 60;
+        if (offer.isHot) score += 30;
+      }
+
+      const discountNum = typeof offer.discountPercentage === 'number'
+        ? offer.discountPercentage
+        : parseInt(String(offer.discountPercentage || '25').replace(/\D/g, ''), 10) || 25;
+
+      if (score >= 40 || targetDomain === 'offer') {
+        allCards.push({
+          card: {
+            id: offer.id || `offer-${Math.random()}`,
+            name: offer.title,
+            category: offer.category || 'عروض وخصومات',
+            address: offer.location || offer.businessName,
+            rating: 4.9,
+            imageUrl: offer.image || offer.imageUrl,
+            phone: offer.phone,
+            whatsapp: offer.whatsapp,
+            price: offer.newPrice,
+            oldPrice: offer.oldPrice,
+            discountPercentage: `${discountNum}%`,
+            badge: `خصم ${discountNum}% 🔥`,
+            path: `/offers?id=${encodeURIComponent(offer.id || '')}`,
+            type: 'offer',
+            canAddToCart: true,
+            canOrderInstant: true,
+            appliedFilters: appliedFilters.length > 0 ? appliedFilters : undefined,
+            cartItemData: {
+              id: offer.id || `offer-${Math.random()}`,
+              name: `${offer.businessName ? `${offer.businessName}: ` : ''}${offer.title}`,
+              price: rawNewPrice || offer.newPrice || 0,
+              originalPrice: offer.oldPrice,
+              image: offer.image || offer.imageUrl,
+              category: offer.category,
+              businessId: offer.businessId || 'offer-biz',
+              businessName: offer.businessName,
+              businessPhone: offer.phone
+            }
+          },
+          score: score || 60,
+          rawPrice: rawNewPrice,
+          rawRating: 4.9
+        });
+      }
+    }
+
+    // 3.2 PRODUCTS & STORE MENU ITEMS FROM DATABASE
+    let allProducts: any[] = getCachedProducts() || [];
+    if (allProducts.length === 0) {
+      try {
+        if (db) {
+          const snap = await getDocs(firestoreQuery(collection(db, 'products'), limit(80)));
+          if (!snap.empty) {
+            allProducts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            if (!appConfig.showDemoData) {
+              allProducts = allProducts.filter(p => !p.isDemo);
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+
+      // Also collect menu items and catalog items from businesses in Firestore
+      let businessesList = getCachedBusinesses() || [];
+      if (businessesList.length === 0 && db) {
+        try {
+          const bSnap = await getDocs(firestoreQuery(collection(db, 'businesses'), limit(80)));
+          if (!bSnap.empty) {
+            businessesList = bSnap.docs.map(d => ({ id: d.id, ...d.data() } as Business));
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      for (const b of businessesList) {
+        if (b.menuItems && Array.isArray(b.menuItems)) {
+          for (const m of b.menuItems) {
+            allProducts.push({
+              id: m.id || `menu-${b.id}-${m.name}`,
+              name: m.name,
+              category: m.category || b.category || 'أطعمة ومنتجات',
+              businessId: b.id,
+              businessName: b.name,
+              businessPhone: b.phone,
+              businessWhatsapp: b.socialLinks?.whatsapp || b.whatsapp,
+              price: typeof m.price === 'number' ? m.price : parseFloat(String(m.price)) || 0,
+              image: m.imageUrl || (m as any).image || b.imageUrl || (b as any).image,
+              description: m.description,
+              path: b.username ? `/@${b.username}` : `/business/${b.id}`,
+              keywords: [m.name, m.category || '', b.name, b.category || '']
+            });
+          }
+        }
+      }
+
+      if (allProducts.length === 0 && appConfig.showDemoData) {
+        allProducts = FEATURED_PRODUCTS_CATALOG;
+      }
+
+      if (allProducts.length > 0) {
+        setCachedProducts(allProducts);
+      }
+    }
+
+    for (const p of allProducts) {
+      const normName = normalizeArabic(p.name || '');
+      const normCat = normalizeArabic(p.category || '');
+      const normBiz = normalizeArabic(p.businessName || '');
+      const prodPrice = typeof p.price === 'number' ? p.price : parseFloat(String(p.price)) || 0;
+
+      if (maxPrice && prodPrice > maxPrice) continue;
+      if (minPrice && prodPrice < minPrice) continue;
+
+      const isProdFood = /مطاعم|مأكولات|ماكولات|حلويات|مخابز|وجبات|شاورما|بيتزا|برجر/i.test(p.category || '');
+
+      if (category && !isCategoryMatch(p.category, category) && !normCat.includes(normalizeArabic(category))) {
+        if (!(isFoodSearch && isProdFood)) {
+          continue;
+        }
+      } else if (isFoodSearch && !isProdFood) {
+        continue;
+      }
+
+      let score = 0;
+      if (normTerm.length > 1 && !/^(عرض|عروض|اكل|أكل|طعام|تخفيضات|خصومات)$/i.test(cleanTerm.trim())) {
         if (normName.includes(normTerm)) score += 150;
         if (normCat.includes(normTerm)) score += 70;
         if (normBiz.includes(normTerm)) score += 50;
       }
-      for (const kw of p.keywords) {
+      for (const kw of (p.keywords || [])) {
         const normKw = normalizeArabic(kw);
         if (normTerm.includes(normKw) || normKw.includes(normTerm)) score += 80;
       }
       for (const token of termTokens) {
-        if (normName.includes(token)) score += 30;
+        if (!/^(عرض|عروض|اكل|أكل|طعام|تخفيضات|خصومات)$/i.test(token)) {
+          if (normName.includes(token)) score += 35;
+        }
       }
 
-      if (score >= 35 || targetDomain === 'product' || targetDomain === 'offer') {
+      if (isFoodSearch && isProdFood) {
+        score += 65;
+      }
+
+      if (score >= 35 || targetDomain === 'product' || (targetDomain === 'offer' && (p.discountPercentage || p.oldPrice))) {
+        const isOffer = targetDomain === 'offer' || Boolean(p.discountPercentage || p.oldPrice);
         allCards.push({
           card: {
             id: p.id,
             name: p.name,
-            category: p.category,
+            category: p.category || 'منتجات',
             address: p.businessName,
             rating: 4.9,
-            imageUrl: p.image,
-            phone: p.businessPhone,
-            whatsapp: p.businessWhatsapp,
-            price: `${p.price.toFixed(2)} د.أ`,
+            imageUrl: p.image || p.imageUrl,
+            phone: p.businessPhone || p.phone,
+            whatsapp: p.businessWhatsapp || p.whatsapp,
+            price: `${prodPrice.toFixed(2)} د.أ`,
             oldPrice: p.oldPrice ? `${p.oldPrice.toFixed(2)} د.أ` : undefined,
             discountPercentage: p.discountPercentage,
-            badge: p.badge || 'منتج متاح 🛍️',
-            path: p.path,
-            type: 'product',
+            badge: p.discountPercentage ? `خصم ${p.discountPercentage}% 🔥` : (p.badge || 'منتج متاح 🛍️'),
+            path: p.path || `/search?q=${encodeURIComponent(p.name)}`,
+            type: isOffer ? 'offer' : 'product',
             canAddToCart: true,
             canOrderInstant: true,
             appliedFilters: appliedFilters.length > 0 ? appliedFilters : undefined,
             cartItemData: {
               id: p.id,
               name: p.name,
-              price: p.price,
+              price: prodPrice,
               originalPrice: p.oldPrice ? `${p.oldPrice.toFixed(2)} د.أ` : undefined,
-              image: p.image,
+              image: p.image || p.imageUrl,
               category: p.category,
-              businessId: p.businessId,
-              businessName: p.businessName,
-              businessPhone: p.businessPhone
+              businessId: p.businessId || 'biz',
+              businessName: p.businessName || 'محل تجاري',
+              businessPhone: p.businessPhone || p.phone
             }
           },
           score: score || 50,
-          rawPrice: p.price,
+          rawPrice: prodPrice,
           rawRating: 4.9
         });
       }
@@ -840,25 +1108,29 @@ export async function filterStructuredEntities(
   }
 
   // ==========================================
-  // 4. BUSINESSES & STORES FILTERING
+  // 4. BUSINESSES & STORES FILTERING (FIRESTORE DATABASE)
   // ==========================================
   if (targetDomain === 'business' || targetDomain === 'all' || ['closed_stores', 'open_stores', 'compare', 'general'].includes(criteria.intent)) {
     let allBusinesses: Business[] = getCachedBusinesses() || [];
     if (allBusinesses.length === 0) {
       try {
         if (db) {
-          const snap = await getDocs(firestoreQuery(collection(db, 'businesses'), limit(60)));
+          const snap = await getDocs(firestoreQuery(collection(db, 'businesses'), limit(150)));
           if (!snap.empty) {
             allBusinesses = snap.docs.map(d => ({ id: d.id, ...d.data() } as Business));
+            if (!appConfig.showDemoData) {
+              allBusinesses = allBusinesses.filter(b => !(b as any).isDemo);
+            }
             setCachedBusinesses(allBusinesses);
           }
         }
       } catch (e) {
-        // fallback
+        console.warn("Could not query Firestore businesses:", e);
       }
     }
-    if (allBusinesses.length === 0 && DEMO_SEED_DATA?.businesses) {
+    if (allBusinesses.length === 0 && appConfig.showDemoData && DEMO_SEED_DATA?.businesses) {
       allBusinesses = DEMO_SEED_DATA.businesses as unknown as Business[];
+      setCachedBusinesses(allBusinesses);
     }
 
     for (const b of allBusinesses) {
@@ -887,8 +1159,7 @@ export async function filterStructuredEntities(
 
       // 3. Strict category filter
       if (category) {
-        const normReqCat = normalizeArabic(category);
-        if (!normCat.includes(normReqCat) && !normDesc.includes(normReqCat)) {
+        if (!isCategoryMatch(b.category, category) && !normDesc.includes(normalizeArabic(category))) {
           continue;
         }
       }
@@ -901,13 +1172,49 @@ export async function filterStructuredEntities(
         }
       }
 
+      // Specialized subcategory and medical profile extraction
+      const subCat = (b as any).subCategory || '';
+      const normSubCat = normalizeArabic(subCat);
+      const docSpecialty = (b as any).medicalProfile?.doctorProfile?.specialty || (b as any).specialty || '';
+      const normDocSpecialty = normalizeArabic(docSpecialty);
+      const facilitySpecs = ((b as any).medicalFacilityInfo?.specialties || []).join(' ');
+      const normFacilitySpecs = normalizeArabic(facilitySpecs);
+
       // Calculate matching score
       let score = 0;
+      if (category) score += 50;
+      if (location) score += 50;
+      if (bRating >= 4.7) score += 20;
+      if (b.isVerified) score += 10;
+      if (b.packagePlan === 'vip') score += 15;
+
+      // Dialect Synonym Cluster Boosters for Irbid
+      const isClothingTerm = /(اواعي|أواعي|ملابس|ازياء|أزياء|البسة|ألبسة|موضة|بوتيك|فستان)/i.test(normTerm);
+      const isClothingBiz = /(ازياء|أزياء|ملابس|أواعي|اواعي|البسة|ألبسة|موضة|بوتيك)/i.test(normCat);
+      if (isClothingTerm && isClothingBiz) {
+        score += 180;
+      }
+
+      const isFoodTerm = /(مطعم|مطاعم|شاورما|برجر|برغر|بيتزا|مشاوي|اكل|أكل|طعام|عشا|غدا|سناك)/i.test(normTerm);
+      const isFoodBiz = /(مطاعم|مأكولات|ماكولات|حلويات|سناكات)/i.test(normCat);
+      if (isFoodTerm && isFoodBiz) {
+        score += 150;
+      }
+
+      const isCafeTerm = /(كافيه|كافيهات|مقهى|قهوة|اراجيل|ارجيله|قعدة)/i.test(normTerm);
+      const isCafeBiz = /(كافيهات|مقاهي|قهوة)/i.test(normCat);
+      if (isCafeTerm && isCafeBiz) {
+        score += 150;
+      }
+
       if (normTerm.length > 1) {
         if (normName === normTerm) score += 300;
         else if (normName.includes(normTerm)) score += 150;
         else if (normTerm.includes(normName)) score += 100;
 
+        if (normDocSpecialty.includes(normTerm)) score += 140;
+        if (normFacilitySpecs.includes(normTerm)) score += 120;
+        if (normSubCat.includes(normTerm)) score += 100;
         if (normCat.includes(normTerm)) score += 60;
         if (normDesc.includes(normTerm)) score += 30;
         if (normAddr.includes(normTerm)) score += 25;
@@ -915,6 +1222,9 @@ export async function filterStructuredEntities(
 
       for (const token of termTokens) {
         if (normName.includes(token)) score += 40;
+        else if (normDocSpecialty.includes(token)) score += 60;
+        else if (normFacilitySpecs.includes(token)) score += 50;
+        else if (normSubCat.includes(token)) score += 45;
         else if (normCat.includes(token)) score += 25;
       }
 
@@ -925,10 +1235,9 @@ export async function filterStructuredEntities(
       }
 
       if (liveStatus.isOpen && !closedNow) score += 15;
-      if (bRating >= 4.7) score += 10;
 
       // Include if it matches criteria or explicit search
-      if (score >= 40 || (openNow && liveStatus.isOpen && (category || normTerm.length <= 1))) {
+      if (score >= 30 || category || location || (openNow && liveStatus.isOpen) || normTerm.length <= 1) {
         const isFoodOrMarket = normCat.includes('مطاعم') || normCat.includes('حلويات') || normCat.includes('سوبرماركت') || normCat.includes('كافيهات');
         
         allCards.push({
@@ -1217,7 +1526,37 @@ export async function getSmartLocalResponse(
     };
   }
 
-  // 2.2 Price & Offer Comparison
+  // 2.2 Clarification Intents (Hunger & Job Inquiries)
+  if (intent === 'hunger') {
+    return {
+      text: `صحة وهنا مقدماً يا غالي! 😋🍽️\nشو بتحب نوع الأكل المفضل اللي عبالك هسا؟\n\nاختر نوع الأكل أو اكتب ما تشتهيه وسأبحث لك فوراً عن أفضل المطاعم المفتوحة والعروض:`,
+      actions: [
+        { label: '🍕 بيتزا ومعجنات', path: 'query:بدي بيتزا مفتوح', query: 'بدي بيتزا مفتوح' },
+        { label: '🌯 شاورما وسناكات', path: 'query:مطعم شاورما فاتح', query: 'مطعم شاورما فاتح' },
+        { label: '🍔 برجر وساندويشات', path: 'query:مطعم برجر مفتوح', query: 'مطعم برجر مفتوح' },
+        { label: '🍗 مشاوي ودجاج', path: 'query:مطاعم مشاوي مفتوحة', query: 'مطاعم مشاوي مفتوحة' },
+        { label: '🧆 فطور وفلافل شعبية', path: 'query:مطعم فلافل وفطور مفتوح', query: 'مطعم فلافل وفطور مفتوح' },
+        { label: '🏷️ تصفح عروض المطاعم', path: '/offers' }
+      ]
+    };
+  }
+
+  if (intent === 'job_inquiry') {
+    return {
+      text: `أهلاً بك وسعداء بمساعدتك لإيجاد فرصة العمل المناسبة في إربد! 💼🤝\nشو بدك شغل وبأي مجال أو تخصص بتبحث؟\n\nاختر مجالك أو اكتب التخصص المطلوب وسأبحث لك فوراً في الشواغر المتاحة:`,
+      actions: [
+        { label: '🛒 كاشير ومبيعات', path: 'query:وظيفة كاشير ومبيعات', query: 'وظيفة كاشير ومبيعات' },
+        { label: '☕ باريستا وضيافة', path: 'query:وظيفة باريستا', query: 'وظيفة باريستا' },
+        { label: '🎧 خدمة عملاء وتسويق', path: 'query:وظائف تسويق ومبيعات', query: 'وظائف تسويق ومبيعات' },
+        { label: '🚗 سائق وتوصيل', path: 'query:وظيفة سائق وتوصيل', query: 'وظيفة سائق وتوصيل' },
+        { label: '💻 تكنولوجيا وبرمجة', path: 'query:وظائف برمجة وتصميم', query: 'وظائف برمجة وتصميم' },
+        { label: '🩺 تمريض وصحة', path: 'query:وظائف تمريض وصحة', query: 'وظائف تمريض وصحة' },
+        { label: '💼 كافة الوظائف الشاغرة', path: '/jobs' }
+      ]
+    };
+  }
+
+  // 2.3 Price & Offer Comparison
   if (intent === 'compare' || /(قارن|مقارنة|مين ارخص|أرخص|احسن عرض|أفضل عرض)/i.test(query)) {
     const comparison = await getOffersComparison(cleanTerm);
     return {
@@ -1254,7 +1593,7 @@ export async function getSmartLocalResponse(
       };
     } else {
       return {
-        text: `لم أجد حالياً شواغر وظيفية تطابق "**${cleanTerm}**" في إربد 💼\n\nيتم تحديث وإضافة الوظائف الشاغرة في المحافظة بشكل يومي ومستمر. يمكنك تصفح كافة الوظائف المتاحة حالياً:`,
+        text: `عذراً منك، لا تتوفر شواغر وظيفية حالياً في مجال "**${cleanTerm}**" منشورة على الموقع 💼.\n\nيتم تحديث وإضافة الشواغر الوظيفية في محافظة إربد باستمرار من قِبل الشركات وأصحاب العمل. يمكنك تصفح كافة الوظائف المتاحة حالياً أو نشر طلب توظيف:`,
         actions: [
           { label: '💼 تصفح كافة الوظائف الشاغرة', path: '/jobs' },
           { label: '📢 نشر إعلان طلب موظفين', path: '/jobs?action=add' }
@@ -1303,23 +1642,87 @@ export async function getSmartLocalResponse(
     }
   }
 
-  // 2.5 Products & Meals Search
-  if (intent === 'product' || intent === 'offer' || domain === 'product' || domain === 'offer') {
-    const filterRes = await filterStructuredEntities({
-      domain: intent === 'offer' ? 'offer' : 'product',
+  // 2.5 Offers & Discounts Search
+  if (intent === 'offer' || domain === 'offer') {
+    let filterRes = await filterStructuredEntities({
+      domain: 'offer',
       cleanTerm,
+      category: parsed.category,
       lowPrice: parsed.isBudgetFriendly,
       maxPrice: parsed.maxPrice,
       limit: 4
     }, rawQuery);
 
+    // Fallback to category offers or top active offers if exact term had 0 matches
+    if (filterRes.cards.length === 0 && (cleanTerm || parsed.category)) {
+      filterRes = await filterStructuredEntities({
+        domain: 'offer',
+        cleanTerm: '',
+        category: parsed.category,
+        limit: 4
+      }, rawQuery);
+    }
+    if (filterRes.cards.length === 0) {
+      filterRes = await filterStructuredEntities({
+        domain: 'offer',
+        cleanTerm: '',
+        limit: 4
+      }, rawQuery);
+    }
+
     if (filterRes.cards.length > 0) {
+      const isFoodQuery = /أكل|اكل|طعام|مطعم|مطاعم|وجبة|وجبات|شاورما|بيتزا|برجر|مشاوي|سناك|حلويات|كنافة|قهوة/i.test(rawQuery) ||
+                          /أكل|اكل|طعام|مطعم|مطاعم|وجبة|وجبات/i.test(cleanTerm) ||
+                          parsed.category === 'مطاعم ومأكولات';
+
+      let introText = `وجدت لك باقة من **أقوى العروض والتخفيضات الحصرية** النشطة حالياً في إربد 🏷️✨🔥\n\nتفضل هذه العروض المميزة، ويمكنك الطلب الفوري عبر الواتساب أو الإضافة لسلة المشتريات:`;
+
+      if (isFoodQuery) {
+        introText = `وجدت لك أقوى **عروض المطاعم والوجبات** والتخفيضات المميزة${cleanTerm && !/^(أكل|اكل|طعام|عروض|عرض)$/i.test(cleanTerm.trim()) ? ` لـ "${cleanTerm}"` : ''} في إربد 🏷️🍕🔥\n\nتفضل هذه العروض الحصرية بنسب توفير مميزة، ويمكنك الطلب الفوري عبر الواتساب أو الإضافة لسلة المشتريات:`;
+      } else if (cleanTerm && cleanTerm.length > 1 && !/^(عروض|عرض|تخفيضات|خصومات)$/i.test(cleanTerm.trim())) {
+        introText = `وجدت لك أفضل **عروض وتخفيضات "${cleanTerm}"** في إربد 🏷️✨\n\nتفضل هذه العروض المميزة للاستفادة من نسب الخصم والتواصل المباشر مع المحل:`;
+      }
+
       return {
-        text: `وجدت لك **أفضل الأصناف والخيارات** لـ "**${cleanTerm}**" في إربد 🛍️🍕\n\nيمكنك إضافة الصنف لسلة مشترياتك فوراً أو طلبه مباشرة عبر الواتساب:`,
+        text: introText,
         cards: filterRes.cards,
         appliedFilters: filterRes.appliedFilters,
         actions: [
+          { label: '🏷️ استعراض كافة العروض والخصومات', path: '/offers' },
           { label: '🛒 عرض سلة المشتريات', path: '/cart' },
+          ...(isFoodQuery ? [{ label: '🍕 دليل المطاعم والكافيهات', path: '/search?category=مطاعم ومأكولات' }] : [])
+        ]
+      };
+    }
+  }
+
+  // 2.5b Products & Meals Search
+  if (intent === 'product' || domain === 'product') {
+    let filterRes = await filterStructuredEntities({
+      domain: 'product',
+      cleanTerm,
+      category: parsed.category,
+      lowPrice: parsed.isBudgetFriendly,
+      maxPrice: parsed.maxPrice,
+      limit: 4
+    }, rawQuery);
+
+    if (filterRes.cards.length === 0) {
+      filterRes = await filterStructuredEntities({
+        domain: 'product',
+        cleanTerm: '',
+        category: parsed.category,
+        limit: 4
+      }, rawQuery);
+    }
+
+    if (filterRes.cards.length > 0) {
+      return {
+        text: `هلا وغلا قرابة! جبتلك **أحسن الخيارات والأصناف** لـ "**${cleanTerm || 'الأكل والمنتجات'}**" بإربد 🛍️🍕\n\nتفضل هدول، وتقدر تضيف الصنف لسلتك فوراً أو تطلبه دغري ع الواتساب:`,
+        cards: filterRes.cards,
+        appliedFilters: filterRes.appliedFilters,
+        actions: [
+          { label: '🛒 فتح سلة المشتريات', path: '/cart' },
           { label: '🏷️ أقوى العروض والخصومات', path: '/offers' }
         ]
       };
@@ -1344,15 +1747,27 @@ export async function getSmartLocalResponse(
 
     if (filterRes.cards.length > 0) {
       let filterSummary = '';
-      if (parsed.isOpen) filterSummary += ' (المفتوحة الآن 🟢)';
-      if (parsed.isHighRating || parsed.minRating) filterSummary += ` (⭐ تقييم ${parsed.minRating || 4.5}+)`;
+      if (parsed.isOpen) filterSummary += ' (المفتوحة هسا 🟢)';
+      if (parsed.isHighRating || parsed.minRating) filterSummary += ` (⭐ الأعلى تقييماً)`;
+
+      const isDoctorSearch = /باطني|طبيب|دكتور|عيادة|مركز طبي/i.test(rawQuery);
+      const isShawarmaSearch = /شاورما/i.test(rawQuery);
+
+      let introText = `أبشر يا غالي! جبتلك هدول المحلات والأماكن المطبقة لـ "**${cleanTerm}**"${filterSummary} 📍✨\n\nتفحّص ساعات العمل وتواصل مع المحل المباشر:`;
+
+      if (isDoctorSearch) {
+        introText = `هلا والله! جبتلك خيرة الأطباء والعيادات المتخصصة بـ "**${cleanTerm}**" والأعلى تقييماً بإربد ⭐🩺\n\nتقدر تتصل فيهم دغري أو تبعث ع الواتساب لحجز موعد:`;
+      } else if (isShawarmaSearch && parsed.isOpen) {
+        introText = `على راسي! جبتلك أحسن مطاعم الشاورما **المفتوحة هسا** بإربد 🌯🟢\n\nاطلب حريقة دغري ع الواتساب أو شوف المنيو:`;
+      }
+
       return {
-        text: `وجدت لك المحلات والأماكن المطابقة لـ "**${cleanTerm}**"${filterSummary} 📍✨\n\nتحقق من حالة الدوام وساعات العمل وتواصل مع المحل مباشرة:`,
+        text: introText,
         cards: filterRes.cards,
         appliedFilters: filterRes.appliedFilters,
         actions: [
-          { label: `🔍 عرض نتائج "${cleanTerm}" في الدليل`, path: `/search?q=${encodeURIComponent(cleanTerm)}` },
-          { label: '🏢 دليل المحلات والشركات', path: '/search' }
+          { label: `🔍 شوف كافّة نتائج "${cleanTerm}" بالدليل`, path: `/search?q=${encodeURIComponent(cleanTerm)}` },
+          { label: '🏢 دليل المحلات وإربد', path: '/search' }
         ]
       };
     }
@@ -1372,22 +1787,133 @@ export async function getSmartLocalResponse(
     }
   }
 
-  // 2.7 Match registered pages
-  let bestMatch: { title: string; path: string } | null = null;
+  // 2.7 Match registered pages & sections (Always with concrete suggestions & cards, NEVER a cold redirect!)
+  let bestMatch: { title: string; path: string; key: string } | null = null;
   for (const key of Object.keys(SITE_PAGES)) {
     const page = SITE_PAGES[key];
     if (page.keywords.some(k => query.includes(k))) {
-      bestMatch = { title: page.title, path: page.path };
+      bestMatch = { title: page.title, path: page.path, key };
       break;
     }
   }
 
   if (bestMatch) {
+    // A. Offers page match
+    if (bestMatch.key === 'offers') {
+      const filterRes = await filterStructuredEntities({ domain: 'offer', cleanTerm: '', limit: 4 }, rawQuery);
+      return {
+        text: `إليك باقة من **أقوى العروض والتخفيضات النشطة حالياً** في إربد بنسب توفير حصرية 🏷️🔥\n\nتفضل هذه العروض المميزة، ويمكنك الطلب الفوري عبر الواتساب أو الإضافة لسلة المشتريات:`,
+        cards: filterRes.cards.length > 0 ? filterRes.cards : undefined,
+        actions: [
+          { label: '🏷️ تصفح جميع العروض في إربد', path: '/offers' },
+          { label: '🛒 عرض سلة المشتريات', path: '/cart' }
+        ]
+      };
+    }
+
+    // B. Housing page match
+    if (bestMatch.key === 'housing') {
+      const filterRes = await filterStructuredEntities({ domain: 'housing', cleanTerm: '', limit: 4 }, rawQuery);
+      return {
+        text: `إليك باقة من **أبرز السكنات والشقق الطلابية المعروضة للإيجار** في إربد وقرب جامعات اليرموك والتكنو 🏠✨\n\nتفضل هذه الخيارات المتاحة، ويمكنك التواصل المباشر مع المالك للحجز والمعاينة:`,
+        cards: filterRes.cards.length > 0 ? filterRes.cards : undefined,
+        actions: [
+          { label: '🏢 تصفح جميع السكنات والشقق', path: '/housing' },
+          { label: '➕ نشر إعلان سكن جديد', path: '/housing?action=add' }
+        ]
+      };
+    }
+
+    // C. Jobs page match
+    if (bestMatch.key === 'jobs') {
+      const filterRes = await filterStructuredEntities({ domain: 'job', cleanTerm: '', limit: 4 }, rawQuery);
+      return {
+        text: `إليك باقة من **أحدث الشواغر وفرص العمل المتاحة** حالياً في إربد 💼🤝\n\nتفضل هذه الوظائف المعلنة، ويمكنك التقديم الفوري لصاحب العمل مباشرة عبر الواتساب:`,
+        cards: filterRes.cards.length > 0 ? filterRes.cards : undefined,
+        actions: [
+          { label: '💼 تصفح كافة الشواغر الوظيفية', path: '/jobs' },
+          { label: '➕ نشر شاغر وظيفي جديد', path: '/jobs?action=add' }
+        ]
+      };
+    }
+
+    // D. Tourism page match
+    if (bestMatch.key === 'tourism') {
+      const tourismCards: BusinessCardItem[] = (SEED_TOURISM_SPOTS || []).slice(0, 3).map(spot => ({
+        id: `tourism-${spot.id}`,
+        name: spot.name,
+        category: spot.category ? `معلم ${spot.category}` : 'سياحة وآثار',
+        address: spot.location,
+        rating: spot.rating || 4.8,
+        imageUrl: spot.image,
+        price: spot.entryFee,
+        badge: 'معلم سياحي 🌿🏛️',
+        path: '/tourism',
+        type: 'business'
+      }));
+
+      return {
+        text: `إليك باقة من **أجمل الوجهات والمعالم السياحية والطبيعية** في محافظة إربد وضواحيها 🌿🏛️\n\nتفضل هذه الأماكن الرائعة للزيارة والاستجمام مع العائلة والأصدقاء:`,
+        cards: tourismCards,
+        actions: [
+          { label: '🌿 تصفح الدليل السياحي الكامل لإربد', path: '/tourism' },
+          { label: '📍 استكشاف المعالم على الخريطة', path: '/tourism' }
+        ]
+      };
+    }
+
+    // E. Merchant Packages match
+    if (bestMatch.key === 'packages') {
+      return {
+        text: `توفر منصة **شو في بإربد؟** باقات اشتراك مخصصة لأصحاب المحلات والشركات لتعزيز ظهورهم ومبيعاتهم:\n\n- 🆓 **الباقة المجانية (0 د.أ):** إدراج في الدليل، معلومات الاتصال، وساعات العمل الأساسية.\n- 🥈 **الباقة الفضية (15 د.أ شهرياً):** علامة التوثيق الفضية، أولوية في نتائج البحث، ونشر 3 عروض شهرياً.\n- 🥇 **الباقة الذهبية (30 د.أ شهرياً):** ظهور في الصفحة الرئيسية، بطاقة تفاعلية مميزة، عروض غير محدودة، وزر واتساب مباشر.\n- 💎 **الباقة البلاتينية (50 د.أ شهرياً):** تغطية إعلانية شاملة، لافتة مميزة (Banner)، دعم فني مخصص، وإحصائيات متقدمة.\n\nيمكنك ترقية حسابك أو اختيار الباقة المناسبة فوراً:`,
+        actions: [
+          { label: '💎 اختيار باقة والترقية الآن', path: '/packages' },
+          { label: '💬 التواصل مع فريق المبيعات', path: '/contact' }
+        ]
+      };
+    }
+
+    // F. Contact match
+    if (bestMatch.key === 'contact') {
+      return {
+        text: `يسعدنا دائماً تواصلك معنا في إدارة منصة **شو في بإربد؟** 🤝📞\n\n- 📱 **الهاتف / واتساب المباشر:** 0799887766\n- 💬 **الدعم الفني والشكاوى:** متاح 24/7 عبر الواتساب\n- 📍 **الموقع:** إربد - شارع الجامعة - مجمع الرمحي\n- ✉️ **البريد الإلكتروني:** info@shofibirbid.site\n\nيمكنك إرسال رسالة مباشرة أو بدء محادثة واتساب معنا فوراً:`,
+        actions: [
+          { label: '💬 محادثة واتساب الإدارة الفورية', path: 'https://wa.me/962799887766' },
+          { label: '✉️ فتح صفحة اتصل بنا', path: '/contact' }
+        ]
+      };
+    }
+
+    // G. Terms or Privacy match
+    if (bestMatch.key === 'terms' || bestMatch.key === 'privacy') {
+      return {
+        text: `نحرص في منصة **شو في بإربد؟** على توفير بيئة موثوقة وآمنة لجميع أهالي وزوار إربد:\n\n- 🔒 **حماية البيانات:** لا نشارك بياناتك أو أرقام هاتفك مع أي طرف ثالث.\n- ✅ **مصداقية العروض والأسعار:** يتم مراجعة بيانات المحلات للتأكد من صحة العروض وأوقات الدوام الحية.\n- 🤝 **التعامل المباشر:** المنصة وسيط ذكي ومجاني يربط الزبائن بالمحلات ومقدمي الخدمات مباشرة دون عمولات خفية.\n\nللاطلاع على البنود القانونية والتفصيلية الكاملة:`,
+        actions: [
+          { label: '📜 قراءة الشروط والأحكام الكاملة', path: '/terms' },
+          { label: '🔒 سياسة الخصوصية', path: '/privacy' }
+        ]
+      };
+    }
+
+    // H. Cart match
+    if (bestMatch.key === 'cart') {
+      return {
+        text: `يمكنك إدارة سلة مشترياتك في منصة **شو في بإربد؟** وإتمام الطلب المباشر عبر الواتساب بضغطة زر واحدة 🛒✨\n\nتفضل بالانتقال للسلة لمراجعة الأصناف أو تصفح العروض الحصرية لإضافتها:`,
+        actions: [
+          { label: '🛒 فتح سلة المشتريات', path: '/cart' },
+          { label: '🏷️ تصفح العروض لإضافتها للسلة', path: '/offers' }
+        ]
+      };
+    }
+
+    // Default match with top businesses
+    const filterRes = await filterStructuredEntities({ domain: 'business', highRating: true, limit: 4 }, rawQuery);
     return {
-      text: `يمكنك زيارة صفحة **${bestMatch.title}** حيث ستجد كافة المعلومات والتفاصيل:`,
+      text: `إليك باقة من **أبرز المحلات والأنشطة التجارية المتميزة** في منصة شو في بإربد 🏢⭐\n\nيمكنك زيارة صفحة **${bestMatch.title}** أو استكشاف الأماكن المقترحة:`,
+      cards: filterRes.cards.length > 0 ? filterRes.cards : undefined,
       actions: [
         { label: `الانتقال إلى: ${bestMatch.title}`, path: bestMatch.path },
-        { label: `🔍 البحث في الدليل عن "${cleanTerm}"`, path: `/search?q=${encodeURIComponent(cleanTerm)}` }
+        { label: `🔍 البحث في الدليل عن "${cleanTerm || bestMatch.title}"`, path: `/search?q=${encodeURIComponent(cleanTerm || bestMatch.title)}` }
       ]
     };
   }
@@ -1407,11 +1933,12 @@ export async function getSmartLocalResponse(
 
 /**
  * Master AI Assistant Function.
- * Runs prompt through FilterEngine first to classify intent and extract structured filters.
- * Differentiates between general/informational queries and search-oriented queries before querying data.
+ * Prioritizes high-intelligence Gemini LLM with multi-turn conversation history.
+ * Fallbacks gracefully to smart local database filter engine when offline or fast response needed.
  */
 export async function askAiAssistant(
-  userMessage: string
+  userMessage: string,
+  history?: { sender: 'user' | 'assistant'; text: string }[]
 ): Promise<{
   text: string;
   actions?: ActionLink[];
@@ -1420,35 +1947,36 @@ export async function askAiAssistant(
   missingPlaceName?: string;
   comparisonMode?: boolean;
   appliedFilters?: string[];
+  suggestedPrompts?: string[];
 }> {
-  // CRITICAL: Always parse the prompt through FilterEngine before fetching data or responding
-  const parsed = FilterEngine.parseQuery(userMessage);
-
-  // 1. Informational & FAQ Queries:
-  // Must return instant targeted conversational answer with ZERO irrelevant cards
-  if (parsed.isInformational || parsed.domain === 'none') {
-    return await getSmartLocalResponse(userMessage);
-  }
-
-  // 2. Specific Search-Oriented Queries:
-  // If the query is search-oriented with domain filters, comparison, or specific keywords
-  if (parsed.isSearchOriented || parsed.intent === 'compare') {
-    const localResult = await getSmartLocalResponse(userMessage);
-    if (localResult.cards && localResult.cards.length > 0) {
-      return localResult;
+  // Extract active history domain for multi-turn context inheritance
+  let historyDomain: FilterDomain | undefined = undefined;
+  if (history && history.length > 0) {
+    const combinedHistory = history.slice(-4).map(h => h.text).join(' ');
+    if (/(وظيفة|وظائف|شواغر|شاغر|شغل|توظيف|بدي اشتغل|أدور على شغل|ابحث عن شغل|فرص عمل)/i.test(combinedHistory)) {
+      historyDomain = 'job';
+    } else if (/(سكن|سكنات|شقة|شقق|استوديو|إيجار|ايجار|طالبات|طلاب)/i.test(combinedHistory)) {
+      historyDomain = 'housing';
+    } else if (/(عرض|عروض|خصم|خصومات|تخفيضات|تنزيلات)/i.test(combinedHistory)) {
+      historyDomain = 'offer';
     }
   }
 
-  // 3. Conversational / Complex Queries:
-  // Query backend LLM with a 3.0s timeout
+  // CRITICAL: Parse query structure for fallback & domain enrichment
+  const parsed = FilterEngine.parseQuery(userMessage);
+
+  // 1. Prioritize Server-side LLM (Gemini 3.8 Flash / Flash Latest) for rich contextual intelligence
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3000);
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
 
     const response = await fetch('/api/ai/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: userMessage }),
+      body: JSON.stringify({ 
+        message: userMessage,
+        history: history || []
+      }),
       signal: controller.signal
     });
     clearTimeout(timeoutId);
@@ -1456,28 +1984,43 @@ export async function askAiAssistant(
     if (response.ok) {
       const data = await response.json();
       if (data && data.text && !data.fallback) {
-        const domain = data.domain || 'none';
+        let domain = data.domain || parsed.domain || 'none';
+
+        // CONTEXT DOMAIN OVERRIDE:
+        // If history context was JOB, and user specifies "كافتيريا", "كاشير", "مطعم", etc.
+        // Prevent accidental domain shift to 'business' (which shows store cards instead of job searching)
+        if (historyDomain === 'job' && !/(سكن|شقة|أكل|اكل|شاورما|بيتزا|خصم|عرض)/i.test(userMessage)) {
+          domain = 'job';
+        } else if (historyDomain === 'housing' && !/(وظيفة|شغل|مطعم|كافيه|عرض)/i.test(userMessage)) {
+          domain = 'housing';
+        } else if (historyDomain === 'offer' && !/(وظيفة|شغل|سكن|شقة)/i.test(userMessage)) {
+          domain = 'offer';
+        }
+
         let matchingCards: BusinessCardItem[] = [];
 
         // STRICT DOMAIN & FILTERENGINE GUARD:
-        // ONLY attach cards if the LLM and FilterEngine confirm a valid search domain
+        // ONLY attach cards if the query is seeking real entities
         if (domain !== 'none' && domain !== 'general') {
-          const searchTarget = data.cleanQuery || parsed.cleanTerm;
+          const searchTarget = data.cleanQuery !== undefined && data.cleanQuery !== null ? data.cleanQuery : parsed.cleanTerm;
+          const filters = data.filters || {};
+
           const filterRes = await filterStructuredEntities({
             domain: domain as any,
-            cleanTerm: searchTarget,
-            openNow: parsed.isOpen,
-            closedNow: parsed.isClosed,
-            highRating: parsed.isHighRating,
-            minRating: parsed.minRating,
-            category: parsed.category,
-            location: parsed.location,
-            university: parsed.university,
-            targetType: parsed.targetType,
-            jobType: parsed.jobType,
-            maxPrice: parsed.maxPrice,
-            minPrice: parsed.minPrice,
-            lowPrice: parsed.isBudgetFriendly,
+            cleanTerm: typeof searchTarget === 'string' ? searchTarget : parsed.cleanTerm,
+            openNow: filters.openNow ?? parsed.isOpen,
+            closedNow: filters.closedNow ?? parsed.isClosed,
+            highRating: filters.highRating ?? parsed.isHighRating,
+            minRating: filters.minRating ?? parsed.minRating,
+            category: filters.category || (domain === 'business' ? parsed.category : undefined),
+            location: filters.location || parsed.location,
+            university: filters.university || parsed.university,
+            targetType: filters.targetType || parsed.targetType,
+            jobType: filters.jobType || parsed.jobType,
+            maxPrice: filters.maxPrice ?? parsed.maxPrice,
+            minPrice: filters.minPrice ?? parsed.minPrice,
+            lowPrice: filters.lowPrice ?? parsed.isBudgetFriendly,
+            sortBy: filters.sortBy || (parsed.sortBy as any),
             limit: 4
           }, userMessage);
 
@@ -1489,10 +2032,13 @@ export async function askAiAssistant(
               ...act,
               label: act.label.replace(/(ابحث عن محل اسمه|ابحث عن محل|بدي محل اسمه)/g, '').trim()
             }))
-          : [
+          : (domain === 'job' ? [
+              { label: '💼 تصفح كافة الوظائف الشاغرة', path: '/jobs' },
+              { label: '📝 نشر طلب توظيف', path: '/jobs' }
+            ] : [
               { label: '🏢 دليل المحلات والأنشطة', path: '/search' },
               { label: '🏷️ أقوى العروض والتخفيضات', path: '/offers' }
-            ];
+            ]);
 
         // Check if missing place lead applies (only when searching for a store that wasn't found)
         const isMissing = matchingCards.length === 0 && domain === 'business' && /(محل اسمه|مكان اسمه|مطعم اسمه|كافيه اسمه|ابحث عن محل)/i.test(userMessage);
@@ -1504,13 +2050,15 @@ export async function askAiAssistant(
           isMissingPlace: isMissing,
           missingPlaceName: isMissing ? (data.cleanQuery || parsed.cleanTerm) : undefined,
           comparisonMode: parsed.intent === 'compare',
-          appliedFilters: parsed.appliedFilterLabels.length > 0 ? parsed.appliedFilterLabels : undefined
+          appliedFilters: parsed.appliedFilterLabels.length > 0 ? parsed.appliedFilterLabels : undefined,
+          suggestedPrompts: Array.isArray(data.suggestedPrompts) && data.suggestedPrompts.length > 0 ? data.suggestedPrompts : undefined
         };
       }
     }
-  } catch (e) {
-    // Fallback to local matcher
+  } catch {
+    // Fallback to high-speed local engine
   }
 
+  // 2. High-speed local engine fallback (Deterministic & fast)
   return await getSmartLocalResponse(userMessage);
 }

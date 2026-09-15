@@ -32,6 +32,7 @@ import { db } from '../../lib/firebase';
 import { WhatsAppIcon } from '../common/WhatsAppIcon';
 import { Business, UpgradeRequest } from '../../types';
 import { getBusinessVipStatus } from '../../lib/vipHelper';
+import { getJordanNow, formatJordanDateArabic } from '../../lib/jordanTime';
 import { isMedicalBusiness } from '../../lib/medicalHelper';
 import { useSystemSettings } from '../../contexts/SystemSettingsContext';
 import { recordAuditLog } from '../../lib/auditLogHelper';
@@ -305,7 +306,7 @@ export function AdminSubscriptionsManager({
           vipSubscriptionStartsAt: now,
           vipSubscriptionExpiresAt: expiresAt,
           isVipScheduled: true,
-          vipNotes: `تمت الترقية للباقة الذهبية بقبول طلب الترقية بتاريخ ${new Date().toLocaleDateString('ar-JO')} (${req.cycle === 'yearly' ? 'اشتراك سنوي' : 'اشتراك شهري'})`
+          vipNotes: `تمت الترقية للباقة الذهبية بقبول طلب الترقية بتاريخ ${formatJordanDateArabic(getJordanNow())} (${req.cycle === 'yearly' ? 'اشتراك سنوي' : 'اشتراك شهري'})`
         });
 
         // Record Audit Log

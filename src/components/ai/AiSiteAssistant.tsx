@@ -21,7 +21,11 @@ import {
   PlusCircle,
   CheckCircle2,
   Tag,
-  AlertCircle
+  AlertCircle,
+  Mic,
+  MicOff,
+  Copy,
+  Check
 } from 'lucide-react';
 import { WhatsAppIcon } from '../common/WhatsAppIcon';
 import { motion, AnimatePresence } from 'motion/react';
@@ -81,30 +85,78 @@ export function AiSiteAssistant() {
   const initialGreeting: ChatMessage = globalSettings?.enableAiAssistant === false ? {
     id: 'welcome-msg',
     sender: 'assistant',
-    text: `مرحباً بك في **شو في بإربد؟** 🌸✨\n\nعذراً، المساعد الذكي **ربداوي AI** غير متاح حالياً.\n\nستتوفر هذه الميزة قريباً جداً، شكراً لتفهمك! 😊`,
+    text: `هلا بيك بـ **شو في بإربد؟** 🌸✨\n\nعذراً يا غالي، المساعد الذكي **ربداوي AI** معطل مؤقتاً.\n\nبنرجع بنشغله عن قريب، يسعد قلبك وشكراً لتفهمك! 😊`,
     timestamp: Date.now()
   } : {
     id: 'welcome-msg',
     sender: 'assistant',
-    text: `مرحباً بك في **شو في بإربد؟** 🌸✨\n\nأنا **ربداوي AI** 🤖، مرشدك التفاعلي المجاني:\n- 🟢 **معرفة المحلات المفتوحة الآن** وساعات عملها.\n- 🏢 **فلترة السكنات والشقق** حسب الجامعة والميزانية.\n- 🏷️ **مقارنة الأسعار والعروض** واختيار الأوفر لك.\n- 🛒 **إضافة للسلة والطلب الفوري** من داخل الشات.\n- 📢 **تسجيل المحلات غير الموجودة** لإضافتها فوراً.\n\nاكتب لي ما الذي تبحث عنه في إربد وسأساعدك فوراً!`,
+    text: `هلا والله ويا مية أهلاً وسهلاً بيك بـ **شو في بإربد؟** 🤖🇯🇴\n\nأنا **ربداوي الأصلي**، ابن بلدك وخبيرك الأول بمدينة ومحافظة إربد! اطلب وتأمر أمر:\n- 🟢 **المحلات والمطاعم الشغالة هسا** وأوقات دوامها.\n- 🏢 **السكنات والشقق الطلابية** قرب اليرموك والتكنو وجدارا ع حسب جيبتك.\n- 🏷️ **أقوى العروض والخصومات** ومقارنة الأسعار السريعة.\n- 🛒 **الطلب الفوري والإضافة للسلة** بضغطة زر واحدة.\n- 💼 **الوظائف الشاغرة، مواقيت الصلاة، وخطوط الباصات!**\n\nشو جاب عبالك تدور عليه اليوم بإربد؟`,
     actions: [
-      { label: '🟢 مطاعم مفتوحة الآن', path: '/search?category=مطاعم' },
+      { label: '🟢 مطاعم مفتوحة هسا', path: '/search?category=مطاعم' },
       { label: '🏠 سكنات طالبات اليرموك', path: '/housing?q=طالبات' },
       { label: '🏷️ مقارنة أقوى العروض', path: '/offers' },
       { label: '💼 وظائف شاغرة اليوم', path: '/jobs' },
       { label: '🕌 مواقيت الصلاة بإربد', path: '/prayer-times' },
-      { label: '🚌 خطوط الباصات', path: '/transportation' }
+      { label: '🚌 خطوط ومواعيد الباصات', path: '/transportation' }
     ],
     timestamp: Date.now()
   };
 
   const [messages, setMessages] = useState<ChatMessage[]>([initialGreeting]);
+  const [isListening, setIsListening] = useState(false);
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Auto scroll to bottom
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const handleCopyText = (id: string, text: string) => {
+    navigator.clipboard?.writeText(text);
+    setCopiedMessageId(id);
+    setTimeout(() => setCopiedMessageId(null), 2000);
+  };
+
+  const handleVoiceInput = () => {
+    if (isListening) {
+      setIsListening(false);
+      return;
+    }
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert('خاصية الإدخال الصوتي غير مدعومة في متصفحك حالياً.');
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'ar-JO';
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+
+      recognition.onstart = () => {
+        setIsListening(true);
+      };
+      recognition.onresult = (event: any) => {
+        const transcript = event.results?.[0]?.[0]?.transcript;
+        if (transcript) {
+          setInputValue(transcript);
+          handleSendMessage(transcript);
+        }
+      };
+      recognition.onerror = () => {
+        setIsListening(false);
+      };
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+      recognition.start();
+    } catch {
+      setIsListening(false);
+    }
   };
 
   // Global window event listeners to toggle/open assistant from mobile navbar or anywhere
@@ -148,8 +200,6 @@ export function AiSiteAssistant() {
     }
   }, [cartToast]);
 
-
-
   const handleToggle = () => {
     if (isOpen) {
       setIsOpen(false);
@@ -179,12 +229,16 @@ export function AiSiteAssistant() {
       timestamp: Date.now()
     };
 
+    const currentHistory = messages
+      .filter(m => m.id !== 'welcome-msg')
+      .map(m => ({ sender: m.sender, text: m.text }));
+
     setMessages(prev => [...prev, userMsg]);
     setInputValue('');
     setIsLoading(true);
 
     try {
-      const response = await askAiAssistant(text);
+      const response = await askAiAssistant(text, [...currentHistory, { sender: 'user', text }]);
       const aiMsg: ChatMessage = {
         id: 'msg-ai-' + Date.now(),
         sender: 'assistant',
@@ -192,13 +246,14 @@ export function AiSiteAssistant() {
         actions: response.actions,
         cards: response.cards,
         appliedFilters: response.appliedFilters,
+        suggestedPrompts: response.suggestedPrompts,
         isMissingPlace: response.isMissingPlace,
         missingPlaceName: response.missingPlaceName,
         comparisonMode: response.comparisonMode,
         timestamp: Date.now()
       };
       setMessages(prev => [...prev, aiMsg]);
-    } catch (err) {
+    } catch {
       const fallbackMsg: ChatMessage = {
         id: 'msg-err-' + Date.now(),
         sender: 'assistant',
@@ -218,6 +273,11 @@ export function AiSiteAssistant() {
   };
 
   const handleActionClick = (action: ActionLink) => {
+    if (action.query || action.path.startsWith('query:')) {
+      const q = action.query || action.path.replace(/^query:/, '');
+      handleSendMessage(q);
+      return;
+    }
     navigate(action.path);
     if (window.innerWidth < 768) {
       setIsOpen(false);
@@ -302,6 +362,10 @@ export function AiSiteAssistant() {
     await reportMissingPlaceLead(missingName, phone, 'تم الإرسال من مساعد الشات الذكي');
     setMissingLeadSubmitted(prev => ({ ...prev, [missingName]: true }));
   };
+
+  if (isAiDisabled) {
+    return null;
+  }
 
   return (
     <>
@@ -595,12 +659,45 @@ export function AiSiteAssistant() {
                           </div>
                           
                           <div className="flex flex-col items-start min-w-0">
-                            {/* Sophisticated ChatGPT style text block */}
-                            <div className="bg-white text-stone-800 border border-stone-200/40 rounded-3xl rounded-tr-none px-4.5 py-3.5 text-xs sm:text-sm leading-relaxed shadow-3xs font-medium prose prose-stone">
-                              <div className="whitespace-pre-line break-words">
-                                {formatMarkdown(msg.text)}
+                            {/* Sophisticated ChatGPT style text block with Copy Button */}
+                            <div className="relative group/msg">
+                              <div className="bg-white text-stone-800 border border-stone-200/40 rounded-3xl rounded-tr-none px-4.5 py-3.5 text-xs sm:text-sm leading-relaxed shadow-3xs font-medium prose prose-stone">
+                                <div className="whitespace-pre-line break-words">
+                                  {formatMarkdown(msg.text)}
+                                </div>
                               </div>
+
+                              {/* Copy message button */}
+                              <button
+                                type="button"
+                                onClick={() => handleCopyText(msg.id, msg.text)}
+                                title="نسخ النص"
+                                className="absolute top-2 left-2 opacity-0 group-hover/msg:opacity-100 transition-opacity p-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-500 hover:text-stone-900 shadow-2xs cursor-pointer active:scale-95"
+                              >
+                                {copiedMessageId === msg.id ? (
+                                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                ) : (
+                                  <Copy className="w-3.5 h-3.5" />
+                                )}
+                              </button>
                             </div>
+
+                            {/* Dynamic AI Contextual Follow-up Prompts */}
+                            {msg.suggestedPrompts && msg.suggestedPrompts.length > 0 && (
+                              <div className="mt-2.5 flex flex-wrap gap-1.5 items-center">
+                                {msg.suggestedPrompts.map((promptText, pIdx) => (
+                                  <button
+                                    key={pIdx}
+                                    type="button"
+                                    onClick={() => handleSendMessage(promptText)}
+                                    className="text-[11px] bg-emerald-50/80 hover:bg-emerald-100 text-[#1a4d2e] font-bold px-3 py-1 rounded-full border border-emerald-200/60 shadow-2xs transition-all active:scale-95 cursor-pointer flex items-center gap-1"
+                                  >
+                                    <Sparkles className="w-3 h-3 text-emerald-600" />
+                                    <span>{promptText}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
 
                             {/* Applied Filters Badge Engine */}
                             {msg.appliedFilters && msg.appliedFilters.length > 0 && (
@@ -947,6 +1044,22 @@ export function AiSiteAssistant() {
 
               {/* Chat Input Capsule - Symmetrical and Extremely Modern */}
               <div className="p-4 bg-white border-t border-stone-100 shrink-0">
+                {isListening && (
+                  <div className="mb-2.5 px-3 py-1.5 rounded-xl bg-rose-50 border border-rose-200/80 flex items-center justify-between text-xs text-rose-800 animate-pulse">
+                    <div className="flex items-center gap-2 font-bold">
+                      <span className="w-2.5 h-2.5 rounded-full bg-rose-600 animate-ping"></span>
+                      <span>🎙️ جاري الاستماع إلى صوتك... تحدث الآن</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsListening(false)}
+                      className="text-rose-600 hover:text-rose-900 font-extrabold text-[11px] underline cursor-pointer"
+                    >
+                      إلغاء
+                    </button>
+                  </div>
+                )}
+
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
@@ -980,6 +1093,21 @@ export function AiSiteAssistant() {
                       <Sparkles className="w-4 h-4 text-emerald-600/40 pointer-events-none" />
                     </div>
                   </div>
+
+                  {/* Microphone Button */}
+                  <button
+                    type="button"
+                    onClick={handleVoiceInput}
+                    disabled={isAiDisabled || isLoading}
+                    title={isListening ? "إيقاف التسجيل" : "التحدث بالصوت"}
+                    className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-all shadow-xs shrink-0 cursor-pointer active:scale-95 border ${
+                      isListening
+                        ? 'bg-rose-600 text-white border-rose-700 animate-bounce'
+                        : 'bg-stone-50 hover:bg-stone-100 text-stone-700 border-stone-200/80'
+                    }`}
+                  >
+                    {isListening ? <MicOff className="w-4.5 h-4.5" /> : <Mic className="w-4.5 h-4.5 text-stone-600" />}
+                  </button>
 
                   <button
                     type="submit"

@@ -97,7 +97,7 @@ export function GlobalSettingsManager({ showToast }: GlobalSettingsManagerProps)
               <p className="text-stone-600 text-xs mt-1 leading-relaxed">
                 {formData.enableAiAssistant !== false 
                   ? 'المساعد الذكي ينشط كأيقونة عائمة في جميع صفحات المنصة لتوجيه الزوار، البحث، ومقارنة العروض.'
-                  : 'سيظهر زر المساعد الذكي ولكن عند فتحه سيعرض رسالة "ستتوفر هذه الميزة قريباً" ولن يتمكن الزائر من المحادثة.'}
+                  : 'عند تعطيله، سيختفي المساعد الذكي وجميع أزراره العائمة تماماً من كافة صفحات المنصة ولن يظهر لأي زائر أو حساب.'}
               </p>
             </div>
           </div>

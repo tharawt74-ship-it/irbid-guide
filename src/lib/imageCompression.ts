@@ -14,13 +14,13 @@ export interface CompressionResult {
 
 export async function compressImage(
   file: File,
-  maxWidth: number = 1600,
-  maxHeight: number = 1600,
-  quality: number = 0.82
+  maxWidth: number = 1000,
+  maxHeight: number = 1000,
+  quality: number = 0.60
 ): Promise<CompressionResult> {
   return new Promise((resolve, reject) => {
-    // If already small (< 150KB), resolve directly
-    if (file.size < 150 * 1024) {
+    // If already extremely small (< 30KB), resolve directly
+    if (file.size < 30 * 1024) {
       const previewUrl = URL.createObjectURL(file);
       return resolve({
         file,

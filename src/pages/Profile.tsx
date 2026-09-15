@@ -17,7 +17,7 @@ import {
   Trash2, ExternalLink, Clock, Users, Award, Crown, BarChart3, UtensilsCrossed,
   Lock, Tag, Info, Sparkles, ChevronLeft, ChevronRight, Phone, MessageCircle, Star,
   Home, Copy, ShieldCheck, Key, Heart, MessageSquareText, Building2, Shield, Printer, QrCode, Calendar, ArrowLeft, ShieldAlert, LogOut,
-  Stethoscope
+  Stethoscope, ClipboardList
 } from 'lucide-react';
 import { JobFormModal } from '../components/jobs/JobFormModal';
 import { VipAnalyticsModal } from '../components/vip/VipAnalyticsModal';
@@ -55,8 +55,12 @@ export function Profile() {
   const [userJobs, setUserJobs] = useState<JobOffer[]>([]);
   const [userHousings, setUserHousings] = useState<HousingItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [profileMainTab, setProfileMainTab] = useState<'visitor' | 'merchant' | 'medical' | 'housing' | 'staff'>('visitor');
+  const [profileMainTab, setProfileMainTab] = useState<'visitor' | 'merchant' | 'medical' | 'housing' | 'staff' | 'requests'>('visitor');
   const [visitorSubTab, setVisitorSubTab] = useState<'favorites' | 'reviews' | 'account'>('favorites');
+  const [requestsSubTab, setRequestsSubTab] = useState<'businesses' | 'marketing'>('businesses');
+  const [userBusinessRequests, setUserBusinessRequests] = useState<any[]>([]);
+  const [userMarketingRequests, setUserMarketingRequests] = useState<any[]>([]);
+  const [loadingRequests, setLoadingRequests] = useState(false);
   
   // Categorize businesses into commercial stores vs medical clinics/facilities
   const medicalBusinesses = React.useMemo(() => {
@@ -111,6 +115,7 @@ export function Profile() {
   const [activeMarketingModalSuccess, setActiveMarketingModalSuccess] = useState<string>("");
   const [submittingMarketingRequest, setSubmittingMarketingRequest] = useState(false);
   const [appConfigState, setAppConfigState] = useState<any>({});
+  const [customAlert, setCustomAlert] = useState<{ message: string; type?: 'success' | 'info' | 'error' } | null>(null);
 
   useEffect(() => {
     getAppConfig().then(config => setAppConfigState(config));
@@ -134,7 +139,7 @@ export function Profile() {
     preferredFilmingDate: '',
     highlightPoints: '',
     // banner specific (if they order homepage banner through marketing card)
-    pageTarget: 'home' as 'home' | 'housing' | 'offers' | 'jobs' | 'transportation' | 'news' | 'tourism',
+    pageTarget: 'home' as 'home' | 'housing' | 'offers' | 'jobs' | 'transportation' | 'news' | 'tourism' | 'medical',
     targetEntityId: '',
     bannerType: 'business' as 'business' | 'image_only' | 'animated_image' | 'text_and_button',
     bannerTitle: '',
@@ -779,30 +784,58 @@ export function Profile() {
     }
   };
 
-  const handlePremiumMessagingUpgrade = async (plan: '1_month' | '3_months' | '6_months' | '1_year') => {
-    if (!currentUser || !selectedBusinessIdForService || !db) return;
-    const business = businesses.find(b => b.id === selectedBusinessIdForService);
+  const handlePremiumMessagingUpgrade = async (plan: '1_month' | '3_months' | '6_months' | '1_year', targetBizId?: string) => {
+    const bizId = targetBizId || selectedBusinessIdForService;
+    if (!currentUser || !bizId || !db) return;
+    const business = businesses.find(b => b.id === bizId);
     if (!business) return;
     if (business.userId !== currentUser.uid && !isAdmin) {
-      alert("غير مصرح لك بترقية باقة محل لا تملكه!");
+      alert("غير مصرح لك بترقية باقة منشأة لا تملكها!");
       return;
     }
 
     try {
+      // Check if there is already a pending premium messaging request for this business
+      const qPending = query(
+        collection(db, "marketingRequests"),
+        where("userId", "==", currentUser.uid)
+      );
+      const snap = await getDocs(qPending);
+      const hasPending = snap.docs.some(doc => {
+        const data = doc.data();
+        return data.businessId === business.id && 
+               data.serviceType === 'premium_messaging' && 
+               data.status === 'pending';
+      });
+
+      if (hasPending) {
+        setCustomAlert({
+          message: "لديك طلب جاري بالفعل وعليه الإنتظار ريثما يتم الموافقة عليه",
+          type: "info"
+        });
+        return;
+      }
+
+      const planLabel = plan === '1_month' ? 'شهر واحد' : plan === '3_months' ? '3 أشهر' : plan === '6_months' ? '6 أشهر' : 'سنة كاملة';
       // Submit marketing request for Admin approval
       await addDoc(collection(db, "marketingRequests"), {
         businessId: business.id,
         businessName: business.name,
         userId: currentUser.uid,
-        userEmail: currentUser.email,
+        userEmail: currentUser.email || '',
         serviceType: 'premium_messaging',
-        serviceName: `طلب ترقية باقة الرسائل المتقدمة (${plan === '1_month' ? 'شهر' : plan === '3_months' ? '3 أشهر' : plan === '6_months' ? '6 أشهر' : 'سنة'})`,
+        serviceName: `طلب ترقية باقة الرسائل المتقدمة (${planLabel})`,
+        messagingPlan: plan,
         status: "pending",
         createdAt: Date.now()
       });
 
-      setServiceRequestSuccess(`تم إرسال طلب ترقية باقة الرسائل لـ ${business.name} بنجاح! سيقوم فريق الإدارة بمراجعة الطلب وتفعيل الباقة فور الاعتماد.`);
+      setServiceRequestSuccess(`تم إرسال طلب ترقية باقة الرسائل (${planLabel}) لـ ${business.name} بنجاح! سيقوم فريق الإدارة بمراجعة الطلب وتفعيل الباقة فور الاعتماد.`);
       setTimeout(() => setServiceRequestSuccess(null), 8000);
+      setCustomAlert({
+        message: "تم إرسال الطلب بنجاح وان عليه الإنتظار حتى توافق إدارة المنصة على الطلب",
+        type: "success"
+      });
     } catch (error) {
       console.error("Error upgrading messaging:", error);
       alert("حدث خطأ أثناء إرسال الطلب.");
@@ -858,6 +891,40 @@ export function Profile() {
       setUserHousings(list);
     } catch (err) {
       console.error("Error fetching user housings:", err);
+    }
+  };
+
+  const fetchUserRequests = async () => {
+    if (!currentUser || !db) return;
+    setLoadingRequests(true);
+    try {
+      const qBiz = query(
+        collection(db, 'businessRequests'),
+        where('userId', '==', currentUser.uid)
+      );
+      const snapBiz = await getDocs(qBiz);
+      const bizList: any[] = [];
+      snapBiz.forEach(d => {
+        bizList.push({ id: d.id, ...d.data() });
+      });
+      bizList.sort((a, b) => (b.createdAt || b.submittedAt || 0) - (a.createdAt || a.submittedAt || 0));
+      setUserBusinessRequests(bizList);
+
+      const qMarket = query(
+        collection(db, 'marketingRequests'),
+        where('userId', '==', currentUser.uid)
+      );
+      const snapMarket = await getDocs(qMarket);
+      const marketList: any[] = [];
+      snapMarket.forEach(d => {
+        marketList.push({ id: d.id, ...d.data() });
+      });
+      marketList.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      setUserMarketingRequests(marketList);
+    } catch (err) {
+      console.error("Error fetching user requests:", err);
+    } finally {
+      setLoadingRequests(false);
     }
   };
 
@@ -956,6 +1023,12 @@ export function Profile() {
   useEffect(() => {
     fetchUserBusinesses();
   }, [currentUser, isStaff]);
+
+  useEffect(() => {
+    if (profileMainTab === 'requests') {
+      fetchUserRequests();
+    }
+  }, [profileMainTab, currentUser]);
 
   const handleEditClick = (business: Business) => {
     setEditingBusiness(business);
@@ -1316,7 +1389,7 @@ export function Profile() {
       </div>
 
       {/* Main Profile Tabs Selector */}
-      <div className={`bg-white p-1.5 sm:p-2 rounded-2xl border border-[#e5e1da] shadow-xs grid grid-cols-2 ${isStaff ? 'sm:grid-cols-3 lg:grid-cols-5' : 'sm:grid-cols-2 lg:grid-cols-4'} gap-1.5 sm:gap-2 min-w-0`}>
+      <div className={`bg-white p-1.5 sm:p-2 rounded-2xl border border-[#e5e1da] shadow-xs grid grid-cols-2 ${isStaff ? 'sm:grid-cols-3 lg:grid-cols-6' : 'sm:grid-cols-3 lg:grid-cols-5'} gap-1.5 sm:gap-2 min-w-0`}>
         <button
           type="button"
           onClick={() => setProfileMainTab('visitor')}
@@ -1367,6 +1440,19 @@ export function Profile() {
         >
           <Home className="h-5 w-5 sm:h-4 sm:w-4 shrink-0 text-amber-400" />
           <span className="text-center sm:text-right leading-tight">سكناتي ({userHousings.length})</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setProfileMainTab('requests')}
+          className={`py-2.5 sm:py-3 px-2 sm:px-4 rounded-xl text-[11px] sm:text-xs font-black transition-all flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 cursor-pointer ${
+            profileMainTab === 'requests'
+              ? 'bg-[#1a4d2e] text-white shadow-xs'
+              : 'text-stone-600 hover:bg-stone-50 hover:text-stone-900'
+          }`}
+        >
+          <ClipboardList className={`h-5 w-5 sm:h-4 sm:w-4 shrink-0 ${profileMainTab === 'requests' ? 'text-emerald-300' : 'text-[#1a4d2e]'}`} />
+          <span className="text-center sm:text-right leading-tight">طلباتي</span>
         </button>
 
         {isStaff && (
@@ -1421,6 +1507,224 @@ export function Profile() {
 
           {visitorSubTab === 'favorites' && <VisitorFavoritesTab />}
           {visitorSubTab === 'reviews' && <VisitorReviewsTab />}
+        </div>
+      )}
+
+      {/* TAB: MY REQUESTS */}
+      {profileMainTab === 'requests' && (
+        <div className="space-y-6">
+          {/* Sub-tabs */}
+          <div className="flex border-b border-stone-200 gap-4 sm:gap-6 text-xs font-bold overflow-x-auto pb-0.5" dir="rtl">
+            <button
+              type="button"
+              onClick={() => setRequestsSubTab('businesses')}
+              className={`pb-3 relative transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                requestsSubTab === 'businesses' ? 'text-[#1a4d2e] font-black' : 'text-stone-500 hover:text-stone-800'
+              }`}
+            >
+              <Store className="h-4 w-4 text-[#1a4d2e] shrink-0" />
+              <span>المحلات والمنشآت</span>
+              {requestsSubTab === 'businesses' && (
+                <div className="absolute bottom-0 right-0 left-0 h-0.5 bg-[#1a4d2e] rounded-full" />
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setRequestsSubTab('marketing')}
+              className={`pb-3 relative transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                requestsSubTab === 'marketing' ? 'text-[#1a4d2e] font-black' : 'text-stone-500 hover:text-stone-800'
+              }`}
+            >
+              <Megaphone className="h-4 w-4 text-emerald-600 shrink-0" />
+              <span>الخدمات التسويقية</span>
+              {requestsSubTab === 'marketing' && (
+                <div className="absolute bottom-0 right-0 left-0 h-0.5 bg-[#1a4d2e] rounded-full" />
+              )}
+            </button>
+          </div>
+
+          {/* Sub-tab Content */}
+          {loadingRequests ? (
+            <div className="py-12 text-center text-stone-500 flex flex-col items-center justify-center gap-2">
+              <div className="w-8 h-8 rounded-full border-3 border-[#1a4d2e] border-t-transparent animate-spin"></div>
+              <span className="text-xs font-bold text-stone-600">جاري تحميل طلباتك...</span>
+            </div>
+          ) : requestsSubTab === 'businesses' ? (
+            <div className="space-y-4" dir="rtl">
+              {userBusinessRequests.length === 0 ? (
+                <div className="bg-stone-50 border border-stone-200/60 p-8 sm:p-12 rounded-[24px] text-center max-w-md mx-auto space-y-4">
+                  <div className="w-16 h-16 rounded-full bg-stone-100 flex items-center justify-center mx-auto text-stone-400">
+                    <Store className="h-8 w-8" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-black text-stone-800">لا توجد طلبات إضافة حالياً</h4>
+                    <p className="text-xs text-stone-500 mt-1 leading-relaxed">
+                      لم تقم بطلب إضافة أي منشآت أو محلات تجارية بعد. يمكنك تسجيل محلك والبدء فوراً في نشر عروضك!
+                    </p>
+                  </div>
+                  <div>
+                    <Link
+                      to="/contact"
+                      className="inline-flex px-5 py-2.5 bg-[#1a4d2e] hover:bg-[#133b22] text-white text-xs font-black rounded-xl transition-all shadow-xs hover:scale-102 active:scale-98"
+                    >
+                      أضف محلك التجاري الآن
+                    </Link>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {userBusinessRequests.map((request) => {
+                    const isMedical = request.requestType === 'medical_facility_registration' || isMedicalBusiness(request);
+                    const title = isMedical 
+                      ? `طلب إضافة منشأة طبية: ${request.name || 'بدون اسم'}`
+                      : `طلب إضافة محل تجاري: ${request.name || 'بدون اسم'}`;
+                    const dateVal = request.createdAt || request.submittedAt;
+                    const dateString = dateVal 
+                      ? new Date(dateVal).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })
+                      : 'تاريخ غير محدد';
+
+                    return (
+                      <div key={request.id} className="bg-white border border-stone-200/80 rounded-[20px] p-4 shadow-3xs hover:shadow-2xs transition-all flex flex-col justify-between gap-3 relative overflow-hidden">
+                        {/* Decorative side color */}
+                        <div className={`absolute top-0 right-0 bottom-0 w-1.5 ${isMedical ? 'bg-teal-500' : 'bg-[#1a4d2e]'}`}></div>
+                        
+                        <div className="pr-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                              isMedical ? 'bg-teal-50 text-teal-700 border border-teal-200' : 'bg-[#1a4d2e]/5 text-[#1a4d2e] border border-[#1a4d2e]/10'
+                            }`}>
+                              {isMedical ? 'طبي وعيادات' : 'تجاري ومحلات'}
+                            </span>
+                            
+                            <span className={`text-[10px] font-black px-2.5 py-1 rounded-full border ${
+                              (request.status === 'approved' || request.status === 'completed')
+                                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                : request.status === 'rejected'
+                                ? 'bg-rose-50 text-rose-800 border-rose-200'
+                                : 'bg-amber-50 text-amber-800 border-amber-200'
+                            }`}>
+                              {(request.status === 'approved' || request.status === 'completed')
+                                ? 'تمت الموافقة'
+                                : request.status === 'rejected'
+                                ? 'تم الرفض'
+                                : 'قيد المراجعة'}
+                            </span>
+                          </div>
+
+                          <h4 className="text-xs sm:text-sm font-black text-stone-800 mt-2.5 line-clamp-2 leading-snug">
+                            {title}
+                          </h4>
+
+                          <p className="text-[10px] sm:text-xs text-stone-500 mt-2 flex items-center gap-1">
+                            <Calendar className="h-3.5 w-3.5 text-stone-400 shrink-0" />
+                            <span>تاريخ تقديم الطلب: {dateString}</span>
+                          </p>
+
+                          {request.packagePlan && (
+                            <p className="text-[10px] sm:text-xs text-stone-500 mt-1 flex items-center gap-1">
+                              <Crown className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                              <span>الباقة المختارة: {request.packagePlan === 'premium' ? 'الباقة المميزة' : 'الباقة الأساسية'}</span>
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="pr-3 pt-2 border-t border-stone-100 flex items-center justify-between text-[11px] text-stone-400">
+                          <span>رقم المعاملة: {request.id?.substring(0, 8)}...</span>
+                          {request.status === 'pending' && (
+                            <span className="text-amber-600 font-bold text-[10px]">سيتم مراجعته قريباً</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-4" dir="rtl">
+              {userMarketingRequests.length === 0 ? (
+                <div className="bg-stone-50 border border-stone-200/60 p-8 sm:p-12 rounded-[24px] text-center max-w-md mx-auto space-y-4">
+                  <div className="w-16 h-16 rounded-full bg-stone-100 flex items-center justify-center mx-auto text-stone-400">
+                    <Megaphone className="h-8 w-8" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-black text-stone-800">لا توجد طلبات خدمات تسويقية حالياً</h4>
+                    <p className="text-xs text-stone-500 mt-1 leading-relaxed">
+                      لم تقم بطلب خدمات تسويقية أو حملات إعلانية بعد. يمكنك طلب خدمات الإعلانات والترقيات من صفحة إدارة محلك!
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {userMarketingRequests.map((request) => {
+                    const title = `طلب خدمة تسويقية: ${request.serviceName || 'خدمة إعلانية'}`;
+                    const dateVal = request.createdAt;
+                    const dateString = dateVal 
+                      ? new Date(dateVal).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })
+                      : 'تاريخ غير محدد';
+
+                    return (
+                      <div key={request.id} className="bg-white border border-stone-200/80 rounded-[20px] p-4 shadow-3xs hover:shadow-2xs transition-all flex flex-col justify-between gap-3 relative overflow-hidden">
+                        {/* Decorative side color */}
+                        <div className="absolute top-0 right-0 bottom-0 w-1.5 bg-emerald-600"></div>
+                        
+                        <div className="pr-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              حملات وإعلانات
+                            </span>
+                            
+                            <span className={`text-[10px] font-black px-2.5 py-1 rounded-full border ${
+                              (request.status === 'approved' || request.status === 'completed')
+                                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                : request.status === 'rejected'
+                                ? 'bg-rose-50 text-rose-800 border-rose-200'
+                                : 'bg-amber-50 text-amber-800 border-amber-200'
+                            }`}>
+                              {(request.status === 'approved' || request.status === 'completed')
+                                ? 'تمت الموافقة'
+                                : request.status === 'rejected'
+                                ? 'تم الرفض'
+                                : 'قيد المراجعة'}
+                            </span>
+                          </div>
+
+                          <h4 className="text-xs sm:text-sm font-black text-stone-800 mt-2.5 line-clamp-2 leading-snug">
+                            {title}
+                          </h4>
+
+                          {request.businessName && (
+                            <p className="text-xs font-bold text-stone-600 mt-1">
+                              للمنشأة: {request.businessName}
+                            </p>
+                          )}
+
+                          <p className="text-[10px] sm:text-xs text-stone-500 mt-2 flex items-center gap-1">
+                            <Calendar className="h-3.5 w-3.5 text-stone-400 shrink-0" />
+                            <span>تاريخ تقديم الطلب: {dateString}</span>
+                          </p>
+
+                          {request.additionalDetails && (
+                            <p className="text-[10px] sm:text-xs text-stone-600 mt-2 bg-stone-50 p-2 rounded-lg border border-stone-100 font-bold leading-relaxed">
+                              تفاصيل: {request.additionalDetails}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="pr-3 pt-2 border-t border-stone-100 flex items-center justify-between text-[11px] text-stone-400">
+                          <span>رقم المعاملة: {request.id?.substring(0, 8)}...</span>
+                          {request.status === 'pending' && (
+                            <span className="text-amber-600 font-bold text-[10px]">سيتم معالجته قريباً</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -1498,6 +1802,7 @@ export function Profile() {
           }}
           onDeleteBusiness={handleDeleteBusiness}
           onOpenMarketingModal={handleOpenMarketingModal}
+          onUpgradeMessaging={handlePremiumMessagingUpgrade}
         />
       )}
 
@@ -3947,7 +4252,8 @@ export function Profile() {
                         { id: 'jobs', label: 'الوظائف والشواغر', icon: '💼', desc: 'أعلى بوابة الوظائف' },
                         { id: 'transportation', label: 'النقل والمواصلات', icon: '🚌', desc: 'أعلى دليل المواصلات' },
                         { id: 'news', label: 'الأخبار والفعاليات', icon: '📰', desc: 'أعلى قسم الأخبار' },
-                        { id: 'tourism', label: 'السياحة والمعالم', icon: '🌲', desc: 'أعلى دليل السياحة' }
+                        { id: 'tourism', label: 'السياحة والمعالم', icon: '🌲', desc: 'أعلى دليل السياحة' },
+                        { id: 'medical', label: 'الرعاية الطبية', icon: '🩺', desc: 'أعلى دليل الرعاية الطبية' }
                       ].map(pg => (
                         <button
                           key={pg.id}
@@ -4217,7 +4523,7 @@ export function Profile() {
                       )}
 
                       {/* Default Store Dropdown */}
-                      {(marketingForm.pageTarget === 'home' || marketingForm.pageTarget === 'transportation' || marketingForm.pageTarget === 'news' || marketingForm.pageTarget === 'tourism') && (
+                      {(marketingForm.pageTarget === 'home' || marketingForm.pageTarget === 'transportation' || marketingForm.pageTarget === 'news' || marketingForm.pageTarget === 'tourism' || marketingForm.pageTarget === 'medical') && (
                         <div className="p-3.5 rounded-2xl bg-emerald-50/70 border border-emerald-200 space-y-2">
                           <label className="block text-xs font-black text-emerald-950 flex items-center gap-1.5">
                             <Store className="h-4 w-4 text-emerald-700" />
@@ -4466,6 +4772,39 @@ export function Profile() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {customAlert && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs" dir="rtl">
+          <div className="bg-white rounded-[24px] p-6 max-w-sm w-full shadow-2xl border border-stone-100 text-center flex flex-col items-center gap-4">
+            {customAlert.type === 'success' ? (
+              <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+                <Check className="w-6 h-6" />
+              </div>
+            ) : (
+              <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
+                <MessageSquare className="w-6 h-6" />
+              </div>
+            )}
+            
+            <h3 className="text-base font-black text-stone-900 leading-tight">
+              {customAlert.type === 'success' ? 'تأكيد إرسال الطلب' : 'تنبيه'}
+            </h3>
+            
+            <p className="text-xs text-stone-600 font-bold leading-relaxed">
+              {customAlert.message}
+            </p>
+            
+            <button
+              type="button"
+              onClick={() => setCustomAlert(null)}
+              className="mt-2 w-full py-2.5 bg-[#1a4d2e] hover:bg-[#143e25] text-white text-xs font-black rounded-xl shadow-xs transition-colors cursor-pointer"
+            >
+              حسناً، فهمت
+            </button>
           </div>
         </div>,
         document.body

@@ -3,6 +3,7 @@ import { collection, query, orderBy, onSnapshot, doc, updateDoc } from 'firebase
 import { db } from '../../lib/firebase';
 import { Crown, CheckCircle2, XCircle, Clock, Check, X, Phone, User, Store } from 'lucide-react';
 import { UpgradeRequest } from '../../types';
+import { getJordanNow, formatJordanDateArabic } from '../../lib/jordanTime';
 
 interface UpgradeRequestsManagerProps {
   showToast: (msg: string, type?: 'success' | 'error' | 'info') => void;
@@ -86,7 +87,7 @@ export function UpgradeRequestsManager({ showToast }: UpgradeRequestsManagerProp
           vipSubscriptionStartsAt: now,
           vipSubscriptionExpiresAt: expiresAt,
           isVipScheduled: true,
-          vipNotes: `تمت الترقية تلقائياً بقبول طلب الترقية VIP بتاريخ ${new Date().toLocaleDateString('ar-JO')}`
+          vipNotes: `تمت الترقية تلقائياً بقبول طلب الترقية VIP بتاريخ ${formatJordanDateArabic(getJordanNow())}`
         });
       }
 

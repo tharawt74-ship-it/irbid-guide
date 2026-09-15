@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { db, auth } from '../lib/firebase';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, onSnapshot } from 'firebase/firestore';
 import {
   CategoryConfig,
   VipPlanConfig,
@@ -263,8 +263,91 @@ export function SystemSettingsProvider({ children }: { children: React.ReactNode
   const [seasonalCampaigns, setSeasonalCampaigns] = useState<SeasonalCampaign[]>(DEFAULT_SEASONAL_CAMPAIGNS);
   const [stories, setStories] = useState<StoryConfig[]>(DEFAULT_STORIES);
 
-  // Load settings from Firestore on mount
+  // Load settings from Firestore on mount & subscribe to real-time changes
   useEffect(() => {
+    let unsubSnapshot: (() => void) | undefined = undefined;
+
+    const processConfigData = (data: any) => {
+      if (!data) return;
+
+      if (data.categories) {
+        const sanitizedCats = (data.categories as CategoryConfig[]).map(c => {
+          if (c.name.includes('تعليم وتدريب') || c.name === '🎓 تعليم وتدريب') {
+            return {
+              ...c,
+              subcategories: c.subcategories.filter(sc => sc !== 'معلمون ومعلمات ودروس خصوصية')
+            };
+          }
+          if (c.name.includes('صحة وطب') || c.name === '🏥 صحة وطب') {
+            return {
+              ...c,
+              subcategories: BUSINESS_CATEGORIES["🏥 صحة وطب"]
+            };
+          }
+          return c;
+        }).filter(
+          c => !c.name.includes('عقارات وسكنات') && c.name !== '🏠 عقارات وسكنات'
+        );
+        
+        // Ensure newly added default categories (like teachers and home projects) exist
+        const defaultCatEntries = Object.entries(BUSINESS_CATEGORIES);
+        const existingCatNames = new Set(sanitizedCats.map(c => c.name));
+        
+        const missingDefaults: CategoryConfig[] = [];
+        defaultCatEntries.forEach(([catName, subcats], idx) => {
+          if (!existingCatNames.has(catName)) {
+            missingDefaults.push({
+              id: `cat_def_${idx + 1}_${Date.now()}`,
+              name: catName,
+              iconName: catName.includes('معلمات') ? 'GraduationCap' : catName.includes('منزلية') ? 'Home' : 'Folder',
+              description: `جميع ${catName} في إربد`,
+              subcategories: subcats,
+              active: true
+            });
+          }
+        });
+
+        const mergedCats = [...sanitizedCats, ...missingDefaults];
+        setCategories(mergedCats.length > 0 ? mergedCats : categories);
+      }
+      if (data.neighborhoods) setNeighborhoods(data.neighborhoods);
+      if (data.vipPlans) {
+        const sanitizedPlans = (data.vipPlans as VipPlanConfig[]).map(plan => {
+          if (plan.id === 'golden') {
+            return {
+              ...plan,
+              features: plan.features.map(f => 
+                f.includes('توثيق ذهبية') || f.includes('كرت المحل')
+                  ? 'شارة التوثيق الزرقاء الرسمية ✓ للموثوقية العالية'
+                  : f
+              )
+            };
+          }
+          return plan;
+        });
+        setVipPlans(sanitizedPlans);
+      }
+      if (data.globalSettings) {
+        const mergedSettings = {
+          ...DEFAULT_GLOBAL_SETTINGS,
+          ...data.globalSettings,
+          logoUrl: data.globalSettings.logoUrl || DEFAULT_GLOBAL_SETTINGS.logoUrl || '/logo.png'
+        };
+        setGlobalSettings(mergedSettings);
+        try {
+          localStorage.setItem('shoof_global_settings', JSON.stringify(mergedSettings));
+        } catch {
+          // ignore
+        }
+      }
+      if (data.staticPages) {
+        setStaticPages(data.staticPages);
+      }
+      if (data.seasonalCampaigns) setSeasonalCampaigns(data.seasonalCampaigns);
+      if (data.stories) setStories(data.stories);
+      if (data.medicalCategories) setMedicalCategories(data.medicalCategories);
+    };
+
     async function loadSettings() {
       try {
         let data: any = null;
@@ -292,108 +375,7 @@ export function SystemSettingsProvider({ children }: { children: React.ReactNode
         }
 
         if (data) {
-          if (data.categories) {
-            const sanitizedCats = (data.categories as CategoryConfig[]).map(c => {
-              if (c.name.includes('تعليم وتدريب') || c.name === '🎓 تعليم وتدريب') {
-                return {
-                  ...c,
-                  subcategories: c.subcategories.filter(sc => sc !== 'معلمون ومعلمات ودروس خصوصية')
-                };
-              }
-              if (c.name.includes('صحة وطب') || c.name === '🏥 صحة وطب') {
-                return {
-                  ...c,
-                  subcategories: BUSINESS_CATEGORIES["🏥 صحة وطب"]
-                };
-              }
-              return c;
-            }).filter(
-              c => !c.name.includes('عقارات وسكنات') && c.name !== '🏠 عقارات وسكنات'
-            );
-            
-            // Ensure newly added default categories (like teachers and home projects) exist
-            const defaultCatEntries = Object.entries(BUSINESS_CATEGORIES);
-            const existingCatNames = new Set(sanitizedCats.map(c => c.name));
-            
-            const missingDefaults: CategoryConfig[] = [];
-            defaultCatEntries.forEach(([catName, subcats], idx) => {
-              if (!existingCatNames.has(catName)) {
-                missingDefaults.push({
-                  id: `cat_def_${idx + 1}_${Date.now()}`,
-                  name: catName,
-                  iconName: catName.includes('معلمات') ? 'GraduationCap' : catName.includes('منزلية') ? 'Home' : 'Folder',
-                  description: `جميع ${catName} في إربد`,
-                  subcategories: subcats,
-                  active: true
-                });
-              }
-            });
-
-            const mergedCats = [...sanitizedCats, ...missingDefaults];
-            setCategories(mergedCats.length > 0 ? mergedCats : categories);
-          }
-          if (data.neighborhoods) setNeighborhoods(data.neighborhoods);
-          if (data.vipPlans) {
-            const sanitizedPlans = (data.vipPlans as VipPlanConfig[]).map(plan => {
-              if (plan.id === 'golden') {
-                return {
-                  ...plan,
-                  features: plan.features.map(f => 
-                    f.includes('توثيق ذهبية') || f.includes('كرت المحل')
-                      ? 'شارة التوثيق الزرقاء الرسمية ✓ للموثوقية العالية'
-                      : f
-                  )
-                };
-              }
-              return plan;
-            });
-            setVipPlans(sanitizedPlans);
-            try {
-              if (db) {
-                await updateDoc(doc(db, 'systemConfig', 'settings'), { vipPlans: sanitizedPlans });
-              }
-            } catch (fsErr) {
-              console.warn('Failed to auto-migrate vipPlans in Firestore:', fsErr);
-            }
-          }
-          if (data.globalSettings) {
-            const mergedSettings = {
-              ...DEFAULT_GLOBAL_SETTINGS,
-              ...data.globalSettings,
-              logoUrl: data.globalSettings.logoUrl || DEFAULT_GLOBAL_SETTINGS.logoUrl || '/logo.png'
-            };
-            setGlobalSettings(mergedSettings);
-            try {
-              localStorage.setItem('shoof_global_settings', JSON.stringify(mergedSettings));
-            } catch {
-              // ignore
-            }
-          }
-          if (data.staticPages) {
-            let loadedPages = data.staticPages;
-            let needsUpdate = false;
-            if (!loadedPages.termsText || loadedPages.termsText.includes('باستخدامك للمنصة، فإنك توافق على الالتزام بالقوانين والشروط المعمول بها')) {
-              loadedPages.termsText = DEFAULT_STATIC_PAGES.termsText;
-              needsUpdate = true;
-            }
-            if (!loadedPages.privacyText || loadedPages.privacyText.includes('نحن نلتزم بحماية خصوصية بيانات جميع زوار وأصحاب المحلات وعدم مشاركتها مع أي أطراف ثالثة.')) {
-              loadedPages.privacyText = DEFAULT_STATIC_PAGES.privacyText;
-              needsUpdate = true;
-            }
-            if (needsUpdate) {
-              try {
-                if (db) {
-                  await updateDoc(doc(db, 'systemConfig', 'settings'), { staticPages: loadedPages });
-                }
-              } catch (fsErr) {
-                console.warn('Failed to auto-migrate static pages in Firestore:', fsErr);
-              }
-            }
-            setStaticPages(loadedPages);
-          }
-          if (data.seasonalCampaigns) setSeasonalCampaigns(data.seasonalCampaigns);
-          if (data.stories) setStories(data.stories);
-          if (data.medicalCategories) setMedicalCategories(data.medicalCategories);
+          processConfigData(data);
         } else {
           // Auto-seed Firestore with default configuration if it is empty
           if (db) {
@@ -418,8 +400,32 @@ export function SystemSettingsProvider({ children }: { children: React.ReactNode
       } finally {
         setIsSettingsLoaded(true);
       }
+
+      // 3. Attach real-time Firestore onSnapshot listener for instant live updates across all sessions & visitors
+      if (db) {
+        try {
+          const settingsDocRef = doc(db, 'systemConfig', 'settings');
+          unsubSnapshot = onSnapshot(settingsDocRef, (snap) => {
+            if (snap.exists()) {
+              const liveData = snap.data();
+              processConfigData(liveData);
+            }
+          }, (snapErr) => {
+            console.warn('Firestore settings snapshot error:', snapErr);
+          });
+        } catch (subErr) {
+          console.warn('Failed to subscribe to settings document:', subErr);
+        }
+      }
     }
+
     loadSettings();
+
+    return () => {
+      if (unsubSnapshot) {
+        unsubSnapshot();
+      }
+    };
   }, []);
 
   // Dynamically update site icon and PWA manifest when logoUrl changes

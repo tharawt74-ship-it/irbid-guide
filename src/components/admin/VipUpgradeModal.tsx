@@ -21,6 +21,7 @@ import {
 import { Business } from '../../types';
 import { getBusinessVipStatus } from '../../lib/vipHelper';
 import { recordAuditLog } from '../../lib/auditLogHelper';
+import { getJordanNow, getJordanDateISO, formatJordanDateArabic } from '../../lib/jordanTime';
 
 interface VipUpgradeModalProps {
   isOpen: boolean;
@@ -59,21 +60,19 @@ export function VipUpgradeModal({
       if (business.vipSubscriptionExpiresAt || business.vipSubscriptionStartsAt) {
         setScheduleType('custom_dates');
         if (business.vipSubscriptionStartsAt) {
-          const sDate = new Date(business.vipSubscriptionStartsAt);
-          setStartDate(sDate.toISOString().slice(0, 10));
+          setStartDate(getJordanDateISO(business.vipSubscriptionStartsAt));
         } else {
-          setStartDate(new Date().toISOString().slice(0, 10));
+          setStartDate(getJordanDateISO(getJordanNow()));
         }
 
         if (business.vipSubscriptionExpiresAt) {
-          const eDate = new Date(business.vipSubscriptionExpiresAt);
-          setEndDate(eDate.toISOString().slice(0, 10));
+          setEndDate(getJordanDateISO(business.vipSubscriptionExpiresAt));
         } else {
           setEndDate('');
         }
       } else {
         setScheduleType('permanent');
-        setStartDate(new Date().toISOString().slice(0, 10));
+        setStartDate(getJordanDateISO(getJordanNow()));
         setEndDate('');
       }
     }
@@ -98,12 +97,12 @@ export function VipUpgradeModal({
   const handleApplyPreset = (days: number) => {
     setPresetDurationDays(days);
     setScheduleType('custom_duration');
-    const today = new Date();
-    const future = new Date();
+    const today = getJordanNow();
+    const future = getJordanNow();
     future.setDate(today.getDate() + days);
 
-    setStartDate(today.toISOString().slice(0, 10));
-    setEndDate(future.toISOString().slice(0, 10));
+    setStartDate(getJordanDateISO(today));
+    setEndDate(getJordanDateISO(future));
   };
 
   const handleRevokeUpgrade = async () => {
@@ -118,7 +117,7 @@ export function VipUpgradeModal({
         vipSubscriptionStartsAt: undefined,
         vipSubscriptionExpiresAt: undefined,
         isVipScheduled: false,
-        vipNotes: vipNotes ? `${vipNotes} (تم سحب الترقية في ${new Date().toLocaleDateString('ar-JO')})` : undefined
+        vipNotes: vipNotes ? `${vipNotes} (تم سحب الترقية في ${formatJordanDateArabic(getJordanNow())})` : undefined
       });
       onClose();
     } catch (err) {

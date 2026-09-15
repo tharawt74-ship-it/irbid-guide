@@ -44,7 +44,7 @@ const PRESET_IMAGES = [
   { label: 'حدائق ومسطحات خضراء', url: 'https://images.unsplash.com/photo-1519331379826-f10be5486c6f?auto=format&fit=crop&w=800&q=80' }
 ];
 
-const SEED_TOURISM_SPOTS: TourismSpot[] = [
+export const SEED_TOURISM_SPOTS: TourismSpot[] = [
   {
     id: '1',
     name: 'مدينة أم قيس الأثرية (جدارا)',

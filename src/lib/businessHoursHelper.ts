@@ -1,4 +1,5 @@
 import { WorkingHours } from '../types';
+import { getJordanNow } from './jordanTime';
 
 export interface LiveStatus {
   isOpen: boolean;
@@ -40,7 +41,7 @@ export function isTodayWorkingDay(workingHours?: WorkingHours): boolean {
   if (!workingHours) return true;
   if (workingHours.isOpen24Hours) return true;
   
-  const todayIndex = new Date().getDay();
+  const todayIndex = getJordanNow().getDay();
   const todayArabicName = ARABIC_DAYS_MAP[todayIndex];
 
   if (workingHours.selectedDays && Array.isArray(workingHours.selectedDays) && workingHours.selectedDays.length > 0) {
@@ -115,7 +116,7 @@ export function getLiveWorkingStatus(workingHours?: WorkingHours): LiveStatus {
   const [openH, openM] = openTimeStr.split(':').map(Number);
   const [closeH, closeM] = closeTimeStr.split(':').map(Number);
 
-  const now = new Date();
+  const now = getJordanNow();
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
   const openMinutes = (openH || 0) * 60 + (openM || 0);

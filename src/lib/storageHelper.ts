@@ -30,9 +30,9 @@ export async function uploadAndCompressImage(
   const {
     folder = 'uploads',
     onProgress,
-    maxWidth = 1600,
-    maxHeight = 1600,
-    quality = 0.82
+    maxWidth = 1000,
+    maxHeight = 1000,
+    quality = 0.60
   } = options;
 
   // Step 1: Compress image client-side

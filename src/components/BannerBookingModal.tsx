@@ -25,6 +25,7 @@ export function BannerBookingModal({ isOpen, onClose, defaultBusiness }: BannerB
   const { currentUser } = useAuth();
   
   const [type, setType] = useState<BannerType>('business');
+  const [pageTarget, setPageTarget] = useState<string>('home');
   const [advertiserName, setAdvertiserName] = useState(currentUser?.displayName || '');
   const [contactPhone, setContactPhone] = useState('');
   const [durationDays, setDurationDays] = useState(7);
@@ -165,12 +166,13 @@ export function BannerBookingModal({ isOpen, onClose, defaultBusiness }: BannerB
         durationDays: Number(durationDays) || 7,
         notes: notes ? sanitizeInput(notes) : '',
         bannerType: type,
+        pageTarget: pageTarget || 'home',
         status: 'pending',
         createdAt: Date.now(),
         userId: currentUser?.uid || 'guest',
         userEmail: currentUser?.email || '',
         serviceType: 'homepage_banner',
-        serviceName: 'طلب حجز بانر إعلاني في الصفحة الرئيسية'
+        serviceName: `طلب حجز بانر إعلاني (${pageTarget === 'medical' ? 'صفحة الرعاية الطبية' : pageTarget === 'home' ? 'الصفحة الرئيسية' : pageTarget})`
       };
 
       if (subtitle.trim()) requestData.subtitle = sanitizeInput(subtitle.trim());
@@ -292,11 +294,51 @@ export function BannerBookingModal({ isOpen, onClose, defaultBusiness }: BannerB
                 </div>
               )}
 
-              {/* 1. Banner Type Selector (Exact 4 Cards from Admin Manager) */}
+              {/* 1. Target Page Selector */}
               <div className="space-y-2.5">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-black text-stone-800 block">
-                    1. نوع وهيكل البانر الإعلاني:
+                    1. اختيار الصفحة المستهدفة لنشر البانر:
+                  </label>
+                  <span className="text-[11px] text-stone-500 font-medium">حدد قسم/صفحة النشر</span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {[
+                    { id: 'home', label: 'الصفحة الرئيسية', icon: '🏠' },
+                    { id: 'medical', label: 'الرعاية الطبية', icon: '🩺' },
+                    { id: 'housing', label: 'السكنات والعقارات', icon: '🏢' },
+                    { id: 'offers', label: 'العروض والخصومات', icon: '🔥' },
+                    { id: 'jobs', label: 'الوظائف والشواغر', icon: '💼' },
+                    { id: 'transportation', label: 'النقل والمواصلات', icon: '🚌' },
+                    { id: 'news', label: 'الأخبار والفعاليات', icon: '📰' },
+                    { id: 'tourism', label: 'السياحة والمعالم', icon: '🌲' }
+                  ].map(pg => (
+                    <button
+                      key={pg.id}
+                      type="button"
+                      onClick={() => setPageTarget(pg.id)}
+                      className={`p-2.5 rounded-xl border text-right transition-all cursor-pointer flex items-center justify-between ${
+                        pageTarget === pg.id
+                          ? 'border-[#1a4d2e] bg-[#1a4d2e]/10 text-[#1a4d2e] font-black shadow-xs ring-1 ring-[#1a4d2e]/20'
+                          : 'border-stone-200 hover:border-stone-300 text-stone-700 bg-white'
+                      }`}
+                    >
+                      <span className="text-xs font-bold flex items-center gap-1.5">
+                        <span>{pg.icon}</span>
+                        <span>{pg.label}</span>
+                      </span>
+                      {pageTarget === pg.id && <span className="text-[10px] bg-[#1a4d2e] text-white px-1.5 py-0.5 rounded-md font-black">✓</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 2. Banner Type Selector (Exact 4 Cards from Admin Manager) */}
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-black text-stone-800 block">
+                    2. نوع وهيكل البانر الإعلاني:
                   </label>
                   <span className="text-[11px] text-stone-500 font-medium">اختر النمط المناسب لحملتك</span>
                 </div>

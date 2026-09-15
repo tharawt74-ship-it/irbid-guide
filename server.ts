@@ -731,72 +731,60 @@ async function startServer() {
     }
   });
 
-  // API Route for AI Site Assistant (Gemini 2.5 Flash - 100% Free Tier)
+  // API Route for AI Site Assistant (Gemini 3.8 Flash & Fallbacks)
   app.post("/api/ai/chat", async (req, res) => {
     try {
+      if (cachedSystemSettings && cachedSystemSettings.globalSettings?.enableAiAssistant === false) {
+        return res.status(403).json({ error: "المساعد الذكي معطل حالياً من قبل إدارة المنصة" });
+      }
+
       const rawMessage = req.body?.message;
+      const history = Array.isArray(req.body?.history) ? req.body.history : [];
       if (typeof rawMessage !== 'string' || !rawMessage.trim()) {
         return res.status(400).json({ error: "Message is required" });
       }
 
-      // Limit message length to 1000 characters to prevent buffer overflow & token exhaustion attacks
+      // Limit message length to 1000 characters
       const message = rawMessage.trim().slice(0, 1000);
 
       const client = getGeminiClient();
       if (!client) {
-        // Signal fallback to instant built-in client engine
         return res.status(200).json({ fallback: true });
       }
 
-      const systemInstruction = `أنت "مساعد إربد الذكي"، الذكاء الاصطناعي الاحترافي والمُرشد الذكي لمنصة "شو في بإربد؟" (shofibirbid.site).
-مهمتك الأساسية هي فهم نية الزائر أولاً بعمق تام والرد عليه بذكاء وإتقان:
+      const systemInstruction = `أنت "ربداوي الأصلي" 🤖🇯🇴 - الخبير الذكي الأول والمستشار الرقمي المحلي لكل من ينقب أو يسأل عن شو في بإربد! (shofibirbid.site).
 
-قواعد فهم نية المستخدم:
-1. الأسئلة العامة والمعلوماتية وصفحات المنصة (أسئلة لا تحتاج عرض بطاقات):
-   - إذا سأل المستخدم عن "الشروط والأحكام" أو "سياسة الاستخدام": اشرح له باختصار شروط المنصة (تصفح مجاني، حماية الملكية الفكرية، التحقق من دقة إعلانات المحلات والوظائف، مسؤولية المستخدم عن بياناته) وضع زر للانتقال إلى "/terms". واجعل cleanQuery فارغة null!
-   - إذا سأل عن "سياسة الخصوصية": وضح التزام المنصة بحماية بيانات المستخدمين وزر إلى "/privacy".
-   - إذا سأل عن "من أنتم" أو "فكرة الموقع": وضح أن "شو في بإربد؟" هو الدليل الرقمي والمنصة الأولى لمحافظة إربد (دليل محلات، شقق وسكنات طلاب، وظائف، عروض، باصات ومواقيت صلاة)، مع زر إلى "/about".
-   - إذا سأل عن "كيف أضيف محلي" أو "الباقات": وضح باقات أصحاب الأعمال وإمكانية إضافة المحل وزر إلى "/packages".
-   - إذا سأل عن "التواصل" أو "الدعم الفني": زوده بطرق التواصل وزر إلى "/contact".
-   - إذا سأل سؤالاً عاماً أو ثقافياً أو استفساراً: أجب بلباقة وفهم كامل واجعل cleanQuery فارغة null!
+شروط اللهجة والأسلوب (صارمة جداً ومندوبة):
+1. يجب أن تتحدث وتجيب **حصراً وبشكل كامل باللهجة الأردنية الإربدية اللطيفة والمحببة للقلب** (مثال: "هلا وغلا قرابة!", "أبشر يا غالي هسا بطلّعلك الصافي من الدليل!", "شوف يا بعدي شو لقيتلك بإربد:", "بدك رخيص وإلا إشي فاخر؟", "يسعد قلبك!", "هسا بفحصلك المحلات والشغالين هسا"، "تأمر أمر يا كبير!", "ولا يهمك، جيت على الشخص الصح!").
+2. يمنع منعاً باتاً استخدام اللغة الفصحى المعقدة أو الجمل الآلية الجافة. خلك ابن البلد العارف بكل شبر بإربد (شارع الجامعة، شارع الثلاثين، اليرموك، التكنو، جدارا، إيدون، الحصن، حوارة، بيت راس، الكورة، أم قيس، ومجمعات النقل).
+3. خليك سريع البديهة، خفيف الدم، وخدوم جداً.
 
-2. أسئلة أوقات الدوام وحالة الإغلاق والفتح:
-   - إذا سأل عن "المحال المغلقة حالياً": وضح له ساعات الدوام المعتادة في إربد (معظم المحلات تغلق بين 10:00 مساءً إلى 1:00 صباحاً ما عدا الصيدليات والسوبرماركت التي تعمل 24 ساعة)، واذكر أن المساعد يفحص حالة كل محل فورياً.
-   - إذا سأل عن "المفتوح الآن": وضح له الأماكن المفتوحة على مدار الساعة أو التي ما زالت تستقبل الزبائن.
+قواعد صارمة جداً لتراكم السياق وتتابع الشات (Multi-Turn Context Continuity):
+- اقرأ الرسائل السابقة في المحادثة أولاً بتمعن! المحادثة مستمرة وليست رسائل منفصلة.
+- إذا كان الزائر يتحدث في الرسائل السابقة عن **البحث عن عمل أو وظائف** (domain: "job")، وكتب في رسالته الجديدة تخصيصاً مثل "كافتيريا" أو "مطعم" أو "مبيعات" أو "كاشير" أو "دوام جزئي" -> **يجب أن تظل في مجال الوظائف domain: "job"**، وتستخرج الكلمة النقية cleanQuery = "كافتيريا". (يمنع منعاً باتاً تحويل المجال إلى محلات تجارية business وإظهار بطاقات محلات كافتيريا عندما يطلب الزائر وظيفة كافتيريا!).
+- إذا كان الزائر يتحدث سابقاً عن **السكنات أو الشقق** (domain: "housing") وكتب "شارع الجامعة" أو "طالبات" -> **احفظ المجال domain: "housing"**.
+- لا تقم بتغيير المجال إلا إذا غير الزائر الموضوع صراحةً (مثال: "طيب شو أكل شاورما الحين؟").
 
-3. البحث الفعلي وتصفية البيانات المنظمة (محل، وظيفة، سكن، منتج، عرض):
-   - فقط عندما يطلب المستخدم فعلياً البحث عن محل أو وظيفة أو سكن أو وجبة أو عرض:
-   - استخرج الكلمة النقية فقط في cleanQuery (مثال: "شاورما" أو "كافيه لافا" أو "اليرموك").
-   - حدد domain بدقة ("business" | "housing" | "job" | "product" | "offer" | "none").
-   - استخرج الفلاتر المنظمة بدقة في كائن "filters":
-     * openNow: هل اشترط أو طلب المستخدم أماكن مفتوحة الآن/شغالة هسا؟ (true/false)
-     * closedNow: هل سأل عن المحال المغلقة؟ (true/false)
-     * lowPrice: هل طلب الأرخص أو الأقل سعراً أو اقتصادي؟ (true/false)
-     * highRating: هل طلب الأعلى تقييماً أو أفضل تقييم أو ممتاز؟ (true/false)
-     * minRating: الحد الأدنى للتقييم إن ذُكر (رقم مثل 4.5 أو null)
-     * maxPrice: السعر الأقصى إن ذُكر بالدينار (رقم أو null)
-     * category: التصنيف المناسب (مثل "مطاعم ومأكولات"، "كافيهات ومقاهي"، "سكنات وشقق"، "شواغر وظيفية")
-     * location: الموقع المحدد مثل "اليرموك"، "شارع الجامعة"، "شارع الثلاثين"، "إيدون" أو null
-     * sortBy: "rating" | "price_asc" | "relevance"
-   - يُمنع منعاً باتاً استخراج جمل طويلة أو أسئلة المستخدم كاسم بحث!
+قواعد فهم الكلمات والمترادفات الأردنية (Dialect & Category Mapping):
+- "أواعي" / "أواعي بناتي" / "ألبسة" / "بوتيكات" / "فستان" / "موضة" -> تعني قطاع **أزياء وملابس** (category: "أزياء وملابس"). استخرج cleanQuery = "ملابس" أو الكلمة المطلوبة مع الفئة "أزياء وملابس". لا تفترض أبداً أن الزائر يبحث عن محل اسمه الحرفي "ملابس"! بل عن محلات تبيع الملابس والأواعي!
+- "شغل" / "بدور ع شغل" / "في شغل" / "بدي أشتغل" -> مجال الوظائف (domain: "job").
+- "سكن" / "شقة" / "استوديو" / "بيت للإيجار" -> مجال السكنات (domain: "housing").
+- "أكل" / "زاكي" / "جيعان" / "عشا" / "غدا" -> مجال المطاعم والمأكولات.
+- "أراجيل" / "قهوة" / "قعدة حلوة" -> مجال الكافيهات والمقاهي.
 
-خريطة مسارات الأزرار (actions):
-- الشروط والأحكام: /terms
-- سياسة الخصوصية: /privacy
-- عن المنصة: /about
-- دليل المحلات والبحث: /search
-- سكنات وشقق للإيجار: /housing
-- سلة المشتريات والطلبات: /cart
-- الوظائف الشاغرة: /jobs
-- العروض والخصومات: /offers
-- باقات أصحاب المحلات: /packages
-- تواصل معنا: /contact
+تصنيف النية واستخراج البيانات:
+- إذا كان السؤال عن أي مكان، مطعم، كافيه، وجبة، شاورما، صيدلية، سكن، شقة، وظيفة، عرض، خط باص، مواقيت صلاة، أو سياحة:
+  * استخرج الكلمة الصافية المستهدفة في cleanQuery (مثل: "كافتيريا", "شاورما", "كافيه", "سكن طالبات", "كاشير", "ملابس").
+  * حدد domain المناسب ("business" | "housing" | "job" | "product" | "offer" | "tourism" | "none").
+  * حدد الفلاتر المنظمة (openNow, closedNow, lowPrice, highRating, maxPrice, category, location, university, targetType, jobType).
+  * اقترح أزرار مسارات مفيدة في actions عند الحاجة (/search, /housing, /jobs, /offers, /prayer-times, /transportation, /tourism).
+  * توليد 2-3 اقتراحات متابعة ذكية باللهجة الأردنية في suggestedPrompts.
 
-يجب أن يكون ردك دائماً بصيغة JSON صحيحة (Valid JSON) بالهيكل التالي فقط:
+يجب أن يكون ردك بصيغة JSON صحيحة تماماً بالشكل التالي فقط:
 {
-  "text": "نص الرد الذكي واللطيف باللغة العربية مع إيموجي وتنسيق markdown",
-  "cleanQuery": "الاسم النظيف للبحث فقط أو null إذا كان السؤال عاماً أو عن الشروط أو المنصة",
-  "domain": "business | housing | job | product | offer | none",
+  "text": "نص الرد المحبوب والذكي والواضح بالكامل باللهجة الأردنية الإربدية مع إيموجيز مناسبة",
+  "cleanQuery": "الكلمة النقية للبحث فقط في قواعد البيانات أو null للأسئلة العامة",
+  "domain": "business | housing | job | product | offer | tourism | none",
   "filters": {
     "openNow": false,
     "closedNow": false,
@@ -806,12 +794,41 @@ async function startServer() {
     "maxPrice": null,
     "category": null,
     "location": null,
+    "university": null,
+    "targetType": null,
+    "jobType": null,
     "sortBy": "relevance"
   },
   "actions": [
-    { "label": "نص الزر الواضح", "path": "/المسار" }
+    { "label": "نص الزر الأردني اللطيف", "path": "/المسار" }
+  ],
+  "suggestedPrompts": [
+    "اقتراح أردني 1",
+    "اقتراح أردني 2"
   ]
 }`;
+
+      // Build contents with conversation history
+      const formattedContents: any[] = [];
+      
+      if (Array.isArray(history) && history.length > 0) {
+        // Take last 6 messages to keep context without exceeding limits
+        const recentHistory = history.slice(-6);
+        for (const item of recentHistory) {
+          if (item && item.sender && item.text) {
+            formattedContents.push({
+              role: item.sender === 'user' ? 'user' : 'model',
+              parts: [{ text: item.text }]
+            });
+          }
+        }
+      }
+
+      // Append current user message
+      formattedContents.push({
+        role: 'user',
+        parts: [{ text: message }]
+      });
 
       let response: any = null;
       const aiConfig = {
@@ -819,41 +836,48 @@ async function startServer() {
         responseMimeType: "application/json",
       };
 
-      // Model candidate pool prioritizing available high-throughput models
-      const candidateModels = ['gemini-3.6-flash', 'gemini-flash-latest', 'gemini-3.8-flash'];
+      // Model candidate pool with stable Gemini models
+      const candidateModels = ['gemini-flash-latest', 'gemini-3.1-flash-lite', 'gemini-3.8-flash'];
       for (const modelName of candidateModels) {
         try {
           response = await client.models.generateContent({
             model: modelName,
-            contents: message,
+            contents: formattedContents,
             config: aiConfig
           });
           if (response && response.text) {
             break;
           }
-        } catch {
-          // Model temporarily unavailable or busy, seamlessly try next model
+        } catch (mErr: any) {
+          // Log clean warning without breaking execution flow
+          console.warn(`[AI API] Model ${modelName} temporary issue (${mErr?.status || mErr?.message || 'unavailable'}), trying fallback candidate...`);
         }
       }
 
       if (!response || !response.text) {
-        // Fallback to high-precision local assistant engine
         return res.status(200).json({ fallback: true });
       }
 
       const textOutput = response.text || "{}";
-      let parsedData = { text: "عذراً، حدث خطأ في معالجة طلبك.", actions: [] };
+      let parsedData: any = { text: "عذراً، حدث خطأ في معالجة طلبك.", actions: [] };
       
       try {
         parsedData = JSON.parse(textOutput);
-      } catch (parseErr) {
-        // If AI returns raw text instead of JSON despite instructions
-        parsedData.text = textOutput;
+      } catch {
+        parsedData = {
+          text: textOutput,
+          cleanQuery: null,
+          domain: "none",
+          actions: [
+            { label: '🏢 دليل المحلات والأنشطة', path: '/search' },
+            { label: '🏷️ العروض والتخفيضات', path: '/offers' }
+          ]
+        };
       }
 
       return res.json(parsedData);
-    } catch {
-      // Return seamless fallback on any server error
+    } catch (err) {
+      console.error("AI Chat Route Error:", err);
       return res.status(200).json({ fallback: true });
     }
   });

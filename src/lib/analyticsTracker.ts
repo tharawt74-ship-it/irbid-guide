@@ -1,6 +1,7 @@
 import { doc, updateDoc, setDoc, increment } from 'firebase/firestore';
 import { db } from './firebase';
 import { Business, BusinessAnalytics } from '../types';
+import { getJordanNow, getJordanDateISO } from './jordanTime';
 
 export type InteractionType = 'view' | 'whatsapp' | 'call' | 'direction' | 'menu' | 'share';
 
@@ -33,14 +34,11 @@ export async function trackBusinessInteraction(businessId: string, type: Interac
       share: 'analytics.shareClicks',
     };
 
-    // Calculate current day and ISO date key (YYYY-MM-DD)
-    const today = new Date();
+    // Calculate current day and ISO date key (YYYY-MM-DD) in Jordan timezone
+    const today = getJordanNow();
     const dayIndex = today.getDay(); // 0 = sun, 1 = mon, ..., 6 = sat
     const dayKey = DAY_KEYS[dayIndex];
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const day = String(today.getDate()).padStart(2, '0');
-    const dateKey = `${year}-${month}-${day}`;
+    const dateKey = getJordanDateISO(today);
 
     const updateObj: Record<string, any> = {
       [fieldMap[type]]: increment(1),

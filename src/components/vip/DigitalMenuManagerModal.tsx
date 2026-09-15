@@ -457,6 +457,7 @@ export function DigitalMenuManagerModal({
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [activeFormTab, setActiveFormTab] = useState<'basics' | 'pricing' | 'versions' | 'extras'>('basics');
   const [showLivePreviewMobile, setShowLivePreviewMobile] = useState(false);
+  const [showTrialLimitPopup, setShowTrialLimitPopup] = useState(false);
 
 
 
@@ -685,11 +686,15 @@ export function DigitalMenuManagerModal({
 
     if (editingItem) {
       setItems(items.map(it => it.id === editingItem.id ? parsedItem : it));
+      handleCancelEdit();
     } else {
-      setItems([...items, parsedItem]);
+      if (vipInfo.isVip && vipInfo.isTrial && items.length >= 15) {
+        setShowTrialLimitPopup(true);
+      } else {
+        setItems([...items, parsedItem]);
+        handleCancelEdit();
+      }
     }
-
-    handleCancelEdit();
   };
 
   const handleDeleteItem = async (id: string) => {
@@ -1881,6 +1886,41 @@ export function DigitalMenuManagerModal({
           </div>
         )}
       </AnimatePresence>
+
+      {/* Trial Limit Alert Popup Modal */}
+      {showTrialLimitPopup && (
+        <div className="fixed inset-0 z-[110000] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in" dir="rtl">
+          <div 
+            className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-amber-200 text-center"
+          >
+            <div className="w-16 h-16 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm animate-bounce">
+              <Sparkles className="h-8 w-8" />
+            </div>
+            
+            <h3 className="text-lg font-black text-stone-900 mb-2">حدود الباقة التجريبية المسموحة</h3>
+            <p className="text-sm text-stone-600 leading-relaxed mb-6">
+              نشكرك على استخدام الباقة الذهبية التجريبية (30 يوماً). 
+              <br />
+              الحد الأقصى المتاح لإضافة {business.category === 'عيادات ومراكز طبية' ? 'الخدمات والإجراءات' : 'الأصناف والمنتجات'} في هذه الباقة هو <span className="font-black text-amber-600">15 صنفاً فقط</span>.
+              <br />
+              <span className="mt-2 block font-medium text-stone-500">للحصول على إمكانيات غير محدودة وتوسيع آفاق عملك، يرجى الترقية للباقة الذهبية الدائمة.</span>
+            </p>
+
+            <div className="flex flex-col gap-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowTrialLimitPopup(false);
+                  setIsFormOpen(false); // Close the item creation form
+                }}
+                className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-amber-950 font-black rounded-xl text-xs transition-all shadow-sm active:scale-95 cursor-pointer"
+              >
+                فهمت ذلك
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>,
     document.body

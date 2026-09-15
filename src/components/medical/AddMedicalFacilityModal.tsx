@@ -423,11 +423,29 @@ export function AddMedicalFacilityModal({ isOpen, onClose, onFacilityAdded }: Ad
     setCurrentStep((prev) => (Math.max(prev - 1, 1) as any));
   };
 
+  // Prevent form submission on hitting Enter inside text inputs
+  const handleFormKeyDown = (e: React.KeyboardEvent<HTMLFormElement>) => {
+    if (e.key === 'Enter') {
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT') {
+        const inputType = (target as HTMLInputElement).type;
+        if (inputType !== 'submit' && inputType !== 'button') {
+          e.preventDefault();
+        }
+      }
+    }
+  };
+
   // Submit Handler
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
     setContactError('');
+
+    if (currentStep < 5) {
+      handleNext();
+      return;
+    }
 
     if (!agreedToTerms) {
       setErrorMessage('يرجى الموافقة على صحة وتعهد البيانات الطبية والتراخيص للمتابعة.');
@@ -600,8 +618,8 @@ export function AddMedicalFacilityModal({ isOpen, onClose, onFacilityAdded }: Ad
         reviewCount: 0,
         views: 1,
         createdAt: now,
-        userId: currentUser?.uid || '',
-        ownerEmail: parsedOwnerEmail || currentUser?.email || '',
+        userId: '',
+        ownerEmail: parsedOwnerEmail || '',
         ownerPhone: parsedOwnerPhone || undefined,
         ownerContact: contactVal || undefined,
         ownerName: doctorName ? sanitizeInput(doctorName) : sanitizeInput(name)
@@ -826,7 +844,7 @@ export function AddMedicalFacilityModal({ isOpen, onClose, onFacilityAdded }: Ad
               )}
 
               {/* FORM STEPS */}
-              <form onSubmit={handleSubmit} className="space-y-6">
+              <form onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} className="space-y-6">
 
                 {/* ================= STEP 1: CATEGORY, SPECIALTY & BASIC INFO ================= */}
                 {currentStep === 1 && (
@@ -2141,6 +2159,7 @@ export function AddMedicalFacilityModal({ isOpen, onClose, onFacilityAdded }: Ad
                 <div className="flex items-center justify-between gap-4 pt-6 border-t border-stone-200">
                   {currentStep > 1 ? (
                     <button
+                      key="btn-prev"
                       type="button"
                       onClick={handlePrev}
                       className="px-6 py-3 rounded-2xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs sm:text-sm font-black flex items-center gap-2 transition-all cursor-pointer"
@@ -2150,6 +2169,7 @@ export function AddMedicalFacilityModal({ isOpen, onClose, onFacilityAdded }: Ad
                     </button>
                   ) : (
                     <button
+                      key="btn-cancel"
                       type="button"
                       onClick={onClose}
                       className="px-5 py-3 rounded-2xl text-stone-400 hover:text-stone-700 text-xs font-bold cursor-pointer"
@@ -2160,6 +2180,7 @@ export function AddMedicalFacilityModal({ isOpen, onClose, onFacilityAdded }: Ad
 
                   {currentStep < 5 ? (
                     <button
+                      key="btn-next"
                       type="button"
                       onClick={handleNext}
                       className="px-8 py-3.5 rounded-2xl bg-[#1a4d2e] hover:bg-[#143d24] text-white text-xs sm:text-sm font-black flex items-center gap-2 shadow-md transition-all cursor-pointer active:scale-95"
@@ -2169,6 +2190,7 @@ export function AddMedicalFacilityModal({ isOpen, onClose, onFacilityAdded }: Ad
                     </button>
                   ) : (
                     <button
+                      key="btn-submit"
                       type="submit"
                       disabled={isSubmitting}
                       className="px-8 sm:px-10 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-[#1a4d2e] hover:from-emerald-700 hover:to-[#133b22] text-white text-xs sm:text-sm font-black flex items-center gap-2 shadow-lg transition-all cursor-pointer active:scale-95 disabled:opacity-50"

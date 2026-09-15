@@ -596,6 +596,163 @@ export const DEMO_SEED_DATA = {
           experienceYears: 14
         }
       }
+    },
+    {
+      id: 'demo-biz-shawarma-saj',
+      name: 'شاورما الصاج الذهبي إربد',
+      username: 'goldensaj_irbid',
+      category: 'مطاعم ومقاهي',
+      subCategory: 'شاورما وسناكات سريعة',
+      address: 'شارع الجامعة، مقابل بوابة اليرموك الشمالية، إربد',
+      district: 'شارع الجامعة',
+      phone: '0789554433',
+      whatsapp: '962789554433',
+      description: 'أطيب شاورما لحم بلدي ودجاج ع الصاج الإيطالي وخبز الشراك الطازج، وجبات عائلية وبوكسات لمة مع ثومية ومخللات بلدية، مفتوح لغاية 3:00 فجراً.',
+      rating: 4.9,
+      reviewCount: 312,
+      workingHours: {
+        isOpen24Hours: true,
+        days: 'طوال أيام الأسبوع',
+        openTime: '10:00',
+        closeTime: '03:30',
+        selectedDays: ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت']
+      },
+      socialLinks: {
+        facebook: 'https://facebook.com',
+        instagram: 'https://instagram.com',
+        whatsapp: '962789554433'
+      },
+      isVerified: true,
+      isFeatured: true,
+      packagePlan: 'vip',
+      imageUrl: 'https://images.unsplash.com/photo-1529006557810-274b9b2fc783?auto=format&fit=crop&q=80&w=800',
+      image: 'https://images.unsplash.com/photo-1529006557810-274b9b2fc783?auto=format&fit=crop&q=80&w=800',
+      createdAt: Date.now() - 3600000 * 2,
+      menuItems: [
+        { id: 'sh1', name: 'سوبر شاورما دجاج شراك مع ثومية وبطاطا', price: '2.50', category: 'شاورما دجاج', description: 'شاورما دجاج بتتبيلة مميزة مع خبز الشراك وصلصة الثوم وبطاطا مقلية', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1529006557810-274b9b2fc783?auto=format&fit=crop&q=80&w=400' },
+        { id: 'sh2', name: 'وجبة شاورما لحم بلدي دبل إيطالي', price: '4.25', category: 'شاورما لحم', description: 'شاورما لحم عجل بلدي طازج مع طحينية وبقدونس ومخلل وبطاطا', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1561651823-34feb02250e4?auto=format&fit=crop&q=80&w=400' },
+        { id: 'sh3', name: 'بوكس لمة الشاورما العائلي (6 سندويشات + لتر كولا)', price: '12.00', category: 'وجبات عائلية', description: 'بوكس عائلي مشكل دجاج ولحم مع مقبلات وبطاطا عائلية ولتر كولا', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&q=80&w=400' }
+      ]
+    },
+    {
+      id: 'demo-biz-dr-kanan',
+      name: 'عيادة الدكتور محمد كنعان للاستشارات الباطنية والقلب',
+      username: 'dr_kanan_clinic',
+      category: 'منشآت طبية',
+      subCategory: 'الأمراض الباطنية والتخصصات الدقيقة',
+      address: 'شارع وصفي التل، مجمع الرازي الطبي التخصصي، الطابق 2، إربد',
+      district: 'شارع وصفي التل',
+      phone: '0795123456',
+      whatsapp: '962795123456',
+      description: 'عيادة استشارية متخصصة في الأمراض الباطنية، القلب والشرايين، ضبط ضغط الدم والسكري، أمراض الجهاز الهضمي والكبد، فحص الإيكو وتخطيط القلب والمناظير.',
+      rating: 4.95,
+      reviewCount: 184,
+      workingHours: {
+        isOpen24Hours: true,
+        days: 'طوال أيام الأسبوع',
+        openTime: '08:30',
+        closeTime: '23:00',
+        selectedDays: ['السبت', 'الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة']
+      },
+      socialLinks: {
+        facebook: 'https://facebook.com',
+        whatsapp: '962795123456'
+      },
+      isVerified: true,
+      isFeatured: true,
+      packagePlan: 'vip',
+      imageUrl: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&q=80&w=800',
+      image: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&q=80&w=800',
+      createdAt: Date.now() - 3600000 * 3,
+      medicalFacilityInfo: {
+        facilityType: 'clinic',
+        specialties: ['الأمراض الباطنية والتخصصات الدقيقة', 'أمراض القلب والشرايين', 'الجهاز الهضمي والسكري']
+      },
+      medicalProfile: {
+        aboutFacility: 'عيادة استشارية رائدة مجهزة بأحدث أجهزة الإيكو وتخطيط القلب وفحوصات الضغط والسكر التراكمي الفورية.',
+        consultationFee: '15 دينار شامل الفحص والتخطيط',
+        doctorProfile: {
+          name: 'د. محمد كنعان',
+          specialty: 'استشاري أول الأمراض الباطنية والقلب',
+          experienceYears: 18
+        }
+      }
+    },
+    {
+      id: 'demo-biz-oxygen-gym',
+      name: 'أوكسجين جيم للياقة وبناء الأجسام (Oxygen Gym Irbid)',
+      username: 'oxygen_gym_irbid',
+      category: 'أندية ورياضة',
+      subCategory: 'نوادي ولياقة بدنية',
+      address: 'شارع الجامعة، بجانب مجمع البنوك ومقابل بوابة اليرموك، إربد',
+      district: 'شارع الجامعة',
+      phone: '0799881122',
+      whatsapp: '962799881122',
+      description: 'أضخم نادي جيم ولياقة بدنية في شارع الجامعة بإربد، أحدث أجهزة كمال الأجسام واللياقة، مدربون محترفون، ساونا وجاكوزي واشتراكات خاصة للطلاب 24 ساعة.',
+      rating: 4.95,
+      reviewCount: 245,
+      workingHours: {
+        isOpen24Hours: true,
+        days: 'طوال أيام الأسبوع 24 ساعة',
+        openTime: '00:00',
+        closeTime: '23:59',
+        selectedDays: ['السبت', 'الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة']
+      },
+      socialLinks: {
+        facebook: 'https://facebook.com',
+        instagram: 'https://instagram.com',
+        whatsapp: '962799881122'
+      },
+      isVerified: true,
+      isFeatured: true,
+      packagePlan: 'vip',
+      imageUrl: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&q=80&w=800',
+      image: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&q=80&w=800',
+      createdAt: Date.now() - 3600000 * 2,
+      menuItems: [
+        { id: 'ox1', name: 'اشتراك شهري VIP شامل كافة الأجهزة والساونا', price: '25.00', category: 'اشتراكات النادي', description: 'دخول غير محدود على مدار 24 ساعة مع برنامج تدريبي وفحص InBody مجاني', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&q=80&w=400' },
+        { id: 'ox2', name: 'اشتراك فصلي للطلاب (3 شهور) + تدريب شخصي', price: '60.00', category: 'عروض الطلاب', description: 'خصم خاص لطلاب الجامعات مع جدول تمارين ونظام غذائي مخصص', isPopular: true, isAvailable: true, imageUrl: 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&q=80&w=400' }
+      ]
+    },
+    {
+      id: 'demo-biz-dr-cardio-yazan',
+      name: 'عيادة الدكتور يزن استشاري أمراض القلب والقسطرة العلاجية',
+      username: 'dr_yazan_cardio',
+      category: 'منشآت طبية',
+      subCategory: 'أمراض القلب والشرايين',
+      address: 'شارع الجامعة، مجمع إربد الطبي الحديث، الطابق 4، إربد',
+      district: 'شارع الجامعة',
+      phone: '0788776655',
+      whatsapp: '962788776655',
+      description: 'عيادة استشارية متخصصة ومتميزة في أمراض وجراحة القلب والشرايين، فحص الإيكو الدقيق، تخطيط الجهد، ومتابعة ضغط الدم وانسداد الشرايين والقسطرة التداخلية.',
+      rating: 4.98,
+      reviewCount: 198,
+      workingHours: {
+        isOpen24Hours: false,
+        days: 'طوال أيام الأسبوع ما عدا الجمعة',
+        openTime: '09:00',
+        closeTime: '20:00',
+        selectedDays: ['السبت', 'الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس']
+      },
+      isVerified: true,
+      isFeatured: true,
+      packagePlan: 'vip',
+      imageUrl: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&q=80&w=800',
+      image: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&q=80&w=800',
+      createdAt: Date.now() - 3600000 * 1,
+      medicalFacilityInfo: {
+        facilityType: 'clinic',
+        specialties: ['أمراض وجراحة القلب والشرايين', 'القسطرة العلاجية والتداخلية', 'تخطيط القلب والإيكو']
+      },
+      medicalProfile: {
+        aboutFacility: 'عيادة مجهزة بأحدث أجهزة تصوير القلب ثلاثية الأبعاد وفحص الجهد لتشخيص كافة اعتلالات القلب والشرايين.',
+        consultationFee: '20 دينار',
+        doctorProfile: {
+          name: 'د. يزن الشبول',
+          specialty: 'استشاري أول أمراض القلب والشرايين والقسطرة',
+          experienceYears: 16
+        }
+      }
     }
   ],
 
@@ -1620,6 +1777,7 @@ export const DEMO_SEED_DATA = {
   // Offers
   offers: [
     {
+      id: 'demo-offer-pizza',
       isDemo: true,
       title: 'عرض الوجبة العائلية: 2 بيتزا كبيرة + بطاطا ولتر كولا',
       businessName: 'بيتزا روما الإيطالية',
@@ -1638,6 +1796,83 @@ export const DEMO_SEED_DATA = {
       createdAt: Date.now() - 3600000 * 6
     },
     {
+      id: 'demo-offer-shawarma',
+      isDemo: true,
+      title: 'عرض الشاورما العربي: وجبة سوبر دبل مع بطاطا ومثومة ومشروب',
+      businessName: 'مطعم ومشاوي ديوان زمان',
+      category: 'مطاعم ومقاهي',
+      discountPercentage: '25%',
+      oldPrice: '4.50 د.أ',
+      newPrice: '3.35 د.أ',
+      code: 'DIWAN25',
+      expiresIn: 'ينتهي خلال 4 أيام',
+      description: 'أشهى شاورما دجاج على الفحم مع خبز صاج طازج وبطاطا مقرمشة ومثومة بلدية شهية.',
+      location: 'شارع بغداد - قرب دوار القبة',
+      phone: '0777123456',
+      whatsapp: '962777123456',
+      image: 'https://images.unsplash.com/photo-1529006557810-274b9b2fc783?auto=format&fit=crop&q=80&w=800',
+      isHot: true,
+      createdAt: Date.now() - 3600000 * 8
+    },
+    {
+      id: 'demo-offer-burger',
+      isDemo: true,
+      title: 'عرض البرجر المميز: وجبة أنجوس برجر دبل مع جبنة شيدر وبطاطا كيرلي',
+      businessName: 'مطعم كرافت برجر إربد',
+      category: 'مطاعم ومقاهي',
+      discountPercentage: '25%',
+      oldPrice: '4.80 د.أ',
+      newPrice: '3.60 د.أ',
+      code: 'BURGER25',
+      expiresIn: 'ينتهي قريباً',
+      description: 'لحم أنجوس بلدي طازج مشوي مع صوص الشيدر الساخن وبطاطا كيرلي المقرمشة.',
+      location: 'شارع الجامعة - مجمع الرمحي',
+      phone: '0798765432',
+      whatsapp: '962798765432',
+      image: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&q=80&w=800',
+      isHot: true,
+      createdAt: Date.now() - 3600000 * 9
+    },
+    {
+      id: 'demo-offer-knafeh',
+      isDemo: true,
+      title: 'سدر كنافة نابلسية خشنة بالجبن البلدي الفاخر والمكسرات',
+      businessName: 'حلويات حبيبة إربد',
+      category: 'حلويات ومخابز',
+      discountPercentage: '20%',
+      oldPrice: '9.00 د.أ',
+      newPrice: '7.20 د.أ',
+      code: 'HABIBA20',
+      expiresIn: 'عرض نهاية الأسبوع',
+      description: 'كنافة نابلسية ساخنة بالسمن البلدي الأصلي وجبن المزرعة الفاخر مع فستق حلبي.',
+      location: 'شارع الهاشمي - وسط البلد',
+      phone: '027241234',
+      whatsapp: '962795123456',
+      image: 'https://images.unsplash.com/photo-1576618148400-f54bed99fcfd?auto=format&fit=crop&q=80&w=800',
+      isHot: true,
+      createdAt: Date.now() - 3600000 * 12
+    },
+    {
+      id: 'demo-offer-pastries',
+      isDemo: true,
+      title: 'عرض سلة المعجنات الشامية: 24 قطعة مشكلة + بيتزا صغيرة مجاناً',
+      businessName: 'مخابز وأفران النور الآلية',
+      category: 'مطاعم ومقاهي',
+      discountPercentage: '30%',
+      oldPrice: '5.50 د.أ',
+      newPrice: '3.85 د.أ',
+      code: 'NOUR30',
+      expiresIn: 'ساري يومياً',
+      description: 'معجنات طازجة من الفرن الحجري: جبنة شامية، صفيحة لحمة بلدية، زعتر بلدي، سبانخ.',
+      location: 'شارع الحصن - قرب إشارة الإسكان',
+      phone: '027271122',
+      whatsapp: '962788001122',
+      image: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&q=80&w=800',
+      isHot: false,
+      createdAt: Date.now() - 3600000 * 14
+    },
+    {
+      id: 'demo-offer-coffee',
       isDemo: true,
       title: 'خصم خاص لطلبة الجامعات على جميع مشروبات القهوة المختصة',
       businessName: 'كافيه لافا (Lava Coffee)',
@@ -1655,6 +1890,44 @@ export const DEMO_SEED_DATA = {
       isStudent: true,
       isHot: true,
       createdAt: Date.now() - 3600000 * 10
+    },
+    {
+      id: 'demo-offer-fashion',
+      isDemo: true,
+      title: 'خصم 25% على بدلات الأعراس والمناسبات الرسمية الرجالية التركية',
+      businessName: 'محل الأناقة الفاخرة للأزياء',
+      category: 'أزياء وملابس',
+      discountPercentage: '25%',
+      oldPrice: '95 د.أ',
+      newPrice: '71.25 د.أ',
+      code: 'ELEGANCE25',
+      expiresIn: 'ساري حتى نهاية الشهر',
+      description: 'أحدث تشكيلة بدلات رجالية للمناسبات مع قميص وربطة عنق وتعديل مجاني للقياس.',
+      location: 'شارع السينما - مجمع الشقران',
+      phone: '0788998877',
+      whatsapp: '962788998877',
+      image: 'https://images.unsplash.com/photo-1594938298603-c8148c4dae35?auto=format&fit=crop&q=80&w=800',
+      isHot: false,
+      createdAt: Date.now() - 3600000 * 18
+    },
+    {
+      id: 'demo-offer-gym',
+      isDemo: true,
+      title: 'اشتراك شهري شامل للياقة البدنية والحديد مع حصص ساونا مجانية',
+      businessName: 'مركز نيو لايف للجيم واللياقة',
+      category: 'أندية ولياقة بدنية',
+      discountPercentage: '30%',
+      oldPrice: '35 د.أ',
+      newPrice: '24.50 د.أ',
+      code: 'FIT30',
+      expiresIn: 'عرض المشتركين الجدد',
+      description: 'أجهزة رياضية أمريكية حديثة مع مدربين معتمدين ومرافق ساونا وبخار متكاملة.',
+      location: 'شارع الثلاثين - مقابل مجمع الشمال',
+      phone: '0799112233',
+      whatsapp: '962799112233',
+      image: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&q=80&w=800',
+      isHot: true,
+      createdAt: Date.now() - 3600000 * 20
     }
   ],
 

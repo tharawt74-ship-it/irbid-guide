@@ -40,6 +40,7 @@ import { BusinessCard } from '../components/BusinessCard';
 import { DEMO_SEED_DATA } from '../lib/demoDataHelper';
 import { trackBusinessInteraction } from '../lib/analyticsTracker';
 import { SEO } from '../components/common/SEO';
+import { getJordanNow } from '../lib/jordanTime';
 import { isBotSubmission, checkSubmissionRateLimit, recordSubmissionTime, sanitizeInput, executeReCaptcha } from '../lib/security';
 import { WhatsApp3DIcon, WhatsAppIcon, Phone3DIcon } from '../components/common/PremiumContactButtons';
 import { WorkingHoursEditor } from '../components/ui/WorkingHoursEditor';
@@ -81,7 +82,7 @@ function getLiveWorkingStatus(hours?: WorkingHours) {
   const [openH, openM] = openTime.split(':').map(Number);
   const [closeH, closeM] = closeTime.split(':').map(Number);
 
-  const now = new Date();
+  const now = getJordanNow();
   const currentH = now.getHours();
   const currentM = now.getMinutes();
 
@@ -306,6 +307,7 @@ export function BusinessDetail() {
   const [newGalleryUrl, setNewGalleryUrl] = useState('');
   const [newGalleryCaption, setNewGalleryCaption] = useState('');
   const [submittingGalleryImage, setSubmittingGalleryImage] = useState(false);
+  const [showTrialGalleryLimitPopup, setShowTrialGalleryLimitPopup] = useState(false);
   const [fullScreenImageUrl, setFullScreenImageUrl] = useState<string | null>(null);
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
 
@@ -943,6 +945,13 @@ export function BusinessDetail() {
 
     setSubmittingGalleryImage(true);
     try {
+      const currentGallery = business.gallery || [];
+      if (vipInfo.isVip && vipInfo.isTrial && currentGallery.length >= 3) {
+        setShowTrialGalleryLimitPopup(true);
+        setSubmittingGalleryImage(false);
+        return;
+      }
+
       const docRef = doc(db, 'businesses', business.id);
       const newItem = {
         url: newGalleryUrl.trim(),
@@ -950,7 +959,6 @@ export function BusinessDetail() {
         createdAt: Date.now()
       };
 
-      const currentGallery = business.gallery || [];
       const updatedGallery = [newItem, ...currentGallery];
 
       const galleryPayload = await compressAndSanitizeFirestorePayload({ gallery: updatedGallery }, true);
@@ -5324,6 +5332,40 @@ export function BusinessDetail() {
           business={business}
           medicalProfile={medicalProfile}
         />
+      )}
+
+      {/* Gallery Trial Limit Alert Popup Modal */}
+      {showTrialGalleryLimitPopup && (
+        <div className="fixed inset-0 z-[110000] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in" dir="rtl">
+          <div 
+            className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-amber-200 text-center text-right"
+          >
+            <div className="w-16 h-16 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm animate-bounce">
+              <Sparkles className="h-8 w-8" />
+            </div>
+            
+            <h3 className="text-lg font-black text-stone-900 mb-2 text-center">حدود الباقة التجريبية المسموحة</h3>
+            <p className="text-sm text-stone-600 leading-relaxed mb-6 text-center">
+              نشكرك على استخدام الباقة الذهبية التجريبية (30 يوماً). 
+              <br />
+              الحد الأقصى المتاح لإضافة الصور في معرض {isMedical ? 'المنشأة الطبية' : 'المحل'} في هذه الباقة هو <span className="font-black text-amber-600">3 صور فقط</span>.
+              <br />
+              <span className="mt-2 block font-medium text-stone-500">للحصول على إمكانيات غير محدودة وتوسيع آفاق عملك، يرجى الترقية للباقة الذهبية الدائمة.</span>
+            </p>
+
+            <div className="flex flex-col gap-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowTrialGalleryLimitPopup(false);
+                }}
+                className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-amber-950 font-black rounded-xl text-xs transition-all shadow-sm active:scale-95 cursor-pointer text-center"
+              >
+                فهمت ذلك
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

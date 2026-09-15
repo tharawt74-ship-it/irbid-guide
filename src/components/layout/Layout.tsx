@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router';
 import { useAuth } from '../../contexts/AuthContext';
+import { getJordanYear } from '../../lib/jordanTime';
 import { 
   Store, 
   LogOut, 
@@ -511,6 +512,22 @@ export function Layout() {
                         </Link>
                       );
                     })}
+                    
+                    <div className="border-t border-stone-150 my-1.5" />
+                    
+                    <div className="px-3 py-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMoreMenuOpen(false);
+                          triggerPwaInstallModal();
+                        }}
+                        className="w-full flex h-9 items-center justify-center gap-1.5 text-[11px] font-black bg-stone-900 hover:bg-stone-800 text-emerald-400 border border-stone-800 rounded-xl transition-all shadow-xs cursor-pointer active:scale-95"
+                      >
+                        <Smartphone className="h-3.5 w-3.5 text-emerald-400 animate-pulse" />
+                        <span>تحميل التطبيق</span>
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -545,7 +562,7 @@ export function Layout() {
               </Link>
             )}
 
-            {totalCount > 0 ? (
+            {totalCount > 0 && (
               <Link
                 to="/cart"
                 className="flex h-8.5 items-center justify-center gap-1.5 text-xs font-black px-3 rounded-xl transition-all shadow-xs border border-amber-600 bg-amber-500 hover:bg-amber-600 text-white cursor-pointer shrink-0 relative"
@@ -557,15 +574,6 @@ export function Layout() {
                   {totalCount}
                 </span>
               </Link>
-            ) : (
-              <button
-                type="button"
-                onClick={triggerPwaInstallModal}
-                className="flex h-8.5 items-center justify-center gap-1 text-xs font-black bg-stone-900 hover:bg-stone-800 text-emerald-400 border border-stone-800 px-2.5 rounded-xl transition-all shadow-2xs cursor-pointer"
-              >
-                <Smartphone className="h-3.5 w-3.5 text-emerald-400 animate-pulse" />
-                <span>تنزيل التطبيق</span>
-              </button>
             )}
 
             {isMedicalPage ? (
@@ -1266,7 +1274,7 @@ export function Layout() {
             </div>
           </div>
           <div className="pt-8 border-t border-[#e5e1da] text-center text-sm font-medium text-stone-400 flex flex-col md:flex-row justify-between items-center gap-4">
-            <div>© {new Date().getFullYear()} {globalSettings.siteName}. جميع الحقوق محفوظة.</div>
+            <div>© {getJordanYear()} {globalSettings.siteName}. جميع الحقوق محفوظة.</div>
             <div className="flex gap-4">
               <Link to="/about" className="hover:text-[#1a4d2e] transition-colors">من نحن</Link>
               <Link to="/terms" className="hover:text-[#1a4d2e] transition-colors">الشروط والأحكام</Link>

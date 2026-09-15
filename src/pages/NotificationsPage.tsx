@@ -31,6 +31,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useNotifications } from '../contexts/NotificationsContext';
 import { useAuth } from '../contexts/AuthContext';
 import { AppNotification } from '../types';
+import { getJordanNow } from '../lib/jordanTime';
 import { cn } from '../lib/utils';
 import { formatArabicTimeAgo, NotificationAvatar } from '../components/notifications/NotificationDropdown';
 import { requestPushPermission, getNotificationPermission, showNativeNotification } from '../lib/pushNotifications';
@@ -112,7 +113,7 @@ export function NotificationsPage() {
     const thisWeek: AppNotification[] = [];
     const earlier: AppNotification[] = [];
 
-    const now = new Date();
+    const now = getJordanNow();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
     const yesterdayStart = todayStart - 86400000;
     const weekStart = todayStart - 86400000 * 6;

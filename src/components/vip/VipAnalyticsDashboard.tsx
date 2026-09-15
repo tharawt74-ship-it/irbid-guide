@@ -8,6 +8,7 @@ import {
 import { WhatsAppIcon } from '../common/WhatsAppIcon';
 import { Business, BusinessAnalytics } from '../../types';
 import { getDefaultAnalytics } from '../../lib/analyticsTracker';
+import { getJordanNow, getJordanDateISO } from '../../lib/jordanTime';
 import { db } from '../../lib/firebase';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 
@@ -27,10 +28,7 @@ const ARABIC_DAYS_OF_WEEK = [
 ] as const;
 
 function formatDateKey(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+  return getJordanDateISO(d);
 }
 
 const DAY_NAMES_AR = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
@@ -89,7 +87,7 @@ export function VipAnalyticsDashboard({ business }: VipAnalyticsDashboardProps) 
     weeklyBars,
     timeRangeLabel,
   } = useMemo(() => {
-    const today = new Date();
+    const today = getJordanNow();
 
     if (timeRange === '7d') {
       // Past 7 calendar days up to today

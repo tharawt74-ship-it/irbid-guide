@@ -9,7 +9,7 @@ import {
   Plus, Edit2, Trash2, Image, Link, Sparkles, 
   Eye, EyeOff, Save, CheckCircle2, Building2, 
   PlayCircle, Megaphone, FileText, X, Star, MapPin,
-  Globe, Home, Flame, Briefcase, Bus, Newspaper, Compass, Filter, Layers
+  Globe, Home, Flame, Briefcase, Bus, Newspaper, Compass, Filter, Layers, Stethoscope
 } from 'lucide-react';
 import { ImageUploader } from '../ui/ImageUploader';
 
@@ -25,7 +25,8 @@ const PAGE_TARGETS = [
   { id: 'housing', name: 'صفحة السكنات والعقارات', icon: Building2, color: 'bg-purple-600 text-white' },
   { id: 'transportation', name: 'صفحة النقل والمواصلات', icon: Bus, color: 'bg-indigo-600 text-white' },
   { id: 'news', name: 'صفحة الأخبار والمستجدات', icon: Newspaper, color: 'bg-rose-600 text-white' },
-  { id: 'tourism', name: 'صفحة السياحة والمعالم', icon: Compass, color: 'bg-teal-600 text-white' }
+  { id: 'tourism', name: 'صفحة السياحة والمعالم', icon: Compass, color: 'bg-teal-600 text-white' },
+  { id: 'medical', name: 'صفحة الرعاية الطبية', icon: Stethoscope, color: 'bg-teal-700 text-white' }
 ];
 
 export function BannersManager({ showToast }: BannersManagerProps) {

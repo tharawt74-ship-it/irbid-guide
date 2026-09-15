@@ -43,9 +43,9 @@ export function ImageUploader({
       const result = await uploadAndCompressImage(file, {
         folder,
         onProgress: (pct) => setProgress(pct),
-        maxWidth: aspectRatio === 'banner' ? 1920 : 1200,
-        maxHeight: aspectRatio === 'banner' ? 800 : 1200,
-        quality: 0.82
+        maxWidth: aspectRatio === 'banner' ? 1200 : 800,
+        maxHeight: aspectRatio === 'banner' ? 500 : 800,
+        quality: 0.55
       });
 
       onChange(result.url);
@@ -60,6 +60,11 @@ export function ImageUploader({
   const handleFileSelect = (file: File) => {
     if (!file.type.startsWith('image/')) {
       alert("يرجى اختيار ملف صورة صالح (JPG, PNG, WebP)!");
+      return;
+    }
+
+    if (file.size > 1 * 1024 * 1024) {
+      alert("حجم الصورة يتجاوز الحد الأقصى المسموح به وهو 1 ميغابايت. يرجى اختيار صورة أصغر الحجم أو مضغوطة مسبقاً.");
       return;
     }
 

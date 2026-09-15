@@ -90,6 +90,17 @@ service cloud.firestore {
               'featuredStartDate', 'featuredExpiryDate', 'packagePlan', 'vipSubscriptionStartsAt',
               'vipSubscriptionExpiresAt', 'isVipTrial', 'isVipScheduled', 'tier'
             ])
+          ) ||
+          // Allow linking/claiming the business if it has no owner yet and the incoming userId is the signed in user
+          (
+            (existing().userId == null || existing().userId == "" || existing().userId == "none") &&
+            incoming().userId == request.auth.uid &&
+            !incoming().diff(existing()).affectedKeys().hasAny([
+              'approved', 'vipStatus', 'isVip', 'vip', 'sponsored', 'isFeatured', 'featured', 
+              'rating', 'reviewCount', 'vipStartDate', 'vipEndDate',
+              'featuredStartDate', 'featuredExpiryDate', 'packagePlan', 'vipSubscriptionStartsAt',
+              'vipSubscriptionExpiresAt', 'isVipTrial', 'isVipScheduled', 'tier'
+            ])
           )
         )) ||
         // Allow public view incrementing safely (no sign in required)

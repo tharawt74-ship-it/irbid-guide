@@ -10,11 +10,151 @@ const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes fresh in-memory cache
 const PERSISTENT_TTL_MS = 30 * 60 * 1000; // 30 minutes persistent cache
 const BIZ_STORAGE_KEY = 'shoof_cached_businesses_v2';
 const BANNERS_STORAGE_KEY = 'shoof_cached_banners_v2';
+const OFFERS_STORAGE_KEY = 'shoof_cached_offers_v2';
+const JOBS_STORAGE_KEY = 'shoof_cached_jobs_v2';
+const HOUSINGS_STORAGE_KEY = 'shoof_cached_housings_v2';
+const PRODUCTS_STORAGE_KEY = 'shoof_cached_products_v2';
 
 // Memory cache
 let cachedBusinesses: CachedData<Business[]> | null = null;
 let cachedBanners: CachedData<HomepageBanner[]> | null = null;
+let cachedOffers: CachedData<any[]> | null = null;
+let cachedJobs: CachedData<any[]> | null = null;
+let cachedHousings: CachedData<any[]> | null = null;
+let cachedProducts: CachedData<any[]> | null = null;
 const businessDetailsMap = new Map<string, CachedData<any>>();
+
+export function getCachedJobs(): any[] | null {
+  if (cachedJobs && (Date.now() - cachedJobs.timestamp < CACHE_TTL_MS)) {
+    return cachedJobs.data;
+  }
+  if (typeof window !== 'undefined') {
+    try {
+      const stored = localStorage.getItem(JOBS_STORAGE_KEY);
+      if (stored) {
+        const parsed: CachedData<any[]> = JSON.parse(stored);
+        if (parsed && Array.isArray(parsed.data) && (Date.now() - parsed.timestamp < PERSISTENT_TTL_MS)) {
+          cachedJobs = parsed;
+          return parsed.data;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return null;
+}
+
+export function setCachedJobs(data: any[]) {
+  const entry = { data, timestamp: Date.now() };
+  cachedJobs = entry;
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(JOBS_STORAGE_KEY, JSON.stringify(entry));
+    } catch {
+      // ignore
+    }
+  }
+}
+
+export function getCachedHousings(): any[] | null {
+  if (cachedHousings && (Date.now() - cachedHousings.timestamp < CACHE_TTL_MS)) {
+    return cachedHousings.data;
+  }
+  if (typeof window !== 'undefined') {
+    try {
+      const stored = localStorage.getItem(HOUSINGS_STORAGE_KEY);
+      if (stored) {
+        const parsed: CachedData<any[]> = JSON.parse(stored);
+        if (parsed && Array.isArray(parsed.data) && (Date.now() - parsed.timestamp < PERSISTENT_TTL_MS)) {
+          cachedHousings = parsed;
+          return parsed.data;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return null;
+}
+
+export function setCachedHousings(data: any[]) {
+  const entry = { data, timestamp: Date.now() };
+  cachedHousings = entry;
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(HOUSINGS_STORAGE_KEY, JSON.stringify(entry));
+    } catch {
+      // ignore
+    }
+  }
+}
+
+export function getCachedProducts(): any[] | null {
+  if (cachedProducts && (Date.now() - cachedProducts.timestamp < CACHE_TTL_MS)) {
+    return cachedProducts.data;
+  }
+  if (typeof window !== 'undefined') {
+    try {
+      const stored = localStorage.getItem(PRODUCTS_STORAGE_KEY);
+      if (stored) {
+        const parsed: CachedData<any[]> = JSON.parse(stored);
+        if (parsed && Array.isArray(parsed.data) && (Date.now() - parsed.timestamp < PERSISTENT_TTL_MS)) {
+          cachedProducts = parsed;
+          return parsed.data;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return null;
+}
+
+export function setCachedProducts(data: any[]) {
+  const entry = { data, timestamp: Date.now() };
+  cachedProducts = entry;
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(entry));
+    } catch {
+      // ignore
+    }
+  }
+}
+
+export function getCachedOffers(): any[] | null {
+  if (cachedOffers && (Date.now() - cachedOffers.timestamp < CACHE_TTL_MS)) {
+    return cachedOffers.data;
+  }
+  if (typeof window !== 'undefined') {
+    try {
+      const stored = localStorage.getItem(OFFERS_STORAGE_KEY);
+      if (stored) {
+        const parsed: CachedData<any[]> = JSON.parse(stored);
+        if (parsed && Array.isArray(parsed.data) && (Date.now() - parsed.timestamp < PERSISTENT_TTL_MS)) {
+          cachedOffers = parsed;
+          return parsed.data;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return null;
+}
+
+export function setCachedOffers(data: any[]) {
+  const entry = { data, timestamp: Date.now() };
+  cachedOffers = entry;
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(OFFERS_STORAGE_KEY, JSON.stringify(entry));
+    } catch {
+      // ignore
+    }
+  }
+}
 
 export function getCachedBusinesses(): Business[] | null {
   if (cachedBusinesses && (Date.now() - cachedBusinesses.timestamp < CACHE_TTL_MS)) {

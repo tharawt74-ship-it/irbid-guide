@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { Business, MarketingRequest, JobOffer } from '../../types';
 import { getAppConfig } from '../../lib/demoDataHelper';
+import { getJordanNow, formatJordanDateArabic } from '../../lib/jordanTime';
 import { 
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, 
   BarChart, Bar, Legend, Cell
@@ -83,25 +84,25 @@ export function AdminStatsOverview({
   // Time-Series growth chart data strictly computed from real Firestore businesses
   const timeSeriesData = useMemo(() => {
     if (!businesses.length) {
-      const currentMonth = new Date().toLocaleDateString('ar-JO', { month: 'short' });
+      const currentMonth = formatJordanDateArabic(getJordanNow(), { month: 'short' });
       return [{ name: currentMonth, 'المحلات النشطة': 0, 'زيارات الدليل': 0 }];
     }
 
     const sorted = [...businesses].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
-    const now = new Date();
+    const now = getJordanNow();
     const monthsMap: { [key: string]: { shops: number; views: number } } = {};
     const monthLabels: string[] = [];
 
     for (let i = 5; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const label = d.toLocaleDateString('ar-JO', { month: 'short' });
+      const label = formatJordanDateArabic(d, { month: 'short' });
       monthLabels.push(label);
       monthsMap[label] = { shops: 0, views: 0 };
     }
 
     sorted.forEach((b) => {
       const bDate = b.createdAt ? new Date(b.createdAt) : now;
-      const bMonthLabel = bDate.toLocaleDateString('ar-JO', { month: 'short' });
+      const bMonthLabel = formatJordanDateArabic(bDate, { month: 'short' });
       const bViews = b.views || b.analytics?.views || 0;
 
       if (monthsMap[bMonthLabel]) {

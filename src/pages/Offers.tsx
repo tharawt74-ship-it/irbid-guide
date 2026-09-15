@@ -31,6 +31,7 @@ import { ShareButton } from '../components/ShareButton';
 import { getWhatsAppUrl, formatOfferWhatsAppMessage } from '../lib/contactHelper';
 import { WhatsApp3DIcon, Phone3DIcon } from '../components/common/PremiumContactButtons';
 import { SEO } from '../components/common/SEO';
+import { getJordanNow } from '../lib/jordanTime';
 import { useAuth } from '../contexts/AuthContext';
 import { BannerSlideshow } from '../components/BannerSlideshow';
 import { HomepageBanner } from '../types';
@@ -84,7 +85,7 @@ export function Offers() {
       if (days.length === 0) return 'متكرر أسبوعياً';
       
       const daysOfWeekArabic = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
-      const todayArabic = daysOfWeekArabic[new Date().getDay()];
+      const todayArabic = daysOfWeekArabic[getJordanNow().getDay()];
       const isTodayActive = days.includes(todayArabic);
 
       if (isTodayActive) {

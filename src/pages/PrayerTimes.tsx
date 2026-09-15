@@ -22,6 +22,9 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router';
 import { SEO } from '../components/common/SEO';
+import { getJordanNow } from '../lib/jordanTime';
+
+export { getJordanNow };
 
 interface PrayerTiming {
   id: string;
@@ -39,39 +42,6 @@ interface HijriDate {
   year: string;
   designation: string;
 }
-
-/**
- * Helper function to retrieve current Date and Time strictly in Jordan timezone (Asia/Amman - UTC+3)
- * regardless of the user's phone or device local timezone settings.
- */
-export const getJordanNow = (): Date => {
-  const now = new Date();
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Asia/Amman',
-    year: 'numeric',
-    month: 'numeric',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: 'numeric',
-    second: 'numeric',
-    hour12: false
-  }).formatToParts(now);
-
-  const getPart = (type: string) => {
-    const p = parts.find(p => p.type === type);
-    return p ? parseInt(p.value, 10) : 0;
-  };
-
-  const year = getPart('year');
-  const month = getPart('month') - 1; // 0-indexed
-  const day = getPart('day');
-  let hour = getPart('hour');
-  if (hour === 24) hour = 0;
-  const minute = getPart('minute');
-  const second = getPart('second');
-
-  return new Date(year, month, day, hour, minute, second);
-};
 
 export function PrayerTimes() {
   const [selectedDate, setSelectedDate] = useState<Date>(getJordanNow());

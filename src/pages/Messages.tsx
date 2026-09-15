@@ -395,6 +395,11 @@ export function Messages() {
       return;
     }
 
+    if (file.size > 1 * 1024 * 1024) {
+      alert("حجم ملف الصورة كبير جداً! الحد الأقصى المسموح به للمرفقات هو 1 ميغابايت.");
+      return;
+    }
+
     const reader = new FileReader();
     reader.onloadend = () => {
       setImageToCrop(reader.result as string);

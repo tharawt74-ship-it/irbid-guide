@@ -28,7 +28,67 @@ export type QueryIntent =
   | 'tourism'
   | 'search'
   | 'recommendation'
+  | 'hunger'
+  | 'job_inquiry'
   | 'general';
+
+/**
+ * Flexible Arabic category cluster matcher to eliminate false rejections.
+ */
+export function isCategoryMatch(businessCategory?: string, requestedCategory?: string): boolean {
+  if (!requestedCategory || !businessCategory) return true;
+  const bCat = normalizeArabic(businessCategory);
+  const rCat = normalizeArabic(requestedCategory);
+  
+  if (bCat.includes(rCat) || rCat.includes(bCat)) return true;
+
+  // Food & Dining category cluster
+  const isFoodReq = /مطاعم|ماكولات|مأكولات|مقاهي|كافيهات|وجبات|سناكات|شاورما|برجر|بيتزا|مشاوي/i.test(rCat);
+  const isFoodBiz = /مطاعم|ماكولات|مأكولات|مقاهي|كافيهات|وجبات|سناكات|أطعمة|اغذية/i.test(bCat);
+  if (isFoodReq && isFoodBiz) return true;
+
+  // Medical & Healthcare category cluster (Clinics, Doctors, Hospitals, Pharmacies)
+  const isMedReq = /طبي|طبية|صيدلية|صيدليات|عيادة|عيادات|مستشفى|مجمع طبي|باطني|دكتور|طبيب|اسنان|أسنان|قلب|قلبية|شرايين|جلدية|عظام|اطفال|أطفال|عيون|علاج طبيعي/i.test(rCat);
+  const isMedBiz = /طبي|طبية|صيدلية|صيدليات|عيادة|عيادات|مستشفى|مجمع طبي|منشآت طبية|باطني|دكتور|طبيب|اسنان|أسنان|مراكز طبية/i.test(bCat);
+  if (isMedReq && isMedBiz) return true;
+
+  // Gym, Sports & Fitness cluster
+  const isGymReq = /رياضة|لياقة|جيم|نوادي|نادي|حديد|فتنس|مسبح|كمال اجسام|بناء اجسام/i.test(rCat);
+  const isGymBiz = /رياضة|لياقة|جيم|نوادي|نادي|حديد|فتنس|مسبح|أندية|اندية/i.test(bCat);
+  if (isGymReq && isGymBiz) return true;
+
+  // Automotive & Maintenance cluster
+  const isAutoReq = /سيارات|صيانة|مركبات|ميكانيك|كراج|هايبرد|غسيل|بناشر|زيوت/i.test(rCat);
+  const isAutoBiz = /سيارات|صيانة|مركبات|ميكانيك|كراج|هايبرد|خدمات وصيانة/i.test(bCat);
+  if (isAutoReq && isAutoBiz) return true;
+
+  // Beauty, Salons & Spas cluster
+  const isBeautyReq = /صالون|تجميل|سبا|حلاق|حلاقة|ميك اب|مكياج|عناية/i.test(rCat);
+  const isBeautyBiz = /صالون|تجميل|سبا|حلاق|حلاقة|مراكز تجميل/i.test(bCat);
+  if (isBeautyReq && isBeautyBiz) return true;
+
+  // Education & Tutoring cluster
+  const isEduReq = /معلم|معلمة|مدرس|استاذ|أستاذ|دروس خصوصية|تعليم|مكتبة|خدمات طلابية|قرطاسية/i.test(rCat);
+  const isEduBiz = /معلم|معلمة|مدرس|استاذ|أستاذ|دروس خصوصية|تعليم|مكتبة|خدمات طلابية|قرطاسية/i.test(bCat);
+  if (isEduReq && isEduBiz) return true;
+
+  // Sweets & Bakeries
+  const isSweetReq = /حلويات|مخابز|كيك|معجنات|افران|أفران/i.test(rCat);
+  const isSweetBiz = /حلويات|مخابز|كيك|معجنات|افران|أفران/i.test(bCat);
+  if (isSweetReq && isSweetBiz) return true;
+
+  // Fashion & Clothing
+  const isClothReq = /ازياء|أزياء|ملابس|أواعي|اواعي|البسة|ألبسة|موضة|بوتيك|احذية|أحذية|فستان|بدلة/i.test(rCat);
+  const isClothBiz = /ازياء|أزياء|ملابس|أواعي|اواعي|البسة|ألبسة|موضة|بوتيك|احذية|أحذية/i.test(bCat);
+  if (isClothReq && isClothBiz) return true;
+
+  // Supermarket & Groceries
+  const isSuperReq = /سوبرماركت|مواد غذائية|بقالة|هايبرماركت/i.test(rCat);
+  const isSuperBiz = /سوبرماركت|مواد غذائية|بقالة|هايبرماركت/i.test(bCat);
+  if (isSuperReq && isSuperBiz) return true;
+
+  return false;
+}
 
 /**
  * Structured query parameters extracted from natural language input.
@@ -172,8 +232,20 @@ export function parseNaturalLanguageQuery(rawQuery: string): FilterParameters {
   let domain: FilterDomain = 'all';
 
   // Informational & Platform Policies
+  const isHungerQuery = /(جوعان|جوعانه|جوعانة|جعت|ميت جوع|ميتة جوع|شو اكل|شو آكل|شو ناكل|بدي اكل|بدي آكل|نفسي باكلة|نفسي بأكلة|عبالي اكل|عبالي آكل|شو اتعشى|شو اتغدى|شو افطر)/i.test(text);
+  const hasSpecificFoodItem = /(شاورما|برجر|برغر|بيتزا|مشاوي|فلافل|حمص|كنافة|معجنات|سوشي|منسف|سمك|دجاج|كباب|بروستد|كريب|وافل)/i.test(text);
+
+  const isGeneralJobInquiry = /(بدي شغل|بدور على شغل|ابحث عن شغل|بدي وظيفه|بدي وظيفة|ابحث عن عمل|بدور على عمل|في شغل|بدي اشتغل|شاغر وظيفي|شواغر وظيفية|فرص عمل)/i.test(text);
+  const hasSpecificJobRole = /(كاشير|محاسب|محاسبة|باريستا|شيف|طباخ|سائق|دليفري|مبيعات|تسويق|مهندس|مهندسة|صيدلي|صيدلانية|تمريض|ممرض|ممرضة|سكرتيرة|خياط|حلاق|كوافير|معلم|معلمة|صيانة|فني|برمجة|مصمم|طيران|محامي)/i.test(text);
+
   if (/^(مرحبا|مرحباً|أهلا|اهلا|سلام|السلام عليكم|صباح الخير|مساء الخير|هاي|hello|hi)$/i.test(text)) {
     intent = 'greeting';
+    domain = 'none';
+  } else if (isHungerQuery && !hasSpecificFoodItem) {
+    intent = 'hunger';
+    domain = 'none';
+  } else if (isGeneralJobInquiry && !hasSpecificJobRole) {
+    intent = 'job_inquiry';
     domain = 'none';
   } else if (/(شروط|احكام|الأحكام|الشروط والأحكام|terms|سياسة الاستخدام|اتفاقية)/i.test(text) && !/(وظيفة|سكن|شقة)/i.test(text)) {
     intent = 'terms';
@@ -208,7 +280,7 @@ export function parseNaturalLanguageQuery(rawQuery: string): FilterParameters {
   } else if (/(قارن|مقارنة|مين ارخص|مين أرخص|مين افضل|مين أحسن|اقوى عروض|أقوى عروض|مقارنة اسعار)/i.test(text)) {
     intent = 'compare';
     domain = 'offer';
-  } else if (/(وظيفة|وظائف|شواغر|شاغر|توظيف|بدي اشتغل|أدور على شغل|ابحث عن شغل|فرص عمل|فرصة عمل|مطلوب موظف|باريستا|محاسب|كاشير|صيدلي|صيدلانية|سائق دليفري|مندوب مبيعات|سكرتيرة|ممرض)/i.test(text)) {
+  } else if (hasSpecificJobRole || /(وظيفة|وظائف|شواغر|شاغر|توظيف|بدي اشتغل|أدور على شغل|ابحث عن شغل|فرص عمل|فرصة عمل|مطلوب موظف)/i.test(text)) {
     intent = 'job';
     domain = 'job';
   } else if (/(شقة|شقق|سكن|سكنات|استوديو|أستوديو|عقار|ايجار|إيجار|غرفة طلاب|غرفة طالبات|مفروش)/i.test(text)) {
@@ -235,9 +307,9 @@ export function parseNaturalLanguageQuery(rawQuery: string): FilterParameters {
   let isOpen: boolean | undefined;
   let isClosed: boolean | undefined;
 
-  if (intent === 'open_stores' || /(مفتوح الآن|مفتوح هسا|مفتوح هسه|فاتح الآن|فاتح هسا|فاتح هسه|فاتحين|شغال الآن|24 ساعة|شغال هسا|شغال هسه|مفتوحين|فاتح)/i.test(text)) {
+  if (intent === 'open_stores' || /(مفتوح الآن|مفتوح هسا|مفتوح هسه|فاتح الآن|فاتح هسا|فاتح هسه|فاتحين|شغال الآن|24 ساعة|شغال هسا|شغال هسه|مفتوحين|فاتحة|فاتح|مفتوحة|مفتوح|شغال)/i.test(text)) {
     isOpen = true;
-  } else if (intent === 'closed_stores' || /(مغلق الآن|مغلق هسا|مسكر الآن|مسكر هسا|مسكرين|مغلقين|مسكر|مغلق)/i.test(text)) {
+  } else if (intent === 'closed_stores' || /(مغلق الآن|مغلق هسا|مسكر الآن|مسكر هسا|مسكرين|مغلقين|مسكرة|مسكر|مغلقة|مغلق)/i.test(text)) {
     isClosed = true;
   }
 
@@ -245,7 +317,7 @@ export function parseNaturalLanguageQuery(rawQuery: string): FilterParameters {
   let minRating: number | undefined;
   let isHighRating = false;
 
-  if (/(أعلى تقييم|اعلى تقييم|أفضل تقييم|افضل تقييم|توب|ممتاز|5 نجوم|خمس نجوم|أحسن تقييم|احسن تقييم|الأفضل|الافضل|أحسن شي|احسن اشي)/i.test(text)) {
+  if (/(أعلى تقييم|اعلى تقييم|أفضل تقييم|افضل تقييم|توب|ممتاز|5 نجوم|خمس نجوم|أحسن تقييم|احسن تقييم|الأفضل|الافضل|أحسن شي|احسن اشي|شاطر|شاطرة|شاطرين|كويس|كويسة|محترف|خبرة)/i.test(text)) {
     isHighRating = true;
     minRating = 4.5;
   }
@@ -260,7 +332,7 @@ export function parseNaturalLanguageQuery(rawQuery: string): FilterParameters {
     }
   }
 
-  // 4. Category Classification
+  // 4. Category & Specialty Classification
   let category: string | undefined;
   let subCategory: string | undefined;
 
@@ -276,11 +348,18 @@ export function parseNaturalLanguageQuery(rawQuery: string): FilterParameters {
     category = 'سكنات وشقق';
   } else if (/(وظيفة|وظائف|شواغر|شاغر|توظيف|باريستا|محاسب|كاشير|صيدلي|مندوب)/i.test(text)) {
     category = 'شواغر وظيفية';
-  } else if (/(صيدلية|صيدليات|دواء|علاج|مركز طبي|دكتور|طبيب|عيادة|مستشفى|مختبر|أسنان)/i.test(text)) {
+  } else if (/(صيدلية|صيدليات|دواء|علاج|مركز طبي|دكتور|طبيب|طبيبة|عيادة|عيادات|مستشفى|مختبر|أسنان|اسنان|باطني|باطنية|قلب|قلبية|شرايين|سكري|جهاز هضمي|جلدية|عظام|عيون|اطفال|أطفال|علاج طبيعي)/i.test(text)) {
     category = 'صيدليات ومراكز طبية';
+    if (/قلب|قلبية|شرايين/i.test(text)) subCategory = 'أمراض القلب والشرايين';
+    else if (/باطني|باطنية/i.test(text)) subCategory = 'الأمراض الباطنية والتخصصات الدقيقة';
+    else if (/أسنان|اسنان/i.test(text)) subCategory = 'طب وجراحة الأسنان';
+    else if (/جلدية|ليزر/i.test(text)) subCategory = 'الجلدية والتجميل والليزر';
+    else if (/عظام|مفاصل/i.test(text)) subCategory = 'جراحة العظام والمفاصل';
+    else if (/أطفال|اطفال/i.test(text)) subCategory = 'طب الأطفال';
+    else if (/عيون|بصريات/i.test(text)) subCategory = 'طب وجراحة العيون';
   } else if (/(حلويات|كنافة|وربات|بقلاوة|كيك|مخبز|معجنات|قشطة)/i.test(text)) {
     category = 'حلويات ومخابز';
-  } else if (/(ملابس|أزياء|بوتيك|أحذية|حقائب|فستان|بدلة|رجالي|ستاتي|ولادي)/i.test(text)) {
+  } else if (/(ملابس|أزياء|ازياء|أواعي|اواعي|ألبسة|البسة|موضة|بوتيك|أحذية|حقائب|فستان|بدلة|رجالي|ستاتي|ولادي)/i.test(text)) {
     category = 'أزياء وملابس';
   } else if (/(سوبرماركت|هايبرماركت|بقالة|مواد تموينية|دكان)/i.test(text)) {
     category = 'سوبرماركت ومواد غذائية';
@@ -292,10 +371,18 @@ export function parseNaturalLanguageQuery(rawQuery: string): FilterParameters {
     category = '🏠 مشاريع منزلية وأونلاين';
   } else if (/(مكتبة|قرطاسية|طباعة|أبحاث|تجليد|كتب)/i.test(text)) {
     category = 'قرطاسية ومكتبات';
-  } else if (/(جيم|رياضة|لياقة|حديد|مسبح|نادي)/i.test(text)) {
+  } else if (/(جيم|رياضة|لياقة|حديد|مسبح|نادي|نوادي|كمال اجسام|بناء اجسام|فتنس)/i.test(text)) {
     category = 'أندية ولياقة بدنية';
+    subCategory = 'نوادي ولياقة بدنية';
   } else if (/(صيانة|ميكانيك|كهرباء|سيارات|بناشر|غيار زيت|هايبرد)/i.test(text)) {
     category = 'خدمات وصيانة سيارات';
+  }
+
+  // Auto-elevate intent if category or domain specifics are recognized
+  if (intent === 'general' && category) {
+    if (category === 'سكنات وشقق') { intent = 'housing'; domain = 'housing'; }
+    else if (category === 'شواغر وظيفية') { intent = 'job'; domain = 'job'; }
+    else { intent = 'business'; domain = 'business'; }
   }
 
   // 5. Price & Budget Boundaries
@@ -372,12 +459,15 @@ export function parseNaturalLanguageQuery(rawQuery: string): FilterParameters {
   let clean = text;
   const prefixes = [
     /^(مرحبا|مرحباً|أهلا|اهلا|سلام|السلام عليكم|صباح الخير|مساء الخير|هاي|لو سمحت|عفواً|عفوا|ممكن|بالله|بدي اسألك|بدي اسالك)\s*/i,
+    /^(انا|أنا)\s+(بدي|اريد|أريد|بدور|أدور|ابحث|أبحث|محتاج|لازم|في)?\s*/i,
     /^(ابحث|ابحثلي|ابحث لي|بحث|فتشلي|دورلي|دور|شوفلي|شوف لي)\s+(عن|على|بالدليل عن|في الموقع عن)?\s*/i,
     /^(اريد|اريد البحث عن|بدي|بدي اعرف|بدي الاقي|بدي اشوف|بدي ابحث عن|بدي اشتري|بدي اطلب)\s*/i,
-    /^(وظيفة كـ|وظيفة|شغل كـ|شغل|شاغر|شواغر)\s+/i,
+    /^(بدي عروض|بدي عرض|اريد عروض|اريد عرض|في عروض|شو في عروض|اعطيني عروض|بدي اشوف عروض|ابحث عن عروض|دور على عروض|شوفلي عروض)\s+(على|في|لـ|عن|بـ)?\s*/i,
+    /^(عروض|عرض|خصومات|خصم|تخفيضات|تنزيلات)\s+(على|في|لـ|عن|بـ)?\s*/i,
+    /^(وظيفة كـ|وظيفة|وظائف|شغل كـ|شغل|شاغر|شواغر|فرصة عمل)\s+(في|بـ|كـ)?\s*/i,
     /^(سكن|شقة|استوديو|غرفة)\s+(في|بـ|عند|قريب من)?\s*/i,
     /^(وين الاقي|وين بلاقي|وين القى|وين فيه|وين موجود|وين مكان|وين موقع|هل يوجد|شو في|ايش في)\s*/i,
-    /^(محل اسمه|مكان اسمه|متجر اسمه|مطعم اسمه|كافيه اسمه|دكان اسمه|محل|مطعم|كافيه|دكان|متجر)\s+/i,
+    /^(محل اسمه|مكان اسمه|متجر اسمه|مطعم اسمه|كافيه اسمه|دكان اسمه|محل|مطعم|كافيه|دكان|متجر|دكتور|طبيب|طبيبة|عيادة|عيادات)\s+/i,
     /^(قارن لي بين|قارن بين|مين عنده|مين ارخص|مين احسن)\s+/i,
   ];
 
@@ -389,12 +479,25 @@ export function parseNaturalLanguageQuery(rawQuery: string): FilterParameters {
     }
   }
 
-  clean = clean.replace(/(مفتوح الآن|مفتوح هسا|فاتح الآن|فاتح هسا|مسكر الآن|مسكر هسا|24 ساعة)/gi, '');
-  clean = clean.replace(/(أعلى تقييم|اعلى تقييم|أفضل تقييم|أرخص|ارخص|اقتصادي|ممتاز|5 نجوم)/gi, '');
+  // Strip location if detected
+  if (location) {
+    clean = clean.replace(new RegExp(`(?:في|بـ|ب|عند|قرب|بجانب|حول)?\\s*${location}`, 'gi'), '').trim();
+  }
+
+  clean = clean.replace(/(مفتوح الآن|مفتوح هسا|فاتح الآن|فاتح هسا|مسكر الآن|مسكر هسا|24 ساعة|مفتوحين|فاتحين|مفتوحة|مفتوح|فاتحة|فاتح|شغال الآن|شغال|مسكرة|مسكر|مغلقة|مغلق)/gi, '');
+  clean = clean.replace(/(أعلى تقييم|اعلى تقييم|أفضل تقييم|افضل تقييم|أرخص|ارخص|اقتصادي|ممتاز|5 نجوم|خمس نجوم|شاطر|شاطرة|شاطرين|كويس|كويسة|محترف|خبرة)/gi, '');
   clean = clean.replace(/[؟?!\.,;:_]+$/g, '').trim();
 
-  if (!clean || clean.length < 2) {
-    clean = text.replace(/[؟?!\.,;]+/g, '').trim();
+  if (intent === 'offer' && (/^(عرض|عروض|خصومات|خصم|تخفيضات|تنزيلات|عروض اليوم|اقوى العروض|أقوى العروض|اليوم)$/i.test(clean.trim()) || clean.trim().length === 0)) {
+    clean = '';
+  } else if (!clean || clean.length < 2) {
+    if (subCategory) {
+      clean = subCategory;
+    } else if (category && category !== 'عام') {
+      clean = category;
+    } else {
+      clean = text.replace(/[؟?!\.,;]+/g, '').trim();
+    }
   }
 
   const normClean = normalizeArabic(clean);
@@ -413,13 +516,20 @@ export function parseNaturalLanguageQuery(rawQuery: string): FilterParameters {
     'contact',
     'prayer',
     'transport',
-    'tourism'
+    'tourism',
+    'hunger',
+    'job_inquiry'
   ].includes(intent);
 
   const hasExplicitSearchKeyword = /(ابحث|دور|فتش|شوفلي|شوف لي|وين الاقي|وين بلاقي|وين فيه|محل اسمه|مطعم اسمه|كافيه اسمه|بدي اشتري|بدي اطلب|بدي احجز)/i.test(text);
 
   const isSearchOriented = !isInformational && (
     hasExplicitSearchKeyword ||
+    Boolean(location) ||
+    Boolean(category) ||
+    Boolean(isOpen) ||
+    Boolean(isHighRating) ||
+    Boolean(minRating) ||
     ['job', 'housing', 'product', 'offer', 'business', 'compare', 'open_stores', 'closed_stores', 'search', 'recommendation'].includes(intent)
   );
 
@@ -531,9 +641,7 @@ export class FilterEngine {
 
     // 3. Category Match
     if (params.category) {
-      const bCat = normalizeArabic(business.category || '');
-      const pCat = normalizeArabic(params.category);
-      if (bCat.includes(pCat) || pCat.includes(bCat)) {
+      if (isCategoryMatch(business.category, params.category)) {
         matchedCriteria.push(`فئة: ${business.category}`);
         score += 30;
       } else if (params.domain === 'business') {

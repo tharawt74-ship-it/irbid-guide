@@ -38,6 +38,7 @@ interface MedicalFacilitiesTabProps {
   onUpdateBusiness: (updatedBusiness: Business) => void;
   onDeleteBusiness: (businessId: string) => Promise<void>;
   onOpenMarketingModal?: (serviceType: string, serviceName: string, successMessage: string, businessId?: string) => void;
+  onUpgradeMessaging?: (plan: '1_month' | '3_months' | '6_months' | '1_year', businessId?: string) => void;
 }
 
 export type MedicalDashboardTab = 
@@ -57,7 +58,8 @@ export function MedicalFacilitiesTab({
   onRefresh,
   onUpdateBusiness,
   onDeleteBusiness,
-  onOpenMarketingModal
+  onOpenMarketingModal,
+  onUpgradeMessaging
 }: MedicalFacilitiesTabProps) {
   const { currentUser, isAdmin } = useAuth();
 
@@ -589,6 +591,7 @@ export function MedicalFacilitiesTab({
               <MedicalMarketingTab
                 business={selectedFacility}
                 onOpenMarketingModal={onOpenMarketingModal}
+                onUpgradeMessaging={onUpgradeMessaging}
               />
             )}
           </div>

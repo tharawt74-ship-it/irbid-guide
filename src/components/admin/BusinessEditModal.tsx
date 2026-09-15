@@ -20,6 +20,7 @@ import {
   CalendarDays
 } from 'lucide-react';
 import { Business, WorkingHours, SocialLinks } from '../../types';
+import { getJordanNow, getJordanDateISO } from '../../lib/jordanTime';
 import { BUSINESS_CATEGORIES, IRBID_REGIONS_CATEGORIZED, MainCategory } from '../../lib/categories';
 import { SearchableSelect } from '../ui/SearchableSelect';
 import { WorkingHoursEditor } from '../ui/WorkingHoursEditor';
@@ -91,18 +92,18 @@ export function BusinessEditModal({
       if (business.vipSubscriptionExpiresAt || business.vipSubscriptionStartsAt) {
         setScheduleDuration('custom_dates');
         if (business.vipSubscriptionStartsAt) {
-          setVipStartDate(new Date(business.vipSubscriptionStartsAt).toISOString().slice(0, 10));
+          setVipStartDate(getJordanDateISO(business.vipSubscriptionStartsAt));
         } else {
-          setVipStartDate(new Date().toISOString().slice(0, 10));
+          setVipStartDate(getJordanDateISO(getJordanNow()));
         }
         if (business.vipSubscriptionExpiresAt) {
-          setVipEndDate(new Date(business.vipSubscriptionExpiresAt).toISOString().slice(0, 10));
+          setVipEndDate(getJordanDateISO(business.vipSubscriptionExpiresAt));
         } else {
           setVipEndDate('');
         }
       } else {
         setScheduleDuration('permanent');
-        setVipStartDate(new Date().toISOString().slice(0, 10));
+        setVipStartDate(getJordanDateISO(getJordanNow()));
         setVipEndDate('');
       }
 
@@ -463,9 +464,9 @@ export function BusinessEditModal({
                     type="button"
                     onClick={() => {
                       setScheduleDuration('custom_duration');
-                      const future = new Date();
+                      const future = getJordanNow();
                       future.setDate(future.getDate() + 30);
-                      setVipEndDate(future.toISOString().slice(0, 10));
+                      setVipEndDate(getJordanDateISO(future));
                     }}
                     className={`py-1.5 px-2.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
                       scheduleDuration === 'custom_duration'
@@ -503,9 +504,9 @@ export function BusinessEditModal({
                         type="button"
                         onClick={() => {
                           setScheduleDays(p.days);
-                          const future = new Date();
+                          const future = getJordanNow();
                           future.setDate(future.getDate() + p.days);
-                          setVipEndDate(future.toISOString().slice(0, 10));
+                          setVipEndDate(getJordanDateISO(future));
                         }}
                         className={`text-[11px] font-bold px-2.5 py-1 rounded-md border ${
                           scheduleDays === p.days

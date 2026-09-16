@@ -8,20 +8,91 @@ export type InteractionType = 'view' | 'whatsapp' | 'call' | 'direction' | 'menu
 const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
 export type DayKey = typeof DAY_KEYS[number];
 
-export async function trackBusinessInteraction(businessId: string, type: InteractionType): Promise<void> {
-  if (!businessId) return;
+export interface TrackingOptions {
+  isOwner?: boolean;
+  currentUserId?: string;
+  ownerId?: string;
+  isAdmin?: boolean;
+}
 
-  // Local storage quick caching to prevent spamming duplicates in the same session
-  const sessionKey = `biz_interact_${businessId}_${type}`;
-  const now = Date.now();
-  const lastTime = sessionStorage.getItem(sessionKey);
-  if (lastTime && (now - parseInt(lastTime, 10) < 45000)) {
-    // Only track once per 45 seconds per session for views/menus
-    if (type === 'view' || type === 'menu') return;
+const TTL_VIEW_MS = 6 * 60 * 60 * 1000; // 6 hours deduplication for page views
+const TTL_MENU_MS = 2 * 60 * 60 * 1000; // 2 hours for menu views
+const TTL_CLICK_MS = 60 * 60 * 1000;    // 1 hour for contact/direction/share clicks
+
+const memoryCache = new Map<string, number>();
+const inFlightRequests = new Set<string>();
+
+function safeGet(key: string): number | null {
+  try {
+    const val = localStorage.getItem(key);
+    if (val) {
+      const num = parseInt(val, 10);
+      if (!isNaN(num)) return num;
+    }
+  } catch {
+    // fallback
   }
-  sessionStorage.setItem(sessionKey, now.toString());
+  return memoryCache.get(key) ?? null;
+}
 
-  if (!db) return;
+function safeSet(key: string, timestamp: number): void {
+  try {
+    localStorage.setItem(key, timestamp.toString());
+  } catch {
+    // fallback
+  }
+  memoryCache.set(key, timestamp);
+}
+
+export async function trackBusinessInteraction(
+  businessId: string, 
+  type: InteractionType,
+  options?: TrackingOptions
+): Promise<void> {
+  if (!businessId || businessId.startsWith('demo-')) return;
+
+  // Exclude store owner and administrators from inflating view metrics
+  const isOwnerOrAdmin = Boolean(
+    options?.isOwner ||
+    options?.isAdmin ||
+    (options?.currentUserId && options?.ownerId && options?.currentUserId === options?.ownerId)
+  );
+
+  if (isOwnerOrAdmin && (type === 'view' || type === 'menu')) {
+    return;
+  }
+
+  // Determine TTL for the interaction type
+  let ttl = TTL_CLICK_MS;
+  if (type === 'view') {
+    ttl = TTL_VIEW_MS;
+  } else if (type === 'menu') {
+    ttl = TTL_MENU_MS;
+  }
+
+  // Check device-level deduplication
+  const now = Date.now();
+  const storageKey = `shofi_trk_${businessId}_${type}`;
+  const lastRecorded = safeGet(storageKey);
+
+  if (lastRecorded && (now - lastRecorded < ttl)) {
+    return;
+  }
+
+  // In-flight guard to avoid concurrent duplicate requests
+  const flightKey = `${businessId}_${type}`;
+  if (inFlightRequests.has(flightKey)) {
+    return;
+  }
+  inFlightRequests.add(flightKey);
+
+  // Mark timestamp immediately
+  safeSet(storageKey, now);
+
+  if (!db) {
+    inFlightRequests.delete(flightKey);
+    return;
+  }
 
   try {
     const docRef = doc(db, 'businesses', businessId);
@@ -34,6 +105,11 @@ export async function trackBusinessInteraction(businessId: string, type: Interac
       share: 'analytics.shareClicks',
     };
 
+    const targetField = fieldMap[type];
+    if (!targetField) {
+      return;
+    }
+
     // Calculate current day and ISO date key (YYYY-MM-DD) in Jordan timezone
     const today = getJordanNow();
     const dayIndex = today.getDay(); // 0 = sun, 1 = mon, ..., 6 = sat
@@ -41,7 +117,7 @@ export async function trackBusinessInteraction(businessId: string, type: Interac
     const dateKey = getJordanDateISO(today);
 
     const updateObj: Record<string, any> = {
-      [fieldMap[type]]: increment(1),
+      [targetField]: increment(1),
       'analytics.lastUpdated': now,
       // Track real day of week counts
       [`analytics.dayOfWeekStats.${dayKey}.${type === 'view' ? 'views' : 'interactions'}`]: increment(1),
@@ -60,6 +136,8 @@ export async function trackBusinessInteraction(businessId: string, type: Interac
     await updateDoc(docRef, updateObj);
   } catch (err) {
     console.warn("Analytics update warning:", err);
+  } finally {
+    inFlightRequests.delete(flightKey);
   }
 }
 

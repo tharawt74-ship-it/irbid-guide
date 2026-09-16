@@ -989,8 +989,19 @@ export function Profile() {
 
       const queryParams = new URLSearchParams(window.location.search);
       const requestedTab = queryParams.get('tab');
+      const targetBusinessId = queryParams.get('businessId');
 
-      if (requestedTab === 'medical') {
+      const targetBiz = targetBusinessId ? userBusinesses.find(b => b.id === targetBusinessId) : null;
+
+      if (targetBiz) {
+        setSelectedBusiness(targetBiz);
+        const isMed = isMedicalBusiness(targetBiz) || !!targetBiz.medicalProfile || targetBiz.requestType === 'medical_facility_registration';
+        if (isMed) {
+          setProfileMainTab('medical');
+        } else {
+          setProfileMainTab('merchant');
+        }
+      } else if (requestedTab === 'medical') {
         setProfileMainTab('medical');
         if (medList.length > 0) setSelectedBusiness(medList[0]);
       } else if (requestedTab === 'housing') {
@@ -1022,7 +1033,7 @@ export function Profile() {
 
   useEffect(() => {
     fetchUserBusinesses();
-  }, [currentUser, isStaff]);
+  }, [currentUser, isStaff, location.search]);
 
   useEffect(() => {
     if (profileMainTab === 'requests') {

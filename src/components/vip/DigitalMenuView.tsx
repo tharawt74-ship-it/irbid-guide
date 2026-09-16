@@ -203,14 +203,14 @@ export function DigitalMenuView({
   };
 
   const handleOrderCartWhatsapp = () => {
-    trackBusinessInteraction(business.id, 'whatsapp');
-    trackBusinessInteraction(business.id, 'menu');
+    trackBusinessInteraction(business.id, 'whatsapp', { isOwner });
+    trackBusinessInteraction(business.id, 'menu', { isOwner });
     sendOrderViaWhatsapp();
   };
 
   const handleSingleOrderWhatsapp = (item: MenuItem, version?: MenuItemVersion, qty: number = 1) => {
-    trackBusinessInteraction(business.id, 'whatsapp');
-    trackBusinessInteraction(business.id, 'menu');
+    trackBusinessInteraction(business.id, 'whatsapp', { isOwner });
+    trackBusinessInteraction(business.id, 'menu', { isOwner });
 
     let phone = business.phone ? business.phone.replace(/[^0-9]/g, '') : '';
     if (phone.startsWith('07')) {

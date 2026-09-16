@@ -440,8 +440,13 @@ export function BusinessDetail() {
           setCachedBusinessDetail(id, fullBiz);
           setLoading(false);
           
-          // Track view interaction in database
-          trackBusinessInteraction(actualId, 'view');
+          // Track view interaction in database (deduplicated per device; excluded for owner and admins)
+          trackBusinessInteraction(actualId, 'view', {
+            isOwner: Boolean(currentUser?.uid && bizData.userId && currentUser.uid === bizData.userId),
+            currentUserId: currentUser?.uid,
+            ownerId: bizData.userId,
+            isAdmin: Boolean(isAdmin)
+          });
           
           // Fetch reviews, offers, and jobs in parallel for maximum speed
           const [reviewsSnap, offersSnap1, offersSnap2, jobsSnap1, jobsSnap2] = await Promise.all([
@@ -832,7 +837,12 @@ export function BusinessDetail() {
 
   const handleShare = async () => {
     if (business?.id) {
-      trackBusinessInteraction(business.id, 'share');
+      trackBusinessInteraction(business.id, 'share', {
+        isOwner,
+        currentUserId: currentUser?.uid,
+        ownerId: business.userId,
+        isAdmin: Boolean(isAdmin)
+      });
     }
     if (navigator.share) {
       try {
@@ -1652,47 +1662,13 @@ export function BusinessDetail() {
 
         <div className="flex flex-wrap items-center gap-2">
           {isOwner && (
-            <>
-              {vipInfo.isVip ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setIsAnalyticsModalOpen(true)}
-                    className="inline-flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white transition-colors text-xs font-black px-3.5 py-2 rounded-xl shadow-xs cursor-pointer"
-                  >
-                    <Crown className="h-4 w-4 fill-white" />
-                    <span>إحصائيات VIP</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setIsMenuManagerOpen(true)}
-                    className="inline-flex items-center gap-1.5 bg-[#1a4d2e] text-white hover:bg-[#133b22] transition-colors text-xs font-black px-3.5 py-2 rounded-xl shadow-xs cursor-pointer"
-                  >
-                    {isMedical ? <Activity className="h-4 w-4" /> : <UtensilsCrossed className="h-4 w-4" />}
-                    <span>{isMedical ? 'الخدمات والإجراءات' : 'المنيو والكتالوج'}</span>
-                  </button>
-                </>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setIsUpgradeModalOpen(true)}
-                  className="inline-flex items-center gap-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white transition-colors text-xs font-black px-3.5 py-2 rounded-xl shadow-xs cursor-pointer"
-                >
-                  <Crown className="h-4 w-4 fill-white" />
-                  <span>ترقية هذا المحل لـ VIP</span>
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={handleOpenEditModal}
-                className="inline-flex items-center gap-1.5 bg-stone-100 text-stone-700 hover:bg-stone-200 transition-colors text-xs font-bold px-3 py-2 rounded-xl shadow-xs cursor-pointer"
-              >
-                <Settings className="h-3.5 w-3.5" />
-                <span>الخصوصية والتعديل</span>
-              </button>
-            </>
+            <Link
+              to={`/profile?tab=${isMedical ? 'medical' : 'merchant'}&businessId=${business.id}`}
+              className="inline-flex items-center gap-1.5 bg-[#1a4d2e] text-white hover:bg-[#133b22] transition-colors text-xs font-black px-3.5 py-2 rounded-xl shadow-xs"
+            >
+              <Settings className="h-4 w-4 text-[#ff9f1c]" />
+              <span>الإنتقال للوحة التحكم</span>
+            </Link>
           )}
 
           <button 
@@ -3728,7 +3704,7 @@ export function BusinessDetail() {
                       href={getWhatsAppUrl(business.phone, formatBusinessWhatsAppMessage(business.name))}
                       target="_blank"
                       rel="noreferrer"
-                      onClick={() => { if (business?.id) trackBusinessInteraction(business.id, 'whatsapp'); }}
+                      onClick={() => { if (business?.id) trackBusinessInteraction(business.id, 'whatsapp', { isOwner, currentUserId: currentUser?.uid, ownerId: business.userId, isAdmin: Boolean(isAdmin) }); }}
                       className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-3 px-4 rounded-xl font-bold text-sm transition-colors shadow-xs cursor-pointer"
                     >
                       <WhatsApp3DIcon className="h-5 w-5 text-white" />
@@ -3737,7 +3713,7 @@ export function BusinessDetail() {
 
                     <a
                       href={`tel:${business.phone}`}
-                      onClick={() => { if (business?.id) trackBusinessInteraction(business.id, 'call'); }}
+                      onClick={() => { if (business?.id) trackBusinessInteraction(business.id, 'call', { isOwner, currentUserId: currentUser?.uid, ownerId: business.userId, isAdmin: Boolean(isAdmin) }); }}
                       className="w-full flex items-center justify-center gap-2 bg-[#1a4d2e] hover:bg-[#133c23] text-white py-3 px-4 rounded-xl font-bold text-sm transition-colors shadow-xs"
                     >
                       <Phone3DIcon className="h-5 w-5 text-white" />
@@ -3844,7 +3820,7 @@ export function BusinessDetail() {
                         href={googleMapsUrl}
                         target="_blank"
                         rel="noreferrer"
-                        onClick={() => { if (business?.id) trackBusinessInteraction(business.id, 'direction'); }}
+                        onClick={() => { if (business?.id) trackBusinessInteraction(business.id, 'direction', { isOwner, currentUserId: currentUser?.uid, ownerId: business.userId, isAdmin: Boolean(isAdmin) }); }}
                         className="text-[11px] font-black text-blue-600 hover:text-blue-700 flex items-center gap-0.5"
                       >
                         <span>تكبير الخريطة</span>
@@ -3860,7 +3836,7 @@ export function BusinessDetail() {
                     href={googleMapsUrl}
                     target="_blank"
                     rel="noreferrer"
-                    onClick={() => { if (business?.id) trackBusinessInteraction(business.id, 'direction'); }}
+                    onClick={() => { if (business?.id) trackBusinessInteraction(business.id, 'direction', { isOwner, currentUserId: currentUser?.uid, ownerId: business.userId, isAdmin: Boolean(isAdmin) }); }}
                     className="w-full flex items-center justify-center gap-2 bg-stone-900 hover:bg-black text-white py-3 px-4 rounded-xl font-bold text-xs sm:text-sm transition-colors shadow-2xs"
                   >
                     <MapPin className="h-4 w-4 text-[#ff9f1c]" />
@@ -5050,7 +5026,7 @@ export function BusinessDetail() {
               <>
                 <a
                   href={`tel:${business.phone}`}
-                  onClick={() => { if (business?.id) trackBusinessInteraction(business.id, 'call'); }}
+                  onClick={() => { if (business?.id) trackBusinessInteraction(business.id, 'call', { isOwner, currentUserId: currentUser?.uid, ownerId: business.userId, isAdmin: Boolean(isAdmin) }); }}
                   className="flex-1 flex flex-col items-center justify-center gap-1 bg-[#1a4d2e] text-white py-2 px-1 rounded-xl font-bold text-xs shadow-xs active:scale-95 transition-transform min-w-0"
                 >
                   <Phone3DIcon className="h-4.5 w-4.5 text-white" />
@@ -5061,7 +5037,7 @@ export function BusinessDetail() {
                   href={getWhatsAppUrl(business.phone, formatBusinessWhatsAppMessage(business.name))}
                   target="_blank"
                   rel="noreferrer"
-                  onClick={() => { if (business?.id) trackBusinessInteraction(business.id, 'whatsapp'); }}
+                  onClick={() => { if (business?.id) trackBusinessInteraction(business.id, 'whatsapp', { isOwner, currentUserId: currentUser?.uid, ownerId: business.userId, isAdmin: Boolean(isAdmin) }); }}
                   className="flex-1 flex flex-col items-center justify-center gap-1 bg-emerald-600 text-white py-2 px-1 rounded-xl font-bold text-xs shadow-xs active:scale-95 transition-transform min-w-0"
                 >
                   <WhatsApp3DIcon className="h-4.5 w-4.5 text-white" />
@@ -5074,7 +5050,7 @@ export function BusinessDetail() {
               href={googleMapsUrl}
               target="_blank"
               rel="noreferrer"
-              onClick={() => { if (business?.id) trackBusinessInteraction(business.id, 'direction'); }}
+              onClick={() => { if (business?.id) trackBusinessInteraction(business.id, 'direction', { isOwner, currentUserId: currentUser?.uid, ownerId: business.userId, isAdmin: Boolean(isAdmin) }); }}
               className="flex-1 flex flex-col items-center justify-center gap-1 bg-stone-900 text-white py-2 px-1 rounded-2xl font-bold text-xs shadow-xs active:scale-95 transition-transform min-w-0"
             >
               <MapPin className="h-4.5 w-4.5 text-[#ff9f1c]" />

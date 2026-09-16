@@ -114,7 +114,7 @@ export function Layout() {
         if (auth?.currentUser) {
           await auth.currentUser.reload();
           await refreshUserData();
-          const isVerifiedNow = auth.currentUser.emailVerified || userProfile?.customEmailVerified;
+          const isVerifiedNow = auth.currentUser.emailVerified || userProfile?.customEmailVerified || userProfile?.emailVerified;
           if (isVerifiedNow) {
             clearInterval(interval);
             window.location.reload();
@@ -157,7 +157,7 @@ export function Layout() {
     try {
       await auth.currentUser.reload();
       await refreshUserData();
-      const isVerifiedNow = auth.currentUser.emailVerified || userProfile?.customEmailVerified;
+      const isVerifiedNow = auth.currentUser.emailVerified || userProfile?.customEmailVerified || userProfile?.emailVerified;
       if (isVerifiedNow) {
         setShowStatusSuccess(true);
         setTimeout(() => {

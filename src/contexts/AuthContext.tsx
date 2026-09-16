@@ -286,6 +286,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           merchantBusinessIds: userBizList.map(b => b.id),
           supervisorPermissions: perms,
           customEmailVerified: profileData?.customEmailVerified || false,
+          emailVerified: profileData?.emailVerified || false,
           readNotificationIds: profileData?.readNotificationIds || [],
           lastNotificationsReadAt: profileData?.lastNotificationsReadAt || 0,
           clearedNotificationsAt: profileData?.clearedNotificationsAt || 0,

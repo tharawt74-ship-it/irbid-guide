@@ -49,6 +49,7 @@ import { MedicalBusinessDetailView } from '../components/medical/MedicalBusiness
 import { MedicalAppointmentModal } from '../components/medical/MedicalAppointmentModal';
 import { MedicalInsurancesTab } from '../components/medical/MedicalInsurancesTab';
 import { MedicalStaffTab } from '../components/medical/MedicalStaffTab';
+import { isTodayWorkingDay } from '../lib/businessHoursHelper';
 
 function getLiveWorkingStatus(hours?: WorkingHours) {
   if (!hours || (!hours.isOpen24Hours && !hours.openTime && !hours.closeTime)) {
@@ -67,6 +68,18 @@ function getLiveWorkingStatus(hours?: WorkingHours) {
       countdownText: ""
     };
   }
+  
+  const isWorkingDay = isTodayWorkingDay(hours);
+
+  if (!isWorkingDay) {
+    return {
+      status: "مغلق اليوم 🔴",
+      subText: "يوم عطلة للمنشأة",
+      isOpen: false,
+      countdownText: "يفتح في يوم العمل القادم"
+    };
+  }
+
   if (hours.isOpen24Hours) {
     return {
       status: "مفتوح الآن 🟢",
@@ -79,8 +92,15 @@ function getLiveWorkingStatus(hours?: WorkingHours) {
   const openTime = hours.openTime || "09:00";
   const closeTime = hours.closeTime || "23:00";
 
-  const [openH, openM] = openTime.split(':').map(Number);
-  const [closeH, closeM] = closeTime.split(':').map(Number);
+  let [openH, openM] = openTime.split(':').map(Number);
+  let [closeH, closeM] = closeTime.split(':').map(Number);
+
+  // Auto-correct common mistake where Arab users select 12:00 (Noon) thinking it's 12 Midnight.
+  // If closing time is exactly 12:00 and open time is before 12, assume they meant midnight (24:00/00:00).
+  if (closeH === 12 && closeM === 0 && openH < 12) {
+    closeH = 23;
+    closeM = 59;
+  }
 
   const now = getJordanNow();
   const currentH = now.getHours();

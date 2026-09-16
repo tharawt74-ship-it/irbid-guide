@@ -113,8 +113,15 @@ export function getLiveWorkingStatus(workingHours?: WorkingHours): LiveStatus {
   const openTimeStr = (workingHours.isRamadanMode && workingHours.ramadanOpenTime) ? workingHours.ramadanOpenTime : (workingHours.openTime || '09:00');
   const closeTimeStr = (workingHours.isRamadanMode && workingHours.ramadanCloseTime) ? workingHours.ramadanCloseTime : (workingHours.closeTime || '23:00');
 
-  const [openH, openM] = openTimeStr.split(':').map(Number);
-  const [closeH, closeM] = closeTimeStr.split(':').map(Number);
+  let [openH, openM] = openTimeStr.split(':').map(Number);
+  let [closeH, closeM] = closeTimeStr.split(':').map(Number);
+
+  // Auto-correct common mistake where Arab users select 12:00 (Noon) thinking it's 12 Midnight.
+  // If closing time is exactly 12:00 and open time is before 12, assume they meant midnight (24:00/00:00).
+  if (closeH === 12 && closeM === 0 && openH < 12) {
+    closeH = 23;
+    closeM = 59;
+  }
 
   const now = getJordanNow();
   const currentMinutes = now.getHours() * 60 + now.getMinutes();

@@ -1106,14 +1106,14 @@ export function AdminDashboard() {
       // Push notification tailored to the specific welcome gift
       const notifMessage = gift.isFeatured
         ? `انضم ${request.name} رسمياً بالباقة الذهبية VIP وحصل على ميزة (المميز/صدارة البحث) ذات الإطار الذهبي وعلامة ممول مجاناً لمدة أسبوع!`
-        : `انضم ${request.name} رسمياً إلى دليل شو في بإربد وحصل على شهر تجربة مجانية للباقة الذهبية VIP!`;
+        : `انضم ${request.name} رسمياً إلى دليل شو في بإربد! أهلاً وسهلاً بهم.`;
 
       await addNotification({
         title: `تم توثيق منشأة جديدة: ${request.name} 🏬`,
         message: notifMessage,
         type: 'business',
         link: `/business/${targetDocId}`,
-        badge: gift.isFeatured ? 'صدارة وممول ⭐' : 'محل جديد VIP 🌟',
+        badge: gift.isFeatured ? 'صدارة وممول ⭐' : 'محل جديد 🌟',
         userId: 'all',
         businessId: targetDocId,
         businessName: request.name,
@@ -1122,7 +1122,7 @@ export function AdminDashboard() {
 
       const toastMessage = gift.isFeatured
         ? `تم قبول وتوثيق (${request.name}) بالباقة الذهبية مع ميزة (المميز/صدارة البحث) بالإطار الذهبي وعلامة ممول لمدة أسبوع!`
-        : `تم قبول وتوثيق (${request.name}) بالباقة الأساسية مع هدية اشتراك شهر مجاني تجريبي في الباقة الذهبية VIP!`;
+        : `تم قبول وتوثيق (${request.name}) بالباقة الأساسية بنجاح!`;
 
       showToast(toastMessage);
 
@@ -1130,7 +1130,7 @@ export function AdminDashboard() {
       recordAuditLog({
         action: 'VERIFY_BUSINESS',
         actionAr: 'توثيق وتسجيل محل جديد',
-        details: `تم قبول وتوثيق محل "${request.name}" وتفعيله في المنصة (${gift.isFeatured ? 'باقة ذهبية + أسبوع ممول' : 'باقة أساسية + شهر VIP مجاني'})`,
+        details: `تم قبول وتوثيق محل "${request.name}" وتفعيله في المنصة (${gift.isFeatured ? 'باقة ذهبية + أسبوع ممول' : 'باقة أساسية'})`,
         performedBy: currentUser?.email || userRole || 'المشرف الإداري',
         userRole: userRole,
         targetId: targetDocId,
@@ -1203,7 +1203,7 @@ export function AdminDashboard() {
 
       const notifMessage = gift.isFeatured
         ? `تمت إضافة ${newBiz.name} بالباقة الذهبية مع ميزة (المميز وصدارة البحث) والإطار الذهبي وعلامة ممول لمدة أسبوع!`
-        : `تم إضافة ${newBiz.name} في ${newBiz.address} مع شهر تجريبي مجاني في الباقة الذهبية VIP!`;
+        : `تم إضافة ${newBiz.name} في ${newBiz.address} بنجاح! أهلاً وسهلاً بهم.`;
 
       await addNotification({
         title: `إضافة مميزة: ${newBiz.name} ✨`,
@@ -1219,7 +1219,7 @@ export function AdminDashboard() {
 
       const toastMessage = gift.isFeatured
         ? `تمت إضافة (${newBiz.name}) بالباقة الذهبية مع ميزة (المميز/صدارة البحث) ذات الإطار الذهبي وعلامة ممول لمدة أسبوع!`
-        : `تمت إضافة (${newBiz.name}) بالباقة الأساسية مع هدية شهر مجاني تجريبي في الباقة الذهبية VIP!`;
+        : `تمت إضافة (${newBiz.name}) بالباقة الأساسية بنجاح!`;
 
       showToast(toastMessage);
     } catch (error) {

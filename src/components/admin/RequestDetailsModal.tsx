@@ -56,13 +56,13 @@ export function RequestDetailsModal({
   const isExplicitGolden = !isTrialOrBasic && (request.packagePlan === 'golden' || request.packagePlan === 'vip' || request.selectedPackagePlan === 'golden');
 
   const planName = 
-    isTrialOrBasic ? 'الباقة الأساسية (مع هدية شهر تجريبي مجاني في VIP 🎁)' :
+    isTrialOrBasic ? 'الباقة الأساسية' :
     isExplicitGolden ? 'الباقة الذهبية (VIP 🌟)' :
     request.packagePlan === 'pay_per_use' ? 'باقة حسب الاستخدام' :
     'الباقة الأساسية';
 
   const billingPeriodLabel = 
-    isTrialOrBasic ? 'اشتراك مجاني دائم (مع تجربة شهر VIP)' :
+    isTrialOrBasic ? 'اشتراك مجاني دائم' :
     request.billingPeriod === 'yearly' ? 'الدفع السنوي (الافتراضي)' :
     request.billingPeriod === 'monthly' ? 'الدفع الشهري' :
     'غير محدد';

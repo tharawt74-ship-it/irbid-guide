@@ -275,7 +275,7 @@ export function MedicalFacilitiesManager({
       invalidateCache();
       const toastMsg = gift.isFeatured
         ? `تم قبول وتوثيق (${req.name}) بالباقة الذهبية مع ميزة (المميز/صدارة البحث) بالإطار الذهبي وعلامة ممول لمدة أسبوع!`
-        : `تم قبول وتوثيق (${req.name}) بالباقة الأساسية مع هدية اشتراك شهر مجاني تجريبي في الباقة الذهبية VIP!`;
+        : `تم قبول وتوثيق (${req.name}) بالباقة الأساسية بنجاح!`;
 
       showToast(toastMsg, 'success');
       recordAuditLog({

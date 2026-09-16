@@ -94,7 +94,7 @@ export function Login() {
       const userCredential = await signInWithEmailAndPassword(auth, cleanEmail, password);
       const user = userCredential.user;
 
-      if (isPhoneOwner && db) {
+      if (db) {
         await linkUserToMatchedBusinesses(user.uid, authRes.phoneDigits, cleanEmail);
       }
 

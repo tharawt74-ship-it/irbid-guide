@@ -40,7 +40,7 @@ export function Register() {
           
           if (!isVerified && db) {
             const profileSnap = await getDoc(doc(db, 'users', auth.currentUser.uid));
-            if (profileSnap.exists() && profileSnap.data().customEmailVerified) {
+            if (profileSnap.exists() && (profileSnap.data().customEmailVerified || profileSnap.data().emailVerified)) {
               isVerified = true;
             }
           }
@@ -170,7 +170,7 @@ export function Register() {
           ...(authRes.phoneDigits ? { phone: authRes.phoneDigits } : {})
         }, { merge: true });
 
-        if (isPhoneOwner) {
+        if (db) {
           await linkUserToMatchedBusinesses(user.uid, authRes.phoneDigits, cleanEmail);
         }
       }

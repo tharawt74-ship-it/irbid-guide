@@ -55,8 +55,8 @@ const formatMarkdown = (text: string) => {
 export function AiSiteAssistant() {
   const navigate = useNavigate();
   const { addItem, totalCount } = useCart();
-  const { globalSettings } = useSystemSettings();
-  const isAiDisabled = globalSettings?.enableAiAssistant === false;
+  const { globalSettings, isSettingsLoaded } = useSystemSettings();
+  const isAiDisabled = !isSettingsLoaded || globalSettings?.enableAiAssistant === false;
 
   const [isOpen, setIsOpen] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
@@ -65,6 +65,14 @@ export function AiSiteAssistant() {
   const [hasOpenedOnce, setHasOpenedOnce] = useState(() => {
     return localStorage.getItem('shofi_ai_opened_once') === 'true';
   });
+
+  // Automatically close and reset if disabled by administrator
+  useEffect(() => {
+    if (isAiDisabled && isOpen) {
+      setIsOpen(false);
+      setIsFullScreen(false);
+    }
+  }, [isAiDisabled, isOpen]);
 
   // Sync isOpen state with global events and localStorage
   useEffect(() => {

@@ -31,8 +31,8 @@ export function BottomNavigation({
   isMenuOpen 
 }: BottomNavigationProps) {
   const location = useLocation();
-  const { globalSettings } = useSystemSettings();
-  const isAiEnabled = globalSettings?.enableAiAssistant !== false;
+  const { globalSettings, isSettingsLoaded } = useSystemSettings();
+  const isAiEnabled = isSettingsLoaded && globalSettings?.enableAiAssistant !== false;
 
   const [isAiOpen, setIsAiOpen] = useState(false);
   const [hasSeenAiDot, setHasSeenAiDot] = useState(() => {

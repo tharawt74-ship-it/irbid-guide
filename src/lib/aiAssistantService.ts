@@ -1962,6 +1962,20 @@ export async function askAiAssistant(
     }
   }
 
+  // Strict Backend/Database Check: Do not answer if AI Assistant is disabled
+  try {
+    const appConfig = await getAppConfig();
+    if (appConfig.enableAiAssistant === false) {
+      return {
+        text: 'المساعد الذكي (ربداوي AI) معطّل حالياً من قِبل إدارة المنصة.',
+        actions: [],
+        cards: []
+      };
+    }
+  } catch {
+    // ignore
+  }
+
   // CRITICAL: Parse query structure for fallback & domain enrichment
   const parsed = FilterEngine.parseQuery(userMessage);
 
@@ -1980,6 +1994,14 @@ export async function askAiAssistant(
       signal: controller.signal
     });
     clearTimeout(timeoutId);
+
+    if (response.status === 403) {
+      return {
+        text: 'المساعد الذكي (ربداوي AI) معطّل حالياً من قِبل إدارة المنصة.',
+        actions: [],
+        cards: []
+      };
+    }
 
     if (response.ok) {
       const data = await response.json();
@@ -2057,6 +2079,20 @@ export async function askAiAssistant(
     }
   } catch {
     // Fallback to high-speed local engine
+  }
+
+  // Double check AI enabled status before running fallback
+  try {
+    const appConfig = await getAppConfig();
+    if (appConfig.enableAiAssistant === false) {
+      return {
+        text: 'المساعد الذكي (ربداوي AI) معطّل حالياً من قِبل إدارة المنصة.',
+        actions: [],
+        cards: []
+      };
+    }
+  } catch {
+    // ignore
   }
 
   // 2. High-speed local engine fallback (Deterministic & fast)

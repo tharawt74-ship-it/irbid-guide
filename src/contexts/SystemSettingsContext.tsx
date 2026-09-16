@@ -365,12 +365,32 @@ export function SystemSettingsProvider({ children }: { children: React.ReactNode
           console.warn('Could not fetch settings from server API, falling back to direct Firestore:', apiErr);
         }
 
-        // 2. Fallback to direct client-side Firestore read
-        if (!data && db) {
-          const docRef = doc(db, 'systemConfig', 'settings');
-          const snap = await getDoc(docRef);
-          if (snap.exists()) {
-            data = snap.data();
+        // 2. Direct client-side Firestore read
+        if (db) {
+          try {
+            const docRef = doc(db, 'systemConfig', 'settings');
+            const snap = await getDoc(docRef);
+            if (snap.exists()) {
+              const fsData = snap.data();
+              data = { ...(data || {}), ...fsData };
+            }
+          } catch (e) {
+            console.warn('Could not read systemConfig/settings:', e);
+          }
+
+          // 3. Cross-check settings/appConfig for enableAiAssistant
+          try {
+            const appConfigDoc = await getDoc(doc(db, 'settings', 'appConfig'));
+            if (appConfigDoc.exists()) {
+              const appConfData = appConfigDoc.data();
+              if (appConfData.enableAiAssistant === false) {
+                if (!data) data = { globalSettings: {} };
+                if (!data.globalSettings) data.globalSettings = {};
+                data.globalSettings.enableAiAssistant = false;
+              }
+            }
+          } catch (e) {
+            console.warn('Could not read settings/appConfig:', e);
           }
         }
 
@@ -503,13 +523,16 @@ export function SystemSettingsProvider({ children }: { children: React.ReactNode
     };
   }, [globalSettings.logoUrl, globalSettings.siteName]);
 
-  // Save current settings to Firestore
+  // Save current settings to Firestore & Backend
   const saveAllToFirestore = async (newConfig: any) => {
+    let saved = false;
+    let lastError: any = null;
+
     try {
       // Remove undefined values from nested objects to prevent Firestore setDoc error
       const cleanedConfig = JSON.parse(JSON.stringify(newConfig));
       
-      // 1. Try saving via the secure server-side API (bypasses direct write rules)
+      // 1. Save via secure server-side API (Vercel serverless / Express backend)
       try {
         const token = auth?.currentUser ? await auth.currentUser.getIdToken() : null;
         if (token) {
@@ -525,21 +548,46 @@ export function SystemSettingsProvider({ children }: { children: React.ReactNode
             const resJson = await apiRes.json();
             if (resJson.success) {
               console.log('Successfully saved system config via server API!');
-              return;
+              saved = true;
             }
           }
         }
       } catch (apiErr) {
-        console.warn('Failed to save config via server API, falling back to direct Firestore setDoc:', apiErr);
+        console.warn('Failed to save config via server API, falling back to direct Firestore:', apiErr);
+        lastError = apiErr;
       }
 
-      // 2. Fallback to direct client Firestore setDoc
+      // 2. Direct client Firestore setDoc to systemConfig/settings
       if (db) {
-        await setDoc(doc(db, 'systemConfig', 'settings'), cleanedConfig, { merge: true });
-        console.log('Successfully saved system config via direct Firestore setDoc!');
+        try {
+          await setDoc(doc(db, 'systemConfig', 'settings'), cleanedConfig, { merge: true });
+          console.log('Successfully saved system config via direct Firestore setDoc!');
+          saved = true;
+        } catch (dbErr) {
+          console.warn('Direct Firestore setDoc to systemConfig/settings failed:', dbErr);
+          lastError = dbErr;
+        }
+
+        // 3. Sync enableAiAssistant directly to settings/appConfig
+        if (cleanedConfig?.globalSettings?.enableAiAssistant !== undefined) {
+          try {
+            await setDoc(doc(db, 'settings', 'appConfig'), {
+              enableAiAssistant: cleanedConfig.globalSettings.enableAiAssistant
+            }, { merge: true });
+            console.log('Successfully synced enableAiAssistant to settings/appConfig in Firestore!');
+            saved = true;
+          } catch (appConfErr) {
+            console.warn('Direct setDoc to settings/appConfig failed:', appConfErr);
+          }
+        }
+      }
+
+      if (!saved && lastError) {
+        throw lastError;
       }
     } catch (err) {
       console.error('Failed to save system config:', err);
+      throw err;
     }
   };
 

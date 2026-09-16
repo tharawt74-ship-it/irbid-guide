@@ -722,6 +722,15 @@ async function startServer() {
       const cleanedSettings = JSON.parse(JSON.stringify(newSettings));
       
       await docRef.set(cleanedSettings, { merge: true });
+      if (cleanedSettings?.globalSettings?.enableAiAssistant !== undefined) {
+        try {
+          await adminDb.collection("settings").doc("appConfig").set({
+            enableAiAssistant: cleanedSettings.globalSettings.enableAiAssistant
+          }, { merge: true });
+        } catch (e) {
+          console.warn("Could not sync appConfig with system settings:", e);
+        }
+      }
       cachedSystemSettings = { ...cachedSystemSettings, ...cleanedSettings };
       cachedSystemSettingsTime = Date.now();
       return res.json({ success: true });
@@ -735,7 +744,25 @@ async function startServer() {
   app.post("/api/ai/chat", async (req, res) => {
     try {
       if (cachedSystemSettings && cachedSystemSettings.globalSettings?.enableAiAssistant === false) {
-        return res.status(403).json({ error: "المساعد الذكي معطل حالياً من قبل إدارة المنصة" });
+        return res.status(403).json({ error: "المساعد الذكي معطل حالياً من قبل إدارة المنصة", disabled: true });
+      }
+
+      // Live verification with Firestore
+      const appInst = getAdminApp();
+      if (appInst) {
+        try {
+          const aDb = getAdminFirestore(appInst);
+          const snap = await aDb.collection("systemConfig").doc("settings").get();
+          if (snap.exists && snap.data()?.globalSettings?.enableAiAssistant === false) {
+            return res.status(403).json({ error: "المساعد الذكي معطل حالياً من قبل إدارة المنصة", disabled: true });
+          }
+          const appConfigSnap = await aDb.collection("settings").doc("appConfig").get();
+          if (appConfigSnap.exists && appConfigSnap.data()?.enableAiAssistant === false) {
+            return res.status(403).json({ error: "المساعد الذكي معطل حالياً من قبل إدارة المنصة", disabled: true });
+          }
+        } catch (e) {
+          console.warn("Firestore live check warning in /api/ai/chat:", e);
+        }
       }
 
       const rawMessage = req.body?.message;

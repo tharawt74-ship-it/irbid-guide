@@ -31,6 +31,62 @@ function getGeminiClient(): GoogleGenAI | null {
   return geminiClient;
 }
 
+let cachedAiEnabled: boolean | null = null;
+let lastAiCheckTime = 0;
+
+async function checkIsAiEnabled(): Promise<boolean> {
+  const now = Date.now();
+  if (cachedAiEnabled !== null && (now - lastAiCheckTime < 10000)) {
+    return cachedAiEnabled;
+  }
+
+  try {
+    const projectId = process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID || 'irbid-7f4dd';
+    const apiKey = process.env.VITE_FIREBASE_API_KEY || 'AIzaSyDDswaCceyey9mjAC7ERlkPQ0dIkNsbquw';
+
+    // 1. Check settings/appConfig
+    try {
+      const restUrlAppConfig = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/settings/appConfig?key=${apiKey}`;
+      const resAppConfig = await fetch(restUrlAppConfig);
+      if (resAppConfig.ok) {
+        const data = await resAppConfig.json();
+        if (data.fields?.enableAiAssistant?.booleanValue === false) {
+          cachedAiEnabled = false;
+          lastAiCheckTime = now;
+          return false;
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    // 2. Check systemConfig/settings
+    try {
+      const restUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/systemConfig/settings?key=${apiKey}`;
+      const res = await fetch(restUrl);
+      if (res.ok) {
+        const data = await res.json();
+        const globalFields = data.fields?.globalSettings?.mapValue?.fields;
+        if (globalFields?.enableAiAssistant?.booleanValue === false) {
+          cachedAiEnabled = false;
+          lastAiCheckTime = now;
+          return false;
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    cachedAiEnabled = true;
+    lastAiCheckTime = now;
+    return true;
+  } catch (e) {
+    console.warn('Could not check AI status in Firestore REST:', e);
+    if (cachedAiEnabled !== null) return cachedAiEnabled;
+    return true;
+  }
+}
+
 export default async function handler(req: any, res: any) {
   if (req.method === 'OPTIONS') {
     res.setHeader('Access-Control-Allow-Credentials', 'true');
@@ -42,6 +98,15 @@ export default async function handler(req: any, res: any) {
 
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  // 0. Strict Database & Backend Check: Verify if AI is disabled by administration
+  const isAiEnabled = await checkIsAiEnabled();
+  if (!isAiEnabled) {
+    return res.status(403).json({
+      error: 'المساعد الذكي معطل حالياً من قبل إدارة المنصة',
+      disabled: true
+    });
   }
 
   try {

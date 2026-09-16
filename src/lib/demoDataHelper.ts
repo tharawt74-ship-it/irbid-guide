@@ -25,10 +25,12 @@ export interface AppConfig {
   priceMessaging1Year?: number;
   priceHousingExtraWeek?: number;
   priceHousingFeatured3Days?: number;
+  enableAiAssistant?: boolean;
 }
 
 export const DEFAULT_APP_CONFIG: AppConfig = {
   showDemoData: false,
+  enableAiAssistant: true,
   priceBasic: 0,
   priceSilver: 5,
   priceGolden: 12,

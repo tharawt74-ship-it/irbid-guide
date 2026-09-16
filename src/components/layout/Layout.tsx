@@ -1298,7 +1298,9 @@ export function Layout() {
       <CartConflictModal />
 
       {/* 100% Free AI Smart Site Assistant */}
-      <AiSiteAssistant />
+      {isSettingsLoaded && globalSettings?.enableAiAssistant !== false && (
+        <AiSiteAssistant />
+      )}
 
       {/* Mobile Fixed Bottom Navigation Bar */}
       <BottomNavigation 

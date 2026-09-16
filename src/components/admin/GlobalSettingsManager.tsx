@@ -38,11 +38,12 @@ export function GlobalSettingsManager({ showToast }: GlobalSettingsManagerProps)
       showToast(
         nextVal 
           ? 'تم تفعيل المساعد الذكي (ربداوي AI) بنجاح 🟢' 
-          : 'تم تعطيل المساعد الذكي (سيختفي الزر تماماً للزوار) ⚪',
+          : 'تم تعطيل المساعد الذكي وحفظه في قاعدة البيانات، واختفاؤه تماماً من الموقع ⚪',
         'success'
       );
     } catch {
-      showToast('حدث خطأ أثناء حفظ التغيير', 'error');
+      setFormData(formData);
+      showToast('حدث خطأ أثناء حفظ التغيير في قاعدة البيانات والخادم', 'error');
     }
   };
 

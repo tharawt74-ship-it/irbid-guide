@@ -38,7 +38,7 @@ export function GlobalSettingsManager({ showToast }: GlobalSettingsManagerProps)
       showToast(
         nextVal 
           ? 'تم تفعيل المساعد الذكي (ربداوي AI) بنجاح 🟢' 
-          : 'تم تعطيل المساعد الذكي (سيظهر إشعار "ستتوفر الميزة قريباً" للزوار) ⚪',
+          : 'تم تعطيل المساعد الذكي (سيختفي الزر تماماً للزوار) ⚪',
         'success'
       );
     } catch {

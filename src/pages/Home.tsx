@@ -532,7 +532,7 @@ export function Home() {
         <div className="relative z-10 w-full max-w-3xl mx-auto space-y-4 md:space-y-6">
           {/* Gradient Typography Heading */}
           <h1 className="text-3xl sm:text-5xl md:text-7xl font-black text-white tracking-tight leading-tight drop-shadow-lg">
-            شو في بـ <span className="text-[#ff9f1c] inline-block pb-1">إربد؟</span>
+            شو في ب{"\u200D"}<span className="text-[#ff9f1c] inline-block pb-1">{"\u200D"}إربد؟</span>
           </h1>
           
           <p className="text-sm sm:text-base md:text-xl text-emerald-50/80 max-w-2xl mx-auto leading-relaxed px-4 font-medium">

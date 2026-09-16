@@ -722,7 +722,7 @@ async function startServer() {
       const cleanedSettings = JSON.parse(JSON.stringify(newSettings));
       
       await docRef.set(cleanedSettings, { merge: true });
-      cachedSystemSettings = cleanedSettings;
+      cachedSystemSettings = { ...cachedSystemSettings, ...cleanedSettings };
       cachedSystemSettingsTime = Date.now();
       return res.json({ success: true });
     } catch (err: any) {

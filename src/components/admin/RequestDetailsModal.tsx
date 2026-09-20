@@ -79,8 +79,11 @@ export function RequestDetailsModal({
   const homeVisits = request.offersHomeVisits || request.medicalProfile?.offersHomeVisits;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto bg-stone-900/70 backdrop-blur-xs animate-in fade-in duration-200" dir="rtl">
-      <div className="bg-white rounded-3xl border border-stone-200/90 shadow-2xl w-full max-w-3xl overflow-hidden my-auto max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 z-[100000] flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 overflow-hidden bg-stone-950/80 backdrop-blur-md animate-in fade-in duration-200" dir="rtl">
+      <div className="bg-white rounded-t-3xl sm:rounded-3xl border border-stone-200/90 shadow-2xl w-full max-w-3xl overflow-hidden my-0 sm:my-auto max-h-[88dvh] sm:max-h-[85vh] flex flex-col">
+        
+        {/* Mobile Drag Indicator */}
+        <div className="w-12 h-1.5 bg-stone-300 rounded-full mx-auto my-2.5 sm:hidden shrink-0" />
         
         {/* Modal Header */}
         <div className={`p-5 sm:p-6 border-b text-white flex items-center justify-between shrink-0 ${

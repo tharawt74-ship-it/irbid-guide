@@ -70,8 +70,8 @@ self.addEventListener('push', (event) => {
 
   const options = {
     body: data.body,
-    icon: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&q=80&w=192',
-    badge: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&q=80&w=192',
+    icon: '/favicon.jpg',
+    badge: '/favicon.jpg',
     vibrate: [100, 50, 100],
     data: {
       url: data.url || '/'

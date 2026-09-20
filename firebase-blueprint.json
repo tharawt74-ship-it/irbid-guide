@@ -105,6 +105,22 @@
         "badgeText": { "type": "string", "maxLength": 100 }
       },
       "required": ["serviceType", "userId"]
+    },
+    "UserReward": {
+      "title": "UserReward",
+      "description": "Visitor gift/reward coupon earned by writing reviews",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128 },
+        "businessId": { "type": "string", "maxLength": 128 },
+        "businessName": { "type": "string", "maxLength": 200 },
+        "code": { "type": "string", "maxLength": 100 },
+        "discountPercent": { "type": "number" },
+        "createdAt": { "type": "number" },
+        "expiresAt": { "type": "number" },
+        "used": { "type": "boolean" }
+      },
+      "required": ["userId", "businessId", "businessName", "code", "discountPercent", "createdAt", "expiresAt", "used"]
     }
   },
   "firestore": {
@@ -131,6 +147,10 @@
     "/marketingRequests/{marketingId}": {
       "schema": { "$ref": "#/entities/MarketingRequest" },
       "description": "Marketing and homepage banner requests"
+    },
+    "/user_rewards/{rewardId}": {
+      "schema": { "$ref": "#/entities/UserReward" },
+      "description": "Visitor earned discount codes/coupons"
     }
   }
 }

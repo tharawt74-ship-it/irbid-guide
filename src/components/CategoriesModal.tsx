@@ -51,14 +51,17 @@ export function CategoriesModal({
 
   const modalContent = (
     <div 
-      className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto animate-in fade-in duration-200"
+      className="fixed inset-0 z-[100000] bg-stone-950/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 overflow-hidden animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div 
-        className="bg-[#fdfcfb] w-full max-w-2xl rounded-3xl shadow-2xl border border-[#e5e1da]/80 relative flex flex-col max-h-[88vh] overflow-hidden my-auto animate-in fade-in zoom-in-95 duration-200"
+        className="bg-[#fdfcfb] w-full max-w-2xl rounded-t-3xl sm:rounded-3xl shadow-2xl border border-[#e5e1da]/80 relative flex flex-col max-h-[88dvh] sm:max-h-[85vh] overflow-hidden my-0 sm:my-auto animate-in fade-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
         dir="rtl"
       >
+        {/* Mobile Drag Indicator */}
+        <div className="w-12 h-1.5 bg-stone-300 rounded-full mx-auto my-2.5 sm:hidden shrink-0" />
+
         {/* Header */}
         <div className="flex items-center justify-between p-4 sm:p-6 border-b border-stone-200/60 shrink-0 bg-white">
           <div className="flex items-center gap-2">

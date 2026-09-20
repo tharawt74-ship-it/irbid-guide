@@ -185,11 +185,14 @@ export function BusinessAddModal({
   if (!isOpen || typeof document === 'undefined') return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto" dir="rtl">
-      <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[88vh] overflow-y-auto p-6 sm:p-8 shadow-2xl border border-stone-200 space-y-6 relative my-auto animate-in fade-in zoom-in-95">
+    <div className="fixed inset-0 z-[100000] bg-stone-950/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 overflow-hidden" dir="rtl">
+      <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-3xl w-full max-h-[88dvh] sm:max-h-[85vh] shadow-2xl border border-stone-200 relative my-0 sm:my-auto animate-in fade-in zoom-in-95 flex flex-col overflow-hidden">
         
+        {/* Mobile Drag Indicator */}
+        <div className="w-12 h-1.5 bg-stone-300 rounded-full mx-auto my-2.5 sm:hidden shrink-0" />
+
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-[#e5e1da] pb-4">
+        <div className="flex items-center justify-between border-b border-[#e5e1da] p-5 sm:px-8 pb-4 shrink-0 bg-white">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-[#ff9f1c]/10 text-[#ff9f1c] flex items-center justify-center font-bold">
               <Plus className="h-6 w-6" />
@@ -209,7 +212,8 @@ export function BusinessAddModal({
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+          <div className="flex-1 overflow-y-auto p-5 sm:p-8 space-y-6">
           
           {/* Name & Category */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -509,8 +513,10 @@ export function BusinessAddModal({
             />
           </label>
 
+          </div>
+
           {/* Footer Actions */}
-          <div className="pt-4 border-t border-[#e5e1da] flex items-center justify-end gap-3">
+          <div className="p-4 sm:px-8 bg-stone-50/90 border-t border-[#e5e1da] shrink-0 sticky bottom-0 z-10 flex items-center justify-end gap-3">
             <button
               type="button"
               onClick={onClose}

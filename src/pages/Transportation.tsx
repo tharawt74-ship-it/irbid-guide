@@ -210,7 +210,7 @@ export function Transportation() {
         title="دليل مواصلات ومجمعات إربد | خطوط باصات وتكاسي إربد"
         description="دليل خطوط ومواصلات محافظة إربد الشامل: مجمع عمان الجديد، مجمع الشمال، مجمع الأغوار، باصات جامعة اليرموك وجامعة العلوم والتكنولوجيا، خطوط السرفيس وتطبيقات التاكسي."
         keywords={['مواصلات إربد', 'باصات إربد', 'مجمع عمان الجديد', 'مجمع الشمال إربد', 'مجمع الأغوار إربد', 'تكاسي إربد', 'سرفيس إربد', 'جامعة اليرموك مواصلات', 'تكنولوجيا مواصلات']}
-        canonicalUrl="https://shofierbid.com/transportation"
+        canonicalUrl="https://shofibirbid.site/transportation"
       />
       {/* Banner Slideshow */}
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">

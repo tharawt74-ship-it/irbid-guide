@@ -78,102 +78,104 @@ export function PwaInstallBanner() {
   // Full Modal view when user explicitly clicks "تنزيل التطبيق" button anywhere
   if (forceModalOpen) {
     return (
-      <div className="fixed inset-0 z-[100] bg-stone-950/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200" dir="rtl">
-        <div className="bg-stone-900 text-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-stone-800 space-y-6 relative overflow-hidden">
-          {/* Top subtle glow */}
-          <div className="absolute -top-24 -right-24 w-48 h-48 bg-[#1a4d2e]/40 rounded-full blur-3xl pointer-events-none" />
+      <div className="fixed inset-0 z-[100000] bg-stone-950/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-hidden" dir="rtl">
+        <div className="bg-stone-900 text-white rounded-t-3xl sm:rounded-3xl max-w-lg w-full max-h-[88dvh] sm:max-h-[85vh] flex flex-col overflow-hidden shadow-2xl border border-stone-800 relative my-0 sm:my-auto animate-in slide-in-from-bottom-6 sm:zoom-in-95 duration-200 text-right">
+          
+          {/* Mobile Drag Indicator */}
+          <div className="w-12 h-1.5 bg-stone-700 rounded-full mx-auto my-2 sm:hidden shrink-0" />
 
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-center gap-3.5">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#1a4d2e] to-emerald-700 text-white flex items-center justify-center shrink-0 border border-emerald-500/30 shadow-lg">
-                <Smartphone className="h-7 w-7 text-emerald-300" />
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-stone-800/80 p-4 sm:p-5 shrink-0 bg-stone-900">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-br from-[#1a4d2e] to-emerald-700 text-white flex items-center justify-center shrink-0 border border-emerald-500/30 shadow-lg">
+                <Smartphone className="h-6 w-6 text-emerald-300" />
               </div>
               <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-xl font-black text-white">تنزيل تطبيق "شو في بإربد؟"</h3>
-                  <span className="bg-emerald-500/20 text-emerald-400 text-xs font-black px-2.5 py-0.5 rounded-full border border-emerald-500/30">
-                    مجاني 100%
-                  </span>
-                </div>
-                <p className="text-xs text-stone-300 mt-1">
-                  تطبيق الويب التفاعلي السريع (PWA) بدون الحاجة لمتجر تطبيقات!
+                <h3 className="text-base sm:text-lg font-black text-white">تنزيل تطبيق "{globalSettings?.siteName || 'شو في بإربد؟'}"</h3>
+                <p className="text-[11px] sm:text-xs text-stone-300 mt-0.5">
+                  تطبيق الويب التفاعلي السريع (PWA)
                 </p>
               </div>
             </div>
 
             <button
               onClick={() => setForceModalOpen(false)}
-              className="text-stone-400 hover:text-white p-2 rounded-xl hover:bg-stone-800 transition-colors cursor-pointer"
+              className="text-stone-400 hover:text-white p-2 rounded-xl hover:bg-stone-800 transition-colors cursor-pointer shrink-0"
+              title="إغلاق"
             >
               <X className="h-5 w-5" />
             </button>
           </div>
 
-          {/* Highlights */}
-          <div className="grid grid-cols-2 gap-3 text-xs">
-            <div className="bg-stone-800/80 p-3 rounded-2xl border border-stone-700/60 flex items-center gap-2.5">
-              <ShieldCheck className="h-4 w-4 text-emerald-400 shrink-0" />
-              <span className="text-stone-200 font-bold">خفيف وسريع بدون مساحة</span>
-            </div>
-            <div className="bg-stone-800/80 p-3 rounded-2xl border border-stone-700/60 flex items-center gap-2.5">
-              <Sparkles className="h-4 w-4 text-amber-400 shrink-0" />
-              <span className="text-stone-200 font-bold">تنبيهات فورية بالعروض</span>
-            </div>
-          </div>
-
-          {/* Action Button */}
-          {deferredPrompt ? (
-            <button
-              onClick={handleInstallClick}
-              className="w-full bg-gradient-to-r from-[#1a4d2e] to-emerald-600 hover:from-[#143d24] hover:to-emerald-700 text-white font-black py-3.5 px-6 rounded-2xl flex items-center justify-center gap-2.5 transition-all shadow-xl text-sm cursor-pointer active:scale-98"
-            >
-              <Download className="h-5 w-5 text-emerald-300 animate-bounce" />
-              <span>تثبيت التطبيق بنقرة واحدة الآن 📲</span>
-            </button>
-          ) : (
-            <div className="space-y-4 pt-2 border-t border-stone-800">
-              <h4 className="text-xs font-black text-emerald-400 flex items-center gap-1.5">
-                <span>تعليمات تثبيت التطبيق على شاشة جهازك الرئيسية:</span>
-              </h4>
-
-              <div className="space-y-3 text-xs">
-                {/* Android Chrome */}
-                <div className="bg-stone-800/90 p-4 rounded-2xl border border-stone-700/80 space-y-1.5">
-                  <div className="font-bold text-white flex items-center justify-between">
-                    <span>📱 أجهزة الأندرويد (Android - Chrome):</span>
-                  </div>
-                  <ol className="list-decimal list-inside space-y-1 text-stone-300 text-[11px] leading-relaxed">
-                    <li>اضغط على قائمة خيارات المتصفح الثلاث نقاط <span className="font-bold text-amber-400">⋮</span> في أعلى المتصفح.</li>
-                    <li>اختر <span className="font-bold text-emerald-300">"تثبيت التطبيق"</span> أو <span className="font-bold text-emerald-300">"إضافة إلى الشاشة الرئيسية"</span>.</li>
-                  </ol>
-                </div>
-
-                {/* iPhone Safari */}
-                <div className="bg-stone-800/90 p-4 rounded-2xl border border-stone-700/80 space-y-1.5">
-                  <div className="font-bold text-white flex items-center justify-between">
-                    <span>🍏 أجهزة الآيفون (iPhone - Safari):</span>
-                  </div>
-                  <ol className="list-decimal list-inside space-y-1 text-stone-300 text-[11px] leading-relaxed">
-                    <li>اضغط على زر المشاركة <Share className="inline h-3.5 w-3.5 text-sky-400 mx-0.5" /> في أسفل شاشة Safari.</li>
-                    <li>اختر <span className="font-bold text-white">"إضافة إلى الشاشة الرئيسية" (Add to Home Screen)</span>.</li>
-                    <li>اضغط <span className="font-bold text-emerald-400">"إضافة"</span> في الزاوية العلوية.</li>
-                  </ol>
-                </div>
-
-                {/* Desktop Chrome */}
-                <div className="bg-stone-800/90 p-4 rounded-2xl border border-stone-700/80 space-y-1.5">
-                  <div className="font-bold text-white flex items-center justify-between">
-                    <span>💻 أجهزة الكمبيوتر (Desktop):</span>
-                  </div>
-                  <p className="text-[11px] text-stone-300 leading-relaxed">
-                    انقر على أيقونة التثبيت <Monitor className="inline h-3.5 w-3.5 text-emerald-400 mx-1" /> الموجودة بجانب شريط العنوان (URL) في متصفح كروم أو إيدج.
-                  </p>
-                </div>
+          {/* Scrollable Body Content */}
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+            {/* Highlights */}
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="bg-stone-800/80 p-3 rounded-2xl border border-stone-700/60 flex items-center gap-2.5">
+                <ShieldCheck className="h-4 w-4 text-emerald-400 shrink-0" />
+                <span className="text-stone-200 font-bold">خفيف وسريع بدون مساحة</span>
+              </div>
+              <div className="bg-stone-800/80 p-3 rounded-2xl border border-stone-700/60 flex items-center gap-2.5">
+                <Sparkles className="h-4 w-4 text-amber-400 shrink-0" />
+                <span className="text-stone-200 font-bold">تنبيهات فورية بالعروض</span>
               </div>
             </div>
-          )}
 
-          <div className="flex justify-end pt-2">
+            {/* Action Button */}
+            {deferredPrompt ? (
+              <button
+                onClick={handleInstallClick}
+                className="w-full bg-gradient-to-r from-[#1a4d2e] to-emerald-600 hover:from-[#143d24] hover:to-emerald-700 text-white font-black py-3 px-5 rounded-2xl flex items-center justify-center gap-2.5 transition-all shadow-xl text-sm cursor-pointer active:scale-98"
+              >
+                <Download className="h-5 w-5 text-emerald-300 animate-bounce" />
+                <span>تثبيت التطبيق بنقرة واحدة الآن</span>
+              </button>
+            ) : (
+              <div className="space-y-3 pt-2 border-t border-stone-800/80">
+                <h4 className="text-xs font-black text-emerald-400">
+                  تعليمات تثبيت التطبيق على شاشة جهازك الرئيسية:
+                </h4>
+
+                <div className="space-y-2.5 text-xs">
+                  {/* Android Chrome */}
+                  <div className="bg-stone-800/90 p-3.5 rounded-2xl border border-stone-700/80 space-y-1">
+                    <div className="font-bold text-white">
+                      أجهزة الأندرويد (Android - Chrome):
+                    </div>
+                    <ol className="list-decimal list-inside space-y-1 text-stone-300 text-[11px] leading-relaxed">
+                      <li>اضغط على قائمة خيارات المتصفح الثلاث نقاط <span className="font-bold text-amber-400">⋮</span> في أعلى المتصفح.</li>
+                      <li>اختر <span className="font-bold text-emerald-300">"تثبيت التطبيق"</span> أو <span className="font-bold text-emerald-300">"إضافة إلى الشاشة الرئيسية"</span>.</li>
+                    </ol>
+                  </div>
+
+                  {/* iPhone Safari */}
+                  <div className="bg-stone-800/90 p-3.5 rounded-2xl border border-stone-700/80 space-y-1">
+                    <div className="font-bold text-white">
+                      أجهزة الآيفون (iPhone - Safari):
+                    </div>
+                    <ol className="list-decimal list-inside space-y-1 text-stone-300 text-[11px] leading-relaxed">
+                      <li>اضغط على زر المشاركة <Share className="inline h-3.5 w-3.5 text-sky-400 mx-0.5" /> في أسفل شاشة Safari.</li>
+                      <li>اختر <span className="font-bold text-white">"إضافة إلى الشاشة الرئيسية" (Add to Home Screen)</span>.</li>
+                      <li>اضغط <span className="font-bold text-emerald-400">"إضافة"</span> في الزاوية العلوية.</li>
+                    </ol>
+                  </div>
+
+                  {/* Desktop Chrome */}
+                  <div className="bg-stone-800/90 p-3.5 rounded-2xl border border-stone-700/80 space-y-1">
+                    <div className="font-bold text-white">
+                      أجهزة الكمبيوتر (Desktop):
+                    </div>
+                    <p className="text-[11px] text-stone-300 leading-relaxed">
+                      انقر على أيقونة التثبيت <Monitor className="inline h-3.5 w-3.5 text-emerald-400 mx-1" /> الموجودة بجانب شريط العنوان (URL) في متصفح كروم أو إيدج.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Sticky Footer */}
+          <div className="p-3.5 sm:px-6 bg-stone-900/90 border-t border-stone-800/80 flex items-center justify-end shrink-0 sticky bottom-0 z-10">
             <button
               onClick={() => setForceModalOpen(false)}
               className="px-5 py-2 rounded-xl text-xs font-bold bg-stone-800 text-stone-300 hover:text-white hover:bg-stone-700 transition-colors cursor-pointer"
@@ -210,7 +212,7 @@ export function PwaInstallBanner() {
               <div className="flex items-center gap-1.5">
                 <h4 className="text-sm font-black text-stone-900">ثبّت تطبيق "{globalSettings?.siteName || 'شو في بإربد؟'}"</h4>
                 <span className="bg-emerald-50 text-emerald-700 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-emerald-200/60">
-                  تطبيق مجاني
+                  تطبيق الويب
                 </span>
               </div>
               <p className="text-xs text-stone-500 mt-0.5 leading-relaxed font-medium">

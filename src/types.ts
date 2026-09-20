@@ -21,6 +21,8 @@ export interface MenuItem {
   versions?: MenuItemVersion[]; // New: Multiple versions / sizes / add-on tiers with custom pricing
   versionType?: 'sizes' | 'addons'; // 'sizes' = أحجام (يبدأ من أقل حجم ويتجاهل سعر التاب الأساسي)، 'addons' = إضافات (يظهر السعر الأصلي بدون يبدأ من)
   createdAt?: number; // Creation timestamp in milliseconds
+  trackStock?: boolean; // Whether stock tracking is enabled for this product/service
+  stockCount?: number; // Quantity available in stock
 }
 
 export interface SocialLinks {
@@ -164,6 +166,7 @@ export interface Business {
   featuredStartDate?: number | null;
   featuredExpiryDate?: number | null;
   views?: number;
+  deliveryAvailable?: boolean;
   
   // Map and VIP details
   isVip?: boolean;
@@ -227,6 +230,19 @@ export interface Business {
   requestType?: string;
   phoneClicks?: number;
   directionsClicks?: number;
+
+  // Gift/Discount Codes Promotion Feature for Reviews
+  giftCodeEnabled?: boolean;
+  giftCodeMinStars?: number;
+  giftCodeLimitType?: 'unlimited' | 'limited';
+  giftCodeTotalLimit?: number;
+  giftCodeDiscountPercent?: number;
+  giftCodeValidityDays?: number;
+  giftCodeStartDate?: string;
+  giftCodeEndDate?: string;
+  giftCodeGrantedCount?: number;
+  giftCodeUserLimit?: 'once' | 'per_review' | 'custom';
+  giftCodeMaxPerUser?: number;
 }
 
 export interface MedicalInsurance {
@@ -696,6 +712,8 @@ export interface GlobalSiteSettings {
   siteName: string;
   siteSubtitle: string;
   logoUrl: string;
+  faviconUrl?: string;
+  ogImageUrl?: string;
   useFullLogo?: boolean;
   logoHeight?: number;
   contactPhone: string;

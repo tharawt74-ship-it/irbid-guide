@@ -22,6 +22,7 @@ import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 import { Verify } from './pages/Verify';
 import { ResetPassword } from './pages/ResetPassword';
+import { NotFound } from './pages/NotFound';
 
 // Helper for resilient lazy component loading
 function lazyWithRetry<T extends React.ComponentType<any>>(
@@ -66,6 +67,7 @@ const CartPage = lazyWithRetry(() => import('./pages/CartPage').then(m => ({ def
 const Search = lazyWithRetry(() => import('./pages/Search').then(m => ({ default: m.Search })));
 const Medical = lazyWithRetry(() => import('./pages/Medical').then(m => ({ default: m.default })));
 const AddMedicalFacility = lazyWithRetry(() => import('./pages/AddMedicalFacility').then(m => ({ default: m.AddMedicalFacility })));
+const MerchantScannerPage = lazyWithRetry(() => import('./pages/MerchantScannerPage').then(m => ({ default: m.MerchantScannerPage })));
 
 export default function App() {
   return (
@@ -79,6 +81,16 @@ export default function App() {
                   <ScrollToTop />
                   <Suspense fallback={null}>
                     <Routes>
+                      {/* Standalone Fullscreen Merchant QR Scanner (No Navbar/Header) */}
+                      <Route
+                        path="/merchant/scanner"
+                        element={
+                          <ProtectedRoute>
+                            <MerchantScannerPage />
+                          </ProtectedRoute>
+                        }
+                      />
+
                       <Route path="/" element={<Layout />}>
                         <Route index element={<Home />} />
                     <Route path="admin" element={
@@ -138,6 +150,7 @@ export default function App() {
                     <Route path="verify" element={<Verify />} />
                     <Route path="reset-password" element={<ResetPassword />} />
                     <Route path=":id" element={<BusinessDetail />} />
+                    <Route path="*" element={<NotFound />} />
                   </Route>
                 </Routes>
               </Suspense>

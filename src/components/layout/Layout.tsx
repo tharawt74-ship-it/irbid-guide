@@ -32,7 +32,10 @@ import {
   Bus,
   Settings,
   Bot,
-  Stethoscope
+  Stethoscope,
+  QrCode,
+  Crown,
+  Zap
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -66,6 +69,11 @@ export function Layout() {
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const moreMenuRef = useRef<HTMLDivElement>(null);
 
+  // Active businesses with gift code promotion enabled (strictly for merchants)
+  const activeGiftBusinesses = (ownedBusinesses || []).filter(b => 
+    b.giftCodeEnabled === true || (b as any).giftCodeEnabled === 'true'
+  );
+
   useEffect(() => {
     function handleClickOutside(event: MouseEvent | TouchEvent) {
       if (moreMenuRef.current && !moreMenuRef.current.contains(event.target as Node)) {
@@ -88,6 +96,55 @@ export function Layout() {
   const [checkingEmail, setCheckingEmail] = useState(false);
   const [showStatusSuccess, setShowStatusSuccess] = useState(false);
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const [showHeader, setShowHeader] = useState(true);
+
+  useEffect(() => {
+    let lastScrollY = window.scrollY;
+    let ticking = false;
+
+    const handleScroll = () => {
+      if (mobileMenuOpen) return;
+
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          const currentScrollY = window.scrollY;
+          
+          // Keep header always visible on Homepage and Search page
+          const isAlwaysVisible = location.pathname === '/' || location.pathname.startsWith('/search');
+          if (isAlwaysVisible) {
+            setShowHeader(true);
+            window.dispatchEvent(new CustomEvent('app-header-visibility', { detail: { visible: true } }));
+          } else if (window.innerWidth < 1024) {
+            if (currentScrollY > lastScrollY && currentScrollY > 80) {
+              setShowHeader(false);
+              window.dispatchEvent(new CustomEvent('app-header-visibility', { detail: { visible: false } }));
+            } else if (currentScrollY < lastScrollY) {
+              setShowHeader(true);
+              window.dispatchEvent(new CustomEvent('app-header-visibility', { detail: { visible: true } }));
+            }
+          } else {
+            setShowHeader(true);
+            window.dispatchEvent(new CustomEvent('app-header-visibility', { detail: { visible: true } }));
+          }
+          
+          lastScrollY = currentScrollY;
+          ticking = false;
+        });
+        ticking = true;
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [mobileMenuOpen, location.pathname]);
+
+  useEffect(() => {
+    if (location.pathname === '/' || location.pathname.startsWith('/search')) {
+      setShowHeader(true);
+      window.dispatchEvent(new CustomEvent('app-header-visibility', { detail: { visible: true } }));
+    }
+  }, [location.pathname]);
+
   const [showMenuTooltip, setShowMenuTooltip] = useState(false);
   const [showDesktopMoreTooltip, setShowDesktopMoreTooltip] = useState(false);
   const isBootstrapAdmin = currentUser && ['princessofx2344@gmail.com', 'admin@shoofiirbid.com', 'irbid.admin@gmail.com', 'tharawt74@gmail.com'].includes(currentUser.email?.toLowerCase().trim() || '');
@@ -177,6 +234,8 @@ export function Layout() {
   useEffect(() => {
     if (mobileMenuOpen) {
       document.body.style.overflow = 'hidden';
+      setShowHeader(true);
+      window.dispatchEvent(new CustomEvent('app-header-visibility', { detail: { visible: true } }));
     } else {
       document.body.style.overflow = 'unset';
     }
@@ -339,11 +398,14 @@ export function Layout() {
 
   return (
     <div className={cn(
-      "bg-[#fdfcfb] flex flex-col font-sans text-[#2d2a26] overflow-x-clip",
+      "bg-[#fdfcfb] flex flex-col font-sans text-[#2d2a26]",
       location.pathname === '/messages' ? "h-screen overflow-hidden" : "min-h-screen"
     )} dir="rtl">
       {/* Top Navigation Bar - Sticky at all scroll depths */}
-      <header className="h-[62px] sm:h-[68px] md:h-[72px] px-2.5 sm:px-4 lg:px-6 2xl:px-8 border-b border-stone-200/90 bg-white/95 backdrop-blur-md sticky top-0 z-[70] transition-all duration-200 shadow-2xs w-full max-w-full flex items-center">
+      <header className={cn(
+        "h-[62px] sm:h-[68px] md:h-[72px] px-2.5 sm:px-4 lg:px-6 2xl:px-8 border-b border-stone-200/90 bg-white/95 backdrop-blur-md sticky z-[70] transition-all duration-300 shadow-2xs w-full max-w-full flex items-center",
+        (showHeader || mobileMenuOpen) ? "top-0" : "-top-[62px] sm:-top-[68px] md:-top-[72px]"
+      )}>
         {/* Desktop Header Layout */}
         <div className="hidden lg:flex w-full max-w-7xl mx-auto h-full items-center justify-between gap-1.5 sm:gap-2 lg:gap-3 flex-nowrap min-w-0 py-1">
           
@@ -750,81 +812,88 @@ export function Layout() {
         </div>
       </header>
 
-      {/* Clean Full-Page Mobile Menu with Smooth Entry and Exit Animations */}
+      {/* Ultra-Modern 2026 Executive Mobile Menu Drawer */}
       <AnimatePresence>
         {mobileMenuOpen && (
           <motion.div 
-            initial={{ opacity: 0, y: 10 }}
+            initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 10 }}
-            transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+            exit={{ opacity: 0, y: 8 }}
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
             onTouchStart={handleTouchStart}
             onTouchEnd={handleTouchEnd}
-            className="lg:hidden fixed top-[62px] sm:top-[68px] md:top-[72px] inset-x-0 bottom-0 z-[65] bg-[#faf9f6] flex flex-col overflow-hidden border-t border-stone-200/60" 
+            className="lg:hidden fixed top-[62px] sm:top-[68px] md:top-[72px] inset-x-0 bottom-0 z-[65] bg-[#f8f7f3] flex flex-col overflow-hidden border-t border-stone-200/80 shadow-2xl" 
             dir="rtl"
           >
-            {/* Scrollable Content Wrapper */}
-            <div className="flex-1 overflow-y-auto px-5 py-6 space-y-6 pb-32">
-              {/* User Account / Welcome Header Bar */}
+            {/* Scrollable Content Container */}
+            <div className="flex-1 overflow-y-auto px-4 sm:px-5 py-5 space-y-5 pb-32">
+              
+              {/* 1. User Hero Profile Card / Guest Welcome Header */}
               {currentUser ? (
-                <div className="bg-white p-4 rounded-2xl border border-stone-200/90 shadow-2xs flex items-center justify-between gap-3 hover:border-[#1a4d2e]/40 transition-colors">
-                  <Link 
-                    to="/profile" 
-                    onClick={closeMenu} 
-                    className="flex items-center gap-3 min-w-0 flex-1 group"
-                  >
-                    <div className="w-11 h-11 rounded-xl bg-[#1a4d2e] text-white font-black flex items-center justify-center text-base shadow-2xs group-hover:scale-105 transition-transform shrink-0">
-                      {(currentUser.displayName || currentUser.email || 'U').charAt(0).toUpperCase()}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-black text-stone-800 truncate group-hover:text-[#1a4d2e] transition-colors">
-                        {currentUser.displayName || currentUser.email?.split('@')[0]}
-                      </p>
-                      <p className="text-xs text-emerald-700 font-bold flex items-center gap-0.5 mt-0.5">
-                        <span>الملف الشخصي والحساب</span>
-                        <ChevronLeft className="h-3 w-3" />
-                      </p>
-                    </div>
-                  </Link>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <Link
-                      to="/profile/settings"
-                      onClick={closeMenu}
-                      className="p-2 text-stone-400 hover:text-[#1a4d2e] hover:bg-stone-100 rounded-xl transition-colors cursor-pointer"
-                      title="إعدادات الحساب"
+                <div className="relative overflow-hidden bg-gradient-to-br from-stone-900 via-[#1a4d2e] to-emerald-950 text-white p-4.5 rounded-3xl shadow-xl border border-emerald-500/25 space-y-3">
+                  {/* Subtle Background Glow Accent */}
+                  <div className="absolute -top-12 -left-12 w-32 h-32 bg-emerald-400/15 rounded-full blur-2xl pointer-events-none" />
+                  
+                  <div className="flex items-center justify-between gap-3 relative z-10">
+                    <Link 
+                      to="/profile" 
+                      onClick={closeMenu} 
+                      className="flex items-center gap-3.5 min-w-0 flex-1 group"
                     >
-                      <Settings className="h-4.5 w-4.5" />
+                      <div className="relative shrink-0">
+                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-400 text-stone-950 font-black flex items-center justify-center text-lg shadow-md ring-2 ring-emerald-400/30 group-hover:scale-105 transition-transform">
+                          {(currentUser.displayName || currentUser.email || 'U').charAt(0).toUpperCase()}
+                        </div>
+                        <span className="w-3.5 h-3.5 bg-emerald-400 rounded-full border-2 border-stone-900 absolute -bottom-0.5 -right-0.5 shadow-xs" title="متصل الآن" />
+                      </div>
+                      <div className="min-w-0 text-right">
+                        <p className="text-sm font-black text-white truncate group-hover:text-emerald-300 transition-colors">
+                          {currentUser.displayName || currentUser.email?.split('@')[0]}
+                        </p>
+                      </div>
                     </Link>
-                    <button
-                      onClick={() => {
-                        closeMenu();
-                        logout();
-                      }}
-                      className="p-2 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors cursor-pointer"
-                      title="تسجيل الخروج"
-                    >
-                      <LogOut className="h-4.5 w-4.5" />
-                    </button>
+
+                    {/* Quick Account Controls */}
+                    <div className="flex items-center gap-1 shrink-0 bg-stone-900/60 p-1 rounded-2xl border border-stone-700/60 backdrop-blur-xs">
+                      <Link
+                        to="/profile/settings"
+                        onClick={closeMenu}
+                        className="p-2 text-stone-300 hover:text-white hover:bg-stone-800 rounded-xl transition-colors cursor-pointer"
+                        title="إعدادات الحساب"
+                      >
+                        <Settings className="h-4 w-4" />
+                      </Link>
+                      <button
+                        onClick={() => {
+                          closeMenu();
+                          logout();
+                        }}
+                        className="p-2 text-stone-300 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-colors cursor-pointer"
+                        title="تسجيل الخروج"
+                      >
+                        <LogOut className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               ) : (
-                <div className="bg-gradient-to-r from-stone-900 to-[#1a4d2e] p-4 rounded-2xl text-white shadow-xs flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-black text-white">أهلاً بك في إربد! 👋</p>
-                    <p className="text-xs text-stone-300 mt-0.5">سجل حسابك لحفظ المفضلات والرسائل</p>
+                <div className="relative overflow-hidden bg-gradient-to-r from-stone-900 via-stone-800 to-[#1a4d2e] p-4.5 rounded-3xl text-white shadow-lg border border-stone-800 flex items-center justify-between gap-3">
+                  <div className="space-y-0.5 min-w-0">
+                    <p className="text-sm font-black text-white">أهلاً بك في دليل إربد! 👋</p>
+                    <p className="text-[11px] text-stone-300 font-medium truncate">سجّل حسابك مجاناً للتواصل وحفظ المفضلات</p>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
                     <Link
                       to="/login"
                       onClick={closeMenu}
-                      className="px-3.5 py-2 bg-emerald-500 hover:bg-emerald-600 text-stone-950 text-xs font-black rounded-xl transition-colors"
+                      className="px-3.5 py-2 bg-emerald-500 hover:bg-emerald-600 text-stone-950 text-xs font-black rounded-xl transition-all shadow-xs active:scale-95"
                     >
                       دخول
                     </Link>
                     <Link
                       to="/register"
                       onClick={closeMenu}
-                      className="px-3.5 py-2 bg-white/20 hover:bg-white/30 text-white text-xs font-bold rounded-xl transition-colors"
+                      className="px-3.5 py-2 bg-white/15 hover:bg-white/25 text-white text-xs font-bold rounded-xl border border-white/20 transition-all active:scale-95"
                     >
                       تسجيل
                     </Link>
@@ -832,245 +901,311 @@ export function Layout() {
                 </div>
               )}
 
-              {/* Action 1: App Download Banner */}
-              <button
-                type="button"
-                onClick={() => {
-                  closeMenu();
-                  triggerPwaInstallModal();
-                }}
-                className="w-full p-3.5 rounded-2xl bg-gradient-to-r from-stone-900 via-stone-800 to-[#1a4d2e] text-white flex items-center justify-between border border-stone-800 shadow-xs hover:shadow-md transition-all cursor-pointer active:scale-98"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/30">
-                    <Smartphone className="h-4.5 w-4.5 animate-pulse" />
+              {/* 2. Floating Command Strip: 4 Interactive Utility Tiles */}
+              <div className="grid grid-cols-4 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeMenu();
+                    navigate('/search');
+                  }}
+                  className="bg-white p-2.5 rounded-2xl border border-stone-200/90 shadow-2xs hover:border-emerald-300 flex flex-col items-center justify-center text-center gap-1.5 transition-all active:scale-95 cursor-pointer group"
+                >
+                  <div className="w-9 h-9 rounded-xl bg-emerald-50 text-[#1a4d2e] flex items-center justify-center shrink-0 group-hover:bg-[#1a4d2e] group-hover:text-white transition-colors">
+                    <Search className="h-4.5 w-4.5" />
                   </div>
-                  <div className="text-right">
-                    <span className="text-xs font-black text-emerald-300 block">تنزيل تطبيق الهاتف مجاناً</span>
-                    <span className="text-[10px] text-stone-300 font-medium">تجربة أسرع بدون تصفح</span>
-                  </div>
-                </div>
-                <span className="text-xs bg-emerald-500 text-stone-950 font-black px-3 py-1 rounded-lg shadow-2xs shrink-0">
-                  تثبيت 📲
-                </span>
-              </button>
+                  <span className="text-[10px] font-black text-stone-700 truncate w-full">البحث</span>
+                </button>
 
-              {/* Action 2: Quick Search Bar Button */}
-              <button
-                type="button"
-                onClick={() => {
-                  closeMenu();
-                  navigate('/search');
-                }}
-                className="w-full p-3.5 rounded-2xl bg-white text-stone-600 hover:text-stone-900 border border-stone-200/90 shadow-2xs flex items-center justify-between transition-all cursor-pointer"
-              >
-                <div className="flex items-center gap-3">
-                  <Search className="h-4.5 w-4.5 text-[#1a4d2e]" />
-                  <span className="text-xs font-bold">عن ماذا تبحث في إربد؟</span>
-                </div>
-                <span className="text-[10px] bg-stone-100 text-stone-500 font-bold px-2.5 py-1 rounded-lg border border-stone-200">
-                  بحث
-                </span>
-              </button>
-
-              {/* Section: Communications (Notifications & Messages) */}
-              <div className="grid grid-cols-2 gap-3">
                 <Link
                   to="/notifications"
                   onClick={closeMenu}
-                  className="p-3 rounded-2xl bg-white border border-stone-200/90 shadow-2xs hover:border-emerald-300 transition-all flex items-center gap-3"
+                  className="bg-white p-2.5 rounded-2xl border border-stone-200/90 shadow-2xs hover:border-emerald-300 flex flex-col items-center justify-center text-center gap-1.5 transition-all active:scale-95 group relative"
                 >
-                  <div className="w-8 h-8 rounded-xl bg-emerald-50 text-[#1a4d2e] flex items-center justify-center shrink-0">
-                    <Bell className="h-4 w-4" />
+                  <div className="w-9 h-9 rounded-xl bg-emerald-50 text-[#1a4d2e] flex items-center justify-center shrink-0 group-hover:bg-[#1a4d2e] group-hover:text-white transition-colors">
+                    <Bell className="h-4.5 w-4.5" />
                   </div>
-                  <div className="flex flex-col min-w-0">
-                    <span className="text-xs font-black text-stone-800 truncate">الإشعارات</span>
-                    <span className="text-[9px] text-stone-500 font-bold truncate">تنبيهات عاجلة</span>
-                  </div>
+                  <span className="text-[10px] font-black text-stone-700 truncate w-full">الإشعارات</span>
                 </Link>
 
                 <Link
                   to="/messages"
                   onClick={closeMenu}
-                  className="p-3 rounded-2xl bg-white border border-stone-200/90 shadow-2xs hover:border-emerald-300 transition-all flex items-center gap-3 relative"
+                  className="bg-white p-2.5 rounded-2xl border border-stone-200/90 shadow-2xs hover:border-emerald-300 flex flex-col items-center justify-center text-center gap-1.5 transition-all active:scale-95 group relative"
                 >
-                  <div className="w-8 h-8 rounded-xl bg-emerald-50 text-[#1a4d2e] flex items-center justify-center shrink-0">
-                    <MessageSquare className="h-4 w-4" />
+                  <div className="w-9 h-9 rounded-xl bg-emerald-50 text-[#1a4d2e] flex items-center justify-center shrink-0 group-hover:bg-[#1a4d2e] group-hover:text-white transition-colors">
+                    <MessageSquare className="h-4.5 w-4.5" />
                   </div>
-                  <div className="flex flex-col min-w-0">
-                    <span className="text-xs font-black text-stone-800 truncate">المحادثات</span>
-                    <span className="text-[9px] text-stone-500 font-bold truncate">دردشة ورسائل</span>
-                  </div>
+                  <span className="text-[10px] font-black text-stone-700 truncate w-full">المحادثات</span>
                   {hasUnreadMessages && (
-                    <span className="absolute top-3 left-3 w-2 h-2 rounded-full bg-red-600 animate-pulse" />
+                    <span className="absolute top-2.5 left-2.5 w-2 h-2 rounded-full bg-red-600 animate-pulse" />
                   )}
                 </Link>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeMenu();
+                    triggerPwaInstallModal();
+                  }}
+                  className="bg-stone-900 text-white p-2.5 rounded-2xl border border-stone-800 shadow-2xs flex flex-col items-center justify-center text-center gap-1.5 transition-all active:scale-95 cursor-pointer group"
+                >
+                  <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 group-hover:bg-emerald-500 group-hover:text-stone-950 transition-colors">
+                    <Smartphone className="h-4.5 w-4.5" />
+                  </div>
+                  <span className="text-[10px] font-black text-emerald-300 truncate w-full">التطبيق</span>
+                </button>
               </div>
 
-              {/* Section: Main App Grid */}
-              <div className="space-y-3 pt-1">
-                {/* Always show "Add your business" button as it's a primary action of the site */}
-                {isMedicalPage ? (
-                  <Link
-                    to="/medical/register"
-                    onClick={closeMenu}
-                    className="w-full p-3.5 rounded-2xl bg-emerald-50 hover:bg-emerald-100 text-[#1a4d2e] border border-emerald-300 font-black text-xs flex items-center justify-between transition-all"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <Stethoscope className="h-4.5 w-4.5 text-[#1a4d2e]" />
-                      <span>طبيب، صيدلي أو تملك منشأة طبية؟</span>
+              {/* 3. Special Merchant & Business Promo Banner */}
+              {currentUser && activeGiftBusinesses.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeMenu();
+                    navigate('/merchant/scanner');
+                  }}
+                  className="w-full p-3.5 rounded-2xl bg-gradient-to-r from-emerald-950 via-stone-950 to-teal-950 text-white flex items-center justify-between border-2 border-emerald-500/60 shadow-lg shadow-emerald-950/30 hover:border-emerald-400 transition-all cursor-pointer active:scale-98 group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-500 text-stone-950 flex items-center justify-center shrink-0 shadow-md group-hover:scale-105 transition-transform">
+                      <QrCode className="h-5 w-5" />
                     </div>
-                    <span className="text-[10px] bg-[#1a4d2e] text-white font-bold px-2.5 py-1 rounded-md">
-                      أضف منشأتك
-                    </span>
-                  </Link>
-                ) : (
-                  <Link
-                    to="/contact"
-                    onClick={closeMenu}
-                    className="w-full p-3.5 rounded-2xl bg-emerald-50 hover:bg-emerald-100 text-[#1a4d2e] border border-emerald-200/80 font-black text-xs flex items-center justify-between transition-all"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <PlusCircle className="h-4.5 w-4.5 text-[#1a4d2e]" />
-                      <span>هل تملك محلاً في إربد؟</span>
+                    <div className="text-right">
+                      <span className="text-xs font-black text-white block">ماسح كودات الخصم</span>
                     </div>
-                    <span className="text-[10px] bg-[#1a4d2e] text-white font-bold px-2.5 py-1 rounded-md">
-                      ضاعف زبائنك
-                    </span>
-                  </Link>
-                )}
+                  </div>
+                  <ChevronLeft className="h-4 w-4 text-emerald-400 group-hover:-translate-x-0.5 transition-transform shrink-0" />
+                </button>
+              )}
 
-                <p className="text-xs font-black text-stone-400 px-1">تصفح أقسام المنصة</p>
-                <nav className="grid grid-cols-2 gap-3">
+              {/* Add Business Callout Banner */}
+              {isMedicalPage ? (
+                <Link
+                  to="/medical/register"
+                  onClick={closeMenu}
+                  className="w-full p-3.5 rounded-2xl bg-emerald-50/90 hover:bg-emerald-100/90 text-[#1a4d2e] border border-emerald-200/90 font-black text-xs flex items-center justify-between transition-all shadow-2xs"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-[#1a4d2e] text-white flex items-center justify-center shrink-0">
+                      <Stethoscope className="h-4 w-4" />
+                    </div>
+                    <span>طبيب أو تملك منشأة طبية؟</span>
+                  </div>
+                  <span className="text-[10px] bg-[#1a4d2e] text-white font-extrabold px-2.5 py-1 rounded-xl shadow-2xs">
+                    أضف منشأتك
+                  </span>
+                </Link>
+              ) : (
+                <Link
+                  to="/contact"
+                  onClick={closeMenu}
+                  className="w-full p-3.5 rounded-2xl bg-emerald-50/90 hover:bg-emerald-100/90 text-[#1a4d2e] border border-emerald-200/90 font-black text-xs flex items-center justify-between transition-all shadow-2xs"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-[#1a4d2e] text-white flex items-center justify-center shrink-0">
+                      <PlusCircle className="h-4 w-4" />
+                    </div>
+                    <span>هل تملك نشاطاً تجارياً في إربد؟</span>
+                  </div>
+                  <span className="text-[10px] bg-[#1a4d2e] text-white font-extrabold px-2.5 py-1 rounded-xl shadow-2xs">
+                    ضاعف زبائنك
+                  </span>
+                </Link>
+              )}
+
+              {/* 4. Categorized Main Navigation Sections */}
+              
+              {/* SECTION A: Primary Discovery Hub */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-xs font-black text-stone-500 uppercase tracking-wide">الخدمات والاكتشافات</span>
+                  <span className="text-[10px] font-extrabold text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded-md">أبرز الأقسام</span>
+                </div>
+
+                <nav className="grid grid-cols-2 gap-2.5">
                   <Link
                     to="/"
                     onClick={closeMenu}
-                    className="p-3.5 rounded-2xl bg-[#1a4d2e] text-white flex items-center gap-2.5 font-black text-xs shadow-2xs transition-all hover:bg-[#143d24]"
+                    className="p-3.5 rounded-2xl bg-[#1a4d2e] text-white flex items-center gap-2.5 font-black text-xs shadow-md transition-all active:scale-95 group"
                   >
-                    <Store className="h-4.5 w-4.5 text-[#ff9f1c]" />
+                    <Store className="h-4.5 w-4.5 text-amber-400 group-hover:scale-110 transition-transform" />
                     <span>الرئيسية</span>
                   </Link>
 
                   <Link
                     to="/offers"
                     onClick={closeMenu}
-                    className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-500 to-red-600 text-white flex items-center justify-between font-black text-xs shadow-2xs transition-all hover:brightness-105"
+                    className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-red-600 text-white flex items-center gap-2 font-black text-xs shadow-md transition-all active:scale-95 group"
                   >
-                    <div className="flex items-center gap-1.5">
-                      <Flame className="h-4.5 w-4.5 text-amber-200" />
-                      <span>عروض وخصومات</span>
-                    </div>
+                    <Flame className="h-4.5 w-4.5 text-amber-200 animate-pulse" />
+                    <span>العروض والخصومات</span>
                   </Link>
 
                   <Link
                     to="/jobs"
                     onClick={closeMenu}
-                    className="p-3.5 rounded-2xl bg-white border border-stone-200/90 text-stone-800 hover:bg-stone-100 flex items-center gap-2.5 font-bold text-xs transition-all"
+                    className="p-3.5 rounded-2xl bg-white border border-stone-200/90 text-stone-800 hover:border-emerald-300 flex items-center gap-2.5 font-bold text-xs transition-all shadow-2xs active:scale-95 group"
                   >
-                    <Briefcase className="h-4.5 w-4.5 text-emerald-700" />
-                    <span>الوظائف</span>
+                    <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
+                      <Briefcase className="h-4 w-4" />
+                    </div>
+                    <span className="font-black">الوظائف</span>
                   </Link>
 
                   <Link
                     to="/housing"
                     onClick={closeMenu}
-                    className="p-3.5 rounded-2xl bg-white border border-stone-200/90 text-stone-800 hover:bg-stone-100 flex items-center gap-2.5 font-bold text-xs transition-all"
+                    className="p-3.5 rounded-2xl bg-white border border-stone-200/90 text-stone-800 hover:border-emerald-300 flex items-center gap-2.5 font-bold text-xs transition-all shadow-2xs active:scale-95 group"
                   >
-                    <Building2 className="h-4.5 w-4.5 text-blue-600" />
-                    <span>سكنات وعقارات</span>
+                    <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                      <Building2 className="h-4 w-4" />
+                    </div>
+                    <span className="font-black">سكنات وعقارات</span>
                   </Link>
+                </nav>
+              </div>
 
+              {/* SECTION B: City Life & Utilities */}
+              <div className="space-y-2 pt-1">
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-xs font-black text-stone-500 uppercase tracking-wide">دليل الحياة والمرافق</span>
+                  <span className="text-[10px] font-extrabold text-stone-400">إربد والمحافظة</span>
+                </div>
+
+                <nav className="grid grid-cols-2 gap-2.5">
                   <Link
                     to="/transportation"
                     onClick={closeMenu}
-                    className="p-3.5 rounded-2xl bg-white border border-stone-200/90 text-stone-800 hover:bg-stone-100 flex items-center gap-2.5 font-bold text-xs transition-all col-span-2"
+                    className="p-3.5 rounded-2xl bg-white border border-stone-200/90 text-stone-800 hover:border-amber-300 flex items-center justify-between font-bold text-xs transition-all shadow-2xs active:scale-95 col-span-2 group"
                   >
-                    <Bus className="h-4.5 w-4.5 text-amber-600" />
-                    <span>دليل المواصلات والمجمعات</span>
-                  </Link>
-
-                  <Link
-                    to="/news"
-                    onClick={closeMenu}
-                    className="p-3.5 rounded-2xl bg-white border border-stone-200/90 text-stone-800 hover:bg-stone-100 flex items-center gap-2.5 font-bold text-xs transition-all"
-                  >
-                    <Newspaper className="h-4.5 w-4.5 text-purple-600" />
-                    <span>أخبار إربد</span>
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 font-black">
+                        <Bus className="h-4.5 w-4.5" />
+                      </div>
+                      <span className="font-black text-stone-900">دليل المواصلات والمجمعات</span>
+                    </div>
+                    <ChevronLeft className="h-4 w-4 text-stone-400 group-hover:-translate-x-0.5 transition-transform" />
                   </Link>
 
                   <Link
                     to="/medical"
                     onClick={closeMenu}
-                    className="p-3.5 rounded-2xl bg-white border border-stone-200/90 text-stone-800 hover:bg-stone-100 flex items-center gap-2.5 font-bold text-xs transition-all"
+                    className="p-3.5 rounded-2xl bg-white border border-stone-200/90 text-stone-800 hover:border-red-300 flex items-center justify-between font-bold text-xs transition-all shadow-2xs active:scale-95 group"
                   >
-                    <Stethoscope className="h-4.5 w-4.5 text-red-500" />
-                    <span>الرعاية الطبية</span>
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-red-50 text-red-500 flex items-center justify-center shrink-0">
+                        <Stethoscope className="h-4 w-4" />
+                      </div>
+                      <span className="font-black">الرعاية الطبية</span>
+                    </div>
+                  </Link>
+
+                  <Link
+                    to="/news"
+                    onClick={closeMenu}
+                    className="p-3.5 rounded-2xl bg-white border border-stone-200/90 text-stone-800 hover:border-purple-300 flex items-center justify-between font-bold text-xs transition-all shadow-2xs active:scale-95 group"
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+                        <Newspaper className="h-4 w-4" />
+                      </div>
+                      <span className="font-black">أخبار إربد</span>
+                    </div>
                   </Link>
 
                   <Link
                     to="/tourism"
                     onClick={closeMenu}
-                    className="p-3.5 rounded-2xl bg-white border border-stone-200/90 text-stone-800 hover:bg-stone-100 flex items-center gap-2.5 font-bold text-xs transition-all"
+                    className="p-3.5 rounded-2xl bg-white border border-stone-200/90 text-stone-800 hover:border-teal-300 flex items-center justify-between font-bold text-xs transition-all shadow-2xs active:scale-95 group"
                   >
-                    <Compass className="h-4.5 w-4.5 text-teal-600" />
-                    <span>أماكن سياحية</span>
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center shrink-0">
+                        <Compass className="h-4 w-4" />
+                      </div>
+                      <span className="font-black">أماكن سياحية</span>
+                    </div>
                   </Link>
 
                   <Link
                     to="/prayer-times"
                     onClick={closeMenu}
-                    className="p-3.5 rounded-2xl bg-white border border-stone-200/90 text-stone-800 hover:bg-stone-100 flex items-center gap-2.5 font-bold text-xs transition-all"
+                    className="p-3.5 rounded-2xl bg-white border border-stone-200/90 text-stone-800 hover:border-indigo-300 flex items-center justify-between font-bold text-xs transition-all shadow-2xs active:scale-95 group"
                   >
-                    <Clock className="h-4.5 w-4.5 text-indigo-600" />
-                    <span>مواقيت الصلاة</span>
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                        <Clock className="h-4 w-4" />
+                      </div>
+                      <span className="font-black">مواقيت الصلاة</span>
+                    </div>
                   </Link>
-
-                  <Link
-                    to="/packages"
-                    onClick={closeMenu}
-                    className="p-3.5 rounded-2xl bg-white border border-stone-200/90 text-stone-800 hover:bg-stone-100 flex items-center gap-2.5 font-bold text-xs transition-all"
-                  >
-                    <Sparkles className="h-4.5 w-4.5 text-amber-500" />
-                    <span>باقات VIP</span>
-                  </Link>
-
                 </nav>
               </div>
 
-              {/* Section: Action Buttons */}
-              <div className="space-y-3 shrink-0">
-                {/* Show Admin/Staff Dashboard button if they have permission */}
-                {isStaff && (
+              {/* SECTION C: VIP Membership & Admin Control */}
+              <div className="space-y-2 pt-1">
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-xs font-black text-stone-500 uppercase tracking-wide">الترقية والخدمات</span>
+                </div>
+
+                <div className="space-y-2">
                   <Link
-                    to="/admin"
+                    to="/packages"
                     onClick={closeMenu}
-                    className="w-full p-3.5 rounded-2xl bg-amber-500 hover:bg-amber-600 text-stone-950 font-black text-sm flex items-center justify-center gap-2 shadow-sm transition-all"
+                    className="p-3.5 rounded-2xl bg-gradient-to-r from-stone-900 to-amber-950 text-white border border-amber-500/30 flex items-center justify-between font-black text-xs transition-all shadow-sm active:scale-98 group"
                   >
-                    <Shield className="h-4.5 w-4.5" />
-                    <span>لوحة التحكم والإدارة</span>
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/30">
+                        <Crown className="h-4.5 w-4.5 text-amber-300 animate-pulse" />
+                      </div>
+                      <div>
+                        <span className="text-white font-black block text-xs">باقات VIP المميزة</span>
+                        <span className="text-[10px] text-amber-300/90 font-bold block">صدّار المحافظة ويميّز نشاطك</span>
+                      </div>
+                    </div>
+                    <span className="text-[10px] bg-amber-500 text-stone-950 font-black px-2.5 py-1 rounded-lg">
+                      ترقية
+                    </span>
                   </Link>
-                )}
+
+                  {/* Admin/Staff Dashboard Link */}
+                  {isStaff && (
+                    <Link
+                      to="/admin"
+                      onClick={closeMenu}
+                      className="w-full p-3.5 rounded-2xl bg-amber-500 hover:bg-amber-600 text-stone-950 font-black text-xs flex items-center justify-between shadow-md transition-all active:scale-98"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Shield className="h-4.5 w-4.5" />
+                        <span>لوحة التحكم والعمليات</span>
+                      </div>
+                      <span className="bg-stone-950 text-white text-[10px] px-2 py-0.5 rounded-md font-bold">الإدارة</span>
+                    </Link>
+                  )}
+                </div>
               </div>
 
-              {/* Footer info links */}
-              <div className="flex items-center justify-around pt-4 text-xs font-bold text-stone-500 border-t border-stone-200/80">
-                <Link to="/about" onClick={closeMenu} className="hover:text-stone-900 transition-colors flex items-center gap-1.5">
-                  <Info className="h-4 w-4" />
-                  <span>عن المنصة</span>
-                </Link>
-                <span className="text-stone-300">•</span>
-                <Link to="/contact" onClick={closeMenu} className="hover:text-stone-900 transition-colors flex items-center gap-1.5">
-                  <Phone className="h-4 w-4" />
-                  <span>اتصل بنا</span>
-                </Link>
+              {/* 5. Footer Information & Quick Links */}
+              <div className="pt-4 border-t border-stone-200/80 space-y-3">
+                <div className="flex items-center justify-around text-xs font-bold text-stone-500">
+                  <Link to="/about" onClick={closeMenu} className="hover:text-stone-900 transition-colors flex items-center gap-1.5">
+                    <Info className="h-3.5 w-3.5" />
+                    <span>عن المنصة</span>
+                  </Link>
+                  <span className="text-stone-300">•</span>
+                  <Link to="/contact" onClick={closeMenu} className="hover:text-stone-900 transition-colors flex items-center gap-1.5">
+                    <Phone className="h-3.5 w-3.5" />
+                    <span>اتصل بنا</span>
+                  </Link>
+                </div>
+
+                <div className="text-center pt-1">
+                  <p className="text-[10px] text-stone-400 font-bold">
+                    دليل "{globalSettings.siteName}" الرقمي • جميع الحقوق محفوظة {getJordanYear()}
+                  </p>
+                </div>
               </div>
 
-              {/* Drawer Version Note */}
-              <div className="pt-2 text-center border-t border-stone-100 mt-2">
-                <p className="text-[10px] text-stone-400 font-bold">
-                  دليل "{globalSettings.siteName}" الرقمي 📱
-                </p>
-              </div>
             </div>
           </motion.div>
         )}
@@ -1209,8 +1344,8 @@ export function Layout() {
                 onClick={triggerPwaInstallModal}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-stone-900 hover:bg-stone-800 text-emerald-400 font-bold text-xs rounded-xl shadow-xs border border-stone-800 transition-all cursor-pointer active:scale-98"
               >
-                <Smartphone className="h-4 w-4 text-emerald-400 animate-pulse" />
-                <span>تنزيل تطبيق الهاتف مجاناً 📱</span>
+                <Smartphone className="h-4 w-4 text-emerald-400" />
+                <span>تنزيل تطبيق الهاتف</span>
               </button>
             </div>
             <div>

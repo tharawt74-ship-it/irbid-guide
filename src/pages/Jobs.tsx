@@ -6,8 +6,9 @@ import {
   Filter, Sparkles, X, Send, GraduationCap, Check, Trash2, 
   Pencil, RefreshCw, Share2, Eye, Store, ExternalLink, Users, Award, ChevronDown
 } from 'lucide-react';
-import { collection, getDocs, doc, deleteDoc, query, orderBy } from 'firebase/firestore';
+import { collection, getDocs, doc, deleteDoc, query, orderBy, limit } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { getCachedJobs, setCachedJobs } from '../lib/dataCache';
 import { JobOffer, Business, HomepageBanner } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { Link } from 'react-router';
@@ -74,6 +75,12 @@ export function Jobs() {
           .then(res => setBanners(res))
           .catch(() => setBanners(DEFAULT_JOBS_BANNERS));
 
+        const cached = getCachedJobs();
+        if (cached && cached.length > 0) {
+          setJobs(cached);
+          setLoading(false);
+        }
+
         if (!db) {
           setJobs([]);
           setLoading(false);
@@ -81,7 +88,7 @@ export function Jobs() {
         }
 
         const appConfig = await getAppConfig();
-        const q = query(collection(db, 'jobs'), orderBy('createdAt', 'desc'));
+        const q = query(collection(db, 'jobs'), orderBy('createdAt', 'desc'), limit(80));
         const snapshot = await getDocs(q);
 
         const list: JobOffer[] = [];
@@ -94,6 +101,7 @@ export function Jobs() {
         });
 
         setJobs(list);
+        setCachedJobs(list);
       } catch (err) {
         console.error('Error fetching jobs from Firestore:', err);
         setJobs([]);
@@ -191,7 +199,7 @@ export function Jobs() {
         title="وظائف وشواغر إربد | أحدث فرص العمل في محافظة إربد"
         description="أحدث وظائف وفرص العمل الشاغرة في محافظة إربد: وظائف مطاعم ومقاهي، مبيعات، تسويق، شركات تكنولوجيا، فرص دوام جزئي وكامل ومناسبة لطلاب الجامعات."
         keywords={['وظائف إربد', 'شواغر إربد', 'عمل في إربد', 'وظائف طلاب إربد', 'وظائف اليرموك', 'سوق العمل إربد']}
-        canonicalUrl="https://shofierbid.com/jobs"
+        canonicalUrl="https://shofibirbid.site/jobs"
       />
       {/* Toast Notification */}
       {toastMessage && (
@@ -671,11 +679,14 @@ export function Jobs() {
 
       {/* Comprehensive Job Details Modal */}
       {selectedDetailJob && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto" dir="rtl">
-          <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[88vh] overflow-y-auto p-6 sm:p-8 shadow-2xl border border-stone-200 space-y-6 relative my-auto animate-in fade-in zoom-in-95">
+        <div className="fixed inset-0 z-[100000] bg-stone-950/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 overflow-hidden" dir="rtl">
+          <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-3xl w-full max-h-[88dvh] sm:max-h-[85vh] flex flex-col overflow-hidden shadow-2xl border border-stone-200 relative my-0 sm:my-auto animate-in slide-in-from-bottom-6 sm:zoom-in-95 duration-200 text-right">
             
+            {/* Mobile Drag Indicator */}
+            <div className="w-12 h-1.5 bg-stone-300 rounded-full mx-auto my-2 sm:hidden shrink-0" />
+
             {/* Header */}
-            <div className="flex items-start justify-between border-b border-[#e5e1da] pb-4">
+            <div className="flex items-start justify-between border-b border-[#e5e1da] p-4 sm:p-6 shrink-0 bg-white">
               <div className="space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="bg-[#1a4d2e]/10 text-[#1a4d2e] text-xs font-black px-2.5 py-0.5 rounded-md">
@@ -692,7 +703,7 @@ export function Jobs() {
                   )}
                 </div>
 
-                <h3 className="text-2xl font-black text-[#2d2a26]">
+                <h3 className="text-lg sm:text-2xl font-black text-[#2d2a26]">
                   {selectedDetailJob.title}
                 </h3>
                 
@@ -717,11 +728,14 @@ export function Jobs() {
 
               <button
                 onClick={() => setSelectedDetailJob(null)}
-                className="p-2 text-stone-400 hover:text-stone-700 rounded-xl hover:bg-stone-100 transition-colors"
+                className="p-2 text-stone-400 hover:text-stone-700 rounded-xl hover:bg-stone-100 transition-colors shrink-0 cursor-pointer"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
+
+            {/* Scrollable Content Body */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
 
             {/* Comprehensive Meta Specs Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 bg-stone-50 p-4 rounded-2xl border border-[#e5e1da]">
@@ -828,16 +842,18 @@ export function Jobs() {
               </div>
             )}
 
+            </div>
+
             {/* Contact & Apply Footer */}
-            <div className="pt-4 border-t border-[#e5e1da] flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="text-xs text-stone-500">
+            <div className="p-4 sm:px-6 bg-stone-50/90 border-t border-[#e5e1da] flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0 sticky bottom-0 z-10">
+              <div className="text-xs text-stone-500 text-center sm:text-right">
                 <span>لأي استفسار يمكنك التواصل مع جهة التوظيف مباشرة:</span>
                 <span className="block font-black text-stone-800 text-sm mt-0.5" dir="ltr">{selectedDetailJob.contactPhone}</span>
               </div>
 
               <div className="flex items-center gap-2.5 w-full sm:w-auto">
                 <a
-                  href={`https://wa.me/${(selectedDetailJob.contactWhatsapp || selectedDetailJob.contactPhone).replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`مرحباً، أود التقدم لوظيفة (${selectedDetailJob.title}) لدى (${selectedDetailJob.company}) المعلنة على دليل شو في بإربد.`)}`}
+                  href={`https://wa.me/${selectedDetailJob.contactWhatsapp || selectedDetailJob.contactPhone}?text=${encodeURIComponent('مرحباً، أود التقدم لوظيفة (' + selectedDetailJob.title + ') لدى (' + selectedDetailJob.company + ') المعلنة على دليل شو في بإربد.')}`}
                   target="_blank"
                   rel="noreferrer"
                   className="flex-1 sm:flex-initial inline-flex justify-center items-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl transition-colors shadow-xs cursor-pointer"

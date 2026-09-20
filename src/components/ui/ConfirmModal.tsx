@@ -87,16 +87,19 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   const styles = getVariantStyles();
 
   return createPortal(
-    <div className="fixed inset-0 z-[100000] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[100000] flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-hidden">
       <div 
-        className="absolute inset-0 bg-stone-900/60 backdrop-blur-sm transition-opacity" 
+        className="absolute inset-0 bg-stone-950/80 backdrop-blur-md transition-opacity" 
         onClick={!isProcessing ? onClose : undefined}
       />
       <div 
-        className="bg-white rounded-2xl shadow-xl w-full max-w-sm relative z-10 overflow-hidden"
+        className="bg-white rounded-t-3xl sm:rounded-2xl shadow-2xl w-full max-w-sm relative z-10 flex flex-col max-h-[88dvh] sm:max-h-[85vh] overflow-hidden my-0 sm:my-auto animate-in fade-in zoom-in-95 duration-200"
         dir="rtl"
       >
-        <div className="p-5 sm:p-6 text-center">
+        {/* Mobile Drag Indicator */}
+        <div className="w-12 h-1.5 bg-stone-300 rounded-full mx-auto my-2.5 sm:hidden shrink-0" />
+
+        <div className="p-5 sm:p-6 text-center overflow-y-auto flex-1 min-h-0">
           <div className={cn("mx-auto flex h-14 w-14 items-center justify-center rounded-full mb-4", styles.iconBg)}>
             {getIcon()}
           </div>
@@ -108,11 +111,11 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
           </p>
         </div>
         
-        <div className="bg-stone-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse sm:gap-2">
+        <div className="bg-stone-50 px-4 py-3 sm:px-6 flex flex-col-reverse sm:flex-row-reverse gap-2 shrink-0 border-t border-stone-100 sticky bottom-0 z-10">
           <button
             type="button"
             className={cn(
-              "w-full inline-flex justify-center rounded-xl border border-transparent px-4 py-2.5 text-sm font-bold text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 sm:ml-3 sm:w-auto transition-colors disabled:opacity-70 disabled:cursor-not-allowed",
+              "w-full inline-flex justify-center rounded-xl border border-transparent px-4 py-2.5 text-sm font-bold text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 sm:w-auto transition-colors disabled:opacity-70 disabled:cursor-not-allowed",
               styles.btn
             )}
             onClick={handleConfirm}
@@ -129,7 +132,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
           </button>
           <button
             type="button"
-            className="mt-3 w-full inline-flex justify-center rounded-xl border border-stone-300 bg-white px-4 py-2.5 text-sm font-bold text-stone-700 shadow-sm hover:bg-stone-50 focus:outline-none focus:ring-2 focus:ring-stone-500 focus:ring-offset-2 sm:mt-0 sm:w-auto transition-colors"
+            className="w-full inline-flex justify-center rounded-xl border border-stone-300 bg-white px-4 py-2.5 text-sm font-bold text-stone-700 shadow-sm hover:bg-stone-50 focus:outline-none focus:ring-2 focus:ring-stone-500 focus:ring-offset-2 sm:w-auto transition-colors"
             onClick={onClose}
             disabled={isProcessing}
           >

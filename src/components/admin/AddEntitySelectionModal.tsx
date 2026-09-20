@@ -30,14 +30,16 @@ export function AddEntitySelectionModal({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100000] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200"
+      className="fixed inset-0 z-[100000] bg-stone-950/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 overflow-hidden animate-in fade-in duration-200"
       dir="rtl"
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-stone-200 space-y-6 relative my-auto animate-in zoom-in-95 duration-200"
+        className="bg-white rounded-t-3xl sm:rounded-3xl max-w-lg w-full p-5 sm:p-8 shadow-2xl border border-stone-200 relative my-0 sm:my-auto animate-in zoom-in-95 duration-200 flex flex-col max-h-[88dvh] sm:max-h-[85vh] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Mobile Drag Indicator */}
+        <div className="w-12 h-1.5 bg-stone-300 rounded-full mx-auto my-1 sm:hidden shrink-0" />
         {/* Header */}
         <div className="flex items-start justify-between border-b border-stone-100 pb-4">
           <div className="flex items-center gap-3">

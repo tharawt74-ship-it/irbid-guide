@@ -1,5 +1,5 @@
 /**
- * Security Utility Helpers for Shofi Erbid (100% Free, Zero-Dependency Bot & Spam Protection)
+ * Security Utility Helpers for ShofiBIrbid (100% Free, Zero-Dependency Bot & Spam Protection)
  */
 
 /**

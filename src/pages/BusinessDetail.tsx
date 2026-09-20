@@ -1,5 +1,5 @@
 import { useConfirm } from '../contexts/ConfirmContext';
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, Link, useLocation, useNavigate } from 'react-router';
 import DOMPurify from 'dompurify';
@@ -15,9 +15,10 @@ import {
   Crown, BarChart3, UtensilsCrossed, Lock as LockIcon, Percent, Globe, Facebook, Instagram, Twitter, Youtube, Smartphone, Send,
   Video, Play, Trash2, Plus, Camera, Image as ImageIcon, ArrowLeft, ChevronLeft, ChevronRight, ChevronDown,
   Briefcase, Building2, Flame, DollarSign, Award, Users, Calendar, Stethoscope, HeartPulse, Activity,
-  Pill, Shield
+  Pill, Shield, Gift, Settings2, QrCode, Truck
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { handleFirestoreError, OperationType } from '../lib/firestoreHelper';
 import { formatDistanceToNow } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { getGoogleMapsEmbedUrl, getGoogleMapsActionUrls } from '../lib/googleReviewsHelper';
@@ -35,18 +36,20 @@ import { getBusinessVipStatus } from '../lib/vipHelper';
 import { compressAndSanitizeFirestorePayload } from '../lib/firestoreHelper';
 import { getWhatsAppUrl, formatBusinessWhatsAppMessage } from '../lib/contactHelper';
 import { ShareButton } from '../components/ShareButton';
-import { getCachedBusinessDetail, setCachedBusinessDetail } from '../lib/dataCache';
+import { getCachedBusinessDetail, setCachedBusinessDetail, invalidateCache } from '../lib/dataCache';
 import { BusinessCard } from '../components/BusinessCard';
 import { DEMO_SEED_DATA } from '../lib/demoDataHelper';
 import { trackBusinessInteraction } from '../lib/analyticsTracker';
 import { SEO } from '../components/common/SEO';
 import { getJordanNow } from '../lib/jordanTime';
 import { isBotSubmission, checkSubmissionRateLimit, recordSubmissionTime, sanitizeInput, executeReCaptcha } from '../lib/security';
+import { NotFound } from './NotFound';
 import { WhatsApp3DIcon, WhatsAppIcon, Phone3DIcon } from '../components/common/PremiumContactButtons';
 import { WorkingHoursEditor } from '../components/ui/WorkingHoursEditor';
 import { isMedicalBusiness, getMedicalProfile, isStaffTabEligible } from '../lib/medicalHelper';
 import { MedicalBusinessDetailView } from '../components/medical/MedicalBusinessDetailView';
 import { MedicalAppointmentModal } from '../components/medical/MedicalAppointmentModal';
+import { saveUserReward, findExistingRewardForBusiness, fetchUserRewards, UserReward } from '../lib/rewardHelper';
 import { MedicalInsurancesTab } from '../components/medical/MedicalInsurancesTab';
 import { MedicalStaffTab } from '../components/medical/MedicalStaffTab';
 import { isTodayWorkingDay } from '../lib/businessHoursHelper';
@@ -186,9 +189,71 @@ export function BusinessDetail() {
   const [newComment, setNewComment] = useState('');
   const [submittingReview, setSubmittingReview] = useState(false);
   const [activeTab, setActiveTab] = useState('about');
+  const tabsAnchorRef = useRef<HTMLDivElement>(null);
+
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    
+    // Smooth scroll user to the top of the selected tab / content area
+    requestAnimationFrame(() => {
+      if (tabsAnchorRef.current) {
+        const anchorTop = tabsAnchorRef.current.getBoundingClientRect().top + window.scrollY;
+        // Keep comfortable offset so tab bar is visible right under layout header or at top of screen
+        const headerOffset = window.innerWidth < 640 ? 72 : window.innerWidth < 1024 ? 76 : 85;
+        const targetY = Math.max(0, anchorTop - headerOffset);
+        
+        window.scrollTo({
+          top: targetY,
+          behavior: 'smooth'
+        });
+      }
+    });
+  };
+
   const [error, setError] = useState('');
   const [copiedPhone, setCopiedPhone] = useState(false);
   const [shareSuccess, setShareSuccess] = useState(false);
+  
+  const [showHeader, setShowHeader] = useState(true);
+
+  useEffect(() => {
+    const handleHeaderVisibility = (e: Event) => {
+      const customEvent = e as CustomEvent<{ visible: boolean }>;
+      if (customEvent.detail && typeof customEvent.detail.visible === 'boolean') {
+        setShowHeader(customEvent.detail.visible);
+      }
+    };
+
+    window.addEventListener('app-header-visibility', handleHeaderVisibility);
+
+    let lastY = window.scrollY;
+    let ticking = false;
+    const handleScroll = () => {
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          const currentY = window.scrollY;
+          if (window.innerWidth < 1024) {
+            if (currentY > lastY && currentY > 80) {
+              setShowHeader(false);
+            } else if (currentY < lastY) {
+              setShowHeader(true);
+            }
+          } else {
+            setShowHeader(true);
+          }
+          lastY = currentY;
+          ticking = false;
+        });
+        ticking = true;
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      window.removeEventListener('app-header-visibility', handleHeaderVisibility);
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, []);
 
   const [liveStatus, setLiveStatus] = useState(() => getLiveWorkingStatus(business?.workingHours));
 
@@ -361,9 +426,31 @@ export function BusinessDetail() {
 
   // Edit / Privacy Modal State for Business Owner
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isGiftCodeCustomizationOpen, setIsGiftCodeCustomizationOpen] = useState(false);
+  const [isGiftCodeStatsOpen, setIsGiftCodeStatsOpen] = useState(false);
+  const [awardedGiftCode, setAwardedGiftCode] = useState<{ code: string; discountPercent: number; businessName: string } | null>(null);
   const [editForm, setEditForm] = useState<Partial<Business>>({});
   const [isUpdating, setIsUpdating] = useState(false);
   const [updateSuccess, setUpdateSuccess] = useState(false);
+  const [existingUserReward, setExistingUserReward] = useState<any>(null);
+  const [isClaimingReward, setIsClaimingReward] = useState(false);
+
+  // Check if current user already has a reward for this business
+  useEffect(() => {
+    async function checkUserReward() {
+      if (!currentUser || !id) {
+        setExistingUserReward(null);
+        return;
+      }
+      try {
+        const found = await findExistingRewardForBusiness(currentUser.uid, id);
+        setExistingUserReward(found);
+      } catch (err) {
+        console.warn("Could not check existing reward:", err);
+      }
+    }
+    checkUserReward();
+  }, [currentUser, id]);
 
   // VIP Feature Modals for Business Owner
   const [isMenuManagerOpen, setIsMenuManagerOpen] = useState(false);
@@ -772,6 +859,17 @@ export function BusinessDetail() {
       logoUrl: business.logoUrl || '',
       googlePlaceUrl: business.googlePlaceUrl || '',
       hideSiteReviews: Boolean(business.hideSiteReviews),
+      giftCodeEnabled: Boolean(business.giftCodeEnabled),
+      giftCodeMinStars: business.giftCodeMinStars || 1,
+      giftCodeLimitType: business.giftCodeLimitType || 'unlimited',
+      giftCodeTotalLimit: business.giftCodeTotalLimit || 100,
+      giftCodeDiscountPercent: business.giftCodeDiscountPercent || 10,
+      giftCodeValidityDays: business.giftCodeValidityDays || 30,
+      giftCodeStartDate: business.giftCodeStartDate || '',
+      giftCodeEndDate: business.giftCodeEndDate || '',
+      giftCodeGrantedCount: business.giftCodeGrantedCount || 0,
+      giftCodeUserLimit: business.giftCodeUserLimit || 'once',
+      giftCodeMaxPerUser: business.giftCodeMaxPerUser || 1,
       workingHours: business.workingHours || {
         isOpen24Hours: false,
         openTime: "09:00",
@@ -804,11 +902,23 @@ export function BusinessDetail() {
         logoUrl: editForm.logoUrl || '',
         googlePlaceUrl: editForm.googlePlaceUrl?.trim() || '',
         hideSiteReviews: Boolean(editForm.hideSiteReviews),
+        giftCodeEnabled: Boolean(editForm.giftCodeEnabled),
+        giftCodeMinStars: Number(editForm.giftCodeMinStars ?? 1),
+        giftCodeLimitType: editForm.giftCodeLimitType || 'unlimited',
+        giftCodeTotalLimit: Number(editForm.giftCodeTotalLimit ?? 100),
+        giftCodeDiscountPercent: Number(editForm.giftCodeDiscountPercent ?? 10),
+        giftCodeValidityDays: Number(editForm.giftCodeValidityDays ?? 30),
+        giftCodeStartDate: editForm.giftCodeStartDate || '',
+        giftCodeEndDate: editForm.giftCodeEndDate || '',
+        giftCodeGrantedCount: Number(editForm.giftCodeGrantedCount ?? 0),
+        giftCodeUserLimit: editForm.giftCodeUserLimit || 'once',
+        giftCodeMaxPerUser: Number(editForm.giftCodeMaxPerUser ?? 1),
         workingHours: editForm.workingHours || null,
       };
 
       const sanitizedPayload = await compressAndSanitizeFirestorePayload(updatedFields, true);
       await updateDoc(docRef, sanitizedPayload);
+      invalidateCache();
 
       setBusiness({
         ...business,
@@ -1033,6 +1143,87 @@ export function BusinessDetail() {
     }
   };
 
+  const awardRewardToUser = async (targetBiz: Business, currentUid: string) => {
+    const rawBizName = targetBiz.name || 'IRBID';
+    const cleanBizName = rawBizName
+      .replace(/[^\w\s]/gi, '')
+      .trim()
+      .split(/\s+/)[0]
+      .toUpperCase() || 'IRBID';
+    const randomSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
+    const discountVal = Number(targetBiz.giftCodeDiscountPercent || 15);
+    const generatedCode = `${cleanBizName}-${discountVal}-${randomSuffix}`;
+    const validityDays = Number(targetBiz.giftCodeValidityDays || 30);
+    const createdAt = Date.now();
+    const expiresAt = createdAt + (validityDays * 24 * 60 * 60 * 1000);
+    const rewardId = 'rew_' + Math.random().toString(36).substring(2, 10) + '_' + Date.now();
+
+    const rewardObj: UserReward = {
+      id: rewardId,
+      userId: currentUid,
+      businessId: targetBiz.id,
+      businessName: targetBiz.name,
+      code: generatedCode,
+      discountPercent: discountVal,
+      createdAt: createdAt,
+      expiresAt: expiresAt,
+      used: false
+    };
+
+    // Save across all tiers (user profile doc in Firestore, localStorage, and attempt user_rewards collection)
+    await saveUserReward(rewardObj);
+
+    setExistingUserReward(rewardObj);
+
+    if (db) {
+      try {
+        const newGrantedCount = (Number(targetBiz.giftCodeGrantedCount) || 0) + 1;
+        const bRef = doc(db, 'businesses', targetBiz.id);
+        await updateDoc(bRef, {
+          giftCodeGrantedCount: newGrantedCount
+        });
+        setBusiness(prev => prev ? {
+          ...prev,
+          giftCodeGrantedCount: newGrantedCount
+        } : null);
+      } catch (countErr) {
+        console.warn("Non-fatal: count increment error:", countErr);
+      }
+    }
+
+    // Trigger the presentation popup immediately!
+    setAwardedGiftCode({
+      code: generatedCode,
+      discountPercent: discountVal,
+      businessName: targetBiz.name
+    });
+
+    try {
+      invalidateCache();
+    } catch {}
+  };
+
+  const handleClaimRetroactiveReward = async () => {
+    if (!currentUser || !business || !db) return;
+    setIsClaimingReward(true);
+    try {
+      let targetBiz = business;
+      try {
+        const freshSnap = await getDoc(doc(db, 'businesses', business.id || id!));
+        if (freshSnap.exists()) {
+          targetBiz = { id: freshSnap.id, ...freshSnap.data() } as Business;
+        }
+      } catch (e) {}
+
+      await awardRewardToUser(targetBiz, currentUser.uid);
+    } catch (err) {
+      console.error("Error claiming reward:", err);
+      alert("حدث خطأ أثناء استلام كود الخصم، يرجى المحاولة مرة أخرى.");
+    } finally {
+      setIsClaimingReward(false);
+    }
+  };
+
   const handleSubmitReview = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser || !id || !db || !newComment.trim()) return;
@@ -1080,22 +1271,108 @@ export function BusinessDetail() {
       const avgRating = totalRatings / updatedReviews.length;
       
       if (business) {
-        setBusiness({
-          ...business,
+        setBusiness(prev => prev ? {
+          ...prev,
           rating: Number(avgRating.toFixed(1)),
           reviewCount: updatedReviews.length
-        });
+        } : null);
         
-        // Update in firestore as well
-        const bRef = doc(db, 'businesses', business.id);
-        await updateDoc(bRef, {
-          rating: Number(avgRating.toFixed(1)),
-          reviewCount: updatedReviews.length
-        });
+        // Update in firestore safely
+        try {
+          const bRef = doc(db, 'businesses', business.id);
+          await updateDoc(bRef, {
+            rating: Number(avgRating.toFixed(1)),
+            reviewCount: updatedReviews.length
+          });
+        } catch (bizRatingErr) {
+          console.warn("Non-fatal: could not update business rating in doc:", bizRatingErr);
+        }
       }
 
       // 4. Record successful submission timestamp for rate limiting
       recordSubmissionTime('review_submit');
+
+      // --- Gift Code Reward Check ---
+      // Fetch fresh business document directly from Firestore so stale React state / cache never stops the reward
+      let targetBiz = business;
+      if (db && (business?.id || id)) {
+        try {
+          const freshSnap = await getDoc(doc(db, 'businesses', business?.id || id));
+          if (freshSnap.exists()) {
+            targetBiz = { id: freshSnap.id, ...freshSnap.data() } as Business;
+          }
+        } catch (freshErr) {
+          console.warn("Could not fetch fresh business for gift code check:", freshErr);
+        }
+      }
+
+      const isGiftEnabled = Boolean(
+        targetBiz && (
+          targetBiz.giftCodeEnabled === true || 
+          (targetBiz as any).giftCodeEnabled === 'true'
+        )
+      );
+
+      if (targetBiz && isGiftEnabled) {
+        let isEligible = true;
+        
+        // 1. Min Stars check
+        const minStars = Number(targetBiz.giftCodeMinStars || 1);
+        if (newRating < minStars) {
+          isEligible = false;
+        }
+        
+        // 2. Dates check (Forgiving & timezone-safe)
+        const now = new Date();
+        const localTodayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        const utcTodayStr = now.toISOString().split('T')[0];
+
+        if (targetBiz.giftCodeStartDate) {
+          const startStr = targetBiz.giftCodeStartDate.split('T')[0];
+          // Only invalidate if BOTH local and UTC are strictly before the start date
+          if (localTodayStr < startStr && utcTodayStr < startStr) {
+            isEligible = false;
+          }
+        }
+        if (targetBiz.giftCodeEndDate) {
+          const endStr = targetBiz.giftCodeEndDate.split('T')[0];
+          // Only invalidate if BOTH local and UTC are strictly after the end date
+          if (localTodayStr > endStr && utcTodayStr > endStr) {
+            isEligible = false;
+          }
+        }
+        
+        // 3. Limit check (total codes)
+        if (targetBiz.giftCodeLimitType === 'limited') {
+          const granted = Number(targetBiz.giftCodeGrantedCount || 0);
+          const limitTotal = Number(targetBiz.giftCodeTotalLimit || 100);
+          if (granted >= limitTotal) {
+            isEligible = false;
+          }
+        }
+
+        // 4. Per-User limit check
+        const userLimit = targetBiz.giftCodeUserLimit || 'once';
+        if (userLimit === 'once') {
+          const alreadyClaimed = await findExistingRewardForBusiness(currentUser.uid, targetBiz.id);
+          if (alreadyClaimed) {
+            isEligible = false;
+          }
+        } else if (userLimit === 'custom') {
+          const allUserRewards = await fetchUserRewards(currentUser.uid);
+          const countForThisBiz = allUserRewards.filter(r => r.businessId === targetBiz.id).length;
+          const maxPerUser = Number(targetBiz.giftCodeMaxPerUser || 1);
+          if (countForThisBiz >= maxPerUser) {
+            isEligible = false;
+          }
+        }
+        // If 'per_review', isEligible remains true!
+        
+        // 5. Award the Code & QR! (Works whether user is customer OR business owner testing)
+        if (isEligible) {
+          await awardRewardToUser(targetBiz, currentUser.uid);
+        }
+      }
 
       setNewComment('');
       setNewRating(5);
@@ -1434,21 +1711,7 @@ export function BusinessDetail() {
   }
 
   if (error || !business) {
-    return (
-      <div className="text-center py-20 bg-white rounded-3xl sm:rounded-[32px] border border-[#e5e1da] p-6 max-w-2xl mx-auto my-8">
-        <div className="bg-stone-50 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6">
-          <Store className="h-10 w-10 text-stone-400" />
-        </div>
-        <h2 className="text-2xl font-bold text-stone-900 mb-2">{error || "المحل غير موجود"}</h2>
-        <p className="text-stone-500 mb-8 max-w-md mx-auto">
-          {error ? error : "قد يكون تم حذفه، أو أن الرابط غير صحيح، أو بانتظار موافقة الإدارة."}
-        </p>
-        <Link to="/" className="inline-flex items-center justify-center px-6 py-3 bg-[#1a4d2e] text-white rounded-xl font-bold hover:bg-[#133b22] transition-colors gap-2">
-          <ArrowRight className="h-5 w-5" />
-          العودة للرئيسية
-        </Link>
-      </div>
-    );
+    return <NotFound />;
   }
 
   const hideSite = Boolean(business?.hideSiteReviews);
@@ -1601,15 +1864,15 @@ export function BusinessDetail() {
             'اربد', 
             'دليل إربد'
           ]}
-          ogImage={business.imageUrl || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&q=80&w=1200'}
+          ogImage={business.imageUrl || 'https://shofibirbid.site/ogimage.jpg'}
           ogType="business.business"
           canonicalUrl={typeof window !== 'undefined' ? window.location.href : undefined}
           schemaData={{
             "@context": "https://schema.org",
             "@type": "LocalBusiness",
-            "@id": typeof window !== 'undefined' ? window.location.href : `https://shofierbid.com/b/${business.id}`,
+            "@id": typeof window !== 'undefined' ? window.location.href : `https://shofibirbid.site/b/${business.id}`,
             "name": business.name,
-            "image": business.imageUrl || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&q=80&w=1200',
+            "image": business.imageUrl || 'https://shofibirbid.site/ogimage.jpg',
             "description": business.description || `صفحة ${business.name} على دليل شو في بإربد الشامل.`,
             "telephone": business.phone || business.socialLinks?.whatsapp || undefined,
             "address": {
@@ -1686,9 +1949,9 @@ export function BusinessDetail() {
       ) : business && (
         <>
           {/* Main Hero Header */}
-          <div className="bg-white rounded-2xl sm:rounded-3xl lg:rounded-[32px] border border-[#e5e1da] overflow-hidden shadow-xs relative">
+          <div className="bg-white rounded-2xl sm:rounded-3xl lg:rounded-[32px] border border-[#e5e1da] shadow-xs relative">
             {/* 1. Cover Image Section */}
-            <div className="h-44 sm:h-60 md:h-[280px] lg:h-[320px] bg-stone-100 relative">
+            <div className="h-44 sm:h-60 md:h-[280px] lg:h-[320px] bg-stone-100 relative rounded-t-2xl sm:rounded-t-3xl lg:rounded-t-[32px] overflow-hidden">
               {business.imageUrl ? (
                 <img 
                   src={business.imageUrl} 
@@ -1761,6 +2024,12 @@ export function BusinessDetail() {
                         <ShieldCheck className="h-3.5 w-3.5" />
                         معتمد في إربد
                       </span>
+                      {!isMedical && business.deliveryAvailable && (
+                        <span className="bg-blue-50 text-blue-700 border border-blue-100 px-3 py-0.5 rounded-full text-xs font-semibold flex items-center gap-1">
+                          <Truck className="h-3.5 w-3.5 text-blue-600" />
+                          توفر التوصيل
+                        </span>
+                      )}
                       {isOwner && (
                         <span className="bg-stone-100 text-stone-700 border border-stone-200 px-3 py-0.5 rounded-full text-xs font-bold flex items-center gap-1">
                           <UserIcon className="h-3.5 w-3.5" />
@@ -1822,6 +2091,12 @@ export function BusinessDetail() {
                     <ShieldCheck className="h-3 w-3" />
                     معتمد في إربد
                   </span>
+                  {!isMedical && business.deliveryAvailable && (
+                    <span className="bg-blue-50 text-blue-700 border border-blue-100 px-2.5 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-0.5 animate-pulse">
+                      <Truck className="h-3 w-3 text-blue-600" />
+                      توفر التوصيل
+                    </span>
+                  )}
                   {isOwner && (
                     <span className="bg-stone-50 text-stone-700 border border-stone-200 px-2.5 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-0.5">
                       <UserIcon className="h-3 w-3" />
@@ -2036,18 +2311,27 @@ export function BusinessDetail() {
                 )}
               </div>
             </div>
+          </div>
 
-            {/* Navigation Tabs Bar */}
-            <div className="relative bg-stone-50/50 border-b border-[#e5e1da]">
-              {/* Mobile Edge Fade Gradients */}
-              <div className="absolute top-0 bottom-0 right-0 w-8 bg-gradient-to-l from-stone-50/90 to-transparent z-10 pointer-events-none md:hidden" />
-              <div className="absolute top-0 bottom-0 left-0 w-8 bg-gradient-to-r from-stone-50/90 to-transparent z-10 pointer-events-none md:hidden" />
-              
-              <div className="flex overflow-x-auto gap-3 md:gap-8 scrollbar-hide px-4 sm:px-8 py-3 md:py-0 snap-x snap-mandatory" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+          {/* Anchor for scrolling to top of tabs/content */}
+          <div ref={tabsAnchorRef} className="scroll-mt-20 md:scroll-mt-24" />
+
+          {/* Navigation Tabs Bar */}
+          <div className={cn(
+            "bg-white/95 backdrop-blur-md border border-[#e5e1da] transition-all duration-300",
+            "rounded-2xl sm:rounded-3xl shadow-xs",
+            "sticky z-40",
+            showHeader ? "top-[68px] sm:top-[74px] md:top-[78px]" : "top-2"
+          )}>
+            {/* Mobile Edge Fade Gradients */}
+            <div className="absolute top-0 bottom-0 right-0 w-8 bg-gradient-to-l from-white/95 to-transparent z-10 pointer-events-none md:hidden rounded-r-2xl" />
+            <div className="absolute top-0 bottom-0 left-0 w-8 bg-gradient-to-r from-white/95 to-transparent z-10 pointer-events-none md:hidden rounded-l-2xl" />
+            
+            <div className="flex overflow-x-auto gap-3 md:gap-8 scrollbar-hide px-4 sm:px-8 py-2.5 md:py-0 snap-x snap-mandatory" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
               {isMedical ? (
                 <>
                   <button 
-                    onClick={() => setActiveTab('about')}
+                    onClick={() => handleTabChange('about')}
                     className={`whitespace-nowrap transition-all flex items-center gap-1.5 snap-start font-bold text-sm md:text-base px-4 py-2 md:px-0 md:py-4 rounded-full md:rounded-none border md:border-0 md:border-b-2 ${
                       activeTab === 'about' 
                         ? 'bg-emerald-50 border-emerald-600 text-[#1a4d2e] md:bg-transparent md:border-b-[#1a4d2e]' 
@@ -2058,7 +2342,7 @@ export function BusinessDetail() {
                     <span>{isPharmacy ? 'الملف الصيدلاني' : 'الملف الطبي'}</span>
                   </button>
                   <button 
-                    onClick={() => setActiveTab('insurances')}
+                    onClick={() => handleTabChange('insurances')}
                     className={`whitespace-nowrap transition-all flex items-center gap-1.5 snap-start font-bold text-sm md:text-base px-4 py-2 md:px-0 md:py-4 rounded-full md:rounded-none border md:border-0 md:border-b-2 ${
                       activeTab === 'insurances' 
                         ? 'bg-blue-50 border-blue-600 text-blue-800 md:bg-transparent md:border-b-blue-600' 
@@ -2075,7 +2359,7 @@ export function BusinessDetail() {
                   </button>
                   {isStaffEligible && medicalProfile.showMedicalStaff !== false && (
                     <button 
-                      onClick={() => setActiveTab('staff')}
+                      onClick={() => handleTabChange('staff')}
                       className={`whitespace-nowrap transition-all flex items-center gap-1.5 snap-start font-bold text-sm md:text-base px-4 py-2 md:px-0 md:py-4 rounded-full md:rounded-none border md:border-0 md:border-b-2 ${
                         activeTab === 'staff' 
                           ? 'bg-emerald-50 border-emerald-600 text-[#1a4d2e] md:bg-transparent md:border-b-[#1a4d2e]' 
@@ -2094,7 +2378,7 @@ export function BusinessDetail() {
                 </>
               ) : (
                 <button 
-                  onClick={() => setActiveTab('about')}
+                  onClick={() => handleTabChange('about')}
                   className={`whitespace-nowrap transition-all flex items-center gap-1.5 snap-start font-bold text-sm md:text-base px-4 py-2 md:px-0 md:py-4 rounded-full md:rounded-none border md:border-0 md:border-b-2 ${
                     activeTab === 'about' 
                       ? 'bg-[#1a4d2e]/10 border-[#1a4d2e]/20 text-[#1a4d2e] md:bg-transparent md:border-b-[#1a4d2e]' 
@@ -2108,7 +2392,7 @@ export function BusinessDetail() {
 
               {vipInfo.isVip && (
                 <button 
-                  onClick={() => setActiveTab('menu')}
+                  onClick={() => handleTabChange('menu')}
                   className={`whitespace-nowrap transition-all flex items-center gap-1.5 snap-start font-bold text-sm md:text-base px-4 py-2 md:px-0 md:py-4 rounded-full md:rounded-none border md:border-0 md:border-b-2 ${
                     activeTab === 'menu' || activeTab === 'products'
                       ? 'bg-[#1a4d2e]/10 border-[#1a4d2e]/20 text-[#1a4d2e] md:bg-transparent md:border-b-[#1a4d2e]' 
@@ -2131,7 +2415,7 @@ export function BusinessDetail() {
 
               {((business.category || "").includes('سكنات') || (business.category || "").includes('شقق') || (business.category || "").includes('عقارات')) && (
                 <button 
-                  onClick={() => setActiveTab('specs')}
+                  onClick={() => handleTabChange('specs')}
                   className={`whitespace-nowrap transition-all flex items-center gap-1.5 snap-start font-bold text-sm md:text-base px-4 py-2 md:px-0 md:py-4 rounded-full md:rounded-none border md:border-0 md:border-b-2 ${
                     activeTab === 'specs' 
                       ? 'bg-[#1a4d2e]/10 border-[#1a4d2e]/20 text-[#1a4d2e] md:bg-transparent md:border-b-[#1a4d2e]' 
@@ -2145,7 +2429,7 @@ export function BusinessDetail() {
 
               {vipInfo.isVip && !isMedical && (
                 <button 
-                  onClick={() => setActiveTab('offers')}
+                  onClick={() => handleTabChange('offers')}
                   className={`whitespace-nowrap transition-all flex items-center gap-1.5 snap-start font-bold text-sm md:text-base px-4 py-2 md:px-0 md:py-4 rounded-full md:rounded-none border md:border-0 md:border-b-2 ${
                     activeTab === 'offers' 
                       ? 'bg-red-50 border-red-200 text-red-600 md:bg-transparent md:border-b-red-500' 
@@ -2158,7 +2442,7 @@ export function BusinessDetail() {
               )}
 
               <button 
-                onClick={() => setActiveTab('jobs')}
+                onClick={() => handleTabChange('jobs')}
                 className={`whitespace-nowrap transition-all flex items-center gap-1.5 snap-start font-bold text-sm md:text-base px-4 py-2 md:px-0 md:py-4 rounded-full md:rounded-none border md:border-0 md:border-b-2 ${
                   activeTab === 'jobs' 
                     ? 'bg-[#1a4d2e]/10 border-[#1a4d2e]/20 text-[#1a4d2e] md:bg-transparent md:border-b-[#1a4d2e]' 
@@ -2176,7 +2460,7 @@ export function BusinessDetail() {
 
               {vipInfo.isVip && (
                 <button 
-                  onClick={() => setActiveTab('reels')}
+                  onClick={() => handleTabChange('reels')}
                   className={`whitespace-nowrap transition-all flex items-center gap-1.5 snap-start font-bold text-sm md:text-base px-4 py-2 md:px-0 md:py-4 rounded-full md:rounded-none border md:border-0 md:border-b-2 ${
                     activeTab === 'reels' 
                       ? 'bg-purple-50 border-purple-200 text-purple-700 font-black md:bg-transparent md:border-b-purple-600' 
@@ -2195,7 +2479,7 @@ export function BusinessDetail() {
 
               {vipInfo.isVip && (
                 <button 
-                  onClick={() => setActiveTab('gallery')}
+                  onClick={() => handleTabChange('gallery')}
                   className={`whitespace-nowrap transition-all flex items-center gap-1.5 snap-start font-bold text-sm md:text-base px-4 py-2 md:px-0 md:py-4 rounded-full md:rounded-none border md:border-0 md:border-b-2 ${
                     activeTab === 'gallery' 
                       ? 'bg-emerald-50 border-emerald-200 text-emerald-700 font-black md:bg-transparent md:border-b-emerald-600' 
@@ -2215,7 +2499,7 @@ export function BusinessDetail() {
               {isOwner && (
                 vipInfo.isVip ? (
                   <button 
-                    onClick={() => setActiveTab('analytics')}
+                    onClick={() => handleTabChange('analytics')}
                     className={`whitespace-nowrap transition-all flex items-center gap-1.5 snap-start font-bold text-sm md:text-base px-4 py-2 md:px-0 md:py-4 rounded-full md:rounded-none border md:border-0 md:border-b-2 ${
                       activeTab === 'analytics' 
                         ? 'bg-amber-50 border-amber-200 text-amber-700 font-black md:bg-transparent md:border-b-amber-500' 
@@ -2236,7 +2520,6 @@ export function BusinessDetail() {
                 )
               )}
             </div>
-            </div>
           </div>
 
           {/* Desktop/Laptop 2-Column Grid Layout */}
@@ -2253,18 +2536,9 @@ export function BusinessDetail() {
                       business={business} 
                       medicalProfile={medicalProfile} 
                       onOpenBookingModal={() => setIsMedicalBookingOpen(true)} 
-                      onNavigateToInsurances={() => {
-                        setActiveTab('insurances');
-                        window.scrollTo({ top: 300, behavior: 'smooth' });
-                      }}
-                      onNavigateToServices={() => {
-                        setActiveTab('menu');
-                        window.scrollTo({ top: 300, behavior: 'smooth' });
-                      }}
-                      onNavigateToStaff={() => {
-                        setActiveTab('staff');
-                        window.scrollTo({ top: 300, behavior: 'smooth' });
-                      }}
+                      onNavigateToInsurances={() => handleTabChange('insurances')}
+                      onNavigateToServices={() => handleTabChange('menu')}
+                      onNavigateToStaff={() => handleTabChange('staff')}
                     />
                   ) : (
                     <div className="space-y-6">
@@ -2345,7 +2619,7 @@ export function BusinessDetail() {
                   <MedicalInsurancesTab
                     business={business}
                     medicalProfile={medicalProfile}
-                    onBackToAbout={() => setActiveTab('about')}
+                    onBackToAbout={() => handleTabChange('about')}
                     onOpenBooking={!isPharmacy ? () => setIsMedicalBookingOpen(true) : undefined}
                   />
                 )}
@@ -2354,7 +2628,7 @@ export function BusinessDetail() {
                   <MedicalStaffTab
                     business={business}
                     medicalProfile={medicalProfile}
-                    onBackToAbout={() => setActiveTab('about')}
+                    onBackToAbout={() => handleTabChange('about')}
                     onOpenBooking={!isPharmacy ? () => setIsMedicalBookingOpen(true) : undefined}
                   />
                 )}
@@ -3216,6 +3490,63 @@ export function BusinessDetail() {
                         <span className="text-stone-400 mr-1 font-normal">({reviews.length} تقييم)</span>
                       </div>
                     </div>
+
+                    {/* Retroactive Reward Claim Banner if user already reviewed and hasn't claimed yet */}
+                    {currentUser && !existingUserReward && business && (business.giftCodeEnabled === true || (business as any).giftCodeEnabled === 'true') && reviews.some(r => r.userId === currentUser.uid && r.rating >= (business.giftCodeMinStars || 1)) && (
+                      <div className="bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-emerald-500/10 border-2 border-emerald-500/30 p-5 rounded-2xl sm:rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
+                        <div className="flex items-center gap-3 text-right">
+                          <div className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-md">
+                            <Gift className="h-6 w-6 animate-pulse" />
+                          </div>
+                          <div>
+                            <h4 className="font-black text-stone-900 text-sm sm:text-base">
+                              تهانينا! تقييمك المعتمد مؤهل للحصول على كود خصم ورمز QR مجاني 🎉
+                            </h4>
+                            <p className="text-xs text-stone-600 font-medium mt-0.5">
+                              لقد قمت بتقييم {business.name} مسبقاً. اضغط على الزر لاستلام بطاقتك ورمز الـ QR فوراً!
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleClaimRetroactiveReward}
+                          disabled={isClaimingReward}
+                          className="shrink-0 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                        >
+                          <QrCode className="h-4 w-4" />
+                          <span>{isClaimingReward ? 'جاري تجهيز الكود...' : 'استلام رمز QR وكود الخصم 🎁'}</span>
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Already claimed reward notification badge */}
+                    {existingUserReward && (
+                      <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl flex items-center justify-between gap-3 text-right">
+                        <div className="flex items-center gap-2.5">
+                          <CheckCircle className="h-5 w-5 text-emerald-600 shrink-0" />
+                          <div>
+                            <span className="text-xs font-bold text-stone-900 block">
+                              لديك كود خصم ورمز QR فعال لهذا المحل ({existingUserReward.discountPercent}% خصم)!
+                            </span>
+                            <span className="text-[11px] font-mono text-emerald-700 font-bold">
+                              الكود: {existingUserReward.code}
+                            </span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setAwardedGiftCode({
+                            code: existingUserReward.code,
+                            discountPercent: existingUserReward.discountPercent,
+                            businessName: business?.name || ''
+                          })}
+                          className="px-3 py-1.5 bg-white border border-emerald-300 text-emerald-800 rounded-lg text-xs font-bold hover:bg-emerald-100/50 transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+                        >
+                          <QrCode className="h-3.5 w-3.5" />
+                          <span>عرض الـ QR</span>
+                        </button>
+                      </div>
+                    )}
                     
                     {/* Add Review Form */}
                     {currentUser ? (
@@ -3545,93 +3876,21 @@ export function BusinessDetail() {
 
             {/* Left Side: Sticky Information & Location Action Box (lg:col-span-1) */}
             <div className="space-y-6 lg:sticky lg:top-28">
-              
-              {/* Owner Quick Control Box */}
-              {isOwner && (
-                <div className="bg-amber-50/80 border border-amber-200/90 rounded-2xl sm:rounded-3xl p-5 shadow-xs space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 font-bold text-amber-950 text-sm">
-                      <Settings className="h-4 w-4 text-amber-700" />
-                      <span>إدارة هذا المحل</span>
-                    </div>
-                    <span className="text-[11px] bg-amber-200/80 text-amber-900 px-2 py-0.5 rounded-md font-bold">
-                      {isAdmin ? 'صلاحية مدير' : 'صاحب المحل'}
-                    </span>
-                  </div>
-                  <p className="text-xs text-amber-800 leading-relaxed">
-                    يمكنك تعديل بيانات المحل، أو إخفاء/إظهار تقييمات الموقع في أي وقت.
-                  </p>
-                  
-                  {/* Subscription status section */}
-                  <div className="bg-white border border-amber-200 rounded-xl p-3.5 space-y-2 text-xs">
-                    <div className="font-bold text-stone-800 border-b border-stone-100 pb-1.5 flex items-center justify-between">
-                      <span>باقة المحل الحالية</span>
-                      <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${
-                        vipInfo.isVip ? "bg-amber-100 text-amber-800" : "bg-stone-100 text-stone-600"
-                      }`}>
-                        {vipInfo.isVip ? '👑 الباقة الذهبية VIP' : '📦 الباقة الأساسية'}
-                      </span>
-                    </div>
-                    
-                    <div className="flex justify-between text-stone-600">
-                      <span>حالة الصلاحيات:</span>
-                      <span className={`font-bold ${
-                        vipInfo.isVip ? "text-emerald-600" : "text-stone-500"
-                      }`}>
-                        {vipInfo.isVip ? 'ميزات VIP الذهبية مفعّلة' : 'صلاحيات الباقة الأساسية فقط'}
-                      </span>
-                    </div>
-
-                    {vipInfo.expiresAt && (
-                      <div className="flex justify-between text-stone-600">
-                        <span>تاريخ انتهاء VIP:</span>
-                        <span className="font-bold font-mono">
-                          {new Date(vipInfo.expiresAt).toLocaleDateString('ar-JO')}
-                        </span>
-                      </div>
-                    )}
-
-                    {!vipInfo.isVip && (
-                      <button
-                        onClick={() => setIsUpgradeModalOpen(true)}
-                        className="w-full mt-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold py-2 px-3 rounded-lg text-xs transition-colors shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
-                      >
-                        <Crown className="h-4 w-4 fill-white" />
-                        <span>ترقية المحل للباقة الذهبية VIP</span>
-                      </button>
-                    )}
-                  </div>
-
-                  {vipInfo.isVip && (
-                    <button
-                      onClick={() => setIsVipPopupManagerOpen(true)}
-                      className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white py-2.5 px-4 rounded-xl font-bold text-xs transition-colors shadow-xs cursor-pointer"
-                    >
-                      <Sparkles className="h-4 w-4 text-amber-200" />
-                      <span>إدارة النافذة الترحيبية VIP (فيديو/صورة)</span>
-                    </button>
-                  )}
-
-                  <button
-                    onClick={handleOpenEditModal}
-                    className="w-full flex items-center justify-center gap-2 bg-stone-800 hover:bg-stone-900 text-white py-2.5 px-4 rounded-xl font-bold text-xs transition-colors shadow-xs cursor-pointer"
-                  >
-                    <Edit3 className="h-4 w-4" />
-                    <span>تعديل المحل والميديا والتقييمات</span>
-                  </button>
-                </div>
-              )}
 
               {/* Quick Contact & Action Card */}
-              <div className="bg-white rounded-2xl sm:rounded-3xl border border-[#e5e1da] p-5 sm:p-6 shadow-xs space-y-5">
-                <h3 className="text-lg font-bold text-[#2d2a26] border-b border-[#e5e1da] pb-3 flex items-center gap-2">
-                  <Phone className="h-5 w-5 text-[#1a4d2e]" />
-                  معلومات التواصل السريع
-                </h3>
+              <div className="bg-white rounded-3xl border border-stone-200/80 p-6 shadow-[0_8px_30px_rgb(0,0,0,0.03)] space-y-6">
+                <div className="flex items-center justify-between border-b border-stone-100 pb-4">
+                  <h3 className="text-lg font-extrabold text-stone-900 flex items-center gap-2.5">
+                    <span className="p-1.5 bg-[#1a4d2e]/10 text-[#1a4d2e] rounded-lg">
+                      <Phone className="h-5 w-5" />
+                    </span>
+                    معلومات التواصل السريع
+                  </h3>
+                </div>
 
                 {/* Call & WhatsApp Buttons */}
                 {business?.phone ? (
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     {/* Medical Quick Appointment Booking Button (Not for Pharmacies) */}
                     {isMedical && !isPharmacy && (
                       <button
@@ -3672,7 +3931,7 @@ export function BusinessDetail() {
                       currentUser ? (
                         <Link
                           to={`/messages?businessId=${business.id}`}
-                          className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-[#1a4d2e] hover:from-amber-600 hover:to-[#133b22] text-white py-3.5 px-4 rounded-xl font-black text-base transition-all shadow-xs hover:shadow-sm cursor-pointer"
+                          className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-[#1a4d2e] hover:from-amber-600 hover:to-[#133b22] text-white py-3.5 px-4 rounded-xl font-black text-base transition-all shadow-md hover:shadow-lg hover:scale-[1.01] active:scale-[0.99] cursor-pointer"
                         >
                           <MessageSquare className="h-5 w-5 text-white animate-pulse" />
                           <span>راسل المحل مباشرة (شات حي)</span>
@@ -3681,7 +3940,7 @@ export function BusinessDetail() {
                         <Link
                           to="/login"
                           state={{ from: location.pathname + location.search }}
-                          className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-[#1a4d2e] hover:from-amber-600 hover:to-[#133b22] text-white py-3.5 px-4 rounded-xl font-black text-base transition-all shadow-xs hover:shadow-sm cursor-pointer"
+                          className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-[#1a4d2e] hover:from-amber-600 hover:to-[#133b22] text-white py-3.5 px-4 rounded-xl font-black text-base transition-all shadow-md hover:shadow-lg hover:scale-[1.01] active:scale-[0.99] cursor-pointer"
                         >
                           <MessageSquare className="h-5 w-5 text-white animate-pulse" />
                           <span>راسل المحل مباشرة (شات حي)</span>
@@ -3700,29 +3959,32 @@ export function BusinessDetail() {
                       </button>
                     )}
 
-                    <a
-                      href={getWhatsAppUrl(business.phone, formatBusinessWhatsAppMessage(business.name))}
-                      target="_blank"
-                      rel="noreferrer"
-                      onClick={() => { if (business?.id) trackBusinessInteraction(business.id, 'whatsapp', { isOwner, currentUserId: currentUser?.uid, ownerId: business.userId, isAdmin: Boolean(isAdmin) }); }}
-                      className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-3 px-4 rounded-xl font-bold text-sm transition-colors shadow-xs cursor-pointer"
-                    >
-                      <WhatsApp3DIcon className="h-5 w-5 text-white" />
-                      <span>واتساب مباشر بضغطة زر</span>
-                    </a>
+                    {/* Contact Buttons Row (WhatsApp & Call side-by-side for elegant design) */}
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <a
+                        href={getWhatsAppUrl(business.phone, formatBusinessWhatsAppMessage(business.name))}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={() => { if (business?.id) trackBusinessInteraction(business.id, 'whatsapp', { isOwner, currentUserId: currentUser?.uid, ownerId: business.userId, isAdmin: Boolean(isAdmin) }); }}
+                        className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-3 px-3 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-sm hover:shadow-md transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer text-center"
+                      >
+                        <WhatsApp3DIcon className="h-4.5 w-4.5 text-white shrink-0" />
+                        <span>واتساب مباشر</span>
+                      </a>
 
-                    <a
-                      href={`tel:${business.phone}`}
-                      onClick={() => { if (business?.id) trackBusinessInteraction(business.id, 'call', { isOwner, currentUserId: currentUser?.uid, ownerId: business.userId, isAdmin: Boolean(isAdmin) }); }}
-                      className="w-full flex items-center justify-center gap-2 bg-[#1a4d2e] hover:bg-[#133c23] text-white py-3 px-4 rounded-xl font-bold text-sm transition-colors shadow-xs"
-                    >
-                      <Phone3DIcon className="h-5 w-5 text-white" />
-                      <span>اتصال موصول (<span dir="ltr" className="font-mono font-bold">{business.phone.replace(/\s+/g, '')}</span>)</span>
-                    </a>
+                      <a
+                        href={`tel:${business.phone}`}
+                        onClick={() => { if (business?.id) trackBusinessInteraction(business.id, 'call', { isOwner, currentUserId: currentUser?.uid, ownerId: business.userId, isAdmin: Boolean(isAdmin) }); }}
+                        className="flex items-center justify-center gap-2 bg-[#1a4d2e] hover:bg-[#133c23] text-white py-3 px-3 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-sm hover:shadow-md transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer text-center"
+                      >
+                        <Phone3DIcon className="h-4.5 w-4.5 text-white shrink-0" />
+                        <span>اتصال هاتفي</span>
+                      </a>
+                    </div>
                     
                     <button
                       onClick={handleCopyPhone}
-                      className="w-full flex items-center justify-center gap-2 bg-stone-50 hover:bg-stone-100 text-stone-700 py-2 px-4 rounded-xl font-semibold text-xs transition-colors border border-[#e5e1da] cursor-pointer"
+                      className="w-full flex items-center justify-center gap-2 bg-stone-50 hover:bg-stone-100 text-stone-700 py-2.5 px-4 rounded-xl font-semibold text-xs transition-all border border-stone-200/60 cursor-pointer"
                     >
                       {copiedPhone ? (
                         <>
@@ -3732,66 +3994,96 @@ export function BusinessDetail() {
                       ) : (
                         <>
                           <Copy className="h-3.5 w-3.5 text-stone-500" />
-                          <span>نسخ رقم الهاتف</span>
+                          <span>نسخ رقم الهاتف: <span dir="ltr" className="font-mono font-bold mr-1">{business.phone.replace(/\s+/g, '')}</span></span>
                         </>
                       )}
                     </button>
                   </div>
                 ) : (
-                  <div className="text-sm text-stone-500 bg-stone-50 p-3 rounded-xl text-center">
+                  <div className="text-sm text-stone-500 bg-stone-50 p-4 rounded-xl text-center border border-dashed border-stone-200">
                     رقم الهاتف غير متاح حالياً
                   </div>
                 )}
 
                 {/* Social Links */}
                 {hasSocialLinks && (
-                  <div className="pt-3 border-t border-stone-100 space-y-2">
+                  <div className="pt-4 border-t border-stone-100 space-y-2.5">
                     <h4 className="text-xs font-bold text-stone-600 flex items-center gap-1.5">
                       <Globe className="h-3.5 w-3.5 text-[#1a4d2e]" />
                       <span>حسابات المحل الرسمية</span>
                     </h4>
-                    {renderSocialMediaButtons(business.socialLinks)}
+                    <div className="bg-stone-50/50 p-2 rounded-xl border border-stone-100">
+                      {renderSocialMediaButtons(business.socialLinks)}
+                    </div>
                   </div>
                 )}
 
-                {/* Address details & Interactive Map */}
-                <div className="space-y-3 pt-2">
-                  <div className="flex items-start gap-3 text-sm">
-                    <div className="p-2 bg-[#1a4d2e]/10 text-[#1a4d2e] rounded-xl shrink-0 mt-0.5">
+                {/* Details Section (Address, Delivery, Hours) */}
+                <div className="space-y-4 pt-3 border-t border-stone-100">
+                  
+                  {/* Address Details */}
+                  <div className="flex items-start gap-3.5 text-sm group/item">
+                    <div className="p-2.5 bg-stone-50 text-[#1a4d2e] rounded-xl shrink-0 mt-0.5 border border-stone-100 group-hover/item:bg-emerald-50 group-hover/item:text-emerald-800 transition-colors">
                       <MapPin className="h-4 w-4" />
                     </div>
                     <div className="space-y-1">
                       <span className="font-bold text-stone-800 block">العنوان والموقع:</span>
-                      <span className="text-stone-600 block break-words">{business.address || "إربد"}</span>
+                      <span className="text-stone-600 block break-words leading-relaxed">{business.address || "إربد"}</span>
                     </div>
                   </div>
 
-                  <div className="flex items-start gap-3 text-sm">
-                    <div className={`p-2 rounded-xl shrink-0 mt-0.5 ${liveStatus.isOpen ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                  {/* Delivery Available (Added between Address and Working Hours) */}
+                  {!isMedical && business.deliveryAvailable && (
+                    <div className="flex items-start gap-3.5 text-sm group/item">
+                      <div className="p-2.5 bg-blue-50/70 text-blue-700 rounded-xl shrink-0 mt-0.5 border border-blue-100/50 group-hover/item:bg-blue-100 group-hover/item:text-blue-800 transition-colors">
+                        <Truck className="h-4 w-4" />
+                      </div>
+                      <div className="space-y-1">
+                        <span className="font-bold text-stone-800 block">خدمة التوصيل:</span>
+                        <div className="flex items-center gap-2">
+                          <span className="bg-blue-100 text-blue-800 text-[11px] font-black px-2.5 py-0.5 rounded-md border border-blue-200/60 flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
+                            التوصيل متوفر
+                          </span>
+                          <span className="text-xs text-stone-500">متاح لجميع مناطق إربد</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* State & Working Hours */}
+                  <div className="flex items-start gap-3.5 text-sm group/item">
+                    <div className={`p-2.5 rounded-xl shrink-0 mt-0.5 border transition-colors ${
+                      liveStatus.isOpen 
+                        ? 'bg-emerald-50/70 text-emerald-700 border-emerald-100/50 group-hover/item:bg-emerald-100 group-hover/item:text-emerald-800' 
+                        : 'bg-red-50/70 text-red-700 border-red-100/50 group-hover/item:bg-red-100 group-hover/item:text-red-800'
+                    }`}>
                       <Clock className={`h-4 w-4 ${liveStatus.isOpen ? 'animate-pulse' : ''}`} />
                     </div>
                     <div className="space-y-1">
                       <span className="font-bold text-stone-800 block">الحالة وساعات العمل:</span>
-                      <div className="flex flex-col gap-1">
-                        <span className={`font-black text-xs px-2.5 py-0.5 rounded-md w-fit ${
+                      <div className="flex flex-col gap-1.5">
+                        <span className={`font-black text-xs px-2.5 py-0.5 rounded-md w-fit flex items-center gap-1.5 ${
                           liveStatus.isOpen 
-                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
-                            : 'bg-red-100 text-red-800 border border-red-200'
+                            ? 'bg-emerald-100/80 text-emerald-800 border border-emerald-200/60' 
+                            : 'bg-red-100/80 text-red-800 border border-red-200/60'
                         }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${liveStatus.isOpen ? 'bg-emerald-600 animate-pulse' : 'bg-red-600'}`} />
                           {liveStatus.status}
                         </span>
                         {liveStatus.countdownText && (
-                          <span className="text-xs font-bold text-stone-700 flex items-center gap-1">
+                          <span className="text-xs font-bold text-stone-700 flex items-center gap-1 bg-amber-50 text-amber-800 px-2.5 py-0.5 rounded-md border border-amber-100/60 w-fit">
                             <span>⏱️</span>
                             <span>{liveStatus.countdownText}</span>
                           </span>
                         )}
-                        <span className="text-xs text-stone-500">
+                        <span className="text-xs text-stone-600 font-medium">
                           {liveStatus.subText}
                         </span>
                         {business.workingHours?.days && (
-                          <span className="text-xs text-stone-400">
-                            🗓️ {business.workingHours.days}
+                          <span className="text-xs text-stone-500 flex items-center gap-1">
+                            <span>🗓️</span>
+                            <span>{business.workingHours.days}</span>
                           </span>
                         )}
                       </div>
@@ -3799,19 +4091,19 @@ export function BusinessDetail() {
                   </div>
 
                   {/* Interactive Map Embed Frame */}
-                  <div className="mt-3 rounded-2xl overflow-hidden border border-[#e5e1da] shadow-2xs bg-stone-100 relative group">
+                  <div className="mt-4 rounded-2xl overflow-hidden border border-stone-200 shadow-sm bg-stone-100 relative group/map">
                     <iframe
                       title={`خريطة ${business.name}`}
                       width="100%"
                       height="180"
-                      className="w-full h-44 border-0 block"
+                      className="w-full h-44 border-0 block group-hover/map:opacity-95 transition-opacity"
                       loading="lazy"
                       allowFullScreen
                       referrerPolicy="no-referrer-when-downgrade"
                       src={embedMapUrl}
                     ></iframe>
                     
-                    <div className="p-2.5 bg-white flex items-center justify-between border-t border-[#e5e1da]">
+                    <div className="p-2.5 bg-white flex items-center justify-between border-t border-stone-200">
                       <span className="text-[11px] font-bold text-stone-600 flex items-center gap-1">
                         <MapPin className="h-3.5 w-3.5 text-red-500" />
                         <span>موقع المحل على الخريطة</span>
@@ -3821,7 +4113,7 @@ export function BusinessDetail() {
                         target="_blank"
                         rel="noreferrer"
                         onClick={() => { if (business?.id) trackBusinessInteraction(business.id, 'direction', { isOwner, currentUserId: currentUser?.uid, ownerId: business.userId, isAdmin: Boolean(isAdmin) }); }}
-                        className="text-[11px] font-black text-blue-600 hover:text-blue-700 flex items-center gap-0.5"
+                        className="text-[11px] font-black text-blue-600 hover:text-blue-700 flex items-center gap-0.5 transition-colors"
                       >
                         <span>تكبير الخريطة</span>
                         <ExternalLink className="h-2.5 w-2.5" />
@@ -3837,15 +4129,15 @@ export function BusinessDetail() {
                     target="_blank"
                     rel="noreferrer"
                     onClick={() => { if (business?.id) trackBusinessInteraction(business.id, 'direction', { isOwner, currentUserId: currentUser?.uid, ownerId: business.userId, isAdmin: Boolean(isAdmin) }); }}
-                    className="w-full flex items-center justify-center gap-2 bg-stone-900 hover:bg-black text-white py-3 px-4 rounded-xl font-bold text-xs sm:text-sm transition-colors shadow-2xs"
+                    className="w-full flex items-center justify-center gap-2 bg-stone-900 hover:bg-black text-white py-3.5 px-4 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-xs hover:shadow-md transform hover:-translate-y-0.5 active:translate-y-0"
                   >
-                    <MapPin className="h-4 w-4 text-[#ff9f1c]" />
+                    <MapPin className="h-4.5 w-4.5 text-[#ff9f1c]" />
                     <span>فتح الموقع والاتجاهات على الخريطة</span>
                   </a>
                 </div>
 
                 {/* Public Suggest an Edit */}
-                <div className="pt-2 border-t border-dashed border-[#e5e1da]">
+                <div className="pt-3 border-t border-dashed border-stone-200">
                   <button
                     onClick={() => {
                       setSuggestForm({
@@ -4087,6 +4379,59 @@ export function BusinessDetail() {
                       </div>
                     </div>
 
+                    {/* Gift Code Promotion Section */}
+                    <div className="p-4 bg-emerald-50/50 rounded-2xl border border-emerald-100 space-y-3">
+                      <div className="flex items-center justify-between border-b border-emerald-100 pb-2">
+                        <div className="flex items-center gap-2 font-bold text-emerald-900 text-sm">
+                          <Gift className="h-4 w-4 text-emerald-700" />
+                          <span>برنامج مكافآت تقييمات الزوار</span>
+                        </div>
+                        
+                        {/* Toggle switch */}
+                        <button
+                          type="button"
+                          onClick={() => setEditForm(prev => ({ ...prev, giftCodeEnabled: !prev.giftCodeEnabled }))}
+                          className={cn(
+                            "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-emerald-500/20",
+                            editForm.giftCodeEnabled ? "bg-emerald-600" : "bg-stone-200"
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-xs ring-0 transition duration-200 ease-in-out",
+                              editForm.giftCodeEnabled ? "translate-x-[-20px]" : "translate-x-0"
+                            )}
+                          />
+                        </button>
+                      </div>
+
+                      <p className="text-xs text-stone-600 leading-relaxed">
+                        عند تفعيل هذا البرنامج، سيحصل الزوار الذين يكتبون تقييماً معتمداً لنشاطك على كود خصم فوري ومميز كهدية تقديراً لهم!
+                      </p>
+
+                      {editForm.giftCodeEnabled && (
+                        <div className="flex flex-wrap items-center gap-2.5 pt-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setIsGiftCodeCustomizationOpen(true)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-colors shadow-xs"
+                          >
+                            <Settings2 className="h-3.5 w-3.5" />
+                            <span>تخصيص شروط وأكواد الخصم</span>
+                          </button>
+                          
+                          <button
+                            type="button"
+                            onClick={() => setIsGiftCodeStatsOpen(true)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-emerald-800 border border-emerald-200 rounded-lg text-xs font-bold hover:bg-emerald-50 transition-colors"
+                          >
+                            <BarChart3 className="h-3.5 w-3.5" />
+                            <span>عرض إحصائيات الأكواد</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
                     {/* Actions */}
                     <div className="flex items-center justify-end gap-3 pt-3 border-t border-stone-100">
                       <button
@@ -4108,6 +4453,507 @@ export function BusinessDetail() {
                   </form>
                 )}
 
+              </div>
+            </div>,
+            document.body
+          )}
+
+          {/* Review Gift Code Customization Modal */}
+          {isGiftCodeCustomizationOpen && typeof document !== 'undefined' && createPortal(
+            <div className="fixed inset-0 z-[200000] bg-stone-950/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 overflow-hidden" dir="rtl">
+              <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-md w-full max-h-[88dvh] sm:max-h-[85vh] shadow-2xl border border-stone-200 relative animate-in zoom-in-95 duration-200 text-right flex flex-col my-0 sm:my-auto overflow-hidden">
+                
+                {/* Mobile Drag Indicator */}
+                <div className="w-12 h-1.5 bg-stone-300 rounded-full mx-auto my-2 sm:hidden shrink-0" />
+
+                {/* Header */}
+                <div className="flex items-center justify-between border-b border-stone-100 p-4 sm:p-5 shrink-0 bg-white">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
+                      <Gift className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base sm:text-lg font-bold text-stone-900">تخصيص مكافآت التقييمات</h3>
+                      <p className="text-xs text-stone-500 font-medium">حدد شروط الحصول على كود الهدية وقيمة الخصم</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsGiftCodeCustomizationOpen(false)}
+                    className="p-2 text-stone-400 hover:text-stone-600 rounded-xl hover:bg-stone-100 transition-colors shrink-0 cursor-pointer"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+
+                {/* Scrollable Body */}
+                <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
+                  {/* Min stars eligibility */}
+                  <div>
+                    <label className="block text-xs font-bold text-stone-700 mb-2">من يستحق الحصول على كود خصم؟</label>
+                    <select
+                      value={editForm.giftCodeMinStars || 1}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, giftCodeMinStars: Number(e.target.value) }))}
+                      className="w-full px-4 py-2.5 rounded-xl border border-stone-200 bg-white text-sm font-medium focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-none transition-all"
+                    >
+                      <option value={1}>أي شخص يقيم المحل (نجمة واحدة فأكثر)</option>
+                      <option value={3}>التقييمات الجيدة والممتازة (3 نجوم فأكثر)</option>
+                      <option value={4}>التقييمات الرائعة والممتازة (4 نجوم فأكثر)</option>
+                      <option value={5}>التقييمات المثالية فقط (5 نجوم)</option>
+                    </select>
+                  </div>
+
+                  {/* Code Limit Type */}
+                  <div>
+                    <label className="block text-xs font-bold text-stone-700 mb-2">كم إجمالي عدد الأكواد المتاحة في الحملة؟</label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setEditForm(prev => ({ ...prev, giftCodeLimitType: 'unlimited' }))}
+                        className={cn(
+                          "py-2.5 px-4 rounded-xl border text-xs font-bold transition-all text-center cursor-pointer",
+                          editForm.giftCodeLimitType === 'unlimited'
+                            ? "bg-emerald-50 border-emerald-500 text-emerald-800 shadow-xs"
+                            : "bg-white border-stone-200 text-stone-600 hover:bg-stone-50"
+                        )}
+                      >
+                        عدد لا نهائي ♾️
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditForm(prev => ({ ...prev, giftCodeLimitType: 'limited' }))}
+                        className={cn(
+                          "py-2.5 px-4 rounded-xl border text-xs font-bold transition-all text-center cursor-pointer",
+                          editForm.giftCodeLimitType === 'limited'
+                            ? "bg-emerald-50 border-emerald-500 text-emerald-800 shadow-xs"
+                            : "bg-white border-stone-200 text-stone-600 hover:bg-stone-50"
+                        )}
+                      >
+                        إجمالي محدد 🔢
+                      </button>
+                    </div>
+
+                    {editForm.giftCodeLimitType === 'limited' && (
+                      <div className="mt-3">
+                        <label className="block text-[11px] font-bold text-stone-500 mb-1">الحد الأقصى لإجمالي الأكواد في الحملة</label>
+                        <input
+                          type="number"
+                          min={1}
+                          required
+                          value={editForm.giftCodeTotalLimit || 100}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, giftCodeTotalLimit: Math.max(1, Number(e.target.value)) }))}
+                          className="w-full px-4 py-2.5 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-none text-sm font-bold"
+                          placeholder="مثال: 150"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Limit per User Account */}
+                  <div className="bg-stone-50 p-3.5 rounded-2xl border border-stone-200/80 space-y-2.5">
+                    <label className="block text-xs font-bold text-stone-800">
+                      كم مرة (الحد الأقصى) سيُمنح كود الخصم للحساب الواحد؟ 👤
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setEditForm(prev => ({ ...prev, giftCodeUserLimit: 'once' }))}
+                        className={cn(
+                          "p-2.5 rounded-xl border text-xs font-bold transition-all text-right flex items-start gap-2 cursor-pointer",
+                          editForm.giftCodeUserLimit === 'once' || !editForm.giftCodeUserLimit
+                            ? "bg-emerald-50 border-emerald-500 text-emerald-950 ring-1 ring-emerald-500/30"
+                            : "bg-white border-stone-200 text-stone-600 hover:bg-stone-100"
+                        )}
+                      >
+                        <div className={cn(
+                          "w-4 h-4 rounded-full border mt-0.5 shrink-0 flex items-center justify-center text-[10px]",
+                          editForm.giftCodeUserLimit === 'once' || !editForm.giftCodeUserLimit
+                            ? "border-emerald-600 bg-emerald-600 text-white"
+                            : "border-stone-300"
+                        )}>
+                          {(editForm.giftCodeUserLimit === 'once' || !editForm.giftCodeUserLimit) && "✓"}
+                        </div>
+                        <div>
+                          <span className="block font-black text-xs">كود واحد فقط للحساب الواحد</span>
+                          <span className="text-[10px] text-stone-500 block mt-0.5 font-normal">
+                            كود خصم وحيد مدى الحياة بغض النظر عن عدد التقييمات
+                          </span>
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setEditForm(prev => ({ ...prev, giftCodeUserLimit: 'per_review' }))}
+                        className={cn(
+                          "p-2.5 rounded-xl border text-xs font-bold transition-all text-right flex items-start gap-2 cursor-pointer",
+                          editForm.giftCodeUserLimit === 'per_review'
+                            ? "bg-emerald-50 border-emerald-500 text-emerald-950 ring-1 ring-emerald-500/30"
+                            : "bg-white border-stone-200 text-stone-600 hover:bg-stone-100"
+                        )}
+                      >
+                        <div className={cn(
+                          "w-4 h-4 rounded-full border mt-0.5 shrink-0 flex items-center justify-center text-[10px]",
+                          editForm.giftCodeUserLimit === 'per_review'
+                            ? "border-emerald-600 bg-emerald-600 text-white"
+                            : "border-stone-300"
+                        )}>
+                          {editForm.giftCodeUserLimit === 'per_review' && "✓"}
+                        </div>
+                        <div>
+                          <span className="block font-black text-xs">كود جديد لكل تقييم</span>
+                          <span className="text-[10px] text-stone-500 block mt-0.5 font-normal">
+                            يحصل العميل على كود خصم مع كل تقييم جديد يضعه
+                          </span>
+                        </div>
+                      </button>
+                    </div>
+
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setEditForm(prev => ({ ...prev, giftCodeUserLimit: 'custom' }))}
+                        className={cn(
+                          "w-full p-2.5 rounded-xl border text-xs font-bold transition-all text-right flex items-center justify-between cursor-pointer",
+                          editForm.giftCodeUserLimit === 'custom'
+                            ? "bg-emerald-50 border-emerald-500 text-emerald-950 ring-1 ring-emerald-500/30"
+                            : "bg-white border-stone-200 text-stone-600 hover:bg-stone-100"
+                        )}
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className={cn(
+                            "w-4 h-4 rounded-full border shrink-0 flex items-center justify-center text-[10px]",
+                            editForm.giftCodeUserLimit === 'custom'
+                              ? "border-emerald-600 bg-emerald-600 text-white"
+                              : "border-stone-300"
+                          )}>
+                            {editForm.giftCodeUserLimit === 'custom' && "✓"}
+                          </div>
+                          <span className="font-black text-xs">تحديد عدد أقصى مخصص للحساب</span>
+                        </div>
+                        <span className="text-[11px] text-stone-500 font-normal">
+                          مثال: 2 أو 3 كودات كحد أعلى
+                        </span>
+                      </button>
+
+                      {editForm.giftCodeUserLimit === 'custom' && (
+                        <div className="mt-2.5 pr-6">
+                          <label className="block text-[11px] font-bold text-stone-600 mb-1">
+                            الحد الأقصى لعدد الأكواد الممنوحة للحساب الواحد:
+                          </label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={20}
+                            value={editForm.giftCodeMaxPerUser || 2}
+                            onChange={(e) => setEditForm(prev => ({ ...prev, giftCodeMaxPerUser: Math.max(1, Number(e.target.value)) }))}
+                            className="w-32 px-3 py-1.5 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-none text-xs font-bold bg-white"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                   {/* Discount percentage */}
+                  <div>
+                    <label className="block text-xs font-bold text-stone-700 mb-1.5">كم نسبة الخصم للهدية؟</label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min={1}
+                        max={100}
+                        required
+                        value={editForm.giftCodeDiscountPercent || 10}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, giftCodeDiscountPercent: Math.min(100, Math.max(1, Number(e.target.value))) }))}
+                        className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-none text-sm font-bold animate-none"
+                        placeholder="مثال: 15"
+                      />
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-stone-400 font-bold">
+                        %
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Gift code validity in days */}
+                  <div>
+                    <label className="block text-xs font-bold text-stone-700 mb-1.5">مدة صلاحية الكود الممنوح (بالأيام)</label>
+                    <input
+                      type="number"
+                      min={1}
+                      required
+                      value={editForm.giftCodeValidityDays || 30}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, giftCodeValidityDays: Math.max(1, Number(e.target.value)) }))}
+                      className="w-full px-4 py-2.5 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-none text-sm font-bold animate-none"
+                      placeholder="مثال: 30"
+                    />
+                    <p className="text-[10px] text-stone-400 mt-1 font-bold">
+                      تحدد عدد الأيام المتاحة للزائر لاستخدام الكوبون بدءاً من تاريخ حصوله عليه.
+                    </p>
+                  </div>
+
+                  {/* Timing duration */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-stone-700">فترة صلاحية العرض (اختياري)</span>
+                      {(editForm.giftCodeStartDate || editForm.giftCodeEndDate) && (
+                        <button
+                          type="button"
+                          onClick={() => setEditForm(prev => ({ ...prev, giftCodeStartDate: '', giftCodeEndDate: '' }))}
+                          className="text-[10px] text-red-500 hover:underline font-bold"
+                        >
+                          إلغاء التواريخ (متاح دائماً)
+                        </button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-bold text-stone-500 mb-1">بدء التفعيل (اختياري)</label>
+                        <input
+                          type="date"
+                          value={editForm.giftCodeStartDate || ''}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, giftCodeStartDate: e.target.value }))}
+                          className="w-full px-3 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-none text-xs font-bold text-stone-800"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-stone-500 mb-1">انتهاء التفعيل (اختياري)</label>
+                        <input
+                          type="date"
+                          value={editForm.giftCodeEndDate || ''}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, giftCodeEndDate: e.target.value }))}
+                          className="w-full px-3 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-none text-xs font-bold text-stone-800"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-stone-400 font-bold">
+                      اترك الحقلين فارغين ليعمل برنامج الخصم بشكل دائم ودون تقيد بتاريخ انتهاء.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Sticky Action Footer */}
+                <div className="p-4 sm:px-6 bg-stone-50/90 border-t border-stone-100 shrink-0 sticky bottom-0 z-10">
+                  <button
+                    type="button"
+                    onClick={() => setIsGiftCodeCustomizationOpen(false)}
+                    className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Check className="h-4 w-4" />
+                    <span>تأكيد وحفظ التخصيص مؤقتاً</span>
+                  </button>
+                </div>
+
+              </div>
+            </div>,
+            document.body
+          )}
+
+          {/* Review Gift Code Stats Modal */}
+          {isGiftCodeStatsOpen && typeof document !== 'undefined' && createPortal(
+            <div className="fixed inset-0 z-[200000] bg-stone-950/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 overflow-hidden" dir="rtl">
+              <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-md w-full max-h-[88dvh] sm:max-h-[85vh] shadow-2xl border border-stone-200 relative animate-in zoom-in-95 duration-200 text-right flex flex-col my-0 sm:my-auto overflow-hidden">
+                
+                {/* Mobile Drag Indicator */}
+                <div className="w-12 h-1.5 bg-stone-300 rounded-full mx-auto my-2 sm:hidden shrink-0" />
+
+                {/* Header */}
+                <div className="flex items-center justify-between border-b border-stone-100 p-4 sm:p-5 shrink-0 bg-white">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
+                      <BarChart3 className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base sm:text-lg font-bold text-stone-900">إحصائيات حملة مكافآت التقييمات</h3>
+                      <p className="text-xs text-stone-500 font-medium">نظرة عامة على الأكواد الممنوحة وأداء البرنامج</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsGiftCodeStatsOpen(false)}
+                    className="p-2 text-stone-400 hover:text-stone-600 rounded-xl hover:bg-stone-100 transition-colors shrink-0 cursor-pointer"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+
+                {/* Scrollable Content */}
+                <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+                  {/* Stats Grid */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-stone-50 p-4 rounded-2xl border border-stone-100 text-center">
+                      <span className="text-xs text-stone-500 font-bold block mb-1">إجمالي الأكواد المتاحة</span>
+                      <span className="text-2xl font-black text-[#1a4d2e]">
+                        {editForm.giftCodeLimitType === 'unlimited' ? '♾️ غير محدود' : editForm.giftCodeTotalLimit || 100}
+                      </span>
+                    </div>
+
+                    <div className="bg-emerald-50/50 p-4 rounded-2xl border border-emerald-100 text-center">
+                      <span className="text-xs text-emerald-800 font-bold block mb-1">الأكواد الممنوحة حتى الآن</span>
+                      <span className="text-2xl font-black text-emerald-700">
+                        {editForm.giftCodeGrantedCount || 0}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Progress Indicator for Limited campaigns */}
+                  {editForm.giftCodeLimitType === 'limited' && (
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-xs font-bold text-stone-600">
+                        <span>نسبة استهلاك الأكواد</span>
+                        <span>{Math.round(((editForm.giftCodeGrantedCount || 0) / (editForm.giftCodeTotalLimit || 100)) * 100)}%</span>
+                      </div>
+                      <div className="w-full bg-stone-100 rounded-full h-2.5">
+                        <div
+                          className="bg-emerald-600 h-2.5 rounded-full transition-all duration-500"
+                          style={{ width: `${Math.min(100, ((editForm.giftCodeGrantedCount || 0) / (editForm.giftCodeTotalLimit || 100)) * 100)}%` }}
+                        />
+                      </div>
+                      <div className="flex justify-between text-[11px] text-stone-500 font-medium">
+                        <span>الأكواد المتبقية: {Math.max(0, (editForm.giftCodeTotalLimit || 100) - (editForm.giftCodeGrantedCount || 0))} كود</span>
+                        <span>الهدف: {editForm.giftCodeTotalLimit || 100} كود</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Timing & Target info */}
+                  <div className="bg-stone-50 p-4 rounded-2xl border border-stone-100 space-y-3 text-xs font-semibold text-stone-700">
+                    <div className="flex justify-between">
+                      <span className="text-stone-500">الحد الأدنى لتقييم النجوم:</span>
+                      <span className="font-bold text-stone-800 flex items-center gap-1">
+                        <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
+                        <span>{editForm.giftCodeMinStars || 1} نجوم فما فوق</span>
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between">
+                      <span className="text-stone-500">نسبة خصم الكوبون:</span>
+                      <span className="font-bold text-emerald-700">%{editForm.giftCodeDiscountPercent || 10} خصم</span>
+                    </div>
+
+                    <div className="flex justify-between">
+                      <span className="text-stone-500">الحد الأقصى لكل حساب:</span>
+                      <span className="font-bold text-stone-800">
+                        {editForm.giftCodeUserLimit === 'per_review'
+                          ? "كود لكل تقييم"
+                          : editForm.giftCodeUserLimit === 'custom'
+                          ? `${editForm.giftCodeMaxPerUser || 2} كودات كحد أقصى`
+                          : "كود واحد فقط"}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between">
+                      <span className="text-stone-500">فترة سريان البرنامج:</span>
+                      <span className="font-bold text-stone-800">
+                        {editForm.giftCodeStartDate && editForm.giftCodeEndDate ? (
+                          <>من {editForm.giftCodeStartDate} إلى {editForm.giftCodeEndDate}</>
+                        ) : (
+                          "مفتوحة دائماً"
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sticky Action Footer */}
+                <div className="p-4 sm:px-6 bg-stone-50/90 border-t border-stone-100 shrink-0 sticky bottom-0 z-10">
+                  <button
+                    type="button"
+                    onClick={() => setIsGiftCodeStatsOpen(false)}
+                    className="w-full py-3 bg-stone-800 hover:bg-stone-900 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center cursor-pointer"
+                  >
+                    إغلاق نافذة الإحصائيات
+                  </button>
+                </div>
+
+              </div>
+            </div>,
+            document.body
+          )}
+
+          {/* Awarded Gift Code Success Modal */}
+          {awardedGiftCode && typeof document !== 'undefined' && createPortal(
+            <div className="fixed inset-0 z-[300000] bg-black/80 backdrop-blur-md flex items-center justify-center p-4" dir="rtl">
+              <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-stone-100 text-center relative animate-in zoom-in-95 duration-200">
+                
+                {/* Close Button */}
+                <button
+                  onClick={() => setAwardedGiftCode(null)}
+                  className="absolute top-4 left-4 p-2 text-stone-400 hover:text-stone-600 rounded-xl hover:bg-stone-100 transition-colors"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+
+                {/* Animated Gift icon */}
+                <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto mb-4 animate-bounce">
+                  <Gift className="h-8 w-8" />
+                </div>
+
+                <h3 className="text-xl font-black text-stone-900 mb-2">تهانينا! لقد حصلت على كود خصم هدية 🎉</h3>
+                <p className="text-xs text-stone-500 font-bold mb-6">
+                  تقديراً لتقييمك المتميز ومساهمتك في دعم محلات إربد، يسر <span className="text-[#1a4d2e]">{awardedGiftCode.businessName}</span> تقديم هذه المكافأة الخاصة لك!
+                </p>
+
+                {/* Dotted Coupon Design with QR Code */}
+                <div className="relative bg-emerald-50/50 border-2 border-dashed border-emerald-300 rounded-3xl p-6 mb-6 overflow-hidden flex flex-col items-center gap-4">
+                  {/* Decorative side circles */}
+                  <div className="absolute top-1/2 -left-3 w-6 h-6 rounded-full bg-white border border-stone-200 -translate-y-1/2" />
+                  <div className="absolute top-1/2 -right-3 w-6 h-6 rounded-full bg-white border border-stone-200 -translate-y-1/2" />
+                  
+                  <div className="w-full text-center">
+                    <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-widest block mb-1">رمز QR Code خصم حصري وجديد</span>
+                    <span className="text-3xl font-black text-emerald-700 block">خصم {awardedGiftCode.discountPercent}%</span>
+                  </div>
+
+                  {/* QR Code visual */}
+                  <div className="p-3 bg-white rounded-xl border border-emerald-100 flex flex-col items-center gap-2 shadow-sm w-full max-w-[170px] relative">
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(awardedGiftCode.code)}`}
+                      alt="QR Code Coupon"
+                      className="w-32 h-32 object-contain rounded-md"
+                      referrerPolicy="no-referrer"
+                    />
+                    <div className="text-xs font-mono font-bold text-stone-600 bg-stone-50 px-2.5 py-0.5 rounded border border-stone-100 select-all tracking-wider">
+                      {awardedGiftCode.code}
+                    </div>
+                  </div>
+                  
+                  {/* Copy code link */}
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(awardedGiftCode.code);
+                      const btn = document.getElementById('copy-coupon-btn');
+                      if (btn) {
+                        btn.innerText = 'تم النسخ! ✔️';
+                        setTimeout(() => {
+                          btn.innerText = 'نسخ الرمز كتابةً 📋';
+                        }, 2000);
+                      }
+                    }}
+                    id="copy-coupon-btn"
+                    className="text-emerald-800 hover:text-emerald-950 text-xs font-bold transition-all underline cursor-pointer"
+                  >
+                    نسخ الرمز كتابةً 📋
+                  </button>
+                </div>
+
+                <div className="bg-stone-50 text-[11px] text-stone-500 p-3 rounded-xl border border-stone-100 mb-6 font-semibold">
+                  📌 يمكنك إبراز هذا الكوبون أو إدخاله عند الشراء أو الحجز للاستفادة من الخصم مباشرةً لدى المحل.
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <Link
+                    to="/profile?tab=rewards"
+                    className="py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Gift className="h-4 w-4" />
+                    <span>عرض جميع مكافآتي</span>
+                  </Link>
+                  <button
+                    onClick={() => setAwardedGiftCode(null)}
+                    className="py-3 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer"
+                  >
+                    إغلاق النافذة
+                  </button>
+                </div>
               </div>
             </div>,
             document.body

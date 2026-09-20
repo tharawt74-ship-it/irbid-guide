@@ -23,6 +23,8 @@ const DEFAULT_GLOBAL_SETTINGS: GlobalSiteSettings = {
   siteName: 'شو في بإربد؟',
   siteSubtitle: 'دليل عروس الشمال والمحلات والخدمات الشامل',
   logoUrl: '/logo.png',
+  faviconUrl: '/favicon.jpg',
+  ogImageUrl: '/ogimage.jpg',
   useFullLogo: true,
   logoHeight: 68,
   contactPhone: '0790000000',
@@ -448,11 +450,9 @@ export function SystemSettingsProvider({ children }: { children: React.ReactNode
     };
   }, []);
 
-  // Dynamically update site icon and PWA manifest when logoUrl changes
+  // Dynamically update site icon and PWA manifest
   useEffect(() => {
-    if (!globalSettings.logoUrl) return;
-
-    const logo = globalSettings.logoUrl;
+    const faviconSrc = (globalSettings as any).faviconUrl || '/favicon.jpg';
     const siteName = globalSettings.siteName || "شو في بإربد";
 
     // Update standard favicon
@@ -462,7 +462,8 @@ export function SystemSettingsProvider({ children }: { children: React.ReactNode
       favicon.rel = 'icon';
       document.head.appendChild(favicon);
     }
-    favicon.href = logo;
+    favicon.type = 'image/jpeg';
+    favicon.href = faviconSrc;
 
     // Update Apple Touch Icon
     let appleIcon = document.querySelector<HTMLLinkElement>('link[rel="apple-touch-icon"]');
@@ -471,7 +472,7 @@ export function SystemSettingsProvider({ children }: { children: React.ReactNode
       appleIcon.rel = 'apple-touch-icon';
       document.head.appendChild(appleIcon);
     }
-    appleIcon.href = logo;
+    appleIcon.href = faviconSrc;
 
     // Generate Dynamic Manifest for PWA
     const manifest = {
@@ -479,6 +480,8 @@ export function SystemSettingsProvider({ children }: { children: React.ReactNode
       short_name: siteName,
       description: "دليل المحلات التجاري وسوق العمل والعروض",
       start_url: "/",
+      id: "/",
+      scope: "/",
       display: "standalone",
       background_color: "#ffffff",
       theme_color: "#1a4d2e",
@@ -487,16 +490,28 @@ export function SystemSettingsProvider({ children }: { children: React.ReactNode
       lang: "ar",
       icons: [
         {
-          src: logo,
+          src: faviconSrc,
           sizes: "192x192",
-          type: "image/png",
-          purpose: "any maskable"
+          type: "image/jpeg",
+          purpose: "any"
         },
         {
-          src: logo,
+          src: faviconSrc,
           sizes: "512x512",
-          type: "image/png",
-          purpose: "any maskable"
+          type: "image/jpeg",
+          purpose: "any"
+        },
+        {
+          src: faviconSrc,
+          sizes: "1024x1024",
+          type: "image/jpeg",
+          purpose: "any"
+        },
+        {
+          src: faviconSrc,
+          sizes: "512x512",
+          type: "image/jpeg",
+          purpose: "maskable"
         }
       ]
     };
@@ -521,7 +536,7 @@ export function SystemSettingsProvider({ children }: { children: React.ReactNode
         URL.revokeObjectURL(manifestUrl);
       }
     };
-  }, [globalSettings.logoUrl, globalSettings.siteName]);
+  }, [(globalSettings as any).faviconUrl, globalSettings.siteName]);
 
   // Save current settings to Firestore & Backend
   const saveAllToFirestore = async (newConfig: any) => {

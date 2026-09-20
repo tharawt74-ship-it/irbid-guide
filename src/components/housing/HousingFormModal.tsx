@@ -256,11 +256,14 @@ export function HousingFormModal({
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[100000] bg-white sm:bg-black/60 sm:backdrop-blur-sm flex flex-col sm:items-center sm:justify-center sm:p-4 overflow-y-auto" dir="rtl">
-      <div className="bg-white w-full min-h-screen sm:min-h-0 sm:max-w-xl sm:rounded-3xl sm:shadow-2xl overflow-hidden sm:my-8 border-t sm:border border-stone-200 animate-in fade-in sm:zoom-in-95 flex flex-col">
+    <div className="fixed inset-0 z-[100000] bg-stone-950/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 overflow-hidden" dir="rtl">
+      <div className="bg-white w-full sm:max-w-xl rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden my-0 sm:my-auto border-t sm:border border-stone-200 animate-in fade-in sm:zoom-in-95 flex flex-col max-h-[88dvh] sm:max-h-[85vh]">
         
+        {/* Mobile Drag Indicator */}
+        <div className="w-12 h-1.5 bg-stone-300 rounded-full mx-auto my-2.5 sm:hidden shrink-0" />
+
         {/* Header */}
-        <div className="bg-gradient-to-l from-[#1a4d2e] to-[#133b22] text-white p-5 flex items-center justify-between">
+        <div className="bg-gradient-to-l from-[#1a4d2e] to-[#133b22] text-white p-5 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-[#ff9f1c]">
               <Building2 className="h-5 w-5" />
@@ -283,7 +286,8 @@ export function HousingFormModal({
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-5 sm:p-6 space-y-4 flex-1 overflow-y-auto sm:max-h-[80vh] text-xs font-bold text-stone-700">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+          <div className="p-5 sm:p-6 space-y-4 flex-1 overflow-y-auto text-xs font-bold text-stone-700">
           
           {/* Honeypot for bots */}
           <div className="absolute opacity-0 -z-50 pointer-events-none" style={{ width: 0, height: 0, overflow: 'hidden' }}>
@@ -866,27 +870,31 @@ export function HousingFormModal({
 
           </div>
 
+          </div>
+
           {/* Submit Action */}
-          <button
-            type="submit"
-            disabled={submitting}
-            className="w-full py-3.5 bg-[#1a4d2e] hover:bg-[#133b22] text-white font-black text-sm rounded-xl transition-all shadow-md cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
-          >
-            {submitting ? (
-              <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-            ) : (
-              <>
-                <Send className="h-4 w-4" />
-                <span>
-                  {isAdmin 
-                    ? 'حفظ ونشر الإعلان فوراً (كإدارة)' 
-                    : (totalFee > 0 
-                        ? `إرسال طلب نشر الإعلان للإدارة (${totalFee} د.أ)` 
-                        : 'إرسال طلب نشر الإعلان للإدارة (مجاناً)')}
-                </span>
-              </>
-            )}
-          </button>
+          <div className="p-4 sm:p-5 border-t border-stone-100 bg-stone-50/90 shrink-0 sticky bottom-0 z-10">
+            <button
+              type="submit"
+              disabled={submitting}
+              className="w-full py-3.5 bg-[#1a4d2e] hover:bg-[#133b22] text-white font-black text-sm rounded-xl transition-all shadow-md cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {submitting ? (
+                <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+              ) : (
+                <>
+                  <Send className="h-4 w-4" />
+                  <span>
+                    {isAdmin 
+                      ? 'حفظ ونشر الإعلان فوراً (كإدارة)' 
+                      : (totalFee > 0 
+                          ? `إرسال طلب نشر الإعلان للإدارة (${totalFee} د.أ)` 
+                          : 'إرسال طلب نشر الإعلان للإدارة (مجاناً)')}
+                  </span>
+                </>
+              )}
+            </button>
+          </div>
         </form>
 
       </div>

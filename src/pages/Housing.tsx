@@ -8,8 +8,9 @@ import {
   Clock, CheckCircle2, AlertCircle, Edit3, User, ArrowLeft, Crown
 } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { collection, getDocs, deleteDoc, doc, addDoc } from 'firebase/firestore';
+import { collection, getDocs, deleteDoc, doc, addDoc, query, orderBy, limit } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { getCachedHousings, setCachedHousings } from '../lib/dataCache';
 import { useAuth } from '../contexts/AuthContext';
 import { ShareButton } from '../components/ShareButton';
 import { getWhatsAppUrl } from '../lib/contactHelper';
@@ -213,14 +214,21 @@ export function Housing() {
   };
 
   const loadHousings = async () => {
-    setLoading(true);
+    const cached = getCachedHousings();
+    if (cached && cached.length > 0) {
+      setHousings(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+
     try {
       if (!db) {
         setHousings([]);
         setLoading(false);
         return;
       }
-      const ref = collection(db, 'housings');
+      const ref = query(collection(db, 'housings'), orderBy('createdAt', 'desc'), limit(80));
       const snap = await getDocs(ref);
       let items: HousingItem[] = [];
       
@@ -230,6 +238,7 @@ export function Housing() {
       });
 
       setHousings(items);
+      setCachedHousings(items);
     } catch (err) {
       console.error("Error loading housings:", err);
       setHousings([]);
@@ -438,7 +447,7 @@ export function Housing() {
         title="سكنات وشقق إربد | سكنات طالبات وطلاب اليرموك والتكنو"
         description="دليل سكنات وشقق محافظة إربد: سكنات طالبات آمنة، سكنات شباب طلاب جامعة اليرموك وجامعة التكنولوجيا، شقق عائلية وأستوديوهات مفروشة للإيجار في إربد."
         keywords={['سكنات إربد', 'سكنات طالبات إربد', 'سكنات اليرموك', 'سكنات التكنو', 'شقق للإيجار إربد', 'استوديو مفروش إربد', 'عقارات إربد']}
-        canonicalUrl="https://shofierbid.com/housing"
+        canonicalUrl="https://shofibirbid.site/housing"
       />
       {/* Toast popup */}
       {toastMessage && (
@@ -1503,28 +1512,39 @@ export function Housing() {
 
       {/* Comprehensive Housing Details Modal */}
       {selectedDetail && (
-        <div className="fixed inset-0 z-[9999] bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto" dir="rtl">
-          <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[94vh] overflow-y-auto p-5 sm:p-8 shadow-2xl border border-stone-200 relative my-auto animate-in fade-in zoom-in-95 space-y-6">
+        <div className="fixed inset-0 z-[99999] bg-stone-950/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-hidden" dir="rtl">
+          <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-3xl w-full max-h-[88dvh] sm:max-h-[85vh] flex flex-col overflow-hidden shadow-2xl border border-stone-200 relative my-0 sm:my-auto animate-in slide-in-from-bottom-6 sm:zoom-in-95 duration-200 text-right">
             
-            {/* Image Header */}
-            <div className="relative aspect-[16/9] w-full rounded-2xl overflow-hidden bg-stone-100 border border-stone-200">
-              <img 
-                src={selectedDetail.image} 
-                alt={selectedDetail.title} 
-                className="w-full h-full object-cover"
-                referrerPolicy="no-referrer"
-              />
+            {/* Mobile Drag Indicator */}
+            <div className="w-12 h-1.5 bg-stone-300 rounded-full mx-auto my-2 sm:hidden shrink-0" />
+
+            {/* Close Button Header */}
+            <div className="flex items-center justify-between border-b border-stone-100 p-3 sm:p-4 shrink-0 bg-white">
+              <span className="text-xs font-black text-stone-600">تفاصيل السكن / العقار</span>
               <button
                 onClick={() => setSelectedDetail(null)}
-                className="absolute top-4 right-4 p-2 bg-black/60 text-white hover:bg-black/80 rounded-full transition-colors"
+                className="p-2 text-stone-400 hover:text-stone-700 rounded-xl hover:bg-stone-100 transition-colors shrink-0 cursor-pointer"
                 title="إغلاق"
               >
                 <X className="h-5 w-5" />
               </button>
-              <div className="absolute top-4 left-4 bg-[#1a4d2e] text-white px-3.5 py-2 rounded-xl text-xs font-black shadow-md">
-                {selectedDetail.price} دينار / {selectedDetail.pricePeriod}
-              </div>
             </div>
+
+            {/* Scrollable Content */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+              
+              {/* Image Header */}
+              <div className="relative aspect-[16/9] w-full rounded-2xl overflow-hidden bg-stone-100 border border-stone-200 shrink-0">
+                <img 
+                  src={selectedDetail.image} 
+                  alt={selectedDetail.title} 
+                  className="w-full h-full object-cover"
+                  referrerPolicy="no-referrer"
+                />
+                <div className="absolute top-4 left-4 bg-[#1a4d2e] text-white px-3.5 py-2 rounded-xl text-xs font-black shadow-md">
+                  {selectedDetail.price} دينار / {selectedDetail.pricePeriod}
+                </div>
+              </div>
 
             {/* Title & Logistics */}
             <div className="space-y-2">
@@ -1600,10 +1620,12 @@ export function Housing() {
               </div>
             </div>
 
-            {/* Footer Direct Call and WhatsApp */}
-            <div className="pt-4 border-t border-stone-200 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="text-xs text-stone-500">
-                <span>للاستفسار أو الاتفاق وزيارة السكن، تواصل مع المالك مباشرة:</span>
+            </div>
+
+            {/* Sticky Action Footer */}
+            <div className="p-4 sm:px-6 bg-stone-50/90 border-t border-[#e5e1da] flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0 sticky bottom-0 z-10">
+              <div className="text-xs text-stone-500 text-center sm:text-right">
+                <span>لأي استفسار يمكنك التواصل مع صاحب السكن مباشرة:</span>
                 <span className="block font-black text-stone-800 text-sm mt-0.5" dir="ltr">{selectedDetail.contactPhone}</span>
               </div>
 
@@ -1613,10 +1635,10 @@ export function Housing() {
                     setSelectedHousingForBooking(selectedDetail);
                     setIsBookingFormOpen(true);
                   }}
-                  className="flex-1 sm:flex-initial inline-flex justify-center items-center gap-2 px-5 py-3.5 bg-[#ff9f1c] hover:bg-[#e58f19] text-[#2d2a26] font-black text-xs sm:text-sm rounded-xl transition-all shadow-md cursor-pointer"
+                  className="flex-1 sm:flex-initial inline-flex justify-center items-center gap-2 px-4 py-3 bg-[#ff9f1c] hover:bg-[#e58f19] text-[#2d2a26] font-black text-xs sm:text-sm rounded-xl transition-all shadow-xs cursor-pointer"
                 >
-                  <Calendar className="h-4.5 w-4.5 shrink-0" />
-                  <span>حجز موعد معاينة مباشر</span>
+                  <Calendar className="h-4 w-4 shrink-0" />
+                  <span>حجز موعد معاينة</span>
                 </button>
 
                 {(selectedDetail.contactMode === 'both' || selectedDetail.contactMode === 'whatsapp_only' || !selectedDetail.contactMode) && (
@@ -1624,9 +1646,9 @@ export function Housing() {
                     href={getWhatsAppUrl(selectedDetail.contactWhatsapp || selectedDetail.contactPhone, `مرحباً، أود الاستفسار بخصوص السكن/العقار المعلن عنه: (${selectedDetail.title}) على منصة شو في بإربد؟.`)}
                     target="_blank"
                     rel="noreferrer"
-                    className="flex-1 sm:flex-initial inline-flex justify-center items-center gap-2 px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm rounded-xl transition-colors shadow-xs cursor-pointer"
+                    className="flex-1 sm:flex-initial inline-flex justify-center items-center gap-2 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm rounded-xl transition-colors shadow-xs cursor-pointer"
                   >
-                    <WhatsApp3DIcon className="h-5 w-5 text-white" />
+                    <WhatsApp3DIcon className="h-4.5 w-4.5 text-white" />
                     <span>واتساب</span>
                   </a>
                 )}
@@ -1634,10 +1656,10 @@ export function Housing() {
                 {(selectedDetail.contactMode === 'both' || selectedDetail.contactMode === 'phone_only' || !selectedDetail.contactMode) && (
                   <a
                     href={`tel:${selectedDetail.contactPhone}`}
-                    className="inline-flex justify-center items-center gap-2 px-4 py-3 bg-[#1a4d2e] hover:bg-[#133c23] text-white font-bold text-xs sm:text-sm rounded-xl transition-colors shadow-xs cursor-pointer"
+                    className="inline-flex justify-center items-center gap-2 px-3.5 py-3 bg-[#1a4d2e] hover:bg-[#133c23] text-white font-bold text-xs sm:text-sm rounded-xl transition-colors shadow-xs cursor-pointer"
                   >
-                    <Phone3DIcon className="h-5 w-5 text-white" />
-                    <span>اتصال هاتفي</span>
+                    <Phone3DIcon className="h-4.5 w-4.5 text-white" />
+                    <span>اتصال</span>
                   </a>
                 )}
               </div>

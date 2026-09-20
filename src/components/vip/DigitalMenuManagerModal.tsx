@@ -7,7 +7,7 @@ import {
   Tag, Info, HelpCircle, AlertCircle, ArrowUp, ArrowDown, Play,
   Home, Building, Activity, ShieldCheck, GraduationCap, Wrench, Gift, ShoppingBag,
   Layers, PlusCircle, Eye, SlidersHorizontal, ArrowRight, CheckCircle2, ChevronDown,
-  Percent, Sparkle, RefreshCw, Search
+  Percent, Sparkle, RefreshCw, Search, Package
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Business, MenuItem, MenuItemVersion } from '../../types';
@@ -440,6 +440,8 @@ export function DigitalMenuManagerModal({
   const [imageUrl, setImageUrl] = useState('');
   const [isAvailable, setIsAvailable] = useState(true);
   const [badge, setBadge] = useState<'popular' | 'new' | 'spicy' | 'vegetarian' | 'none'>('none');
+  const [trackStock, setTrackStock] = useState(false);
+  const [stockCount, setStockCount] = useState<number | ''>('');
   
   // Custom Options/Modifiers state
   const [options, setOptions] = useState<string[]>([]);
@@ -557,6 +559,8 @@ export function DigitalMenuManagerModal({
     setImageUrl(item.imageUrl || '');
     setIsAvailable(item.isAvailable !== false);
     setBadge(item.badge || (item.isPopular ? 'popular' : 'none'));
+    setTrackStock(!!item.trackStock);
+    setStockCount(item.stockCount !== undefined ? item.stockCount : '');
     setOptions(item.options || []);
     setNewOptionInput('');
     setVersions(item.versions || []);
@@ -585,6 +589,8 @@ export function DigitalMenuManagerModal({
     setImageUrl('');
     setIsAvailable(true);
     setBadge('none');
+    setTrackStock(false);
+    setStockCount('');
     setOptions([]);
     setNewOptionInput('');
     setVersions([]);
@@ -667,6 +673,8 @@ export function DigitalMenuManagerModal({
       return;
     }
 
+    const parsedStock = trackStock && stockCount !== '' ? parseInt(String(stockCount), 10) : undefined;
+
     const parsedItem: MenuItem = {
       id: editingItem ? editingItem.id : 'item_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
       name: name.trim(),
@@ -682,6 +690,8 @@ export function DigitalMenuManagerModal({
       versions: versions.length > 0 ? versions : undefined,
       versionType: versions.length > 0 ? versionType : undefined,
       createdAt: editingItem ? (editingItem.createdAt || Date.now()) : Date.now(),
+      trackStock: trackStock || undefined,
+      stockCount: trackStock ? (isNaN(Number(parsedStock)) ? 0 : Number(parsedStock)) : undefined,
     };
 
     if (editingItem) {
@@ -839,10 +849,13 @@ export function DigitalMenuManagerModal({
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[100000] bg-black/85 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-y-auto animate-fade-in" dir="rtl">
+    <div className="fixed inset-0 z-[100000] bg-stone-950/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 overflow-hidden animate-fade-in" dir="rtl">
       
       {/* Main Manager Container */}
-      <div className="bg-white rounded-3xl max-w-5xl w-full max-h-[88vh] flex flex-col shadow-2xl border border-stone-200 relative my-auto text-right overflow-hidden">
+      <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-5xl w-full max-h-[88dvh] sm:max-h-[85vh] flex flex-col shadow-2xl border border-stone-200 relative my-0 sm:my-auto text-right overflow-hidden">
+        
+        {/* Mobile Drag Indicator */}
+        <div className="w-12 h-1.5 bg-stone-300 rounded-full mx-auto my-2 sm:hidden shrink-0" />
         
         {/* Top Sticky Bar */}
         <div className="flex items-center justify-between border-b border-stone-200 px-5 py-4 bg-gradient-to-r from-stone-50 via-white to-amber-50/30">
@@ -1380,6 +1393,83 @@ export function DigitalMenuManagerModal({
                             {isAvailable ? 'متاح للطلب ✅' : 'غير متوفر ❌'}
                           </span>
                         </label>
+                      </div>
+
+                      {/* Stock / Quantity Tracking section */}
+                      <div className="bg-stone-50 border border-stone-200 rounded-2xl p-4.5 space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h4 className="text-xs font-black text-stone-900 flex items-center gap-1.5">
+                              <Package className="h-4 w-4 text-[#1a4d2e]" />
+                              <span>تتبع حالة المخزون والكمية المتوفرة</span>
+                            </h4>
+                            <p className="text-[10px] text-stone-500 mt-0.5">تفعيل هذا الخيار سيقوم بمراقبة الكمية المتبقية لضمان عدم حجز صنف غير متوفر.</p>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={trackStock}
+                              onChange={(e) => {
+                                setTrackStock(e.target.checked);
+                                if (e.target.checked && stockCount === '') {
+                                  setStockCount(10); // default starting stock count
+                                }
+                              }}
+                              className="sr-only peer"
+                            />
+                            <div className="w-11 h-6 bg-stone-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-stone-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                          </label>
+                        </div>
+
+                        {trackStock && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2.5 border-t border-stone-200/60 animate-in slide-in-from-top-2 duration-200">
+                            <div>
+                              <label className="block text-xs font-black text-stone-800 mb-1">
+                                الكمية المتوفرة في المخزن
+                              </label>
+                              <div className="relative">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  required={trackStock}
+                                  value={stockCount}
+                                  onChange={(e) => {
+                                    const v = e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value, 10));
+                                    setStockCount(v);
+                                  }}
+                                  placeholder="مثال: 15"
+                                  className="w-full p-3 pl-12 bg-white border border-stone-200 rounded-xl text-base font-black text-stone-900 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]/30"
+                                />
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-stone-400 font-bold">وحدة</span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center">
+                              <div className={`p-3 rounded-xl text-xs w-full font-bold flex items-center gap-2 ${
+                                typeof stockCount === 'number' && stockCount === 0
+                                  ? 'bg-rose-50 text-rose-800 border border-rose-100'
+                                  : typeof stockCount === 'number' && stockCount <= 5
+                                  ? 'bg-amber-50 text-amber-800 border border-amber-100'
+                                  : 'bg-emerald-50 text-emerald-800 border border-emerald-100'
+                              }`}>
+                                <div className={`w-2.5 h-2.5 rounded-full ${
+                                  typeof stockCount === 'number' && stockCount === 0
+                                    ? 'bg-rose-600 animate-pulse'
+                                    : typeof stockCount === 'number' && stockCount <= 5
+                                    ? 'bg-amber-500 animate-pulse'
+                                    : 'bg-emerald-500'
+                                }`} />
+                                <span>
+                                  {typeof stockCount === 'number' && stockCount === 0
+                                    ? 'نفدت الكمية تماماً (سيظهر للزبائن غير متوفر)'
+                                    : typeof stockCount === 'number' && stockCount <= 5
+                                    ? `كمية منخفضة ومحدودة! متبقي فقط ${stockCount}`
+                                    : `الكمية ممتازة ومتوفرة للطلب (متبقي ${stockCount || 0})`}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                     </div>

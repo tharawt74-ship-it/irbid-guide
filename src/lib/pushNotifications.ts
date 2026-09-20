@@ -97,7 +97,7 @@ export function showNativeNotification(title: string, body: string, url: string 
 
   if (Notification.permission === 'granted') {
     try {
-      const icon = iconUrl || '/favicon.ico';
+      const icon = iconUrl || '/favicon.jpg';
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.ready.then((reg) => {
           reg.showNotification(title, {

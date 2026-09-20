@@ -12,6 +12,7 @@ import {
   setDoc, 
   orderBy,
   addDoc,
+  limit,
   onSnapshot
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -370,16 +371,16 @@ export function AdminDashboard() {
         rrRes
       ] = await Promise.allSettled([
         getAppConfig(),
-        getDocs(query(collection(db, 'businessRequests'), orderBy('createdAt', 'desc'))).catch(() => getDocs(collection(db, 'businessRequests'))),
-        getDocs(query(collection(db, 'businesses'), orderBy('createdAt', 'desc'))).catch(() => getDocs(collection(db, 'businesses'))),
-        getDocs(query(collection(db, 'marketingRequests'), orderBy('createdAt', 'desc'))),
-        getDocs(query(collection(db, 'jobs'), orderBy('createdAt', 'desc'))),
-        getDocs(query(collection(db, 'bannerBookingRequests'), orderBy('createdAt', 'desc'))),
-        getDocs(query(collection(db, 'news'), orderBy('createdAt', 'desc'))),
-        getDocs(query(collection(db, 'housings'), orderBy('createdAt', 'desc'))),
-        getDocs(query(collection(db, 'tourism'))),
-        getDocs(query(collection(db, 'edit_suggestions'), orderBy('createdAt', 'desc'))),
-        getDocs(query(collection(db, 'review_reports'), orderBy('createdAt', 'desc')))
+        getDocs(query(collection(db, 'businessRequests'), orderBy('createdAt', 'desc'), limit(150))).catch(() => getDocs(query(collection(db, 'businessRequests'), limit(150)))),
+        getDocs(query(collection(db, 'businesses'), orderBy('createdAt', 'desc'), limit(150))).catch(() => getDocs(query(collection(db, 'businesses'), limit(150)))),
+        getDocs(query(collection(db, 'marketingRequests'), orderBy('createdAt', 'desc'), limit(100))),
+        getDocs(query(collection(db, 'jobs'), orderBy('createdAt', 'desc'), limit(100))),
+        getDocs(query(collection(db, 'bannerBookingRequests'), orderBy('createdAt', 'desc'), limit(100))),
+        getDocs(query(collection(db, 'news'), orderBy('createdAt', 'desc'), limit(100))),
+        getDocs(query(collection(db, 'housings'), orderBy('createdAt', 'desc'), limit(100))),
+        getDocs(query(collection(db, 'tourism'), limit(100))),
+        getDocs(query(collection(db, 'edit_suggestions'), orderBy('createdAt', 'desc'), limit(100))),
+        getDocs(query(collection(db, 'review_reports'), orderBy('createdAt', 'desc'), limit(100)))
       ]);
 
       // 1. Config

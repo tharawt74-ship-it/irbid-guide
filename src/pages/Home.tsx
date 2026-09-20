@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { collection, query, orderBy, getDocs } from 'firebase/firestore';
+import { collection, query, orderBy, getDocs, limit } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { Business, HomepageBanner } from '../types';
@@ -137,7 +137,7 @@ export function Home() {
       
       try {
         const appConfig = await getAppConfig();
-        const q = query(collection(db, 'businesses'), orderBy('createdAt', 'desc'));
+        const q = query(collection(db, 'businesses'), orderBy('createdAt', 'desc'), limit(150));
         const bannersQuery = query(collection(db, 'banners'));
 
         const [querySnapshot, bannersSnap] = await Promise.all([
@@ -471,18 +471,29 @@ export function Home() {
     // Regular tabs sorting if no active search
     if (activeTab === 'featured') {
       displayedBusinesses = displayedBusinesses.filter(b => isBusinessCurrentlyFeatured(b, now));
+      displayedBusinesses = displayedBusinesses.sort((a, b) => {
+        return compareBusinessesByTier(a, b, undefined, now);
+      });
+    } else if (activeTab === 'popular') {
+      displayedBusinesses = displayedBusinesses.sort((a, b) => {
+        // Sort from most views to least views, and then highest rating to lowest rating (regardless of featured/VIP tiers)
+        const viewsDiff = (b.views || 0) - (a.views || 0);
+        if (viewsDiff !== 0) return viewsDiff;
+        return (b.rating || 0) - (a.rating || 0);
+      });
+    } else if (activeTab === 'recent') {
+      displayedBusinesses = displayedBusinesses.sort((a, b) => {
+        // Sort from newest to oldest (regardless of featured/VIP tiers)
+        const timeA = a.createdAt || 0;
+        const timeB = b.createdAt || 0;
+        return timeB - timeA;
+      });
+    } else {
+      // Default / 'all' tab: Restore the exact original sorting mechanism (Featured -> Golden VIP -> Rest)
+      displayedBusinesses = displayedBusinesses.sort((a, b) => {
+        return compareBusinessesByTier(a, b, undefined, now);
+      });
     }
-
-    // Always sort by: Featured -> Golden VIP -> Rest (with tab criteria as secondary sort)
-    displayedBusinesses = displayedBusinesses.sort((a, b) => {
-      let secondary: ((x: Business, y: Business) => number) | undefined;
-      if (activeTab === 'popular') {
-        secondary = (x, y) => (y.views || 0) - (x.views || 0);
-      } else if (activeTab === 'recent') {
-        secondary = (x, y) => (y.createdAt || 0) - (x.createdAt || 0);
-      }
-      return compareBusinessesByTier(a, b, secondary, now);
-    });
   }
 
   return (
@@ -490,7 +501,7 @@ export function Home() {
       <SEO 
         title="الرئيسية | الدليل الشامل لمدينة ومحافظة إربد"
         description="دليل إربد الأكبر والشامل: استكشف أفضل المطاعم والمقاهي والمحلات التجارية، الوظائف وسوق العمل، سكنات طلاب جامعة اليرموك وجامعة التكنولوجيا، وعروض التسوق في إربد."
-        canonicalUrl="https://shofierbid.com/"
+        canonicalUrl="https://shofibirbid.site/"
       />
       
       
@@ -864,7 +875,7 @@ export function Home() {
                 }`}
               >
                 <Clock className={`h-3.5 w-3.5 md:h-3.5 md:w-3.5 ${activeTab === 'recent' ? 'text-white' : 'text-blue-500'}`} />
-                <span>المضافة حديثاً</span>
+                <span>الأحدث</span>
               </button>
             </div>
           </div>

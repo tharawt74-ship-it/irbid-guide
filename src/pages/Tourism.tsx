@@ -393,7 +393,7 @@ export function Tourism() {
         <SEO 
           title={`${activeSpot.name} | معالم إربد السياحية`}
           description={activeSpot.description}
-          canonicalUrl={`https://shofierbid.com/tourism?id=${activeSpot.id}`}
+          canonicalUrl={`https://shofibirbid.site/tourism?id=${activeSpot.id}`}
         />
 
         {/* Back navigation & Quick Admin tools */}
@@ -593,7 +593,7 @@ export function Tourism() {
         title="السياحة ومعالم إربد | أم قيس، طبقة فحل، غابات برقش وتل إربد"
         description="دليل الأماكن السياحية والآثار والطبيعة في محافظة إربد وعروس الشمال: أم قيس، طبقة فحل، غابات برقش، سد وادي العرب، بيت عرار الثقافي، ومتحف التراث الأردني."
         keywords={['سياحة إربد', 'معالم إربد', 'أم قيس', 'طبقة فحل', 'غابات برقش', 'سد وادي العرب', 'بيت عرار', 'آثار إربد']}
-        canonicalUrl="https://shofierbid.com/tourism"
+        canonicalUrl="https://shofibirbid.site/tourism"
       />
       {/* Toast Notification */}
       {toastMessage && (

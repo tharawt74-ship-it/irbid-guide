@@ -348,7 +348,7 @@ export function News() {
         <SEO 
           title={`${activeArticle.title} | أخبار إربد`}
           description={activeArticle.excerpt || activeArticle.summary}
-          canonicalUrl={`https://shofierbid.com/news?id=${activeArticle.id}`}
+          canonicalUrl={`https://shofibirbid.site/news?id=${activeArticle.id}`}
         />
 
         {/* Breadcrumb & Navigation */}
@@ -521,7 +521,7 @@ export function News() {
         title="أخبار وفعاليات إربد | تغطية مستمرة لأهم الأحداث"
         description="تابع أحدث وأهم أخبار مدينة إربد: تغطية لأخبار التعليم وجامعة اليرموك، الفعاليات الثقافية، السياحة، الطقس، وقرارات البلدية في محافظة إربد."
         keywords={['أخبار إربد', 'فعاليات إربد', 'جامعة اليرموك أخبار', 'بلدية إربد', 'طقس إربد', 'إربد الان']}
-        canonicalUrl="https://shofierbid.com/news"
+        canonicalUrl="https://shofibirbid.site/news"
       />
       {/* Toast Notification */}
       {toastMessage && (

@@ -113,16 +113,19 @@ export function VipPopupManagerModal({
 
   return createPortal(
     <div 
-      className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto"
+      className="fixed inset-0 z-[100000] bg-stone-950/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 overflow-hidden"
       dir="rtl"
       onClick={onClose}
     >
       <div 
-        className="bg-white rounded-3xl max-w-2xl w-full max-h-[88vh] flex flex-col overflow-hidden shadow-2xl border border-stone-200 relative my-auto animate-in fade-in zoom-in-95"
+        className="bg-white rounded-t-3xl sm:rounded-3xl max-w-2xl w-full max-h-[88dvh] sm:max-h-[85vh] flex flex-col overflow-hidden shadow-2xl border border-stone-200 relative my-0 sm:my-auto animate-in fade-in zoom-in-95"
         onClick={e => e.stopPropagation()}
       >
+        {/* Mobile Drag Indicator */}
+        <div className="w-12 h-1.5 bg-stone-300 rounded-full mx-auto my-2.5 sm:hidden shrink-0" />
+
         {/* Header */}
-        <div className="bg-gradient-to-r from-amber-500 via-amber-600 to-[#1a4d2e] p-5 text-white flex items-center justify-between">
+        <div className="bg-gradient-to-r from-amber-500 via-amber-600 to-[#1a4d2e] p-5 text-white flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-white/20 backdrop-blur-xs flex items-center justify-center text-amber-200 shadow-xs">
               <Crown className="h-5 w-5 fill-amber-300" />
@@ -149,7 +152,8 @@ export function VipPopupManagerModal({
         </div>
 
         {/* Body Form */}
-        <form onSubmit={handleSave} className="p-5 sm:p-7 space-y-6 max-h-[80vh] overflow-y-auto">
+        <form onSubmit={handleSave} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+          <div className="p-5 sm:p-7 space-y-6 flex-1 overflow-y-auto">
           {errorMsg && (
             <div className="p-3 bg-red-50 text-red-700 border border-red-200 rounded-xl text-xs font-bold flex items-center gap-2">
               <AlertCircle className="h-4 w-4 shrink-0" />
@@ -350,8 +354,10 @@ export function VipPopupManagerModal({
             </div>
           </div>
 
+          </div>
+
           {/* Footer Controls */}
-          <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-stone-100">
+          <div className="p-4 sm:px-6 bg-stone-50/90 border-t border-stone-100 shrink-0 sticky bottom-0 z-10 flex flex-col sm:flex-row items-center justify-between gap-3">
             <button
               type="button"
               onClick={() => setShowPreview(true)}

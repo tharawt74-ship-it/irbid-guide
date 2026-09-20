@@ -689,13 +689,15 @@ export function AddMedicalFacilityModal({ isOpen, onClose, onFacilityAdded }: Ad
 
   const modalContent = (
     <div 
-      className="fixed inset-0 z-[9999] overflow-y-auto bg-stone-950/75 backdrop-blur-md flex items-start justify-center p-3 sm:p-5 md:p-8"
+      className="fixed inset-0 z-[100000] overflow-hidden bg-stone-950/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6"
       dir="rtl"
     >
       <div 
-        className="bg-white rounded-3xl shadow-2xl border border-stone-200 w-full max-w-5xl overflow-hidden my-auto animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[92vh]"
+        className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl border border-stone-200 w-full max-w-5xl overflow-hidden my-0 sm:my-auto animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[88dvh] sm:max-h-[85vh]"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Mobile Drag Indicator */}
+        <div className="w-12 h-1.5 bg-stone-300 rounded-full mx-auto my-2.5 sm:hidden shrink-0" />
         {/* Top Header Bar */}
         <div className="bg-gradient-to-r from-stone-900 via-stone-800 to-stone-900 text-white p-4 sm:p-5 px-6 flex items-center justify-between border-b border-stone-800 shrink-0">
           <div className="flex items-center gap-3">

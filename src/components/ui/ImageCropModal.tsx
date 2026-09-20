@@ -235,7 +235,7 @@ export function ImageCropModal({
     <AnimatePresence>
       <div 
         data-no-bottom-sheet="true"
-        className="fixed inset-0 z-[9999999] flex items-center justify-center p-2 sm:p-4 md:p-6 bg-black/90 backdrop-blur-md select-none" 
+        className="fixed inset-0 z-[9999999] flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 bg-black/90 backdrop-blur-md select-none overflow-hidden" 
         dir="rtl"
       >
         <motion.div
@@ -243,8 +243,10 @@ export function ImageCropModal({
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.94, y: 15 }}
           transition={{ duration: 0.2 }}
-          className="bg-stone-900 border border-stone-700/80 w-full max-w-2xl rounded-2xl sm:rounded-3xl shadow-2xl flex flex-col h-[94dvh] sm:h-[88vh] max-h-[820px] overflow-hidden"
+          className="bg-stone-900 border border-stone-700/80 w-full max-w-2xl rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col h-[92dvh] sm:h-[88vh] max-h-[820px] overflow-hidden"
         >
+          {/* Mobile Drag Indicator */}
+          <div className="w-12 h-1.5 bg-stone-700 rounded-full mx-auto my-2 sm:hidden shrink-0" />
           {/* Header */}
           <div className="px-4 py-3 sm:px-5 sm:py-3.5 border-b border-stone-800 flex items-center justify-between bg-stone-950/90 shrink-0">
             <div className="flex items-center gap-2.5">

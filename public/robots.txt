@@ -12,10 +12,33 @@ Allow: /tourism
 Allow: /prayer-times
 Allow: /pricing
 
+# Generative Engine Optimization (GEO) - Explicitly allow AI Search Engines
+User-agent: GPTBot
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
 # Disallow private and dashboard routes
 Disallow: /admin
 Disallow: /profile/settings
 Disallow: /messages
 
-# Sitemap URL
-Sitemap: https://shofierbid.com/sitemap.xml
+# Sitemap & LLMs Manifest
+Sitemap: https://shofibirbid.site/sitemap.xml
+# LLMs Manifest: https://shofibirbid.site/llms.txt

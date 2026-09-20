@@ -24,8 +24,9 @@ import {
 import { cn } from '../lib/utils';
 import { Link } from 'react-router';
 import { CategoryButtonLabel } from '../components/CategoryButtonLabel';
-import { collection, getDocs, query, orderBy, addDoc } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, addDoc, limit } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { getCachedOffers, setCachedOffers } from '../lib/dataCache';
 import { getAppConfig } from '../lib/demoDataHelper';
 import { ShareButton } from '../components/ShareButton';
 import { getWhatsAppUrl, formatOfferWhatsAppMessage } from '../lib/contactHelper';
@@ -141,6 +142,12 @@ export function Offers() {
           .then(res => setBanners(res))
           .catch(() => setBanners(DEFAULT_OFFERS_BANNERS));
 
+        const cached = getCachedOffers();
+        if (cached && cached.length > 0) {
+          setOffers(cached);
+          setLoading(false);
+        }
+
         if (!db) {
           setOffers([]);
           setLoading(false);
@@ -148,7 +155,7 @@ export function Offers() {
         }
 
         const appConfig = await getAppConfig();
-        const q = query(collection(db, 'offers'), orderBy('createdAt', 'desc'));
+        const q = query(collection(db, 'offers'), orderBy('createdAt', 'desc'), limit(80));
         const snap = await getDocs(q);
 
         const loaded: OfferItem[] = [];
@@ -161,6 +168,7 @@ export function Offers() {
         });
 
         setOffers(loaded);
+        setCachedOffers(loaded);
       } catch (err) {
         console.warn('Error loading offers from Firestore:', err);
         setOffers([]);
@@ -205,7 +213,7 @@ export function Offers() {
         title="عروض وخصومات إربد | أحدث تخفيضات وكوبونات المطاعم والمحلات"
         description="استكشف أقوى العروض والخصومات والتخفيضات اليومية في مدينة إربد: خصومات مطاعم وكافيهات، عروض الملابس، إلكترونيات، صالونات ومراكز التجميل."
         keywords={['عروض إربد', 'خصومات إربد', 'تخفيضات إربد', 'كوبونات إربد', 'مطاعم إربد عروض']}
-        canonicalUrl="https://shofierbid.com/offers"
+        canonicalUrl="https://shofibirbid.site/offers"
       />
 
       {/* Banner Slideshow */}
@@ -630,45 +638,51 @@ export function Offers() {
 
       {/* Add Offer Modal */}
       {isAddModalOpen && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto" dir="rtl">
-          <div className="bg-white rounded-3xl max-w-xl w-full max-h-[88vh] flex flex-col overflow-hidden p-6 sm:p-8 shadow-2xl border border-stone-200 space-y-5 relative my-auto animate-in fade-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-[100000] bg-stone-950/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 overflow-hidden" dir="rtl">
+          <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-xl w-full max-h-[88dvh] sm:max-h-[85vh] flex flex-col overflow-hidden p-5 sm:p-8 shadow-2xl border border-stone-200 relative my-0 sm:my-auto animate-in slide-in-from-bottom-6 sm:zoom-in-95 duration-200">
+            
+            {/* Mobile Drag Indicator */}
+            <div className="w-12 h-1.5 bg-stone-300 rounded-full mx-auto my-1 sm:hidden shrink-0" />
+
             <div className="flex items-center justify-between border-b border-stone-100 pb-3">
               <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-orange-100 text-orange-600 rounded-xl">
+                <div className="p-2 bg-orange-100 text-orange-600 rounded-xl shrink-0">
                   <Gift className="h-5 w-5" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-stone-900">نشر عرض أو خصم خاص بمحلك</h3>
+                  <h3 className="text-base sm:text-lg font-bold text-stone-900">نشر عرض أو خصم خاص بمحلك</h3>
                   <p className="text-xs text-stone-500">ليصل عرضك إلى آلاف الزوار والطلبة في إربد</p>
                 </div>
               </div>
-              <button onClick={() => setIsAddModalOpen(false)} className="p-2 text-stone-400 hover:text-stone-600 rounded-xl hover:bg-stone-100 transition-colors cursor-pointer">
+              <button onClick={() => setIsAddModalOpen(false)} className="p-2 text-stone-400 hover:text-stone-600 rounded-xl hover:bg-stone-100 transition-colors shrink-0 cursor-pointer">
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <p className="text-xs text-stone-600 leading-relaxed bg-amber-50 p-3 rounded-xl border border-amber-200">
-              يمكنك نشر عروضك وتخفيضاتك الترويجية مباشرة عبر باقات الاشتراك أو بالتواصل المباشر مع فريق إدارة شو في بإربد لتثبيت عرضك في الصفحة الرئيسية وقسم العروض.
-            </p>
+            <div className="overflow-y-auto space-y-5 pt-3">
+              <p className="text-xs text-stone-600 leading-relaxed bg-amber-50 p-3 rounded-xl border border-amber-200">
+                يمكنك نشر عروضك وتخفيضاتك الترويجية مباشرة عبر باقات الاشتراك أو بالتواصل المباشر مع فريق إدارة شو في بإربد لتثبيت عرضك في الصفحة الرئيسية وقسم العروض.
+              </p>
 
-            <div className="space-y-3 pt-2">
-              <Link
-                to="/packages"
-                onClick={() => setIsAddModalOpen(false)}
-                className="w-full flex items-center justify-center gap-2 bg-[#1a4d2e] hover:bg-[#133b22] text-white py-3 px-4 rounded-xl font-bold text-sm shadow-xs transition-colors"
-              >
-                <Sparkles className="h-4 w-4 text-yellow-300" />
-                <span>تصفح باقات العروض والترويج</span>
-              </Link>
-              
-              <Link
-                to="/contact"
-                onClick={() => setIsAddModalOpen(false)}
-                className="w-full flex items-center justify-center gap-2 bg-stone-100 hover:bg-stone-200 text-stone-800 py-3 px-4 rounded-xl font-bold text-sm transition-colors"
-              >
-                <Store className="h-4 w-4 text-stone-500" />
-                <span>تواصل مع الإدارة لإضافة عرضك</span>
-              </Link>
+              <div className="space-y-3 pt-2">
+                <Link
+                  to="/packages"
+                  onClick={() => setIsAddModalOpen(false)}
+                  className="w-full flex items-center justify-center gap-2 bg-[#1a4d2e] hover:bg-[#133b22] text-white py-3 px-4 rounded-xl font-bold text-sm shadow-xs transition-colors"
+                >
+                  <Sparkles className="h-4 w-4 text-yellow-300" />
+                  <span>تصفح باقات العروض والترويج</span>
+                </Link>
+                
+                <Link
+                  to="/contact"
+                  onClick={() => setIsAddModalOpen(false)}
+                  className="w-full flex items-center justify-center gap-2 bg-stone-100 hover:bg-stone-200 text-stone-800 py-3 px-4 rounded-xl font-bold text-sm transition-colors"
+                >
+                  <Store className="h-4 w-4 text-stone-500" />
+                  <span>تواصل مع الإدارة لإضافة عرضك</span>
+                </Link>
+              </div>
             </div>
           </div>
         </div>,

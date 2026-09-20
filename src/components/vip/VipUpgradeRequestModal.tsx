@@ -137,11 +137,14 @@ export function VipUpgradeRequestModal({
     : (cycle === 'yearly' ? '119' : '19');
 
   return createPortal(
-    <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto" dir="rtl">
-      <div className="bg-white rounded-3xl p-6 sm:p-8 w-full max-w-md max-h-[88vh] flex flex-col overflow-y-auto shadow-2xl relative my-auto animate-in fade-in zoom-in-95">
+    <div className="fixed inset-0 z-[100000] bg-stone-950/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 overflow-hidden" dir="rtl">
+      <div className="bg-white rounded-t-3xl sm:rounded-3xl p-5 sm:p-8 w-full max-w-md max-h-[88dvh] sm:max-h-[85vh] flex flex-col overflow-hidden shadow-2xl relative my-0 sm:my-auto animate-in fade-in zoom-in-95">
         
+        {/* Mobile Drag Indicator */}
+        <div className="w-12 h-1.5 bg-stone-300 rounded-full mx-auto my-1 sm:hidden shrink-0 mb-3" />
+
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4 shrink-0">
           <div className="flex items-center gap-3">
             <div className="bg-amber-100 text-amber-600 p-2.5 rounded-xl">
               <Crown className="h-6 w-6 fill-amber-500" />
@@ -177,7 +180,8 @@ export function VipUpgradeRequestModal({
             </div>
           </div>
         ) : (
-          <div className="space-y-6">
+          <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+            <div className="flex-1 overflow-y-auto space-y-4 p-1">
             
             {/* Error Message */}
             {error && (
@@ -282,8 +286,10 @@ export function VipUpgradeRequestModal({
               </div>
             </div>
 
+            </div>
+
             {/* Submit Actions */}
-            <div className="pt-2">
+            <div className="shrink-0 pt-3 mt-2 border-t border-stone-100 bg-white">
               <button
                 onClick={handleRequestSubmit}
                 disabled={isSubmitting || hasPending || checkingPending}

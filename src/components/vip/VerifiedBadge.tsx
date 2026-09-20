@@ -57,14 +57,16 @@ export function VerifiedBadge({
       {/* Verification Trust Modal */}
       {showModal && typeof document !== 'undefined' && createPortal(
         <div 
-          className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto" 
+          className="fixed inset-0 z-[100000] bg-stone-950/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 overflow-hidden" 
           dir="rtl"
           onClick={() => setShowModal(false)}
         >
           <div 
-            className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-sky-200 relative my-auto animate-in fade-in zoom-in-95 space-y-5 text-right"
+            className="bg-white rounded-t-3xl sm:rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-sky-200 relative my-0 sm:my-auto animate-in fade-in zoom-in-95 space-y-5 text-right max-h-[88dvh] sm:max-h-[85vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
+            {/* Mobile Drag Indicator */}
+            <div className="w-12 h-1.5 bg-stone-300 rounded-full mx-auto my-1 sm:hidden shrink-0" />
             <button
               onClick={() => setShowModal(false)}
               className="absolute top-5 left-5 p-2 bg-stone-100 hover:bg-stone-200 text-stone-500 rounded-full transition-colors"

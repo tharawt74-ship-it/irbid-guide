@@ -279,7 +279,7 @@ export function PrayerTimes() {
         title="مواقيت الصلاة في إربد | أوقات الأذان والتاريخ الهجري"
         description="مواقيت الصلاة الدقيقة واليومية في مدينة إربد وضواحيها (الفجر، الشروق، الظهر، العصر، المغرب، العشاء)، التاريخ الهجري، بوصلة القبلة وأشهر مساجد إربد."
         keywords={['مواقيت الصلاة إربد', 'أذان إربد', 'صلاة الفجر إربد', 'صلاة المغرب إربد', 'مساجد إربد', 'موعد الأذان في إربد']}
-        canonicalUrl="https://shofierbid.com/prayer-times"
+        canonicalUrl="https://shofibirbid.site/prayer-times"
       />
       {/* Top Banner Header */}
       <div className="bg-gradient-to-br from-[#1a4d2e] via-[#133b22] to-[#0a2313] text-white pt-8 pb-16 px-4 sm:px-6 lg:px-8 relative overflow-hidden shadow-md">

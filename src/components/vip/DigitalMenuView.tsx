@@ -180,6 +180,16 @@ export function DigitalMenuView({
 
   // Cart operations using CartContext
   const addToCart = (item: MenuItem, version?: MenuItemVersion, quantity: number = 1) => {
+    // If stock tracking is enabled, check if the requested addition exceeds available stock
+    if (item.trackStock) {
+      const currentCartQty = getItemQuantity(item.id);
+      const stockLimit = item.stockCount !== undefined ? item.stockCount : 0;
+      if (currentCartQty + quantity > stockLimit) {
+        alert(`عذراً، الكمية المطلوبة غير متوفرة بالكامل في المخزن. الكمية المتاحة: ${stockLimit} فقط.`);
+        return;
+      }
+    }
+
     addItem(
       item, 
       {
@@ -564,9 +574,32 @@ export function DigitalMenuView({
                   {/* Card Body */}
                   <div className="p-3 sm:p-4 flex-1 flex flex-col justify-between space-y-2 min-w-0">
                     <div className="space-y-1">
-                      <h3 className="text-sm sm:text-base font-extrabold text-stone-900 lg:font-bold line-clamp-1 leading-snug group-hover:text-amber-950">
-                        {item.name}
-                      </h3>
+                      <div className="flex items-center justify-between gap-1">
+                        <h3 className="text-sm sm:text-base font-extrabold text-stone-900 lg:font-bold line-clamp-1 leading-snug group-hover:text-amber-950">
+                          {item.name}
+                        </h3>
+                      </div>
+
+                      {item.trackStock && (
+                        <div className="flex items-center gap-1.5 pb-0.5">
+                          {item.stockCount === 0 ? (
+                            <span className="inline-flex items-center gap-1 text-[9px] sm:text-[10px] font-black bg-rose-50 text-rose-800 border border-rose-100 px-2 py-0.5 rounded-full select-none">
+                              <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+                              <span>نفدت الكمية 🚫</span>
+                            </span>
+                          ) : item.stockCount !== undefined && item.stockCount <= 5 ? (
+                            <span className="inline-flex items-center gap-1 text-[9px] sm:text-[10px] font-black bg-amber-50 text-amber-800 border border-amber-100 px-2 py-0.5 rounded-full select-none">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                              <span>متبقي {item.stockCount} قطع فقط! ⚠️</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[9px] sm:text-[10px] font-black bg-emerald-50 text-emerald-800 border border-emerald-100 px-2 py-0.5 rounded-full select-none">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                              <span>متوفر بالمخزن ({item.stockCount})</span>
+                            </span>
+                          )}
+                        </div>
+                      )}
 
                       {discount && (
                         <div className="flex flex-wrap items-center gap-1">
@@ -613,7 +646,7 @@ export function DigitalMenuView({
                         })()}
                       </div>
 
-                      {item.isAvailable !== false ? (
+                      {(item.isAvailable !== false && (!item.trackStock || (item.stockCount !== undefined && item.stockCount > 0))) ? (
                         <div className="flex items-center w-full sm:w-auto justify-center">
                           {item.versions && item.versions.length > 0 ? (
                             <button
@@ -654,8 +687,8 @@ export function DigitalMenuView({
                           )}
                         </div>
                       ) : (
-                        <span className="text-[9px] sm:text-xs font-bold text-stone-400 bg-stone-100 px-1.5 py-0.5 rounded-lg text-center w-full sm:w-auto">
-                          غير متوفر
+                        <span className="text-[9px] sm:text-xs font-bold text-stone-400 bg-stone-100 px-1.5 py-0.5 rounded-lg text-center w-full sm:w-auto whitespace-nowrap">
+                          {item.trackStock && item.stockCount === 0 ? 'نفدت الكمية 🚫' : 'غير متوفر'}
                         </span>
                       )}
                     </div>
@@ -726,6 +759,27 @@ export function DigitalMenuView({
                       </h3>
                     </div>
 
+                    {item.trackStock && (
+                      <div className="flex items-center gap-1.5 pt-0.5 pb-1">
+                        {item.stockCount === 0 ? (
+                          <span className="inline-flex items-center gap-1 text-[9px] sm:text-[10px] font-black bg-rose-50 text-rose-800 border border-rose-100 px-2 py-0.5 rounded-full select-none">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+                            <span>نفدت الكمية 🚫</span>
+                          </span>
+                        ) : item.stockCount !== undefined && item.stockCount <= 5 ? (
+                          <span className="inline-flex items-center gap-1 text-[9px] sm:text-[10px] font-black bg-amber-50 text-amber-800 border border-amber-100 px-2 py-0.5 rounded-full select-none">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                            <span>متبقي {item.stockCount} قطع فقط! ⚠️</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[9px] sm:text-[10px] font-black bg-emerald-50 text-emerald-800 border border-emerald-100 px-2 py-0.5 rounded-full select-none">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            <span>متوفر بالمخزن ({item.stockCount})</span>
+                          </span>
+                        )}
+                      </div>
+                    )}
+
                     {item.description && (
                       <p className="text-[11px] sm:text-xs text-stone-500/90 line-clamp-2 leading-relaxed pt-0.5">
                         {item.description}
@@ -770,7 +824,7 @@ export function DigitalMenuView({
                       )}
                     </div>
 
-                    {item.isAvailable !== false ? (
+                    {(item.isAvailable !== false && (!item.trackStock || (item.stockCount !== undefined && item.stockCount > 0))) ? (
                       <div className="flex items-center w-full sm:w-auto justify-center">
                         {item.versions && item.versions.length > 0 ? (
                           <button
@@ -811,8 +865,8 @@ export function DigitalMenuView({
                         )}
                       </div>
                     ) : (
-                      <span className="text-[9px] sm:text-xs font-bold text-stone-400 bg-stone-100 px-1.5 py-0.5 rounded-lg text-center w-full sm:w-auto">
-                        غير متوفر
+                      <span className="text-[9px] sm:text-xs font-bold text-stone-400 bg-stone-100 px-1.5 py-0.5 rounded-lg text-center w-full sm:w-auto whitespace-nowrap">
+                        {item.trackStock && item.stockCount === 0 ? 'نفدت الكمية 🚫' : 'غير متوفر'}
                       </span>
                     )}
                   </div>
@@ -892,9 +946,35 @@ export function DigitalMenuView({
                     </div>
                   )}
 
+                  {lightboxItem.trackStock && (
+                    <div className={`p-3 rounded-xl text-xs font-bold flex items-center gap-2 border ${
+                      lightboxItem.stockCount === 0
+                        ? 'bg-rose-50 text-rose-800 border-rose-200'
+                        : lightboxItem.stockCount !== undefined && lightboxItem.stockCount <= 5
+                        ? 'bg-amber-50 text-amber-800 border-amber-200'
+                        : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                    }`}>
+                      <span className={`w-2 h-2 rounded-full ${
+                        lightboxItem.stockCount === 0
+                          ? 'bg-rose-500 animate-pulse'
+                          : lightboxItem.stockCount !== undefined && lightboxItem.stockCount <= 5
+                          ? 'bg-amber-500 animate-pulse'
+                          : 'bg-emerald-500'
+                      }`} />
+                      <span>
+                        {lightboxItem.stockCount === 0
+                          ? 'نأسف! لقد نفدت هذه الكمية تماماً من مخازننا في الوقت الحالي.'
+                          : lightboxItem.stockCount !== undefined && lightboxItem.stockCount <= 5
+                          ? `كمية محدودة جداً! متبقي فقط ${lightboxItem.stockCount} قطع في المخزن للطلب.`
+                          : `هذا الصنف متوفر حالياً وبحالة جيدة (متبقي ${lightboxItem.stockCount} قطعة).`}
+                      </span>
+                    </div>
+                  )}
+
                   <div className="flex gap-2.5 pt-2">
                     <button
                       type="button"
+                      disabled={lightboxItem.trackStock && lightboxItem.stockCount === 0}
                       onClick={() => {
                         if (lightboxItem.versions && lightboxItem.versions.length > 0) {
                           const target = lightboxItem;
@@ -905,12 +985,21 @@ export function DigitalMenuView({
                           setLightboxItem(null);
                         }
                       }}
-                      className="flex-1 py-3 bg-[#1a4d2e] hover:bg-[#133b22] text-white rounded-xl text-sm font-black flex items-center justify-center gap-2 shadow-md transition-colors cursor-pointer"
+                      className={`flex-1 py-3 text-white rounded-xl text-sm font-black flex items-center justify-center gap-2 shadow-md transition-colors whitespace-nowrap ${
+                        lightboxItem.trackStock && lightboxItem.stockCount === 0
+                          ? 'bg-stone-300 text-stone-500 cursor-not-allowed shadow-none'
+                          : 'bg-[#1a4d2e] hover:bg-[#133b22] cursor-pointer'
+                      }`}
                     >
                       {lightboxItem.versions && lightboxItem.versions.length > 0 ? (
                         <>
                           <Layers className="h-4 w-4" />
                           <span>اختيار الحجم / النسخة</span>
+                        </>
+                      ) : lightboxItem.trackStock && lightboxItem.stockCount === 0 ? (
+                        <>
+                          <X className="h-4 w-4" />
+                          <span>نفدت الكمية</span>
                         </>
                       ) : (
                         <>
@@ -922,6 +1011,7 @@ export function DigitalMenuView({
 
                     <button
                       type="button"
+                      disabled={lightboxItem.trackStock && lightboxItem.stockCount === 0}
                       onClick={() => {
                         if (lightboxItem.versions && lightboxItem.versions.length > 0) {
                           const target = lightboxItem;
@@ -932,11 +1022,15 @@ export function DigitalMenuView({
                           setLightboxItem(null);
                         }
                       }}
-                      className="px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-black flex items-center justify-center gap-2 shadow-md transition-colors cursor-pointer"
+                      className={`px-4 py-3 text-white rounded-xl text-sm font-black flex items-center justify-center gap-2 shadow-md transition-colors whitespace-nowrap ${
+                        lightboxItem.trackStock && lightboxItem.stockCount === 0
+                          ? 'bg-stone-200 text-stone-400 cursor-not-allowed shadow-none'
+                          : 'bg-emerald-600 hover:bg-emerald-700 cursor-pointer'
+                      }`}
                       title="طلب حجز فوري عبر الواتساب"
                     >
                       <WhatsAppIcon className="h-4 w-4" />
-                      <span>حجز فوري</span>
+                      <span>{lightboxItem.trackStock && lightboxItem.stockCount === 0 ? 'غير متوفر' : 'حجز فوري'}</span>
                     </button>
                   </div>
                 </div>

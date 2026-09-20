@@ -17,7 +17,7 @@ import {
   Trash2, ExternalLink, Clock, Users, Award, Crown, BarChart3, UtensilsCrossed,
   Lock, Tag, Info, Sparkles, ChevronLeft, ChevronRight, Phone, MessageCircle, Star,
   Home, Copy, ShieldCheck, Key, Heart, MessageSquareText, Building2, Shield, Printer, QrCode, Calendar, ArrowLeft, ShieldAlert, LogOut,
-  Stethoscope, ClipboardList
+  Stethoscope, ClipboardList, Gift, Settings2
 } from 'lucide-react';
 import { JobFormModal } from '../components/jobs/JobFormModal';
 import { VipAnalyticsModal } from '../components/vip/VipAnalyticsModal';
@@ -40,12 +40,14 @@ import { StoreEditForm } from '../components/profile/StoreEditForm';
 import { SocialLinks, WorkingHours } from '../types';
 import { VisitorFavoritesTab } from '../components/profile/VisitorFavoritesTab';
 import { VisitorReviewsTab } from '../components/profile/VisitorReviewsTab';
+import { VisitorRewardsTab } from '../components/profile/VisitorRewardsTab';
 import { VisitorHousingsTab } from '../components/profile/VisitorHousingsTab';
 import { MedicalFacilitiesTab } from '../components/profile/MedicalFacilitiesTab';
 import { isMedicalBusiness } from '../lib/medicalHelper';
 import { PrintableQrPosterModal } from '../components/profile/PrintableQrPosterModal';
 import { MultiBranchModal } from '../components/profile/MultiBranchModal';
 import { ScheduledNotificationModal } from '../components/profile/ScheduledNotificationModal';
+import { MerchantQrScanner } from '../components/profile/MerchantQrScanner';
 
 export function Profile() {
   const { confirm } = useConfirm();
@@ -56,7 +58,7 @@ export function Profile() {
   const [userHousings, setUserHousings] = useState<HousingItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [profileMainTab, setProfileMainTab] = useState<'visitor' | 'merchant' | 'medical' | 'housing' | 'staff' | 'requests'>('visitor');
-  const [visitorSubTab, setVisitorSubTab] = useState<'favorites' | 'reviews' | 'account'>('favorites');
+  const [visitorSubTab, setVisitorSubTab] = useState<'favorites' | 'reviews' | 'rewards' | 'account'>('favorites');
   const [requestsSubTab, setRequestsSubTab] = useState<'businesses' | 'marketing'>('businesses');
   const [userBusinessRequests, setUserBusinessRequests] = useState<any[]>([]);
   const [userMarketingRequests, setUserMarketingRequests] = useState<any[]>([]);
@@ -173,10 +175,13 @@ export function Profile() {
   const [isQrPosterOpen, setIsQrPosterOpen] = useState(false);
   const [isMultiBranchOpen, setIsMultiBranchOpen] = useState(false);
   const [isScheduledNotifOpen, setIsScheduledNotifOpen] = useState(false);
+  const [isGiftCodeCustomizationOpen, setIsGiftCodeCustomizationOpen] = useState(false);
+  const [isGiftCodeStatsOpen, setIsGiftCodeStatsOpen] = useState(false);
+  const [giftForm, setGiftForm] = useState<Partial<Business>>({});
 
   // Active business management state
   const [selectedBusiness, setSelectedBusiness] = useState<Business | null>(null);
-  const [merchantSubTab, setMerchantSubTab] = useState<'businesses' | 'housings' | 'jobs'>('businesses');
+  const [merchantSubTab, setMerchantSubTab] = useState<'businesses' | 'housings' | 'jobs' | 'qr-scanner'>('businesses');
   const [activeSectionTab, setActiveSectionTab] = useState<'overview' | 'edit_info' | 'offers' | 'jobs' | 'marketing' | 'reviews' | 'homepage_banner' | 'shared_accounts' | 'housings'>('overview');
 
   // Custom Banner request state
@@ -1001,23 +1006,28 @@ export function Profile() {
         } else {
           setProfileMainTab('merchant');
         }
-      } else if (requestedTab === 'medical') {
+      } else if (requestedTab === 'requests') {
+        setProfileMainTab('requests');
+      } else if (requestedTab === 'medical' && medList.length > 0) {
         setProfileMainTab('medical');
-        if (medList.length > 0) setSelectedBusiness(medList[0]);
+        setSelectedBusiness(medList[0]);
+      } else if (requestedTab === 'merchant' && commList.length > 0) {
+        setProfileMainTab('merchant');
+        setSelectedBusiness(commList[0]);
       } else if (requestedTab === 'housing') {
         setProfileMainTab('housing');
       } else if (requestedTab === 'visitor') {
         setProfileMainTab('visitor');
-      } else if (requestedTab === 'merchant') {
-        setProfileMainTab('merchant');
-        if (commList.length > 0) setSelectedBusiness(commList[0]);
+      } else if (requestedTab === 'rewards') {
+        setProfileMainTab('visitor');
+        setVisitorSubTab('rewards');
       } else if (commList.length > 0) {
         setSelectedBusiness(commList[0]);
         setProfileMainTab('merchant');
       } else if (medList.length > 0) {
         setSelectedBusiness(medList[0]);
         setProfileMainTab('medical');
-      } else if (isStaff) {
+      } else if (isStaff && requestedTab === 'staff') {
         setProfileMainTab('staff');
       } else {
         setProfileMainTab('visitor');
@@ -1040,6 +1050,25 @@ export function Profile() {
       fetchUserRequests();
     }
   }, [profileMainTab, currentUser]);
+
+  // Ensure active tab corresponds to an allowed tab for current user status
+  useEffect(() => {
+    if (!loading) {
+      if (profileMainTab === 'merchant' && commercialBusinesses.length === 0) {
+        if (medicalBusinesses.length > 0) {
+          setProfileMainTab('medical');
+        } else {
+          setProfileMainTab('visitor');
+        }
+      } else if (profileMainTab === 'medical' && medicalBusinesses.length === 0) {
+        if (commercialBusinesses.length > 0) {
+          setProfileMainTab('merchant');
+        } else {
+          setProfileMainTab('visitor');
+        }
+      }
+    }
+  }, [loading, profileMainTab, commercialBusinesses.length, medicalBusinesses.length]);
 
   const handleEditClick = (business: Business) => {
     setEditingBusiness(business);
@@ -1146,6 +1175,7 @@ export function Profile() {
     aboutVideoUrl?: string;
     aboutImageUrl?: string;
     vipPopup?: any;
+    deliveryAvailable?: boolean;
   }) => {
     const targetBusiness = editingBusiness || selectedBusiness;
     if (!targetBusiness || !db || !currentUser) return;
@@ -1188,6 +1218,9 @@ export function Profile() {
       }
       if (updatedData.vipPopup !== undefined) {
         dataToSave.vipPopup = updatedData.vipPopup;
+      }
+      if (updatedData.deliveryAvailable !== undefined) {
+        dataToSave.deliveryAvailable = updatedData.deliveryAvailable;
       }
 
       const sanitizedData = await compressAndSanitizeFirestorePayload(dataToSave, true);
@@ -1400,87 +1433,115 @@ export function Profile() {
       </div>
 
       {/* Main Profile Tabs Selector */}
-      <div className={`bg-white p-1.5 sm:p-2 rounded-2xl border border-[#e5e1da] shadow-xs grid grid-cols-2 ${isStaff ? 'sm:grid-cols-3 lg:grid-cols-6' : 'sm:grid-cols-3 lg:grid-cols-5'} gap-1.5 sm:gap-2 min-w-0`}>
-        <button
-          type="button"
-          onClick={() => setProfileMainTab('visitor')}
-          className={`py-2.5 sm:py-3 px-2 sm:px-4 rounded-xl text-[11px] sm:text-xs font-black transition-all flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 cursor-pointer ${
-            profileMainTab === 'visitor'
-              ? 'bg-[#1a4d2e] text-white shadow-xs'
-              : 'text-stone-600 hover:bg-stone-50 hover:text-stone-900'
-          }`}
-        >
-          <Heart className="h-5 w-5 sm:h-4 sm:w-4 text-[#ff9f1c] shrink-0" />
-          <span className="text-center sm:text-right leading-tight">تفاعلاتي<br className="sm:hidden" /> ومفضلتي</span>
-        </button>
+      {(() => {
+        const showMerchantTab = commercialBusinesses.length > 0;
+        const showMedicalTab = medicalBusinesses.length > 0;
+        const showStaffTab = isStaff;
+        const visibleTabsCount = 3 + (showMerchantTab ? 1 : 0) + (showMedicalTab ? 1 : 0) + (showStaffTab ? 1 : 0);
 
-        <button
-          type="button"
-          onClick={() => setProfileMainTab('merchant')}
-          className={`py-2.5 sm:py-3 px-2 sm:px-4 rounded-xl text-[11px] sm:text-xs font-black transition-all flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 cursor-pointer ${
-            profileMainTab === 'merchant'
-              ? 'bg-[#1a4d2e] text-white shadow-xs'
-              : 'text-stone-600 hover:bg-stone-50 hover:text-stone-900'
-          }`}
-        >
-          <Store className="h-5 w-5 sm:h-4 sm:w-4 shrink-0" />
-          <span className="text-center sm:text-right leading-tight">محلاتي ({commercialBusinesses.length})</span>
-        </button>
+        const gridColsClass = 
+          visibleTabsCount === 3
+            ? 'grid-cols-3'
+            : visibleTabsCount === 4
+            ? 'grid-cols-2 sm:grid-cols-4'
+            : visibleTabsCount === 5
+            ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5'
+            : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6';
 
-        <button
-          type="button"
-          onClick={() => setProfileMainTab('medical')}
-          className={`py-2.5 sm:py-3 px-2 sm:px-4 rounded-xl text-[11px] sm:text-xs font-black transition-all flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 cursor-pointer ${
-            profileMainTab === 'medical'
-              ? 'bg-teal-700 text-white shadow-xs'
-              : 'text-teal-900 bg-teal-50/50 hover:bg-teal-100/70'
-          }`}
-        >
-          <Stethoscope className={`h-5 w-5 sm:h-4 sm:w-4 shrink-0 ${profileMainTab === 'medical' ? 'text-teal-200' : 'text-teal-600'}`} />
-          <span className="text-center sm:text-right leading-tight">منشآتي الطبية ({medicalBusinesses.length})</span>
-        </button>
+        return (
+          <div className={`bg-white p-1.5 sm:p-2 rounded-2xl border border-[#e5e1da] shadow-xs grid ${gridColsClass} gap-1.5 sm:gap-2 min-w-0`}>
+            {/* 1. Interactions & Favorites Tab (Always visible) */}
+            <button
+              type="button"
+              onClick={() => setProfileMainTab('visitor')}
+              className={`py-2.5 sm:py-3 px-2 sm:px-4 rounded-xl text-[11px] sm:text-xs font-black transition-all flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 cursor-pointer ${
+                profileMainTab === 'visitor'
+                  ? 'bg-[#1a4d2e] text-white shadow-xs'
+                  : 'text-stone-600 hover:bg-stone-50 hover:text-stone-900'
+              }`}
+            >
+              <Heart className="h-5 w-5 sm:h-4 sm:w-4 text-[#ff9f1c] shrink-0" />
+              <span className="text-center sm:text-right leading-tight">تفاعلاتي<br className="sm:hidden" /> ومفضلتي</span>
+            </button>
 
-        <button
-          type="button"
-          onClick={() => setProfileMainTab('housing')}
-          className={`py-2.5 sm:py-3 px-2 sm:px-4 rounded-xl text-[11px] sm:text-xs font-black transition-all flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 cursor-pointer ${
-            profileMainTab === 'housing'
-              ? 'bg-emerald-700 text-white shadow-xs'
-              : 'text-stone-600 hover:bg-stone-50 hover:text-stone-900'
-          }`}
-        >
-          <Home className="h-5 w-5 sm:h-4 sm:w-4 shrink-0 text-amber-400" />
-          <span className="text-center sm:text-right leading-tight">سكناتي ({userHousings.length})</span>
-        </button>
+            {/* 2. Commercial Shops Tab (Only if user has approved commercial shops) */}
+            {showMerchantTab && (
+              <button
+                type="button"
+                onClick={() => setProfileMainTab('merchant')}
+                className={`py-2.5 sm:py-3 px-2 sm:px-4 rounded-xl text-[11px] sm:text-xs font-black transition-all flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 cursor-pointer ${
+                  profileMainTab === 'merchant'
+                    ? 'bg-[#1a4d2e] text-white shadow-xs'
+                    : 'text-stone-600 hover:bg-stone-50 hover:text-stone-900'
+                }`}
+              >
+                <Store className="h-5 w-5 sm:h-4 sm:w-4 shrink-0" />
+                <span className="text-center sm:text-right leading-tight">محلاتي ({commercialBusinesses.length})</span>
+              </button>
+            )}
 
-        <button
-          type="button"
-          onClick={() => setProfileMainTab('requests')}
-          className={`py-2.5 sm:py-3 px-2 sm:px-4 rounded-xl text-[11px] sm:text-xs font-black transition-all flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 cursor-pointer ${
-            profileMainTab === 'requests'
-              ? 'bg-[#1a4d2e] text-white shadow-xs'
-              : 'text-stone-600 hover:bg-stone-50 hover:text-stone-900'
-          }`}
-        >
-          <ClipboardList className={`h-5 w-5 sm:h-4 sm:w-4 shrink-0 ${profileMainTab === 'requests' ? 'text-emerald-300' : 'text-[#1a4d2e]'}`} />
-          <span className="text-center sm:text-right leading-tight">طلباتي</span>
-        </button>
+            {/* 3. Medical Facilities Tab (Only if user has approved medical facilities) */}
+            {showMedicalTab && (
+              <button
+                type="button"
+                onClick={() => setProfileMainTab('medical')}
+                className={`py-2.5 sm:py-3 px-2 sm:px-4 rounded-xl text-[11px] sm:text-xs font-black transition-all flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 cursor-pointer ${
+                  profileMainTab === 'medical'
+                    ? 'bg-teal-700 text-white shadow-xs'
+                    : 'text-teal-900 bg-teal-50/50 hover:bg-teal-100/70'
+                }`}
+              >
+                <Stethoscope className={`h-5 w-5 sm:h-4 sm:w-4 shrink-0 ${profileMainTab === 'medical' ? 'text-teal-200' : 'text-teal-600'}`} />
+                <span className="text-center sm:text-right leading-tight">منشآتي الطبية ({medicalBusinesses.length})</span>
+              </button>
+            )}
 
-        {isStaff && (
-          <button
-            type="button"
-            onClick={() => setProfileMainTab('staff')}
-            className={`py-2.5 sm:py-3 px-2 sm:px-4 rounded-xl text-[11px] sm:text-xs font-black transition-all flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 cursor-pointer ${
-              profileMainTab === 'staff'
-                ? 'bg-amber-600 text-white shadow-xs'
-                : 'text-amber-800 bg-amber-50 hover:bg-amber-100'
-            }`}
-          >
-            <ShieldCheck className="h-5 w-5 sm:h-4 sm:w-4 shrink-0" />
-            <span className="text-center sm:text-right leading-tight">بوابة<br className="sm:hidden" /> الإشراف</span>
-          </button>
-        )}
-      </div>
+            {/* 4. Housings Tab (Always visible) */}
+            <button
+              type="button"
+              onClick={() => setProfileMainTab('housing')}
+              className={`py-2.5 sm:py-3 px-2 sm:px-4 rounded-xl text-[11px] sm:text-xs font-black transition-all flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 cursor-pointer ${
+                profileMainTab === 'housing'
+                  ? 'bg-emerald-700 text-white shadow-xs'
+                  : 'text-stone-600 hover:bg-stone-50 hover:text-stone-900'
+              }`}
+            >
+              <Home className="h-5 w-5 sm:h-4 sm:w-4 shrink-0 text-amber-400" />
+              <span className="text-center sm:text-right leading-tight">سكناتي ({userHousings.length})</span>
+            </button>
+
+            {/* 5. Requests Tab (Always visible) */}
+            <button
+              type="button"
+              onClick={() => setProfileMainTab('requests')}
+              className={`py-2.5 sm:py-3 px-2 sm:px-4 rounded-xl text-[11px] sm:text-xs font-black transition-all flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 cursor-pointer ${
+                profileMainTab === 'requests'
+                  ? 'bg-[#1a4d2e] text-white shadow-xs'
+                  : 'text-stone-600 hover:bg-stone-50 hover:text-stone-900'
+              }`}
+            >
+              <ClipboardList className={`h-5 w-5 sm:h-4 sm:w-4 shrink-0 ${profileMainTab === 'requests' ? 'text-emerald-300' : 'text-[#1a4d2e]'}`} />
+              <span className="text-center sm:text-right leading-tight">طلباتي</span>
+            </button>
+
+            {/* 6. Staff Tab (Staff only) */}
+            {showStaffTab && (
+              <button
+                type="button"
+                onClick={() => setProfileMainTab('staff')}
+                className={`py-2.5 sm:py-3 px-2 sm:px-4 rounded-xl text-[11px] sm:text-xs font-black transition-all flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 cursor-pointer ${
+                  profileMainTab === 'staff'
+                    ? 'bg-amber-600 text-white shadow-xs'
+                    : 'text-amber-800 bg-amber-50 hover:bg-amber-100'
+                }`}
+              >
+                <ShieldCheck className="h-5 w-5 sm:h-4 sm:w-4 shrink-0" />
+                <span className="text-center sm:text-right leading-tight">بوابة<br className="sm:hidden" /> الإشراف</span>
+              </button>
+            )}
+          </div>
+        );
+      })()}
 
       {/* TAB 1: VISITOR HUB */}
       {profileMainTab === 'visitor' && (
@@ -1514,10 +1575,25 @@ export function Profile() {
                 <div className="absolute bottom-0 right-0 left-0 h-0.5 bg-[#1a4d2e] rounded-full" />
               )}
             </button>
+
+            <button
+              type="button"
+              onClick={() => setVisitorSubTab('rewards')}
+              className={`pb-3 relative transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                visitorSubTab === 'rewards' ? 'text-[#1a4d2e] font-black' : 'text-stone-500 hover:text-stone-800'
+              }`}
+            >
+              <Gift className="h-4 w-4 text-emerald-600 animate-pulse" />
+              <span>مكافآتي 🎁</span>
+              {visitorSubTab === 'rewards' && (
+                <div className="absolute bottom-0 right-0 left-0 h-0.5 bg-[#1a4d2e] rounded-full" />
+              )}
+            </button>
           </div>
 
           {visitorSubTab === 'favorites' && <VisitorFavoritesTab />}
           {visitorSubTab === 'reviews' && <VisitorReviewsTab />}
+          {visitorSubTab === 'rewards' && <VisitorRewardsTab />}
         </div>
       )}
 
@@ -1564,27 +1640,68 @@ export function Profile() {
           ) : requestsSubTab === 'businesses' ? (
             <div className="space-y-4" dir="rtl">
               {userBusinessRequests.length === 0 ? (
-                <div className="bg-stone-50 border border-stone-200/60 p-8 sm:p-12 rounded-[24px] text-center max-w-md mx-auto space-y-4">
-                  <div className="w-16 h-16 rounded-full bg-stone-100 flex items-center justify-center mx-auto text-stone-400">
-                    <Store className="h-8 w-8" />
+                <div className="bg-stone-50 border border-stone-200/70 p-6 sm:p-10 rounded-[28px] text-center max-w-lg mx-auto space-y-6">
+                  <div className="w-16 h-16 rounded-2xl bg-white border border-stone-200/80 shadow-3xs flex items-center justify-center mx-auto text-[#1a4d2e]">
+                    <ClipboardList className="h-8 w-8" />
                   </div>
-                  <div>
-                    <h4 className="text-sm font-black text-stone-800">لا توجد طلبات إضافة حالياً</h4>
-                    <p className="text-xs text-stone-500 mt-1 leading-relaxed">
-                      لم تقم بطلب إضافة أي منشآت أو محلات تجارية بعد. يمكنك تسجيل محلك والبدء فوراً في نشر عروضك!
+                  <div className="space-y-1.5">
+                    <h4 className="text-base sm:text-lg font-black text-stone-800">لا توجد لديك طلبات تسجيل حالياً</h4>
+                    <p className="text-xs text-stone-500 leading-relaxed max-w-md mx-auto">
+                      لم تقم بتقديم طلب إضافة لمحل تجاري أو منشأة طبية بعد. يمكنك تقديم طلب جديد والبدء في نشر أنشطتك وعروضك عبر الخيارات المتاحة أدناه:
                     </p>
                   </div>
-                  <div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                     <Link
                       to="/contact"
-                      className="inline-flex px-5 py-2.5 bg-[#1a4d2e] hover:bg-[#133b22] text-white text-xs font-black rounded-xl transition-all shadow-xs hover:scale-102 active:scale-98"
+                      className="flex flex-col items-center justify-center gap-2 p-4 rounded-2xl bg-[#1a4d2e] hover:bg-[#133b22] text-white transition-all shadow-3xs hover:scale-102 active:scale-98 text-center group cursor-pointer"
                     >
-                      أضف محلك التجاري الآن
+                      <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
+                        <Store className="h-5 w-5 text-white" />
+                      </div>
+                      <div>
+                        <span className="text-xs font-black block">إضافة محل تجاري 🏪</span>
+                        <span className="text-[10px] text-emerald-100/80 block mt-0.5">مطاعم، كافيهات، متاجر، خدمات</span>
+                      </div>
+                    </Link>
+
+                    <Link
+                      to="/medical/add"
+                      className="flex flex-col items-center justify-center gap-2 p-4 rounded-2xl bg-teal-700 hover:bg-teal-800 text-white transition-all shadow-3xs hover:scale-102 active:scale-98 text-center group cursor-pointer"
+                    >
+                      <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
+                        <Stethoscope className="h-5 w-5 text-white" />
+                      </div>
+                      <div>
+                        <span className="text-xs font-black block">إضافة منشأة طبية 🩺</span>
+                        <span className="text-[10px] text-teal-100/80 block mt-0.5">عيادات، صيدليات، مراكز ومختبرات</span>
+                      </div>
                     </Link>
                   </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-4">
+                  {/* Quick Action Top Bar */}
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-stone-50/80 p-3.5 rounded-2xl border border-stone-200/60">
+                    <span className="text-xs font-bold text-stone-700">لديك {userBusinessRequests.length} طلب/طلبات مسجلة</span>
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                      <Link
+                        to="/contact"
+                        className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-[#1a4d2e] hover:bg-[#133b22] text-white text-xs font-black rounded-xl transition-all shadow-3xs hover:scale-102 active:scale-98"
+                      >
+                        <Plus className="h-3.5 w-3.5 text-[#ff9f1c]" />
+                        <span>إضافة محل تجاري</span>
+                      </Link>
+                      <Link
+                        to="/medical/add"
+                        className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-teal-700 hover:bg-teal-800 text-white text-xs font-black rounded-xl transition-all shadow-3xs hover:scale-102 active:scale-98"
+                      >
+                        <Plus className="h-3.5 w-3.5 text-teal-200" />
+                        <span>إضافة منشأة طبية</span>
+                      </Link>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {userBusinessRequests.map((request) => {
                     const isMedical = request.requestType === 'medical_facility_registration' || isMedicalBusiness(request);
                     const title = isMedical 
@@ -1649,6 +1766,7 @@ export function Profile() {
                       </div>
                     );
                   })}
+                  </div>
                 </div>
               )}
             </div>
@@ -1838,19 +1956,19 @@ export function Profile() {
         </div>
 
         {/* Executive Merchant Navigation */}
-        <div className="grid grid-cols-2 bg-stone-100/80 p-1.5 rounded-2xl gap-1.5 border border-stone-200/50">
+        <div className="grid grid-cols-1 sm:grid-cols-3 bg-stone-100/80 p-1.5 rounded-2xl gap-1.5 border border-stone-200/50">
           <button 
             type="button"
             onClick={() => setMerchantSubTab('businesses')}
-            className={`py-2.5 px-2 sm:px-3 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 ${
+            className={`py-2.5 px-2 sm:px-3 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
               merchantSubTab === 'businesses'
                 ? 'bg-white text-[#1a4d2e] shadow-sm ring-1 ring-stone-200/50'
                 : 'text-stone-600 hover:bg-white/50 hover:text-stone-900'
             }`}
           >
-            <Store className={`h-5 w-5 sm:h-4 sm:w-4 ${merchantSubTab === 'businesses' ? 'text-[#1a4d2e]' : 'text-stone-400'}`} />
-            <span className="flex items-center gap-1.5 flex-col sm:flex-row text-center sm:text-right">
-              محلاتي وأفرعي
+            <Store className={`h-4 w-4 shrink-0 ${merchantSubTab === 'businesses' ? 'text-[#1a4d2e]' : 'text-stone-400'}`} />
+            <span className="flex items-center gap-1.5">
+              <span>محلاتي وأفرعي</span>
               <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${merchantSubTab === 'businesses' ? 'bg-[#1a4d2e]/10 text-[#1a4d2e]' : 'bg-stone-200 text-stone-500'}`}>
                 {commercialBusinesses.length}
               </span>
@@ -1859,16 +1977,31 @@ export function Profile() {
 
           <button 
             type="button"
+            onClick={() => setMerchantSubTab('qr-scanner')}
+            className={`py-2.5 px-2 sm:px-3 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
+              merchantSubTab === 'qr-scanner'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'text-stone-600 hover:bg-white/50 hover:text-stone-900'
+            }`}
+          >
+            <QrCode className={`h-4 w-4 shrink-0 ${merchantSubTab === 'qr-scanner' ? 'text-white' : 'text-emerald-600'}`} />
+            <span className="flex items-center gap-1.5">
+              <span>ماسح الـ QR للزبائن 📷</span>
+            </span>
+          </button>
+
+          <button 
+            type="button"
             onClick={() => setMerchantSubTab('jobs')}
-            className={`py-2.5 px-2 sm:px-3 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 ${
+            className={`py-2.5 px-2 sm:px-3 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
               merchantSubTab === 'jobs'
                 ? 'bg-white text-indigo-700 shadow-sm ring-1 ring-stone-200/50'
                 : 'text-stone-600 hover:bg-white/50 hover:text-stone-900'
             }`}
           >
-            <Briefcase className={`h-5 w-5 sm:h-4 sm:w-4 ${merchantSubTab === 'jobs' ? 'text-indigo-600' : 'text-stone-400'}`} />
-            <span className="flex items-center gap-1.5 flex-col sm:flex-row text-center sm:text-right">
-              فرص التوظيف
+            <Briefcase className={`h-4 w-4 shrink-0 ${merchantSubTab === 'jobs' ? 'text-indigo-600' : 'text-stone-400'}`} />
+            <span className="flex items-center gap-1.5">
+              <span>فرص التوظيف</span>
               <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${merchantSubTab === 'jobs' ? 'bg-indigo-100 text-indigo-700' : 'bg-stone-200 text-stone-500'}`}>
                 {userJobs.length}
               </span>
@@ -2831,6 +2964,102 @@ export function Profile() {
                           </div>
                         </div>
 
+                        {selectedBusiness && (
+                          <div className="p-5 bg-emerald-50/60 rounded-2xl border border-emerald-100 space-y-3.5 shadow-2xs text-right" dir="rtl">
+                            <div className="flex items-center justify-between border-b border-emerald-100 pb-2.5">
+                              <div className="flex items-center gap-2 font-black text-emerald-900 text-sm">
+                                <Gift className="h-5 w-5 text-emerald-700" />
+                                <span>برنامج مكافآت تقييمات الزوار</span>
+                              </div>
+                              
+                              {/* Toggle switch */}
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  if (!db) return;
+                                  const newVal = !selectedBusiness.giftCodeEnabled;
+                                  // Update Firestore
+                                  await updateDoc(doc(db, 'businesses', selectedBusiness.id), {
+                                    giftCodeEnabled: newVal
+                                  });
+                                  invalidateCache();
+                                  // Update local states
+                                  const updatedBiz = { ...selectedBusiness, giftCodeEnabled: newVal };
+                                  setBusinesses(prev => prev.map(b => b.id === selectedBusiness.id ? updatedBiz : b));
+                                  setSelectedBusiness(updatedBiz);
+                                }}
+                                className={cn(
+                                  "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
+                                  selectedBusiness.giftCodeEnabled ? "bg-emerald-600" : "bg-stone-200"
+                                )}
+                              >
+                                <span
+                                  className={cn(
+                                    "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-xs ring-0 transition duration-200 ease-in-out",
+                                    selectedBusiness.giftCodeEnabled ? "translate-x-[-20px]" : "translate-x-0"
+                                  )}
+                                />
+                              </button>
+                            </div>
+
+                            <p className="text-xs text-stone-600 leading-relaxed font-medium">
+                              عند تفعيل هذا البرنامج، سيحصل الزوار الذين يكتبون تقييماً مستوفياً للشروط لنشاطك على كود خصم فوري ومميز كهدية تقديراً لهم! يساعدك هذا البرنامج في مضاعفة أعداد المراجعات والتقييمات الإيجابية وبناء سمعة ممتازة لمحلك.
+                            </p>
+
+                            {selectedBusiness.giftCodeEnabled && (
+                              <div className="flex flex-wrap items-center gap-3 pt-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setGiftForm({
+                                      giftCodeEnabled: selectedBusiness.giftCodeEnabled,
+                                      giftCodeMinStars: selectedBusiness.giftCodeMinStars || 1,
+                                      giftCodeLimitType: selectedBusiness.giftCodeLimitType || 'unlimited',
+                                      giftCodeTotalLimit: selectedBusiness.giftCodeTotalLimit || 100,
+                                      giftCodeDiscountPercent: selectedBusiness.giftCodeDiscountPercent || 10,
+                                      giftCodeValidityDays: selectedBusiness.giftCodeValidityDays || 30,
+                                      giftCodeStartDate: selectedBusiness.giftCodeStartDate || '',
+                                      giftCodeEndDate: selectedBusiness.giftCodeEndDate || '',
+                                      giftCodeGrantedCount: selectedBusiness.giftCodeGrantedCount || 0,
+                                      giftCodeUserLimit: selectedBusiness.giftCodeUserLimit || 'once',
+                                      giftCodeMaxPerUser: selectedBusiness.giftCodeMaxPerUser || 1,
+                                    });
+                                    setIsGiftCodeCustomizationOpen(true);
+                                  }}
+                                  className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 transition-colors shadow-xs cursor-pointer"
+                                >
+                                  <Settings2 className="h-4 w-4" />
+                                  <span>تخصيص شروط وأكواد الخصم</span>
+                                </button>
+                                
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setGiftForm({
+                                      giftCodeEnabled: selectedBusiness.giftCodeEnabled,
+                                      giftCodeMinStars: selectedBusiness.giftCodeMinStars || 1,
+                                      giftCodeLimitType: selectedBusiness.giftCodeLimitType || 'unlimited',
+                                      giftCodeTotalLimit: selectedBusiness.giftCodeTotalLimit || 100,
+                                      giftCodeDiscountPercent: selectedBusiness.giftCodeDiscountPercent || 10,
+                                      giftCodeValidityDays: selectedBusiness.giftCodeValidityDays || 30,
+                                      giftCodeStartDate: selectedBusiness.giftCodeStartDate || '',
+                                      giftCodeEndDate: selectedBusiness.giftCodeEndDate || '',
+                                      giftCodeGrantedCount: selectedBusiness.giftCodeGrantedCount || 0,
+                                      giftCodeUserLimit: selectedBusiness.giftCodeUserLimit || 'once',
+                                      giftCodeMaxPerUser: selectedBusiness.giftCodeMaxPerUser || 1,
+                                    });
+                                    setIsGiftCodeStatsOpen(true);
+                                  }}
+                                  className="flex items-center gap-1.5 px-4 py-2 bg-white text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold hover:bg-emerald-50 transition-colors cursor-pointer"
+                                >
+                                  <BarChart3 className="h-4 w-4" />
+                                  <span>عرض إحصائيات الأكواد</span>
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
                         {loadingBusinessReviews ? (
                           <div className="text-center py-12">
                             <div className="inline-block w-8 h-8 rounded-full border-2 border-stone-200 border-t-[#1a4d2e] animate-spin"></div>
@@ -3453,6 +3682,11 @@ export function Profile() {
         </>
         )}
 
+        {/* SUB-TAB 2: QR CODES SCANNER */}
+        {merchantSubTab === 'qr-scanner' && (
+          <MerchantQrScanner businesses={businesses} />
+        )}
+
         {/* SUB-TAB 3: JOBS MANAGEMENT */}
         {merchantSubTab === 'jobs' && (
           <div className="pt-2">
@@ -3872,37 +4106,46 @@ export function Profile() {
 
       {/* Shop Edit Modal */}
       {editingBusiness && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto" dir="rtl">
-          <div className="bg-white rounded-3xl p-6 md:p-8 w-full max-w-2xl max-h-[88vh] overflow-y-auto shadow-2xl border border-stone-200 relative my-auto animate-in fade-in zoom-in-95">
-            <button 
-              onClick={() => setEditingBusiness(null)}
-              className="absolute top-6 left-6 p-2 bg-stone-100 text-stone-500 hover:bg-stone-200 rounded-full transition-colors z-10"
-            >
-              <X className="h-5 w-5" />
-            </button>
+        <div className="fixed inset-0 z-[100000] bg-stone-950/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 overflow-hidden" dir="rtl">
+          <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-2xl w-full max-h-[88dvh] sm:max-h-[85vh] flex flex-col overflow-hidden shadow-2xl border border-stone-200 relative my-0 sm:my-auto animate-in slide-in-from-bottom-6 sm:zoom-in-95 duration-200 text-right">
             
-            <div className="mb-6">
-              <h2 className="text-2xl font-black text-[#2d2a26] flex items-center gap-2">
-                <Edit3 className="h-6 w-6 text-[#1a4d2e]" />
-                تعديل بيانات المحل ({editingBusiness.name})
-              </h2>
-              <p className="text-xs text-stone-500 mt-1">تحديث وتعديل جميع تفاصيل المتجر المعروضة لرواد منصة إربد</p>
-            </div>
+            {/* Mobile Drag Indicator */}
+            <div className="w-12 h-1.5 bg-stone-300 rounded-full mx-auto my-2 sm:hidden shrink-0" />
 
-            {updateSuccess ? (
-              <div className="py-12 text-center">
-                <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
-                <h3 className="text-xl font-bold text-[#2d2a26]">تم تحديث البيانات بنجاح!</h3>
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-stone-100 p-4 sm:p-6 shrink-0 bg-white">
+              <div>
+                <h2 className="text-lg sm:text-2xl font-black text-[#2d2a26] flex items-center gap-2">
+                  <Edit3 className="h-5 w-5 sm:h-6 sm:w-6 text-[#1a4d2e]" />
+                  تعديل بيانات المحل ({editingBusiness.name})
+                </h2>
+                <p className="text-xs text-stone-500 mt-0.5">تحديث وتعديل جميع تفاصيل المتجر المعروضة لرواد منصة إربد</p>
               </div>
-            ) : (
-              <StoreEditForm
-                business={editingBusiness}
-                onSave={handleSaveStoreData}
-                isSaving={isSavingBusiness}
-                onCancel={() => setEditingBusiness(null)}
-                inModal={true}
-              />
-            )}
+              <button 
+                onClick={() => setEditingBusiness(null)}
+                className="p-2 bg-stone-100 text-stone-500 hover:bg-stone-200 rounded-full transition-colors shrink-0 cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            
+            {/* Scrollable Content */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-8">
+              {updateSuccess ? (
+                <div className="py-12 text-center">
+                  <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
+                  <h3 className="text-xl font-bold text-[#2d2a26]">تم تحديث البيانات بنجاح!</h3>
+                </div>
+              ) : (
+                <StoreEditForm
+                  business={editingBusiness}
+                  onSave={handleSaveStoreData}
+                  isSaving={isSavingBusiness}
+                  onCancel={() => setEditingBusiness(null)}
+                  inModal={true}
+                />
+              )}
+            </div>
           </div>
         </div>,
         document.body
@@ -4062,47 +4305,55 @@ export function Profile() {
 
       {/* Marketing Form Popup Modal */}
       {isMarketingModalOpen && activeMarketingModalType && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto animate-in fade-in" dir="rtl">
-          <div className="bg-white rounded-3xl p-6 md:p-8 w-full max-w-2xl max-h-[88vh] overflow-y-auto shadow-2xl border border-stone-200 relative my-auto animate-in fade-in zoom-in-95">
-            <button 
-              type="button"
-              onClick={() => setIsMarketingModalOpen(false)}
-              className="absolute top-6 left-6 p-2 bg-stone-100 text-stone-500 hover:bg-stone-200 rounded-full transition-colors z-10 cursor-pointer"
-            >
-              <X className="h-5 w-5" />
-            </button>
+        <div className="fixed inset-0 z-[100000] bg-stone-950/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 overflow-hidden" dir="rtl">
+          <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-2xl w-full max-h-[88dvh] sm:max-h-[85vh] flex flex-col overflow-hidden shadow-2xl border border-stone-200 relative my-0 sm:my-auto animate-in slide-in-from-bottom-6 sm:zoom-in-95 duration-200 text-right">
+            
+            {/* Mobile Drag Indicator */}
+            <div className="w-12 h-1.5 bg-stone-300 rounded-full mx-auto my-2 sm:hidden shrink-0" />
 
-            <div className="mb-6">
-              <span className="inline-block py-1 px-3 rounded-full bg-purple-50 text-purple-700 text-xs font-bold mb-2">
-                طلب وتخصيص خدمة ترويجية 🚀
-              </span>
-              <h2 className="text-2xl font-black text-[#2d2a26] flex items-center gap-2">
-                <Rocket className="h-6 w-6 text-[#1a4d2e]" />
-                {activeMarketingModalName}
-              </h2>
-              <p className="text-xs text-stone-500 mt-1">
-                املأ تفاصيل الخدمة أدناه لتصل للإدارة بدقة ونقوم بالبدء بالتواصل معك وتفعيلها فوراً
-              </p>
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-stone-100 p-4 sm:p-6 shrink-0 bg-white">
+              <div>
+                <span className="inline-block py-0.5 px-2.5 rounded-full bg-purple-50 text-purple-700 text-[10px] sm:text-xs font-bold mb-1">
+                  طلب وتخصيص خدمة ترويجية 🚀
+                </span>
+                <h2 className="text-lg sm:text-2xl font-black text-[#2d2a26] flex items-center gap-2">
+                  <Rocket className="h-5 w-5 sm:h-6 sm:w-6 text-[#1a4d2e]" />
+                  {activeMarketingModalName}
+                </h2>
+                <p className="text-xs text-stone-500 mt-0.5">
+                  املأ تفاصيل الخدمة أدناه لتصل للإدارة بدقة ونقوم بالبدء بالتواصل معك وتفعيلها فوراً
+                </p>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setIsMarketingModalOpen(false)}
+                className="p-2 bg-stone-100 text-stone-500 hover:bg-stone-200 rounded-full transition-colors shrink-0 cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
             </div>
 
-            <form onSubmit={handleMarketingRequestSubmit} className="space-y-5 text-right">
-              
-              {/* WhatsApp Number (For all services) */}
-              <div>
-                <label className="block text-xs font-bold text-stone-700 mb-1.5 font-black">رقم الواتساب للتنسيق والمتابعة: <span className="text-red-500">*</span></label>
-                <div className="relative">
-                  <Phone className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
-                  <input
-                    type="tel"
-                    required
-                    value={marketingForm.contactWhatsapp}
-                    onChange={e => setMarketingForm(prev => ({ ...prev, contactWhatsapp: e.target.value }))}
-                    placeholder="مثال: 079xxxxxxx"
-                    className="w-full bg-stone-50 border border-stone-200 rounded-xl pr-10 pl-4 py-2.5 text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
-                  />
+            <form onSubmit={handleMarketingRequestSubmit} className="flex flex-col flex-1 overflow-hidden text-right">
+              {/* Scrollable Form Content */}
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
+                
+                {/* WhatsApp Number (For all services) */}
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1.5 font-black">رقم الواتساب للتنسيق والمتابعة: <span className="text-red-500">*</span></label>
+                  <div className="relative">
+                    <Phone className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
+                    <input
+                      type="tel"
+                      required
+                      value={marketingForm.contactWhatsapp}
+                      onChange={e => setMarketingForm(prev => ({ ...prev, contactWhatsapp: e.target.value }))}
+                      placeholder="مثال: 079xxxxxxx"
+                      className="w-full bg-stone-50 border border-stone-200 rounded-xl pr-10 pl-4 py-2.5 text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                    />
+                  </div>
+                  <p className="text-[10px] text-stone-400 mt-1">سيستخدمه المشرف للتواصل وتأكيد الحجز وتفعيل الإعلان</p>
                 </div>
-                <p className="text-[10px] text-stone-400 mt-1">سيستخدمه المشرف للتواصل وتأكيد الحجز وتفعيل الإعلان</p>
-              </div>
 
               {/* SERVICE SPECIFIC FIELDS */}
               
@@ -4759,8 +5010,10 @@ export function Profile() {
               {/* 4. NFC Stands */}
               {/* 5. Social Media */}
 
-              {/* Action Buttons */}
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-stone-100">
+              </div>
+
+              {/* Sticky Action Footer */}
+              <div className="p-4 sm:px-6 bg-stone-50/90 border-t border-stone-100 flex items-center justify-end gap-3 shrink-0 sticky bottom-0 z-10">
                 <button
                   type="button"
                   onClick={() => setIsMarketingModalOpen(false)}
@@ -4816,6 +5069,443 @@ export function Profile() {
             >
               حسناً، فهمت
             </button>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Review Gift Code Customization Modal */}
+      {isGiftCodeCustomizationOpen && selectedBusiness && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[200000] bg-stone-950/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 overflow-hidden" dir="rtl">
+          <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-md w-full max-h-[88dvh] sm:max-h-[85vh] shadow-2xl border border-stone-200 relative animate-in zoom-in-95 duration-200 text-right flex flex-col my-0 sm:my-auto overflow-hidden">
+            
+            {/* Mobile Drag Indicator */}
+            <div className="w-12 h-1.5 bg-stone-300 rounded-full mx-auto my-2 sm:hidden shrink-0" />
+
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-stone-100 p-4 sm:p-5 shrink-0 bg-white">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
+                  <Gift className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-black text-stone-900">تخصيص مكافآت التقييمات</h3>
+                  <p className="text-xs text-stone-500 font-bold">حدد شروط الحصول على كود الهدية وقيمة الخصم</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsGiftCodeCustomizationOpen(false)}
+                className="p-2 text-stone-400 hover:text-stone-600 rounded-xl hover:bg-stone-100 transition-colors cursor-pointer shrink-0"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Scrollable Body */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
+              {/* Min stars eligibility */}
+              <div>
+                <label className="block text-xs font-bold text-stone-700 mb-2">من يستحق الحصول على كود خصم؟</label>
+                <select
+                  value={giftForm.giftCodeMinStars || 1}
+                  onChange={(e) => setGiftForm(prev => ({ ...prev, giftCodeMinStars: Number(e.target.value) }))}
+                  className="w-full px-4 py-2.5 rounded-xl border border-stone-200 bg-white text-sm font-bold focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-none transition-all cursor-pointer"
+                >
+                  <option value={1}>أي شخص يقيم المحل (نجمة واحدة فأكثر)</option>
+                  <option value={3}>التقييمات الجيدة والممتازة (3 نجوم فأكثر)</option>
+                  <option value={4}>التقييمات الرائعة والممتازة (4 نجوم فأكثر)</option>
+                  <option value={5}>التقييمات المثالية فقط (5 نجوم)</option>
+                </select>
+              </div>
+
+              {/* Code Limit Type */}
+              <div>
+                <label className="block text-xs font-bold text-stone-700 mb-2">كم عدد الأكواد المتاحة؟</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setGiftForm(prev => ({ ...prev, giftCodeLimitType: 'unlimited' }))}
+                    className={cn(
+                      "py-2.5 px-4 rounded-xl border text-xs font-bold transition-all text-center cursor-pointer",
+                      giftForm.giftCodeLimitType === 'unlimited'
+                        ? "bg-emerald-50 border-emerald-500 text-emerald-800 shadow-xs"
+                        : "bg-white border-stone-200 text-stone-600 hover:bg-stone-50"
+                    )}
+                  >
+                    عدد لا نهائي ♾️
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setGiftForm(prev => ({ ...prev, giftCodeLimitType: 'limited' }))}
+                    className={cn(
+                      "py-2.5 px-4 rounded-xl border text-xs font-bold transition-all text-center cursor-pointer",
+                      giftForm.giftCodeLimitType === 'limited'
+                        ? "bg-emerald-50 border-emerald-500 text-emerald-800 shadow-xs"
+                        : "bg-white border-stone-200 text-stone-600 hover:bg-stone-50"
+                    )}
+                  >
+                    عدد محدد 🔢
+                  </button>
+                </div>
+
+                {giftForm.giftCodeLimitType === 'limited' && (
+                  <div className="mt-3">
+                    <label className="block text-[11px] font-bold text-stone-500 mb-1">الحد الأقصى لعدد الأكواد</label>
+                    <input
+                      type="number"
+                      min={1}
+                      required
+                      value={giftForm.giftCodeTotalLimit || 100}
+                      onChange={(e) => setGiftForm(prev => ({ ...prev, giftCodeTotalLimit: Math.max(1, Number(e.target.value)) }))}
+                      className="w-full px-4 py-2.5 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-none text-sm font-bold"
+                      placeholder="مثال: 150"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Limit per User Account */}
+              <div className="bg-stone-50 p-3.5 rounded-2xl border border-stone-200/80 space-y-2.5">
+                <label className="block text-xs font-bold text-stone-800">
+                  كم مرة (الحد الأقصى) سيُمنح كود الخصم للحساب الواحد؟ 👤
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setGiftForm(prev => ({ ...prev, giftCodeUserLimit: 'once' }))}
+                    className={cn(
+                      "p-2.5 rounded-xl border text-xs font-bold transition-all text-right flex items-start gap-2 cursor-pointer",
+                      giftForm.giftCodeUserLimit === 'once' || !giftForm.giftCodeUserLimit
+                        ? "bg-emerald-50 border-emerald-500 text-emerald-950 ring-1 ring-emerald-500/30"
+                        : "bg-white border-stone-200 text-stone-600 hover:bg-stone-100"
+                    )}
+                  >
+                    <div className={cn(
+                      "w-4 h-4 rounded-full border mt-0.5 shrink-0 flex items-center justify-center text-[10px]",
+                      giftForm.giftCodeUserLimit === 'once' || !giftForm.giftCodeUserLimit
+                        ? "border-emerald-600 bg-emerald-600 text-white"
+                        : "border-stone-300"
+                    )}>
+                      {(giftForm.giftCodeUserLimit === 'once' || !giftForm.giftCodeUserLimit) && "✓"}
+                    </div>
+                    <div>
+                      <span className="block font-black text-xs">كود واحد فقط للحساب الواحد</span>
+                      <span className="text-[10px] text-stone-500 block mt-0.5 font-normal">
+                        كود خصم وحيد مدى الحياة بغض النظر عن عدد التقييمات
+                      </span>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setGiftForm(prev => ({ ...prev, giftCodeUserLimit: 'per_review' }))}
+                    className={cn(
+                      "p-2.5 rounded-xl border text-xs font-bold transition-all text-right flex items-start gap-2 cursor-pointer",
+                      giftForm.giftCodeUserLimit === 'per_review'
+                        ? "bg-emerald-50 border-emerald-500 text-emerald-950 ring-1 ring-emerald-500/30"
+                        : "bg-white border-stone-200 text-stone-600 hover:bg-stone-100"
+                    )}
+                  >
+                    <div className={cn(
+                      "w-4 h-4 rounded-full border mt-0.5 shrink-0 flex items-center justify-center text-[10px]",
+                      giftForm.giftCodeUserLimit === 'per_review'
+                        ? "border-emerald-600 bg-emerald-600 text-white"
+                        : "border-stone-300"
+                    )}>
+                      {giftForm.giftCodeUserLimit === 'per_review' && "✓"}
+                    </div>
+                    <div>
+                      <span className="block font-black text-xs">كود جديد لكل تقييم</span>
+                      <span className="text-[10px] text-stone-500 block mt-0.5 font-normal">
+                        يحصل العميل على كود خصم مع كل تقييم جديد يضعه
+                      </span>
+                    </div>
+                  </button>
+                </div>
+
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setGiftForm(prev => ({ ...prev, giftCodeUserLimit: 'custom' }))}
+                    className={cn(
+                      "w-full p-2.5 rounded-xl border text-xs font-bold transition-all text-right flex items-center justify-between cursor-pointer",
+                      giftForm.giftCodeUserLimit === 'custom'
+                        ? "bg-emerald-50 border-emerald-500 text-emerald-950 ring-1 ring-emerald-500/30"
+                        : "bg-white border-stone-200 text-stone-600 hover:bg-stone-100"
+                    )}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className={cn(
+                        "w-4 h-4 rounded-full border shrink-0 flex items-center justify-center text-[10px]",
+                        giftForm.giftCodeUserLimit === 'custom'
+                          ? "border-emerald-600 bg-emerald-600 text-white"
+                          : "border-stone-300"
+                      )}>
+                        {giftForm.giftCodeUserLimit === 'custom' && "✓"}
+                      </div>
+                      <span className="font-black text-xs">تحديد عدد أقصى مخصص للحساب</span>
+                    </div>
+                    <span className="text-[11px] text-stone-500 font-normal">
+                      مثال: 2 أو 3 كودات كحد أعلى
+                    </span>
+                  </button>
+
+                  {giftForm.giftCodeUserLimit === 'custom' && (
+                    <div className="mt-2.5 pr-6">
+                      <label className="block text-[11px] font-bold text-stone-600 mb-1">
+                        الحد الأقصى لعدد الأكواد الممنوحة للحساب الواحد:
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={20}
+                        value={giftForm.giftCodeMaxPerUser || 2}
+                        onChange={(e) => setGiftForm(prev => ({ ...prev, giftCodeMaxPerUser: Math.max(1, Number(e.target.value)) }))}
+                        className="w-32 px-3 py-1.5 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-none text-xs font-bold bg-white"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Discount percentage */}
+              <div>
+                <label className="block text-xs font-bold text-stone-700 mb-1.5">كم نسبة الخصم للهدية؟</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    required
+                    value={giftForm.giftCodeDiscountPercent || 10}
+                    onChange={(e) => setGiftForm(prev => ({ ...prev, giftCodeDiscountPercent: Math.min(100, Math.max(1, Number(e.target.value))) }))}
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-none text-sm font-bold"
+                    placeholder="مثال: 15"
+                  />
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-stone-400 font-bold">
+                    %
+                  </div>
+                </div>
+              </div>
+
+              {/* Gift code validity in days */}
+              <div>
+                <label className="block text-xs font-bold text-stone-700 mb-1.5">مدة صلاحية الكود الممنوح (بالأيام)</label>
+                <input
+                  type="number"
+                  min={1}
+                  required
+                  value={giftForm.giftCodeValidityDays || 30}
+                  onChange={(e) => setGiftForm(prev => ({ ...prev, giftCodeValidityDays: Math.max(1, Number(e.target.value)) }))}
+                  className="w-full px-4 py-2.5 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-none text-sm font-bold"
+                  placeholder="مثال: 30"
+                />
+                <p className="text-[10px] text-stone-400 mt-1 font-bold">
+                  تحدد عدد الأيام المتاحة للزائر لاستخدام الكوبون بدءاً من تاريخ حصوله عليه.
+                </p>
+              </div>
+
+              {/* Timing duration */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-stone-700">فترة صلاحية العرض (اختياري)</span>
+                  {(giftForm.giftCodeStartDate || giftForm.giftCodeEndDate) && (
+                    <button
+                      type="button"
+                      onClick={() => setGiftForm(prev => ({ ...prev, giftCodeStartDate: '', giftCodeEndDate: '' }))}
+                      className="text-[10px] text-red-500 hover:underline font-bold"
+                    >
+                      إلغاء التواريخ (متاح دائماً)
+                    </button>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-stone-500 mb-1">بدء التفعيل (اختياري)</label>
+                    <input
+                      type="date"
+                      value={giftForm.giftCodeStartDate || ''}
+                      onChange={(e) => setGiftForm(prev => ({ ...prev, giftCodeStartDate: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-none text-xs font-bold text-stone-800"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-stone-500 mb-1">انتهاء التفعيل (اختياري)</label>
+                    <input
+                      type="date"
+                      value={giftForm.giftCodeEndDate || ''}
+                      onChange={(e) => setGiftForm(prev => ({ ...prev, giftCodeEndDate: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-none text-xs font-bold text-stone-800"
+                    />
+                  </div>
+                </div>
+                <p className="text-[10px] text-stone-400 font-bold">
+                  اترك الحقلين فارغين ليعمل برنامج الخصم بشكل دائم ودون تقيد بتاريخ انتهاء.
+                </p>
+              </div>
+            </div>
+
+            {/* Sticky Action Footer */}
+            <div className="p-4 sm:px-6 bg-stone-50/90 border-t border-stone-100 shrink-0 sticky bottom-0 z-10">
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!db || !selectedBusiness) return;
+                  try {
+                    const updatedFields = {
+                      giftCodeEnabled: true,
+                      giftCodeMinStars: Number(giftForm.giftCodeMinStars ?? 1),
+                      giftCodeLimitType: giftForm.giftCodeLimitType || 'unlimited',
+                      giftCodeTotalLimit: Number(giftForm.giftCodeTotalLimit ?? 100),
+                      giftCodeDiscountPercent: Number(giftForm.giftCodeDiscountPercent ?? 10),
+                      giftCodeValidityDays: Number(giftForm.giftCodeValidityDays ?? 30),
+                      giftCodeStartDate: giftForm.giftCodeStartDate || '',
+                      giftCodeEndDate: giftForm.giftCodeEndDate || '',
+                      giftCodeUserLimit: giftForm.giftCodeUserLimit || 'once',
+                      giftCodeMaxPerUser: Number(giftForm.giftCodeMaxPerUser ?? 1),
+                    };
+
+                    await updateDoc(doc(db, 'businesses', selectedBusiness.id), updatedFields);
+                    invalidateCache();
+
+                    const updatedBiz = { ...selectedBusiness, ...updatedFields };
+                    setBusinesses(prev => prev.map(b => b.id === selectedBusiness.id ? updatedBiz : b));
+                    setSelectedBusiness(updatedBiz);
+                    setIsGiftCodeCustomizationOpen(false);
+                  } catch (err) {
+                    console.error("Error saving gift code customization: ", err);
+                  }
+                }}
+                className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Check className="h-4 w-4" />
+                <span>حفظ التخصيص وتفعيل البرنامج فوراً ✨</span>
+              </button>
+            </div>
+
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Review Gift Code Stats Modal */}
+      {isGiftCodeStatsOpen && selectedBusiness && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[200000] bg-stone-950/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 overflow-hidden" dir="rtl">
+          <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-md w-full max-h-[88dvh] sm:max-h-[85vh] shadow-2xl border border-stone-200 relative animate-in zoom-in-95 duration-200 text-right flex flex-col my-0 sm:my-auto overflow-hidden">
+            
+            {/* Mobile Drag Indicator */}
+            <div className="w-12 h-1.5 bg-stone-300 rounded-full mx-auto my-2 sm:hidden shrink-0" />
+
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-stone-100 p-4 sm:p-5 shrink-0 bg-white">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
+                  <BarChart3 className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-black text-stone-900">إحصائيات حملة مكافآت التقييمات</h3>
+                  <p className="text-xs text-stone-500 font-bold">نظرة عامة على الأكواد الممنوحة وأداء البرنامج</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsGiftCodeStatsOpen(false)}
+                className="p-2 text-stone-400 hover:text-stone-600 rounded-xl hover:bg-stone-100 transition-colors cursor-pointer shrink-0"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Scrollable Content */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+              {/* Stats Grid */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-stone-50 p-4 rounded-2xl border border-stone-100 text-center">
+                  <span className="text-xs text-stone-500 font-bold block mb-1">إجمالي الأكواد المتاحة</span>
+                  <span className="text-xl font-black text-[#1a4d2e]">
+                    {selectedBusiness.giftCodeLimitType === 'unlimited' ? '♾️ غير محدود' : selectedBusiness.giftCodeTotalLimit || 100}
+                  </span>
+                </div>
+
+                <div className="bg-emerald-50/50 p-4 rounded-2xl border border-emerald-100 text-center">
+                  <span className="text-xs text-emerald-800 font-bold block mb-1">الأكواد الممنوحة حتى الآن</span>
+                  <span className="text-xl font-black text-emerald-700">
+                    {selectedBusiness.giftCodeGrantedCount || 0}
+                  </span>
+                </div>
+              </div>
+
+              {/* Progress Indicator for Limited campaigns */}
+              {selectedBusiness.giftCodeLimitType === 'limited' && (
+                <div className="space-y-2">
+                  <div className="flex justify-between text-xs font-bold text-stone-600">
+                    <span>نسبة استهلاك الأكواد</span>
+                    <span>{Math.round(((selectedBusiness.giftCodeGrantedCount || 0) / (selectedBusiness.giftCodeTotalLimit || 100)) * 100)}%</span>
+                  </div>
+                  <div className="w-full bg-stone-100 rounded-full h-2.5">
+                    <div
+                      className="bg-emerald-600 h-2.5 rounded-full transition-all duration-500"
+                      style={{ width: `${Math.min(100, ((selectedBusiness.giftCodeGrantedCount || 0) / (selectedBusiness.giftCodeTotalLimit || 100)) * 100)}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-[11px] text-stone-500 font-bold">
+                    <span>الأكواد المتبقية: {Math.max(0, (selectedBusiness.giftCodeTotalLimit || 100) - (selectedBusiness.giftCodeGrantedCount || 0))} كود</span>
+                    <span>الهدف: {selectedBusiness.giftCodeTotalLimit || 100} كود</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Timing & Target info */}
+              <div className="bg-stone-50 p-4 rounded-2xl border border-stone-100 space-y-3 text-xs font-bold text-stone-700">
+                <div className="flex justify-between">
+                  <span className="text-stone-500">الحد الأدنى لتقييم النجوم:</span>
+                  <span className="font-bold text-stone-800 flex items-center gap-1">
+                    <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
+                    <span>{selectedBusiness.giftCodeMinStars || 1} نجوم فما فوق</span>
+                  </span>
+                </div>
+
+                <div className="flex justify-between">
+                  <span className="text-stone-500">حد المنح للحساب الواحد:</span>
+                  <span className="font-bold text-stone-800">
+                    {selectedBusiness.giftCodeUserLimit === 'per_review'
+                      ? 'كود جديد لكل تقييم'
+                      : selectedBusiness.giftCodeUserLimit === 'custom'
+                      ? `${selectedBusiness.giftCodeMaxPerUser || 2} كودات كحد أقصى`
+                      : 'كود واحد فقط لكل حساب'}
+                  </span>
+                </div>
+
+                <div className="flex justify-between">
+                  <span className="text-stone-500">نسبة خصم الكوبون:</span>
+                  <span className="font-bold text-emerald-700">%{selectedBusiness.giftCodeDiscountPercent || 10} خصم</span>
+                </div>
+
+                <div className="flex justify-between">
+                  <span className="text-stone-500">فترة سريان البرنامج:</span>
+                  <span className="font-bold text-stone-800">
+                    {selectedBusiness.giftCodeStartDate && selectedBusiness.giftCodeEndDate ? (
+                      <>من {selectedBusiness.giftCodeStartDate} إلى {selectedBusiness.giftCodeEndDate}</>
+                    ) : (
+                      "مفتوحة دائماً"
+                    )}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Sticky Action Footer */}
+            <div className="p-4 sm:px-6 bg-stone-50/90 border-t border-stone-100 shrink-0 sticky bottom-0 z-10">
+              <button
+                type="button"
+                onClick={() => setIsGiftCodeStatsOpen(false)}
+                className="w-full py-3 bg-stone-800 hover:bg-stone-900 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center cursor-pointer"
+              >
+                إغلاق نافذة الإحصائيات
+              </button>
+            </div>
+
           </div>
         </div>,
         document.body

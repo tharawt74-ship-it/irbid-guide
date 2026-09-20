@@ -66,14 +66,16 @@ export function VipWelcomePopupModal({
 
   return createPortal(
     <div 
-      className="fixed inset-0 z-[999999] bg-stone-950/85 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 overflow-y-auto"
+      className="fixed inset-0 z-[999999] bg-stone-950/85 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 overflow-hidden"
       dir="rtl"
       onClick={onClose}
     >
       <div 
-        className="max-w-lg w-full flex flex-col gap-4 sm:gap-5 relative my-auto animate-in fade-in zoom-in-95 duration-200"
+        className="max-w-lg w-full flex flex-col gap-4 sm:gap-5 relative my-0 sm:my-auto animate-in fade-in zoom-in-95 duration-200 max-h-[88dvh] sm:max-h-[85vh] overflow-y-auto p-4 sm:p-0"
         onClick={e => e.stopPropagation()}
       >
+        {/* Mobile Drag Indicator */}
+        <div className="w-12 h-1.5 bg-stone-400 rounded-full mx-auto sm:hidden shrink-0" />
         {/* Pass 1: Standalone Title Header above the media */}
         <div className="flex items-center justify-between pb-1 px-1">
           <div className="flex items-center gap-2.5">

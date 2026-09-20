@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router';
-import { collection, getDocs, query, orderBy } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { getCachedBusinesses, setCachedBusinesses, getCachedOffers, setCachedOffers, getCachedJobs, setCachedJobs, getCachedHousings, setCachedHousings } from '../lib/dataCache';
 import { 
   Search as SearchIcon, X, Store, Briefcase, Building, Newspaper, 
   MapPin, Star, Clock, ChevronRight, Loader2, Flame, MenuSquare, 
@@ -99,22 +100,38 @@ export function Search() {
     setBusinessPage(1);
   }, [inputVal, selectedLocation, selectedMainCategory, selectedSubCategory, activeTab]);
 
-  // Load all datasets on mount
+  // Load all datasets on mount with caching & query limits
   useEffect(() => {
     async function loadSearchData() {
       if (!db) {
         setLoading(false);
         return;
       }
-      setLoading(true);
+
+      // Check cache first for instant render and zero DB reads
+      const cachedB = getCachedBusinesses();
+      const cachedO = getCachedOffers();
+      const cachedJ = getCachedJobs();
+      const cachedH = getCachedHousings();
+
+      if (cachedB && cachedB.length > 0) {
+        setBusinesses(cachedB);
+        if (cachedO) setOffers(cachedO);
+        if (cachedJ) setJobs(cachedJ);
+        if (cachedH) setHousings(cachedH);
+        setLoading(false);
+      } else {
+        setLoading(true);
+      }
+
       try {
         const appConfig = await getAppConfig();
         const [bizSnap, offersSnap, jobsSnap, housingsSnap, newsSnap] = await Promise.all([
-          getDocs(query(collection(db, 'businesses'))),
-          getDocs(query(collection(db, 'offers'), orderBy('createdAt', 'desc'))).catch(() => ({ docs: [] } as any)),
-          getDocs(query(collection(db, 'jobs'), orderBy('createdAt', 'desc'))).catch(() => ({ docs: [] } as any)),
-          getDocs(query(collection(db, 'housings'), orderBy('createdAt', 'desc'))).catch(() => ({ docs: [] } as any)),
-          getDocs(query(collection(db, 'news'), orderBy('createdAt', 'desc'))).catch(() => ({ docs: [] } as any))
+          getDocs(query(collection(db, 'businesses'), limit(150))),
+          getDocs(query(collection(db, 'offers'), orderBy('createdAt', 'desc'), limit(50))).catch(() => ({ docs: [] } as any)),
+          getDocs(query(collection(db, 'jobs'), orderBy('createdAt', 'desc'), limit(50))).catch(() => ({ docs: [] } as any)),
+          getDocs(query(collection(db, 'housings'), orderBy('createdAt', 'desc'), limit(50))).catch(() => ({ docs: [] } as any)),
+          getDocs(query(collection(db, 'news'), orderBy('createdAt', 'desc'), limit(50))).catch(() => ({ docs: [] } as any))
         ]);
 
         let bizDocs = bizSnap.docs
@@ -126,11 +143,22 @@ export function Search() {
           bizDocs = DEMO_SEED_DATA.businesses.map((b, idx) => ({ id: `demo-b-${idx}`, ...b } as Business));
         }
 
+        const offersList = offersSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as OfferItem)).filter((o: any) => appConfig.showDemoData !== false || !o.isDemo);
+        const jobsList = jobsSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as JobOffer)).filter((j: any) => appConfig.showDemoData !== false || !j.isDemo);
+        const housingsList = housingsSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as HousingItem)).filter((h: any) => appConfig.showDemoData !== false || !h.isDemo);
+        const newsList = newsSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as NewsArticle));
+
         setBusinesses(bizDocs);
-        setOffers(offersSnap.docs.map(d => ({ id: d.id, ...d.data() } as OfferItem)).filter(o => appConfig.showDemoData !== false || !o.isDemo));
-        setJobs(jobsSnap.docs.map(d => ({ id: d.id, ...d.data() } as JobOffer)).filter(j => appConfig.showDemoData !== false || !j.isDemo));
-        setHousings(housingsSnap.docs.map(d => ({ id: d.id, ...d.data() } as HousingItem)).filter(h => appConfig.showDemoData !== false || !h.isDemo));
-        setNews(newsSnap.docs.map(d => ({ id: d.id, ...d.data() } as NewsArticle)));
+        setOffers(offersList);
+        setJobs(jobsList);
+        setHousings(housingsList);
+        setNews(newsList);
+
+        // Save to cache
+        setCachedBusinesses(bizDocs);
+        setCachedOffers(offersList);
+        setCachedJobs(jobsList);
+        setCachedHousings(housingsList);
       } catch (err) {
         console.error('Error loading search datasets:', err);
       } finally {

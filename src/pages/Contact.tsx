@@ -618,7 +618,7 @@ export function Contact() {
         title="أضف محلك - اشتراك في دليل إربد | تواصل معنا"
         description="انضم لمنظومة الأعمال الأكبر في إربد. أضف محلك التجاري، مطعمك، عيادتك، أو خدماتك إلى منصة شو في بإربد واستقبل زبائن جدد يومياً."
         keywords={['أضف محلك إربد', 'إعلان في إربد', 'تسجيل محلات إربد', 'إضافة شركة إربد', 'دليل أعمال إربد']}
-        canonicalUrl="https://shofierbid.com/contact"
+        canonicalUrl="https://shofibirbid.site/contact"
       />
 
       {/* Hero / Header */}

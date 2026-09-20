@@ -37,8 +37,10 @@ export function VipAnalyticsModal({
 
   if (!vipInfo.isVip) {
     return createPortal(
-      <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto" dir="rtl">
-        <div className="bg-white rounded-3xl max-w-lg w-full max-h-[88vh] flex flex-col overflow-y-auto p-6 sm:p-8 shadow-2xl border border-amber-200 text-center space-y-5 my-auto animate-in fade-in zoom-in-95 relative">
+      <div className="fixed inset-0 z-[100000] bg-stone-950/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 overflow-hidden" dir="rtl">
+        <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-lg w-full max-h-[88dvh] sm:max-h-[85vh] flex flex-col p-6 sm:p-8 shadow-2xl border border-amber-200 text-center space-y-5 my-0 sm:my-auto animate-in fade-in zoom-in-95 relative overflow-y-auto">
+          {/* Mobile Drag Indicator */}
+          <div className="w-12 h-1.5 bg-stone-300 rounded-full mx-auto my-1 sm:hidden shrink-0" />
           <div className="w-16 h-16 bg-amber-100 text-amber-700 rounded-2xl flex items-center justify-center mx-auto shadow-xs">
             <BarChart3 className="h-8 w-8 text-amber-600" />
           </div>
@@ -81,8 +83,11 @@ export function VipAnalyticsModal({
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto" dir="rtl">
-      <div className="bg-white rounded-3xl p-5 sm:p-7 md:p-8 w-full max-w-4xl max-h-[88vh] flex flex-col overflow-y-auto shadow-2xl border border-amber-200 relative my-auto animate-in fade-in zoom-in-95 space-y-6">
+    <div className="fixed inset-0 z-[100000] bg-stone-950/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 overflow-hidden" dir="rtl">
+      <div className="bg-white rounded-t-3xl sm:rounded-3xl p-5 sm:p-7 md:p-8 w-full max-w-4xl max-h-[88dvh] sm:max-h-[85vh] flex flex-col overflow-hidden shadow-2xl border border-amber-200 relative my-0 sm:my-auto animate-in fade-in zoom-in-95">
+        
+        {/* Mobile Drag Indicator */}
+        <div className="w-12 h-1.5 bg-stone-300 rounded-full mx-auto my-1 sm:hidden shrink-0 mb-3" />
         
         {/* Top Header Controls */}
         <div className="flex items-center justify-between border-b border-stone-200 pb-4">

@@ -10,15 +10,18 @@ export function CartConflictModal() {
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-950/70 backdrop-blur-sm animate-in fade-in duration-200" dir="rtl">
+      <div className="fixed inset-0 z-[100000] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-stone-950/80 backdrop-blur-md animate-in fade-in duration-200 overflow-hidden" dir="rtl">
         <motion.div 
-          initial={{ scale: 0.9, opacity: 0, y: 20 }}
+          initial={{ scale: 0.95, opacity: 0, y: 20 }}
           animate={{ scale: 1, opacity: 1, y: 0 }}
-          exit={{ scale: 0.9, opacity: 0, y: 20 }}
-          className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-stone-200 space-y-5 text-right relative overflow-hidden"
+          exit={{ scale: 0.95, opacity: 0, y: 20 }}
+          className="bg-white rounded-t-3xl sm:rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-stone-200 flex flex-col max-h-[88dvh] sm:max-h-[85vh] relative overflow-hidden my-0 sm:my-auto"
         >
+          {/* Mobile Drag Indicator */}
+          <div className="w-12 h-1.5 bg-stone-300 rounded-full mx-auto mb-3 sm:hidden shrink-0" />
+
           {/* Header Icon */}
-          <div className="flex items-center gap-3 border-b border-stone-100 pb-4">
+          <div className="flex items-center gap-3 border-b border-stone-100 pb-4 shrink-0">
             <div className="w-12 h-12 rounded-2xl bg-amber-100 border border-amber-200 text-amber-700 flex items-center justify-center shrink-0 shadow-xs">
               <AlertTriangle className="h-6 w-6 text-amber-600 animate-pulse" />
             </div>
@@ -28,22 +31,25 @@ export function CartConflictModal() {
             </div>
           </div>
 
-          {/* Explanation Box */}
-          <div className="bg-amber-50/70 border border-amber-200/80 rounded-2xl p-4 text-xs space-y-2 text-stone-800">
-            <p className="leading-relaxed font-bold text-amber-950">
-              تحتوي سلتك الحالية على <span className="font-black text-amber-700 font-mono">({items.length})</span> أصناف من محل: <span className="font-black underline">{businessName}</span>.
-            </p>
-            <p className="leading-relaxed text-stone-600">
-              أنتم الآن تحاولون إضافة صنف (<span className="font-bold text-stone-900">{pendingConflict.item.name}</span>) من محل آخر: <span className="font-bold text-stone-900">{pendingConflict.business.name}</span>.
+          {/* Scrollable Body */}
+          <div className="flex-1 overflow-y-auto space-y-4 py-4">
+            {/* Explanation Box */}
+            <div className="bg-amber-50/70 border border-amber-200/80 rounded-2xl p-4 text-xs space-y-2 text-stone-800">
+              <p className="leading-relaxed font-bold text-amber-950">
+                تحتوي سلتك الحالية على <span className="font-black text-amber-700 font-mono">({items.length})</span> أصناف من محل: <span className="font-black underline">{businessName}</span>.
+              </p>
+              <p className="leading-relaxed text-stone-600">
+                أنتم الآن تحاولون إضافة صنف (<span className="font-bold text-stone-900">{pendingConflict.item.name}</span>) من محل آخر: <span className="font-bold text-stone-900">{pendingConflict.business.name}</span>.
+              </p>
+            </div>
+
+            <p className="text-xs text-stone-500 font-bold leading-relaxed">
+              يرجى اختيار ما تود القيام به:
             </p>
           </div>
 
-          <p className="text-xs text-stone-500 font-bold leading-relaxed">
-            يرجى اختيار ما تود القيام به:
-          </p>
-
-          {/* Action Buttons */}
-          <div className="space-y-2.5 pt-1">
+          {/* Action Buttons (Pinned at Bottom) */}
+          <div className="space-y-2.5 pt-3 border-t border-stone-100 shrink-0 sticky bottom-0 bg-white z-10">
             <button
               onClick={confirmReplaceCart}
               className="w-full bg-red-600 hover:bg-red-700 text-white font-black py-3 px-4 rounded-2xl text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs"

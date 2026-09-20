@@ -3,7 +3,7 @@ import {
   Store, User, MapPin, Phone, Globe, Image as ImageIcon,
   MessageSquare, EyeOff, Sparkles, Check, Clock, ShieldCheck, 
   ExternalLink, Info, AtSign, Copy, Trash2, AlertTriangle, Eye,
-  Video, Play, HelpCircle, Crown
+  Video, Play, HelpCircle, Crown, Truck
 } from 'lucide-react';
 import { Business, WorkingHours, SocialLinks, AboutMediaConfig, VipPopupConfig } from '../../types';
 import { BUSINESS_CATEGORIES, IRBID_REGIONS_CATEGORIZED, MainCategory } from '../../lib/categories';
@@ -16,6 +16,7 @@ import { RichTextEditor } from '../common/RichTextEditor';
 import { VipPopupManagerModal } from '../vip/VipPopupManagerModal';
 import { getBusinessVipStatus } from '../../lib/vipHelper';
 import { cn } from '../../lib/utils';
+import { isMedicalBusiness } from '../../lib/medicalHelper';
 
 interface StoreEditFormProps {
   business: Business;
@@ -38,6 +39,7 @@ interface StoreEditFormProps {
     aboutMedia?: AboutMediaConfig | null;
     aboutVideoUrl?: string | null;
     aboutImageUrl?: string | null;
+    deliveryAvailable?: boolean;
   }) => Promise<void>;
   onDelete?: (businessId: string) => Promise<void>;
   isSaving?: boolean;
@@ -65,6 +67,7 @@ export function StoreEditForm({
   const [logoUrl, setLogoUrl] = useState(business.logoUrl || '');
   const [googlePlaceUrl, setGooglePlaceUrl] = useState(business.googlePlaceUrl || '');
   const [hideSiteReviews, setHideSiteReviews] = useState(!!business.hideSiteReviews);
+  const [deliveryAvailable, setDeliveryAvailable] = useState(!!business.deliveryAvailable);
 
   // About Media state (Available to all accounts)
   const initialAboutType: 'video' | 'image' = 
@@ -126,6 +129,7 @@ export function StoreEditForm({
     setLogoUrl(business.logoUrl || '');
     setGooglePlaceUrl(business.googlePlaceUrl || '');
     setHideSiteReviews(!!business.hideSiteReviews);
+    setDeliveryAvailable(!!business.deliveryAvailable);
 
     const bAboutType = business.aboutMedia?.type || (business.aboutVideoUrl ? 'video' : business.aboutImageUrl ? 'image' : 'video');
     const bAboutUrl = business.aboutMedia?.url || business.aboutVideoUrl || business.aboutImageUrl || '';
@@ -219,6 +223,7 @@ export function StoreEditForm({
       } : null,
       aboutVideoUrl: aboutMediaType === 'video' && aboutMediaUrl.trim() ? aboutMediaUrl.trim() : null,
       aboutImageUrl: aboutMediaType === 'image' && aboutMediaUrl.trim() ? aboutMediaUrl.trim() : null,
+      deliveryAvailable: !isMedicalBusiness(business) ? deliveryAvailable : false,
     });
   };
 
@@ -470,6 +475,33 @@ export function StoreEditForm({
               يتم استخدامه في زر "اتصل الآن" وزر "واتساب" المباشر في صفحة محلك وبطاقات العرض.
             </p>
           </div>
+
+          {!isMedicalBusiness(business) && (
+            <div className="pt-3 border-t border-stone-100">
+              <label className={cn(
+                "flex items-start gap-3.5 p-4 rounded-xl border cursor-pointer transition-all flex-col sm:flex-row sm:items-center",
+                deliveryAvailable 
+                  ? "bg-blue-50/60 border-blue-200 shadow-3xs" 
+                  : "bg-stone-50/50 border-stone-200 hover:bg-stone-50"
+              )}>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    checked={deliveryAvailable}
+                    onChange={e => setDeliveryAvailable(e.target.checked)}
+                    className="h-5 w-5 rounded text-blue-600 focus:ring-blue-500 border-stone-300 shrink-0 cursor-pointer"
+                  />
+                  <span className="font-black text-stone-900 flex items-center gap-2 text-xs sm:text-sm">
+                    <Truck className="h-4.5 w-4.5 text-blue-600" />
+                    تفعيل خدمة التوصيل في المحل (توفر التوصيل)
+                  </span>
+                </div>
+                <div className="text-xs text-stone-500 sm:mr-auto mt-1 sm:mt-0 leading-relaxed">
+                  سيظهر وسم <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded-md font-bold text-[10px]">توفر التوصيل</span> بوضوح في صفحة المحل وبطاقة العرض لتعريف الزبائن بإمكانية الطلب والتوصيل.
+                </div>
+              </label>
+            </div>
+          )}
         </div>
 
         {/* 5. Visuals & Bio Description */}

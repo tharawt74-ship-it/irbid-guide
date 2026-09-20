@@ -485,11 +485,14 @@ export function JobFormModal({
   if (!isOpen || typeof document === 'undefined') return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto" dir="rtl">
-      <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[88vh] overflow-y-auto shadow-2xl border border-stone-200 relative my-auto animate-in fade-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-[100000] bg-stone-950/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 overflow-hidden" dir="rtl">
+      <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-3xl w-full max-h-[88dvh] sm:max-h-[85vh] shadow-2xl border border-stone-200 relative my-0 sm:my-auto flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         
+        {/* Mobile Drag Indicator */}
+        <div className="w-12 h-1.5 bg-stone-300 rounded-full mx-auto my-2.5 sm:hidden shrink-0" />
+
         {/* Sticky Header */}
-        <div className="sticky top-0 z-20 bg-white/95 backdrop-blur-md px-6 py-4 border-b border-stone-100 flex items-center justify-between">
+        <div className="shrink-0 bg-white/95 backdrop-blur-md px-6 py-4 border-b border-stone-100 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#1a4d2e] to-[#143e25] text-white flex items-center justify-center shadow-xs">
               <Briefcase className="h-5 w-5" />
@@ -513,7 +516,8 @@ export function JobFormModal({
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+          <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {/* Honeypot field - 100% hidden from humans, bots will fill it */}
           <div className="absolute opacity-0 -z-50 pointer-events-none" style={{ width: 0, height: 0, overflow: 'hidden' }}>
             <label htmlFor="job_website_hp">لا تقم بتعبئة هذا الحقل إذا كنت بشراً</label>
@@ -940,8 +944,10 @@ export function JobFormModal({
             </label>
           </div>
 
+          </div>
+
           {/* Sticky Actions Footer */}
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-stone-100">
+          <div className="p-4 sm:px-6 bg-stone-50/90 border-t border-stone-100 shrink-0 sticky bottom-0 z-10 flex items-center justify-end gap-3">
             <button
               type="button"
               onClick={onClose}

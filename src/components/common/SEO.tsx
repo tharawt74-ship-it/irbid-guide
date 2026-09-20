@@ -21,10 +21,10 @@ export const SEO: React.FC<SEOProps> = ({
     'مواصلات إربد', 'أم قيس', 'أطباء إربد', 'صيدليات إربد'
   ],
   canonicalUrl,
-  ogImage = 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&q=80&w=1200',
+  ogImage = 'https://shofibirbid.site/ogimage.jpg',
   ogType = 'website',
   schemaData,
-  author = 'شو في بإربد (Shofi Erbid)'
+  author = 'شو في بإربد (ShofiBIrbid)'
 }) => {
   const fullTitle = title 
     ? `${title} | شو في بإربد - الدليل الشامل لمحافظة إربد`
@@ -57,10 +57,23 @@ export const SEO: React.FC<SEOProps> = ({
     setMetaTag('robots', 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1');
 
     // 3. OpenGraph / Social Meta
+    const resolvedOgImage = ogImage.startsWith('http')
+      ? ogImage
+      : (typeof window !== 'undefined'
+          ? `${window.location.origin}${ogImage.startsWith('/') ? '' : '/'}${ogImage}`
+          : `https://shofibirbid.site/${ogImage.startsWith('/') ? ogImage.slice(1) : ogImage}`);
+
     setMetaTag('og:title', fullTitle, true);
     setMetaTag('og:description', description, true);
     setMetaTag('og:type', ogType, true);
-    setMetaTag('og:image', ogImage, true);
+    setMetaTag('og:image', resolvedOgImage, true);
+    setMetaTag('og:image:secure_url', resolvedOgImage, true);
+    if (resolvedOgImage.includes('ogimage.jpg')) {
+      setMetaTag('og:image:type', 'image/jpeg', true);
+      setMetaTag('og:image:width', '1376', true);
+      setMetaTag('og:image:height', '768', true);
+      setMetaTag('og:image:alt', fullTitle, true);
+    }
     setMetaTag('og:site_name', 'شو في بإربد - الدليل الشامل لمدينة إربد', true);
     setMetaTag('og:locale', 'ar_JO', true);
     
@@ -73,7 +86,7 @@ export const SEO: React.FC<SEOProps> = ({
     setMetaTag('twitter:card', 'summary_large_image');
     setMetaTag('twitter:title', fullTitle);
     setMetaTag('twitter:description', description);
-    setMetaTag('twitter:image', ogImage);
+    setMetaTag('twitter:image', resolvedOgImage);
 
     // 5. Canonical Link
     let linkCanonical = document.querySelector('link[rel="canonical"]') as HTMLLinkElement;
@@ -121,24 +134,26 @@ export const SEO: React.FC<SEOProps> = ({
           },
           {
             "@type": "WebSite",
-            "@id": "https://shofierbid.com/#website",
-            "url": "https://shofierbid.com",
+            "@id": "https://shofibirbid.site/#website",
+            "url": "https://shofibirbid.site",
             "name": "شو في بإربد؟",
-            "alternateName": ["Shofi Erbid", "دليل إربد", "دليل محافظة إربد الشامل"],
+            "alternateName": ["ShofiBIrbid", "دليل إربد", "دليل محافظة إربد الشامل"],
             "description": "المنصة والدليل الرقمي الشامل والأكبر لكل ما يخص محافظة إربد: مطاعم، مقاهي، محلات تجارية، وظائف، عروض، وسكنات.",
             "inLanguage": "ar-JO",
+            "image": "https://shofibirbid.site/favicon.jpg",
             "potentialAction": {
               "@type": "SearchAction",
-              "target": "https://shofierbid.com/?search={search_term_string}",
+              "target": "https://shofibirbid.site/?search={search_term_string}",
               "query-input": "required name=search_term_string"
             }
           },
           {
             "@type": "Organization",
-            "@id": "https://shofierbid.com/#organization",
-            "name": "شو في بإربد - Shofi Erbid",
-            "url": "https://shofierbid.com",
-            "logo": "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&q=80&w=512",
+            "@id": "https://shofibirbid.site/#organization",
+            "name": "شو في بإربد - ShofiBIrbid",
+            "url": "https://shofibirbid.site",
+            "logo": "https://shofibirbid.site/favicon.jpg",
+            "image": "https://shofibirbid.site/favicon.jpg",
             "address": {
               "@type": "PostalAddress",
               "addressLocality": "إربد",

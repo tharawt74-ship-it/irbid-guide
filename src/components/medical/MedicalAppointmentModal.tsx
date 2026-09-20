@@ -90,13 +90,16 @@ ${symptomsNotes.trim() ? `📝 *ملاحظات/استفسار:* ${symptomsNotes}
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-stone-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[100000] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-stone-950/80 backdrop-blur-md animate-in fade-in duration-200 overflow-hidden">
       <div 
         className="absolute inset-0"
         onClick={onClose}
       />
 
-      <div className="relative w-full sm:max-w-lg bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl border border-stone-200 overflow-hidden z-10 animate-in slide-in-from-bottom-5 duration-200 max-h-[90vh] flex flex-col">
+      <div className="relative w-full sm:max-w-lg bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl border border-stone-200 overflow-hidden z-10 animate-in slide-in-from-bottom-5 duration-200 max-h-[88dvh] sm:max-h-[85vh] flex flex-col my-0 sm:my-auto">
+        {/* Mobile Drag Indicator */}
+        <div className="w-12 h-1.5 bg-stone-300 rounded-full mx-auto my-2 sm:hidden shrink-0" />
+
         {/* Header */}
         <div className="p-4 sm:p-5 bg-gradient-to-l from-[#1a4d2e] via-emerald-800 to-teal-900 text-white flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">

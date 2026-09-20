@@ -231,4 +231,25 @@
   transform: translateY(-50%) scale(1.2);
 }
 
+/* Scanner Shake & Laser Animation Effects */
+@keyframes scanner-shake {
+  0%, 100% { transform: translateX(0); }
+  15%, 45%, 75% { transform: translateX(-10px) rotate(-0.5deg); }
+  30%, 60%, 90% { transform: translateX(10px) rotate(0.5deg); }
+}
+
+.animate-scanner-shake {
+  animation: scanner-shake 0.65s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+@keyframes scanner-pulse-laser {
+  0% { top: 10%; opacity: 0.7; }
+  50% { top: 85%; opacity: 1; }
+  100% { top: 10%; opacity: 0.7; }
+}
+
+.animate-laser-scan {
+  animation: scanner-pulse-laser 2.2s ease-in-out infinite;
+}
+
 

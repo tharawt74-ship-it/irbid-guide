@@ -13,6 +13,7 @@ import { SocialLinksEditor } from '../ui/SocialLinksEditor';
 import { ImageUploader } from '../ui/ImageUploader';
 import { MediaRenderer } from '../common/MediaRenderer';
 import { RichTextEditor } from '../common/RichTextEditor';
+import { PaymentMethodsSelector } from '../ui/PaymentMethodsSelector';
 import { VipPopupManagerModal } from '../vip/VipPopupManagerModal';
 import { getBusinessVipStatus } from '../../lib/vipHelper';
 import { cn } from '../../lib/utils';
@@ -40,6 +41,7 @@ interface StoreEditFormProps {
     aboutVideoUrl?: string | null;
     aboutImageUrl?: string | null;
     deliveryAvailable?: boolean;
+    paymentMethods?: string[];
   }) => Promise<void>;
   onDelete?: (businessId: string) => Promise<void>;
   isSaving?: boolean;
@@ -68,6 +70,9 @@ export function StoreEditForm({
   const [googlePlaceUrl, setGooglePlaceUrl] = useState(business.googlePlaceUrl || '');
   const [hideSiteReviews, setHideSiteReviews] = useState(!!business.hideSiteReviews);
   const [deliveryAvailable, setDeliveryAvailable] = useState(!!business.deliveryAvailable);
+  const [paymentMethods, setPaymentMethods] = useState<string[]>(
+    business.paymentMethods || business.medicalProfile?.paymentMethods || ['كاش', 'فيزا', 'كليك']
+  );
 
   // About Media state (Available to all accounts)
   const initialAboutType: 'video' | 'image' = 
@@ -178,6 +183,7 @@ export function StoreEditForm({
   }, [imageUrl]);
 
   const cleanUsername = (val: string) => {
+    if (!val) return '';
     return val
       .toLowerCase()
       .replace(/[\s]+/g, '_')
@@ -224,6 +230,7 @@ export function StoreEditForm({
       aboutVideoUrl: aboutMediaType === 'video' && aboutMediaUrl.trim() ? aboutMediaUrl.trim() : null,
       aboutImageUrl: aboutMediaType === 'image' && aboutMediaUrl.trim() ? aboutMediaUrl.trim() : null,
       deliveryAvailable: !isMedicalBusiness(business) ? deliveryAvailable : false,
+      paymentMethods,
     });
   };
 
@@ -240,14 +247,14 @@ export function StoreEditForm({
     }
   };
 
-  const displayHandle = username.trim() ? `@${username.trim()}` : `@${cleanUsername(business.name) || 'store'}`;
+  const displayHandle = username.trim() ? `@${username.trim()}` : `@${cleanUsername(business.name || '') || 'store'}`;
   const displayUrl = `${typeof window !== 'undefined' ? window.location.origin : 'https://shofi-irbid.com'}/${username.trim() ? `@${username.trim()}` : `business/${business.id}`}`;
 
   return (
     <>
       <form onSubmit={handleSubmit} className="space-y-6" dir="rtl">
-        {/* 1. Basic Info & Category */}
-        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-stone-200/80 shadow-2xs space-y-4">
+        {/* 1. Basic Store Info & Classification */}
+        <div className="bg-white p-3 sm:p-6 rounded-xl sm:rounded-2xl border-0 sm:border border-stone-200/80 shadow-none sm:shadow-2xs space-y-4">
           <div className="flex items-center gap-2 pb-3 border-b border-stone-100">
             <Store className="h-5 w-5 text-[#1a4d2e]" />
             <h4 className="text-sm font-black text-stone-800">المعلومات الأساسية والتصنيف</h4>
@@ -317,7 +324,7 @@ export function StoreEditForm({
         </div>
 
         {/* 🌟 2. Social Media Username & Custom Page URL */}
-        <div className="bg-gradient-to-br from-emerald-50/70 via-white to-stone-50 p-5 sm:p-6 rounded-2xl border border-emerald-200/80 shadow-2xs space-y-4">
+        <div className="bg-gradient-to-br from-emerald-50/70 via-white to-stone-50 p-3 sm:p-6 rounded-xl sm:rounded-2xl border-0 sm:border border-emerald-200/80 shadow-none sm:shadow-2xs space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-emerald-100">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-xl bg-[#1a4d2e] flex items-center justify-center text-white shadow-2xs">
@@ -393,7 +400,7 @@ export function StoreEditForm({
         </div>
 
         {/* 3. Location & Address */}
-        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-stone-200/80 shadow-2xs space-y-4">
+        <div className="bg-white p-3 sm:p-6 rounded-xl sm:rounded-2xl border-0 sm:border border-stone-200/80 shadow-none sm:shadow-2xs space-y-4">
           <div className="flex items-center gap-2 pb-3 border-b border-stone-100">
             <MapPin className="h-5 w-5 text-[#1a4d2e]" />
             <h4 className="text-sm font-black text-stone-800">الموقع والعنوان في محافظة إربد</h4>
@@ -449,7 +456,7 @@ export function StoreEditForm({
         </div>
 
         {/* 4. Contact Phone & Details */}
-        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-stone-200/80 shadow-2xs space-y-4">
+        <div className="bg-white p-3 sm:p-6 rounded-xl sm:rounded-2xl border-0 sm:border border-stone-200/80 shadow-none sm:shadow-2xs space-y-4">
           <div className="flex items-center gap-2 pb-3 border-b border-stone-100">
             <Phone className="h-5 w-5 text-[#1a4d2e]" />
             <h4 className="text-sm font-black text-stone-800">أرقام التواصل والطلبات</h4>
@@ -505,7 +512,7 @@ export function StoreEditForm({
         </div>
 
         {/* 5. Visuals & Bio Description */}
-        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-stone-200/80 shadow-2xs space-y-4">
+        <div className="bg-white p-3 sm:p-6 rounded-xl sm:rounded-2xl border-0 sm:border border-stone-200/80 shadow-none sm:shadow-2xs space-y-4">
           <div className="flex items-center gap-2 pb-3 border-b border-stone-100">
             <ImageIcon className="h-5 w-5 text-[#1a4d2e]" />
             <h4 className="text-sm font-black text-stone-800">هوية المحل والشعار والصور</h4>
@@ -557,7 +564,7 @@ export function StoreEditForm({
         </div>
 
         {/* 5.5. Media for "About" Section (Video or Image for all accounts) */}
-        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-stone-200/80 shadow-2xs space-y-4">
+        <div className="bg-white p-3 sm:p-6 rounded-xl sm:rounded-2xl border-0 sm:border border-stone-200/80 shadow-none sm:shadow-2xs space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-stone-100">
             <div className="flex items-center gap-2">
               <div className="p-1.5 rounded-lg bg-emerald-50 text-[#1a4d2e]">
@@ -689,7 +696,7 @@ export function StoreEditForm({
 
         {/* 5.6 VIP Interactive Welcome Popup Shortcut (If VIP) */}
         {vipInfo.isVip && (
-          <div className="bg-gradient-to-br from-amber-50 to-amber-100/50 border border-amber-300/80 rounded-2xl p-5 shadow-2xs space-y-3">
+          <div className="bg-gradient-to-br from-amber-50 to-amber-100/50 border-0 sm:border border-amber-300/80 rounded-xl sm:rounded-2xl p-3 sm:p-5 shadow-none sm:shadow-2xs space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shadow-xs">
@@ -734,8 +741,16 @@ export function StoreEditForm({
           onChange={setSocialLinks}
         />
 
+        {/* 7.5 Payment Methods Selector */}
+        <div className="bg-white p-3 sm:p-6 rounded-xl sm:rounded-2xl border-0 sm:border border-stone-200/80 shadow-none sm:shadow-2xs">
+          <PaymentMethodsSelector
+            value={paymentMethods}
+            onChange={setPaymentMethods}
+          />
+        </div>
+
         {/* 8. Visibility & Privacy Controls (إخفاء المحل والتقييمات) */}
-        <div className="bg-stone-50/80 border border-stone-200 rounded-2xl p-5 space-y-4">
+        <div className="bg-stone-50/80 border-0 sm:border border-stone-200 rounded-xl sm:rounded-2xl p-3 sm:p-5 space-y-4 shadow-none sm:shadow-2xs">
           <div className="flex items-center gap-2">
             <EyeOff className="h-5 w-5 sm:h-6 sm:w-6 shrink-0 text-amber-600" />
             <div>
@@ -801,7 +816,7 @@ export function StoreEditForm({
 
         {/* 🚨 9. Danger Zone: Delete Store Page (منطقة حذف المحل نهائياً) */}
         {onDelete && (
-          <div className="bg-rose-50/60 border border-rose-200 rounded-2xl p-5 space-y-3">
+          <div className="bg-rose-50/60 border-0 sm:border border-rose-200 rounded-xl sm:rounded-2xl p-3 sm:p-5 space-y-3 shadow-none sm:shadow-2xs">
             <div className="flex items-center gap-2 text-rose-800">
               <AlertTriangle className="h-5 w-5 text-rose-600" />
               <div>

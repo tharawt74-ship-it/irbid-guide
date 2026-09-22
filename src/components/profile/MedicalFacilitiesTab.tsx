@@ -253,7 +253,7 @@ export function MedicalFacilitiesTab({
         </div>
 
         {/* Currently Selected Facility WorkSpace - Unified Container */}
-        <div className="border border-stone-200/80 rounded-2xl bg-white overflow-hidden shadow-2xs">
+        <div className="border-0 sm:border border-stone-200/80 rounded-xl sm:rounded-2xl bg-white overflow-hidden shadow-none sm:shadow-2xs">
           {/* Facility Info Header Banner */}
           <div className="bg-teal-800/5 p-4 sm:p-5 border-b border-stone-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div className="flex items-center gap-3.5 sm:gap-4 w-full sm:w-auto min-w-0">
@@ -493,7 +493,7 @@ export function MedicalFacilitiesTab({
           </div>
 
           {/* Active Panel Content */}
-          <div className="min-h-[220px]">
+          <div className="pt-6 sm:pt-9 min-h-[220px]">
             {activeTab === 'overview' && (
               <MedicalOverviewTab
                 business={selectedFacility}

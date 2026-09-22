@@ -138,7 +138,7 @@ export function WorkingHoursEditor({
   const isOvernight = closeH < openH;
 
   return (
-    <div className="bg-white border border-stone-200/90 rounded-3xl p-4 sm:p-6 space-y-6 shadow-xs" dir="rtl">
+    <div className="bg-white border-0 sm:border border-stone-200/90 rounded-xl sm:rounded-3xl p-3 sm:p-6 space-y-4 sm:space-y-6 shadow-none sm:shadow-xs" dir="rtl">
       {/* 1. Header & Live Simulator Badge */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-stone-100">
         <div className="flex items-center gap-3">

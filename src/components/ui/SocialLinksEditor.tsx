@@ -21,7 +21,7 @@ const PLATFORMS = [
 
 export function SocialLinksEditor({ socialLinks, onChange }: Props) {
   return (
-    <div className="bg-stone-50 border border-stone-200 rounded-2xl p-4.5 space-y-4">
+    <div className="bg-stone-50 border-0 sm:border border-stone-200 rounded-xl sm:rounded-2xl p-3 sm:p-4.5 space-y-4 shadow-none sm:shadow-2xs">
       <h4 className="font-bold text-stone-800">روابط التواصل الاجتماعي (اختياري)</h4>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {PLATFORMS.map((platform) => {

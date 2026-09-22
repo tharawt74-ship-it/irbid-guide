@@ -288,9 +288,9 @@ export function SupervisorsManager() {
 
       {/* Add Supervisor Modal */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95" dir="rtl">
-            <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+        <div className="fixed inset-0 z-[100000] bg-black/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 my-auto max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3rem)] flex flex-col overflow-hidden" dir="rtl">
+            <div className="flex items-center justify-between border-b border-stone-100 pb-3 shrink-0">
               <div className="flex items-center gap-2">
                 <ShieldCheck className="h-5 w-5 text-[#1a4d2e]" />
                 <h4 className="font-black text-stone-900 text-base">تعيين مشرف جديد</h4>
@@ -298,13 +298,13 @@ export function SupervisorsManager() {
               <button 
                 type="button" 
                 onClick={() => setIsAddModalOpen(false)}
-                className="p-1.5 text-stone-400 hover:text-stone-700 rounded-xl hover:bg-stone-100"
+                className="p-1.5 text-stone-400 hover:text-stone-700 rounded-xl hover:bg-stone-100 transition-colors"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            <form onSubmit={handleAddSupervisor} className="space-y-4">
+            <form onSubmit={handleAddSupervisor} className="space-y-4 overflow-y-auto flex-1 my-2 pr-1">
               <div className="space-y-1">
                 <label className="block text-xs font-bold text-stone-700">اسم المشرف الثلاثي:</label>
                 <input

@@ -224,32 +224,32 @@ export function Pricing() {
       {/* Header / Hero */}
       <div className="text-center space-y-5 max-w-3xl mx-auto pt-4 px-4">
         {/* Top 2 Tabs Selector */}
-        <div className="flex justify-center pb-2">
-          <div className="bg-stone-100/95 p-1.5 rounded-2xl sm:rounded-3xl inline-flex items-center gap-1.5 border border-stone-200/80 shadow-xs max-w-full">
+        <div className="flex justify-center pb-2 w-full">
+          <div className="bg-stone-100/95 p-1.5 rounded-2xl sm:rounded-3xl border border-stone-200/80 shadow-xs w-full max-w-lg sm:w-auto grid grid-cols-2 gap-1.5 sm:flex sm:items-center">
             <button
               type="button"
               onClick={() => handleTabChange('commercial')}
-              className={`px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-black transition-all flex items-center gap-2 cursor-pointer shrink-0 ${
+              className={`py-3 px-2 sm:px-6 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer w-full text-center ${
                 sectorTab === 'commercial'
                   ? 'bg-white text-stone-900 shadow-sm border border-stone-200/60'
-                  : 'text-stone-500 hover:text-stone-800 hover:bg-stone-200/50'
+                  : 'text-stone-600 hover:text-stone-900 hover:bg-stone-200/50'
               }`}
             >
-              <Store className={`h-4 w-4 ${sectorTab === 'commercial' ? 'text-[#1a4d2e]' : 'text-stone-400'}`} />
-              <span>المحلات والأنشطة التجارية</span>
+              <Store className={`h-4 w-4 shrink-0 ${sectorTab === 'commercial' ? 'text-[#1a4d2e]' : 'text-stone-400'}`} />
+              <span className="leading-tight">المحلات والأنشطة التجارية</span>
             </button>
 
             <button
               type="button"
               onClick={() => handleTabChange('medical')}
-              className={`px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-black transition-all flex items-center gap-2 cursor-pointer shrink-0 ${
+              className={`py-3 px-2 sm:px-6 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer w-full text-center ${
                 sectorTab === 'medical'
                   ? 'bg-[#1a4d2e] text-white shadow-md'
                   : 'text-stone-600 hover:text-stone-900 hover:bg-stone-200/50'
               }`}
             >
-              <Stethoscope className={`h-4 w-4 ${sectorTab === 'medical' ? 'text-emerald-300' : 'text-emerald-600'}`} />
-              <span>المنشآت والمراكز الطبية</span>
+              <Stethoscope className={`h-4 w-4 shrink-0 ${sectorTab === 'medical' ? 'text-emerald-300' : 'text-emerald-600'}`} />
+              <span className="leading-tight">المنشآت والمراكز الطبية</span>
             </button>
           </div>
         </div>
@@ -287,12 +287,12 @@ export function Pricing() {
         )}
 
         {/* Psychological Billing Toggle */}
-        <div className="pt-4 flex justify-center">
-          <div className="bg-stone-100 p-1.5 rounded-2xl inline-flex items-center gap-1 border border-stone-200">
+        <div className="pt-3 flex justify-center w-full">
+          <div className="bg-stone-100 p-1.5 rounded-2xl w-full max-w-xs sm:w-auto grid grid-cols-2 gap-1 border border-stone-200">
             <button
               type="button"
               onClick={() => setBillingCycle('monthly')}
-              className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
+              className={`py-2 px-3 rounded-xl text-xs font-black transition-all cursor-pointer text-center ${
                 billingCycle === 'monthly'
                   ? 'bg-white text-stone-800 shadow-sm'
                   : 'text-stone-500 hover:text-stone-800'
@@ -303,14 +303,14 @@ export function Pricing() {
             <button
               type="button"
               onClick={() => setBillingCycle('yearly')}
-              className={`relative px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
+              className={`relative py-2 px-3 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                 billingCycle === 'yearly'
                   ? 'bg-[#1a4d2e] text-white shadow-md'
                   : 'text-[#1a4d2e] hover:bg-stone-200'
               }`}
             >
               <span>الدفع السنوي</span>
-              <span className="bg-amber-400 text-[#2d2a26] text-[9px] px-1.5 py-0.5 rounded-full font-black animate-pulse">
+              <span className="bg-amber-400 text-[#2d2a26] text-[9px] px-1.5 py-0.5 rounded-full font-black animate-pulse whitespace-nowrap">
                 وفر 48% 🔥
               </span>
             </button>

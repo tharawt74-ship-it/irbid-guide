@@ -200,19 +200,11 @@ export function Tourism() {
           items.push({ id: d.id, ...data } as TourismSpot);
         });
 
-        if (items.length === 0 && appConfig.showDemoData) {
-          // Seed the static spots into Firestore
-          for (const spot of SEED_TOURISM_SPOTS) {
-            const docRef = doc(collection(db, 'tourism'), spot.id);
-            await setDoc(docRef, { ...spot, isDemo: true });
-          }
-          setSpots(SEED_TOURISM_SPOTS);
-        } else {
-          setSpots(items);
-        }
+        // Respect Firestore state without auto-seeding
+        setSpots(items);
       } catch (err) {
         console.error("Error loading tourism spots:", err);
-        setSpots(SEED_TOURISM_SPOTS);
+        setSpots([]);
       } finally {
         setLoading(false);
       }

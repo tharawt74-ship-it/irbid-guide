@@ -496,23 +496,23 @@ export function AdminSubscriptionsManager({
           {/* Sub-tab 1: المحلات */}
           <button
             onClick={() => setActiveSector('shops')}
-            className={`flex items-center justify-center gap-2.5 py-3.5 px-4 rounded-xl text-sm font-black transition-all cursor-pointer ${
+            className={`flex flex-wrap sm:flex-nowrap items-center justify-center gap-1.5 sm:gap-2.5 py-3 px-2 sm:px-4 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer ${
               activeSector === 'shops'
                 ? 'bg-[#1a4d2e] text-white shadow-md'
                 : 'text-stone-600 hover:bg-stone-100 hover:text-stone-900 bg-stone-50/60'
             }`}
           >
-            <Store className={`h-4.5 w-4.5 ${activeSector === 'shops' ? 'text-[#ff9f1c]' : 'text-stone-400'}`} />
-            <span>المحلات والأنشطة التجارية</span>
+            <Store className={`h-4 w-4 sm:h-4.5 sm:w-4.5 shrink-0 ${activeSector === 'shops' ? 'text-[#ff9f1c]' : 'text-stone-400'}`} />
+            <span className="text-center leading-tight">المحلات والأنشطة التجارية</span>
             <span
-              className={`text-xs px-2 py-0.5 rounded-full font-sans ${
+              className={`text-[10px] sm:text-xs px-1.5 py-0.5 rounded-full font-sans shrink-0 ${
                 activeSector === 'shops' ? 'bg-white/20 text-white' : 'bg-stone-200 text-stone-700'
               }`}
             >
               {commercialShops.length}
             </span>
             {shopUpgradeRequests.filter((r) => r.status === 'pending').length > 0 && (
-              <span className="bg-amber-500 text-stone-950 text-[10px] px-2 py-0.5 rounded-full font-black animate-pulse">
+              <span className="bg-amber-500 text-stone-950 text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded-full font-black animate-pulse shrink-0">
                 {shopUpgradeRequests.filter((r) => r.status === 'pending').length} ترقية
               </span>
             )}
@@ -521,23 +521,23 @@ export function AdminSubscriptionsManager({
           {/* Sub-tab 2: المنشآت الطبية */}
           <button
             onClick={() => setActiveSector('medical')}
-            className={`flex items-center justify-center gap-2.5 py-3.5 px-4 rounded-xl text-sm font-black transition-all cursor-pointer ${
+            className={`flex flex-wrap sm:flex-nowrap items-center justify-center gap-1.5 sm:gap-2.5 py-3 px-2 sm:px-4 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer ${
               activeSector === 'medical'
                 ? 'bg-[#1a4d2e] text-white shadow-md'
                 : 'text-stone-600 hover:bg-stone-100 hover:text-stone-900 bg-stone-50/60'
             }`}
           >
-            <Stethoscope className={`h-4.5 w-4.5 ${activeSector === 'medical' ? 'text-[#ff9f1c]' : 'text-stone-400'}`} />
-            <span>المنشآت والمراكز الطبية</span>
+            <Stethoscope className={`h-4 w-4 sm:h-4.5 sm:w-4.5 shrink-0 ${activeSector === 'medical' ? 'text-[#ff9f1c]' : 'text-stone-400'}`} />
+            <span className="text-center leading-tight">المنشآت والمراكز الطبية</span>
             <span
-              className={`text-xs px-2 py-0.5 rounded-full font-sans ${
+              className={`text-[10px] sm:text-xs px-1.5 py-0.5 rounded-full font-sans shrink-0 ${
                 activeSector === 'medical' ? 'bg-white/20 text-white' : 'bg-stone-200 text-stone-700'
               }`}
             >
               {medicalFacilities.length}
             </span>
             {medicalUpgradeRequests.filter((r) => r.status === 'pending').length > 0 && (
-              <span className="bg-amber-500 text-stone-950 text-[10px] px-2 py-0.5 rounded-full font-black animate-pulse">
+              <span className="bg-amber-500 text-stone-950 text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded-full font-black animate-pulse shrink-0">
                 {medicalUpgradeRequests.filter((r) => r.status === 'pending').length} ترقية
               </span>
             )}

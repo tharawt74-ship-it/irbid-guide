@@ -507,7 +507,7 @@ export function Home() {
       
 
       {/* Hero Section - Premium Level */}
-      <div className="w-full bg-[#0f3820] rounded-2xl md:rounded-[32px] py-10 md:py-20 px-4 sm:p-6 md:p-16 text-white flex flex-col items-center text-center relative overflow-hidden shadow-2xl shadow-[#1a4d2e]/20 min-h-[350px] md:min-h-[500px] justify-center">
+      <div className="w-full max-w-full bg-[#0f3820] rounded-2xl md:rounded-[32px] py-10 md:py-20 px-4 sm:p-6 md:p-16 text-white flex flex-col items-center text-center relative overflow-hidden shadow-2xl shadow-[#1a4d2e]/20 min-h-[350px] md:min-h-[500px] justify-center box-border">
         
         {/* Animated Mesh Gradient Background */}
         <div className="absolute inset-0 bg-gradient-to-br from-[#1a4d2e] via-[#0f3820] to-[#0a2414] z-0"></div>
@@ -540,7 +540,7 @@ export function Home() {
           <ShoppingCart className="h-10 w-10 text-emerald-300 -rotate-12" />
         </div>
         
-        <div className="relative z-10 w-full max-w-3xl mx-auto space-y-4 md:space-y-6">
+        <div className="relative z-10 w-full max-w-3xl mx-auto min-w-0 space-y-4 md:space-y-6">
           {/* Gradient Typography Heading */}
           <h1 className="text-3xl sm:text-5xl md:text-7xl font-black text-white tracking-tight leading-tight drop-shadow-lg">
             شو في ب{"\u200D"}<span className="text-[#ff9f1c] inline-block pb-1">{"\u200D"}إربد؟</span>
@@ -558,7 +558,7 @@ export function Home() {
                 navigate(`/search?q=${encodeURIComponent(searchTerm.trim())}`);
               }
             }}
-            className="mt-6 md:mt-10 w-full max-w-2xl mx-auto relative group"
+            className="mt-6 md:mt-10 w-full max-w-2xl mx-auto min-w-0 relative group"
           >
             <input
               type="text"

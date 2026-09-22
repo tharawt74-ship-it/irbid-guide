@@ -27,6 +27,7 @@ import { WorkingHoursEditor } from '../ui/WorkingHoursEditor';
 import { SocialLinksEditor } from '../ui/SocialLinksEditor';
 import { ImageUploader } from '../ui/ImageUploader';
 import { RichTextEditor } from '../common/RichTextEditor';
+import { PaymentMethodsSelector } from '../ui/PaymentMethodsSelector';
 
 interface BusinessEditModalProps {
   isOpen: boolean;
@@ -300,16 +301,6 @@ export function BusinessEditModal({
             </div>
           </div>
 
-          {/* Description */}
-          <div>
-            <label className="block text-xs font-black text-stone-700 mb-1.5">الوصف والخدمات المقدمة</label>
-            <RichTextEditor
-              value={formData.description || ''}
-              onChange={val => setFormData({ ...formData, description: val })}
-              placeholder="اكتب نبذة تعريفية شاملة ومُنسقة عن المحل..."
-            />
-          </div>
-
           {/* Address & District & Phone */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
@@ -384,6 +375,23 @@ export function BusinessEditModal({
             />
           </div>
 
+          {/* Description */}
+          <div>
+            <label className="block text-xs font-black text-stone-700 mb-1.5">نبذة تعريفية عن المكان وما يقدمه لزبائنه *</label>
+            <RichTextEditor
+              value={formData.description || ''}
+              onChange={val => setFormData({ ...formData, description: val })}
+              placeholder="اكتب نبذة تعريفية شاملة ومُنسقة عن المحل..."
+            />
+          </div>
+
+          {/* Payment Methods */}
+          <PaymentMethodsSelector
+            value={formData.paymentMethods || business?.paymentMethods || business?.medicalProfile?.paymentMethods || ['كاش', 'فيزا', 'كليك']}
+            onChange={m => setFormData({ ...formData, paymentMethods: m })}
+            className="bg-stone-50 p-4 rounded-2xl border border-stone-200"
+          />
+
           {/* Live Working Hours Section (For all packages) */}
           <WorkingHoursEditor
             workingHours={workingHours}
@@ -438,7 +446,7 @@ export function BusinessEditModal({
                     onChange={e => setFormData({ ...formData, isVerified: e.target.checked })}
                     className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500"
                   />
-                  <span>تفعيل "العلامة الزرقاء" للحساب الموثّق (فيسبوك وX) 🔵</span>
+                  <span>تفعيل "العلامة الزرقاء" للحساب الموثّق المعتمد 🔵</span>
                 </label>
               </div>
             </div>

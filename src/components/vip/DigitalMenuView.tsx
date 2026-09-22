@@ -534,9 +534,9 @@ export function DigitalMenuView({
 
                     {item.imageUrl ? (
                       <div 
-                        onClick={() => setLightboxItem(item)}
+                        onClick={() => handleOpenVersionModal(item)}
                         className="w-full h-full cursor-pointer relative group/img"
-                        title="انقر لمعاينة الصورة كاملة"
+                        title="انقر لتخصيص ومعاينة التفاصيل"
                       >
                         <img
                           referrerPolicy="no-referrer"
@@ -549,7 +549,11 @@ export function DigitalMenuView({
                         </div>
                       </div>
                     ) : (
-                      <div className="w-full h-full bg-amber-50/60 text-amber-700 flex items-center justify-center border-b border-amber-100 relative overflow-hidden">
+                      <div 
+                        onClick={() => handleOpenVersionModal(item)}
+                        className="w-full h-full bg-amber-50/60 text-amber-700 flex items-center justify-center border-b border-amber-100 relative overflow-hidden cursor-pointer"
+                        title="انقر للتفاصيل"
+                      >
                         {theme.cartIconType === 'home' ? (
                           <Home className="h-6 w-6 sm:h-8 sm:w-8 text-amber-600/40" />
                         ) : theme.cartIconType === 'medical' ? (
@@ -575,7 +579,11 @@ export function DigitalMenuView({
                   <div className="p-3 sm:p-4 flex-1 flex flex-col justify-between space-y-2 min-w-0">
                     <div className="space-y-1">
                       <div className="flex items-center justify-between gap-1">
-                        <h3 className="text-sm sm:text-base font-extrabold text-stone-900 lg:font-bold line-clamp-1 leading-snug group-hover:text-amber-950">
+                        <h3 
+                          onClick={() => handleOpenVersionModal(item)}
+                          className="text-sm sm:text-base font-extrabold text-stone-900 lg:font-bold line-clamp-1 leading-snug group-hover:text-amber-950 cursor-pointer"
+                          title="انقر لتخصيص ومعاينة التفاصيل"
+                        >
                           {item.name}
                         </h3>
                       </div>
@@ -601,14 +609,6 @@ export function DigitalMenuView({
                         </div>
                       )}
 
-                      {discount && (
-                        <div className="flex flex-wrap items-center gap-1">
-                          <span className="text-[9px] sm:text-xs text-stone-400 font-bold line-through">
-                            {discount.originalPrice} د.أ
-                          </span>
-                        </div>
-                      )}
-
                       {item.description && (
                         <p className="text-[11px] sm:text-xs text-stone-500/90 line-clamp-2 leading-relaxed pt-0.5">
                           {item.description}
@@ -628,22 +628,29 @@ export function DigitalMenuView({
 
                     {/* Footer Actions */}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-1 pt-2 border-t border-dashed border-stone-100 mt-auto">
-                      <div className="text-[11px] sm:text-sm font-black text-amber-950 whitespace-nowrap bg-amber-50/90 px-2 py-1 sm:px-2.5 sm:py-1 rounded-lg border border-amber-200/40 shadow-3xs text-center w-full sm:w-auto">
-                        {(() => {
-                          const priceInfo = getMenuItemDisplayPrice(item);
-                          if (priceInfo.isStartingPrice) {
+                      <div className="flex items-center justify-center sm:justify-start gap-1.5 flex-wrap w-full sm:w-auto">
+                        <div className="text-xs sm:text-sm font-black text-[#1a4d2e] whitespace-nowrap">
+                          {(() => {
+                            const priceInfo = getMenuItemDisplayPrice(item);
+                            if (priceInfo.isStartingPrice) {
+                              return (
+                                <span className="text-[11px] sm:text-xs text-stone-700">
+                                  يبدأ من <span className="font-mono text-xs sm:text-sm font-black text-[#1a4d2e]">{priceInfo.formattedPrice}</span> د.أ
+                                </span>
+                              );
+                            }
                             return (
-                              <span className="text-[10px] sm:text-xs">
-                                يبدأ من <span className="font-mono text-[11px] sm:text-sm font-black">{priceInfo.formattedPrice}</span> د.أ
-                              </span>
+                              <>
+                                <span className="font-mono text-xs sm:text-sm font-black text-[#1a4d2e]">{priceInfo.formattedPrice}</span> <span className="text-[10px] font-bold text-stone-600">د.أ</span>
+                              </>
                             );
-                          }
-                          return (
-                            <>
-                              <span className="font-mono text-[11px] sm:text-sm font-black">{priceInfo.formattedPrice}</span> <span className="text-[9px] font-normal">د.أ</span>
-                            </>
-                          );
-                        })()}
+                          })()}
+                        </div>
+                        {discount && (
+                          <span className="text-[10px] sm:text-xs text-stone-400 font-bold line-through whitespace-nowrap">
+                            {discount.originalPrice} د.أ
+                          </span>
+                        )}
                       </div>
 
                       {(item.isAvailable !== false && (!item.trackStock || (item.stockCount !== undefined && item.stockCount > 0))) ? (
@@ -709,13 +716,11 @@ export function DigitalMenuView({
               >
                 {/* Fixed Image Thumbnail (Order-1 in RTL means Right Side) */}
                 <div className="relative w-20 h-20 sm:w-28 sm:h-28 rounded-xl bg-stone-100 overflow-hidden shrink-0 select-none">
-                  {renderPremiumBadge(item)}
-
                   {item.imageUrl ? (
                     <div 
-                      onClick={() => setLightboxItem(item)}
+                      onClick={() => handleOpenVersionModal(item)}
                       className="w-full h-full cursor-pointer relative group/img"
-                      title="انقر لمعاينة الصورة كاملة"
+                      title="انقر لتخصيص ومعاينة التفاصيل"
                     >
                       <img
                         referrerPolicy="no-referrer"
@@ -728,7 +733,11 @@ export function DigitalMenuView({
                       </div>
                     </div>
                   ) : (
-                    <div className="w-full h-full bg-amber-50/60 text-amber-700 flex items-center justify-center relative overflow-hidden">
+                    <div 
+                      onClick={() => handleOpenVersionModal(item)}
+                      className="w-full h-full bg-amber-50/60 text-amber-700 flex items-center justify-center relative overflow-hidden cursor-pointer"
+                      title="انقر للتفاصيل"
+                    >
                       {theme.cartIconType === 'home' ? (
                         <Home className="h-6 w-6 sm:h-7 sm:w-7 text-amber-600/40" />
                       ) : theme.cartIconType === 'medical' ? (
@@ -742,44 +751,92 @@ export function DigitalMenuView({
                       )}
                     </div>
                   )}
-
-                  {discount && (
-                    <div className="absolute bottom-1.5 left-1.5 bg-rose-600 text-white text-[8px] sm:text-[10px] font-black px-1.5 py-0.5 rounded shadow-xs z-10 whitespace-nowrap">
-                      %{discount.discountPercent}-
-                    </div>
-                  )}
                 </div>
 
                 {/* Content Block */}
                 <div className="flex-1 min-w-0 flex flex-col justify-between self-stretch py-0.5 space-y-1">
                   <div>
+                    {/* Item Name */}
                     <div className="flex items-center justify-between gap-2">
-                      <h3 className="text-sm sm:text-base font-extrabold text-stone-900 lg:font-bold line-clamp-1 group-hover:text-amber-950">
+                      <h3 
+                        onClick={() => handleOpenVersionModal(item)}
+                        className="text-sm sm:text-base font-extrabold text-stone-900 lg:font-bold line-clamp-1 group-hover:text-amber-950 cursor-pointer"
+                        title="انقر لتخصيص ومعاينة التفاصيل"
+                      >
                         {item.name}
                       </h3>
                     </div>
 
-                    {item.trackStock && (
-                      <div className="flex items-center gap-1.5 pt-0.5 pb-1">
-                        {item.stockCount === 0 ? (
-                          <span className="inline-flex items-center gap-1 text-[9px] sm:text-[10px] font-black bg-rose-50 text-rose-800 border border-rose-100 px-2 py-0.5 rounded-full select-none">
-                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
-                            <span>نفدت الكمية 🚫</span>
-                          </span>
-                        ) : item.stockCount !== undefined && item.stockCount <= 5 ? (
-                          <span className="inline-flex items-center gap-1 text-[9px] sm:text-[10px] font-black bg-amber-50 text-amber-800 border border-amber-100 px-2 py-0.5 rounded-full select-none">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                            <span>متبقي {item.stockCount} قطع فقط! ⚠️</span>
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-[9px] sm:text-[10px] font-black bg-emerald-50 text-emerald-800 border border-emerald-100 px-2 py-0.5 rounded-full select-none">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                            <span>متوفر بالمخزن ({item.stockCount})</span>
-                          </span>
-                        )}
-                      </div>
-                    )}
+                    {/* Badges Container (Placed between Name at top & Description at bottom) */}
+                    <div className="flex flex-wrap items-center gap-1.5 pt-1 pb-0.5">
+                      {/* Popular / Special Badge */}
+                      {(() => {
+                        if (isMedical) return null;
+                        const badgeType = item.badge || (item.isPopular ? 'popular' : 'none');
+                        if (badgeType === 'popular') {
+                          return (
+                            <span className="inline-flex items-center gap-1 bg-gradient-to-r from-amber-500 to-amber-600 text-white text-[9px] sm:text-[10px] font-black px-2 py-0.5 rounded-md shadow-2xs whitespace-nowrap select-none">
+                              <Flame className="h-2.5 w-2.5 sm:h-3 sm:w-3 fill-current animate-pulse shrink-0" />
+                              <span>{theme.badges.popular}</span>
+                            </span>
+                          );
+                        }
+                        if (badgeType === 'new') {
+                          return (
+                            <span className="inline-flex items-center gap-1 bg-gradient-to-r from-sky-500 to-indigo-600 text-white text-[9px] sm:text-[10px] font-black px-2 py-0.5 rounded-md shadow-2xs whitespace-nowrap select-none">
+                              <Sparkles className="h-2.5 w-2.5 sm:h-3 sm:w-3 animate-pulse shrink-0" />
+                              <span>{theme.badges.new}</span>
+                            </span>
+                          );
+                        }
+                        if (badgeType === 'spicy') {
+                          return (
+                            <span className="inline-flex items-center gap-1 bg-gradient-to-r from-red-500 to-rose-600 text-white text-[9px] sm:text-[10px] font-black px-2 py-0.5 rounded-md shadow-2xs whitespace-nowrap select-none">
+                              <span>{theme.badges.spicyOrFeatured}</span>
+                            </span>
+                          );
+                        }
+                        if (badgeType === 'vegetarian') {
+                          return (
+                            <span className="inline-flex items-center gap-1 bg-gradient-to-r from-emerald-500 to-green-600 text-white text-[9px] sm:text-[10px] font-black px-2 py-0.5 rounded-md shadow-2xs whitespace-nowrap select-none">
+                              <span>{theme.badges.vegetarianOrPromo}</span>
+                            </span>
+                          );
+                        }
+                        return null;
+                      })()}
 
+                      {/* Discount Percentage Badge */}
+                      {discount && (
+                        <span className="inline-flex items-center gap-1 bg-rose-600 text-white text-[9px] sm:text-[10px] font-black px-2 py-0.5 rounded-md shadow-2xs whitespace-nowrap select-none">
+                          خصم %{discount.discountPercent}
+                        </span>
+                      )}
+
+                      {/* Stock Status Badge */}
+                      {item.trackStock && (
+                        <>
+                          {item.stockCount === 0 ? (
+                            <span className="inline-flex items-center gap-1 text-[9px] sm:text-[10px] font-black bg-rose-50 text-rose-800 border border-rose-100 px-2 py-0.5 rounded-md select-none">
+                              <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+                              <span>نفدت الكمية 🚫</span>
+                            </span>
+                          ) : item.stockCount !== undefined && item.stockCount <= 5 ? (
+                            <span className="inline-flex items-center gap-1 text-[9px] sm:text-[10px] font-black bg-amber-50 text-amber-800 border border-amber-100 px-2 py-0.5 rounded-md select-none">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                              <span>متبقي {item.stockCount} قطع فقط! ⚠️</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[9px] sm:text-[10px] font-black bg-emerald-50 text-emerald-800 border border-emerald-100 px-2 py-0.5 rounded-md select-none">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                              <span>متوفر بالمخزن ({item.stockCount})</span>
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </div>
+
+                    {/* Item Description (from bottom of badges) */}
                     {item.description && (
                       <p className="text-[11px] sm:text-xs text-stone-500/90 line-clamp-2 leading-relaxed pt-0.5">
                         {item.description}
@@ -800,25 +857,25 @@ export function DigitalMenuView({
                   {/* Footer Row */}
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1.5 border-t border-dashed border-stone-100/80 mt-auto">
                     <div className="flex items-center gap-1.5 justify-center sm:justify-start w-full sm:w-auto">
-                      <div className="text-[11px] sm:text-sm font-black text-amber-950 whitespace-nowrap bg-amber-50/80 px-2 py-1 rounded-lg border border-amber-200/50 shadow-3xs text-center">
+                      <div className="text-xs sm:text-sm font-black text-[#1a4d2e] whitespace-nowrap">
                         {(() => {
                           const priceInfo = getMenuItemDisplayPrice(item);
                           if (priceInfo.isStartingPrice) {
                             return (
-                              <span className="text-[10px] sm:text-xs">
-                                يبدأ من <span className="font-mono text-[11px] sm:text-sm font-black">{priceInfo.formattedPrice}</span> د.أ
+                              <span className="text-[11px] sm:text-xs text-stone-700">
+                                يبدأ من <span className="font-mono text-xs sm:text-sm font-black text-[#1a4d2e]">{priceInfo.formattedPrice}</span> د.أ
                               </span>
                             );
                           }
                           return (
                             <>
-                              <span className="font-mono text-[11px] sm:text-sm font-black">{priceInfo.formattedPrice}</span> <span className="text-[9px] font-normal">د.أ</span>
+                              <span className="font-mono text-xs sm:text-sm font-black text-[#1a4d2e]">{priceInfo.formattedPrice}</span> <span className="text-[10px] font-bold text-stone-600">د.أ</span>
                             </>
                           );
                         })()}
                       </div>
                       {discount && (
-                        <span className="text-[9px] sm:text-xs text-stone-400 font-bold line-through">
+                        <span className="text-[10px] sm:text-xs text-stone-400 font-bold line-through whitespace-nowrap">
                           {discount.originalPrice} د.أ
                         </span>
                       )}
@@ -1060,56 +1117,97 @@ export function DigitalMenuView({
                 className="bg-white rounded-t-3xl sm:rounded-3xl overflow-hidden max-w-lg w-full shadow-2xl relative border border-stone-100 max-h-[88vh] flex flex-col"
                 onClick={(e) => e.stopPropagation()}
               >
-                {/* Header */}
-                <div className="p-4 sm:p-5 border-b border-stone-100 flex items-center justify-between gap-3 bg-stone-50/70">
-                  <div className="flex items-center gap-3 min-w-0">
-                    {selectedItemForVersions.imageUrl ? (
-                      <img 
-                        src={selectedItemForVersions.imageUrl} 
-                        alt="" 
-                        className="w-12 h-12 rounded-xl object-cover shrink-0 border border-stone-200/80" 
-                      />
-                    ) : (
-                      <div className="w-12 h-12 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
-                        <Layers className="h-6 w-6" />
-                      </div>
-                    )}
-                    <div className="min-w-0">
-                      <h3 className="text-base sm:text-lg font-black text-stone-900 truncate">
-                        {selectedItemForVersions.name}
-                      </h3>
-                      <p className="text-xs text-stone-500 font-medium">
-                        السعر الأساسي: <span className="font-mono font-bold text-[#1a4d2e]">{selectedItemForVersions.price} د.أ</span>
-                      </p>
+                {/* Wide Top Banner Image */}
+                <div className="relative w-full h-48 sm:h-56 bg-stone-100 overflow-hidden shrink-0">
+                  {selectedItemForVersions.imageUrl ? (
+                    <img
+                      referrerPolicy="no-referrer"
+                      src={selectedItemForVersions.imageUrl}
+                      alt={selectedItemForVersions.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-amber-50/80 text-amber-700 flex items-center justify-center relative">
+                      {theme.cartIconType === 'home' ? (
+                        <Home className="h-12 w-12 text-amber-600/40" />
+                      ) : theme.cartIconType === 'medical' ? (
+                        <Activity className="h-12 w-12 text-amber-600/40" />
+                      ) : theme.cartIconType === 'edu' ? (
+                        <GraduationCap className="h-12 w-12 text-amber-600/40" />
+                      ) : theme.cartIconType === 'wrench' ? (
+                        <Wrench className="h-12 w-12 text-amber-600/40" />
+                      ) : (
+                        <UtensilsCrossed className="h-12 w-12 text-amber-600/40" />
+                      )}
                     </div>
-                  </div>
+                  )}
 
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+
+                  {/* Badges on Top */}
+                  {renderPremiumBadge(selectedItemForVersions)}
+
+                  {/* Close Button */}
                   <button
                     type="button"
                     onClick={() => setSelectedItemForVersions(null)}
-                    className="w-9 h-9 rounded-full bg-white hover:bg-stone-200 text-stone-600 flex items-center justify-center transition-colors cursor-pointer border border-stone-200 shrink-0"
+                    className="absolute top-3 left-3 w-9 h-9 bg-black/60 hover:bg-black/80 text-white rounded-full flex items-center justify-center transition-all z-20 cursor-pointer shadow-md"
+                    title="إغلاق"
                   >
                     <X className="h-4 w-4" />
                   </button>
+
+                  {/* Header Title Overlay */}
+                  <div className="absolute bottom-3 inset-x-4 flex items-end justify-between gap-2 text-white">
+                    <div className="min-w-0">
+                      <h3 className="text-lg sm:text-xl font-black drop-shadow-md truncate text-white">
+                        {selectedItemForVersions.name}
+                      </h3>
+                      {selectedItemForVersions.category && (
+                        <span className="text-[11px] font-bold text-white/80 drop-shadow-xs block">
+                          {selectedItemForVersions.category}
+                        </span>
+                      )}
+                    </div>
+                    <div className="bg-white/95 text-stone-900 px-3 py-1 rounded-xl text-xs sm:text-sm font-black shadow-md shrink-0">
+                      {selectedItemForVersions.price} د.أ
+                    </div>
+                  </div>
                 </div>
 
-                {/* Body: Versions options list */}
+                {/* Body: Item details & Version options */}
                 <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1">
                   {selectedItemForVersions.description && (
-                    <p className="text-xs text-stone-600 leading-relaxed bg-stone-50 p-3 rounded-xl border border-stone-100">
+                    <p className="text-xs sm:text-sm text-stone-600 leading-relaxed bg-stone-50 p-3 rounded-xl border border-stone-100">
                       {selectedItemForVersions.description}
                     </p>
                   )}
 
-                  <div className="space-y-2">
-                    <label className="text-xs font-black text-stone-800 flex items-center gap-1.5">
-                      <Layers className="h-4 w-4 text-amber-600" />
-                      <span>
-                        {selectedItemForVersions.versionType === 'addons' 
-                          ? 'اختر الإضافة أو الخيار المطلوب (اختياري):' 
-                          : 'اختر الحجم أو المقاس المطلوب:'}
-                      </span>
-                    </label>
+                  {/* Options tags if present */}
+                  {selectedItemForVersions.options && selectedItemForVersions.options.length > 0 && (
+                    <div className="space-y-1.5">
+                      <span className="text-xs font-black text-stone-800">التفاصيل والخيارات المتاحة:</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {selectedItemForVersions.options.map((opt, idx) => (
+                          <span key={idx} className="text-xs bg-amber-50 border border-amber-200/80 text-amber-950 px-2.5 py-1 rounded-lg font-bold">
+                            {opt}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Versions / Sizes selection if item has versions */}
+                  {selectedItemForVersions.versions && selectedItemForVersions.versions.length > 0 && (
+                    <div className="space-y-2">
+                      <label className="text-xs font-black text-stone-800 flex items-center gap-1.5">
+                        <Layers className="h-4 w-4 text-amber-600" />
+                        <span>
+                          {selectedItemForVersions.versionType === 'addons' 
+                            ? 'اختر الإضافة أو الخيار المطلوب (اختياري):' 
+                            : 'اختر الحجم أو المقاس المطلوب:'}
+                        </span>
+                      </label>
 
                     <div className="space-y-2">
                       {/* Default Base Item option - Only shown if versionType is 'addons' */}
@@ -1199,6 +1297,7 @@ export function DigitalMenuView({
                       })}
                     </div>
                   </div>
+                )}
 
                   {/* Quantity Selector */}
                   <div className="flex items-center justify-between p-3 bg-stone-50 rounded-2xl border border-stone-200">

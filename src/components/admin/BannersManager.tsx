@@ -509,10 +509,10 @@ export function BannersManager({ showToast }: BannersManagerProps) {
 
       {/* MODAL FORM: ADD / EDIT BANNER */}
       {isFormOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs overflow-y-auto" dir="rtl">
-          <div className="bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl border border-stone-200 animate-in fade-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-[100000] flex items-center justify-center p-3 sm:p-6 bg-stone-900/70 backdrop-blur-sm overflow-y-auto" dir="rtl">
+          <div className="bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl border border-stone-200 animate-in fade-in zoom-in-95 duration-200 my-auto max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3rem)] flex flex-col">
             {/* Modal Header */}
-            <div className="p-5 border-b border-stone-100 flex items-center justify-between bg-stone-50">
+            <div className="p-4 sm:p-5 border-b border-stone-100 flex items-center justify-between bg-stone-50 shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 bg-[#1a4d2e] text-white rounded-xl">
                   <Megaphone className="h-5 w-5" />

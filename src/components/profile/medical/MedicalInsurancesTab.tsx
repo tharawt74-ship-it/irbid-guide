@@ -98,7 +98,7 @@ export function MedicalInsurancesTab({
   };
 
   return (
-    <form onSubmit={handleSave} className="p-4 sm:p-6 space-y-6 text-right" dir="rtl">
+    <form onSubmit={handleSave} className="p-2 sm:p-6 space-y-4 sm:space-y-6 text-right" dir="rtl">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-stone-200">
         <div>
           <h3 className="text-base font-black text-[#2d2a26] flex items-center gap-2">
@@ -120,7 +120,7 @@ export function MedicalInsurancesTab({
       </div>
 
       {/* Direct Billing Toggle */}
-      <div className="bg-teal-50/60 border border-teal-200/80 p-4 rounded-2xl flex items-center justify-between flex-wrap gap-3">
+      <div className="bg-teal-50/60 border-0 sm:border border-teal-200/80 p-3.5 sm:p-4 rounded-xl sm:rounded-2xl flex items-center justify-between flex-wrap gap-3 shadow-none sm:shadow-2xs">
         <div className="space-y-0.5">
           <span className="text-xs font-black text-teal-950 flex items-center gap-1.5">
             <CheckCircle className="h-4 w-4 text-teal-600" />
@@ -142,7 +142,7 @@ export function MedicalInsurancesTab({
       </div>
 
       {/* Insurance Notes */}
-      <div className="bg-white border border-stone-200 rounded-2xl p-4 sm:p-5 space-y-2">
+      <div className="bg-white border-0 sm:border border-stone-200 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 space-y-2 shadow-none sm:shadow-2xs">
         <label className="block text-xs font-black text-stone-800 flex items-center gap-1.5">
           <Info className="h-4 w-4 text-teal-600" />
           ملاحظات وإرشادات التأمين الموجهة للمراجعين:
@@ -160,7 +160,7 @@ export function MedicalInsurancesTab({
       </div>
 
       {/* Popular Jordan Insurances Toggle Grid */}
-      <div className="bg-white border border-stone-200 rounded-2xl p-4 sm:p-5 space-y-4">
+      <div className="bg-white border-0 sm:border border-stone-200 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 space-y-4 shadow-none sm:shadow-2xs">
         <div className="flex items-center justify-between pb-2 border-b border-stone-100 flex-wrap gap-2">
           <div>
             <h4 className="text-xs font-black text-stone-900">
@@ -200,7 +200,7 @@ export function MedicalInsurancesTab({
       </div>
 
       {/* Custom Insurances Form & List */}
-      <div className="bg-white border border-stone-200 rounded-2xl p-4 sm:p-5 space-y-4">
+      <div className="bg-white border-0 sm:border border-stone-200 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 space-y-4 shadow-none sm:shadow-2xs">
         <h4 className="text-xs font-black text-stone-900">
           إضافة شركة تأمين خاصة أو نقابة إضافية:
         </h4>

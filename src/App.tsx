@@ -68,6 +68,7 @@ const Search = lazyWithRetry(() => import('./pages/Search').then(m => ({ default
 const Medical = lazyWithRetry(() => import('./pages/Medical').then(m => ({ default: m.default })));
 const AddMedicalFacility = lazyWithRetry(() => import('./pages/AddMedicalFacility').then(m => ({ default: m.AddMedicalFacility })));
 const MerchantScannerPage = lazyWithRetry(() => import('./pages/MerchantScannerPage').then(m => ({ default: m.MerchantScannerPage })));
+const BusinessMenuOffers = lazyWithRetry(() => import('./pages/BusinessMenuOffers'));
 
 export default function App() {
   return (
@@ -90,6 +91,10 @@ export default function App() {
                           </ProtectedRoute>
                         }
                       />
+
+                      {/* Standalone Fullscreen Merchant Menu and Offers Platform */}
+                      <Route path="/business/:id/menu-offers" element={<BusinessMenuOffers />} />
+                      <Route path="/b/:id/menu-offers" element={<BusinessMenuOffers />} />
 
                       <Route path="/" element={<Layout />}>
                         <Route index element={<Home />} />

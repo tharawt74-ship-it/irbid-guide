@@ -218,6 +218,9 @@ export interface Business {
   // VIP Interactive Visitor Welcome Popup
   vipPopup?: VipPopupConfig;
 
+  // Payment Methods
+  paymentMethods?: string[];
+
   // About Section Media (Available to all businesses: Video or Image)
   aboutMedia?: AboutMediaConfig;
   aboutVideoUrl?: string;
@@ -243,6 +246,16 @@ export interface Business {
   giftCodeGrantedCount?: number;
   giftCodeUserLimit?: 'once' | 'per_review' | 'custom';
   giftCodeMaxPerUser?: number;
+
+  // Food & Drink Dedicated Menu-Offers QR Platform
+  menuQrEnabled?: boolean;
+  menuQrThemeColor?: string;
+  menuQrSecondaryColor?: string;
+  menuQrLayout?: 'grid' | 'list' | 'compact';
+  menuQrWelcomeText?: string;
+  menuQrCoverImage?: string;
+  menuQrShowPrices?: boolean;
+  menuQrPosterStyle?: 'classic_red' | 'gold_luxury' | 'wood_cafe' | 'modern_dark' | 'clean_emerald';
 }
 
 export interface MedicalInsurance {
@@ -644,11 +657,24 @@ export interface PromoDeal {
   businessName: string;
   title: string;
   description: string;
-  discountPercentage?: number;
+  discountPercentage?: string | number;
   dealCode?: string;
   imageUrl?: string;
-  expiresAt: number;
+  image?: string;
+  expiresAt?: number;
   createdAt: number;
+  newPrice?: string | number;
+  oldPrice?: string | number;
+  isHot?: boolean;
+  isStudent?: boolean;
+  code?: string;
+  whatsapp?: string;
+  phone?: string;
+  location?: string;
+  category?: string;
+  durationMode?: 'unlimited' | 'fixed' | 'recurring_weekly' | string;
+  recurringDays?: string[];
+  expiresIn?: string;
 }
 
 export interface EditSuggestion {
@@ -806,3 +832,50 @@ export interface UpgradeRequest {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface TerminalDestination {
+  name: string;
+  vehicleType: string;
+  approxFare: string;
+  duration: string;
+  frequency: string;
+}
+
+export interface TerminalItem {
+  id: string;
+  type: 'terminal';
+  name: string;
+  location: string;
+  description: string;
+  destinationTypes: string[];
+  destinations: TerminalDestination[];
+  order?: number;
+  createdAt?: number;
+}
+
+export interface RouteItem {
+  id: string;
+  type: 'route';
+  name: string;
+  code: string;
+  stops: string[];
+  fare: string;
+  time: string;
+  order?: number;
+  createdAt?: number;
+}
+
+export interface TaxiItem {
+  id: string;
+  type: 'taxi';
+  name: string;
+  categoryType: string;
+  phone?: string;
+  description: string;
+  badge: string;
+  order?: number;
+  createdAt?: number;
+}
+
+export type TransportationItem = TerminalItem | RouteItem | TaxiItem;
+

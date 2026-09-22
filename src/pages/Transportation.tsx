@@ -25,149 +25,37 @@ import {
 import { Link } from 'react-router';
 import { SEO } from '../components/common/SEO';
 import { BannerSlideshow } from '../components/BannerSlideshow';
-import { HomepageBanner } from '../types';
+import { HomepageBanner, TerminalItem, RouteItem, TaxiItem } from '../types';
 import { fetchPageBanners, DEFAULT_TRANSPORT_BANNERS } from '../lib/pageBanners';
-
-interface Terminal {
-  id: string;
-  name: string;
-  location: string;
-  description: string;
-  destinationTypes: string[];
-  destinations: { name: string; vehicleType: string; approxFare: string; duration: string; frequency: string }[];
-}
-
-interface TaxiApp {
-  name: string;
-  type: string;
-  phone?: string;
-  description: string;
-  badge: string;
-}
+import { fetchTransportation } from '../lib/transportationService';
+import { useAuth } from '../contexts/AuthContext';
 
 export function Transportation() {
+  const { isAdmin } = useAuth();
   const [activeTab, setActiveTab] = useState<'terminals' | 'routes' | 'taxis' | 'tips'>('terminals');
   const [banners, setBanners] = useState<HomepageBanner[]>(DEFAULT_TRANSPORT_BANNERS);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedTerminal, setSelectedTerminal] = useState<string>('all');
   const [copied, setCopied] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  const [terminalsData, setTerminalsData] = useState<TerminalItem[]>([]);
+  const [internalRoutes, setInternalRoutes] = useState<RouteItem[]>([]);
+  const [taxiApps, setTaxiApps] = useState<TaxiItem[]>([]);
 
   useEffect(() => {
     fetchPageBanners(['مواصلات', 'باصات', 'مجمع', 'سرفيس', 'تكاسي'], DEFAULT_TRANSPORT_BANNERS, 'transportation')
       .then(res => setBanners(res))
       .catch(() => setBanners(DEFAULT_TRANSPORT_BANNERS));
+
+    fetchTransportation()
+      .then(res => {
+        setTerminalsData(res.terminals);
+        setInternalRoutes(res.routes);
+        setTaxiApps(res.taxis);
+      })
+      .catch(err => console.error("Error loading transportation:", err))
+      .finally(() => setLoading(false));
   }, []);
-
-  const terminalsData: Terminal[] = [
-    {
-      id: 'amman-new',
-      name: 'مجمع عمان الجديد (مجمع إربد الرئيسي)',
-      location: 'جنوب مدينة إربد - بالقرب من دوار الثقافة وشبكة الطرق الرئيسية',
-      description: 'أكبر مجمع حافلات وسرفيس في إربد، المنفذ الرئيسي للسفر بين إربد والعاصمة عمان وباقي محافظات المملكة.',
-      destinationTypes: ['عمان', 'الزرقاء', 'المفرق', 'جرش', 'السلط', 'جامعة العلوم والتكنولوجيا'],
-      destinations: [
-        { name: 'عمان (مجمع الشمال - صويلح / العبدلي)', vehicleType: 'حافلات كوستر / باصات كبيرة / سرفيس', approxFare: '1.25 - 1.80 د.أ', duration: '50 - 65 دقيقة', frequency: 'كل 5 - 10 دقائق' },
-        { name: 'الزرقاء (مجمع الزرقاء الجديد)', vehicleType: 'باصات كوستر', approxFare: '1.40 د.أ', duration: '50 دقيقة', frequency: 'كل 15 دقيقة' },
-        { name: 'جامعة العلوم والتكنولوجيا الاردنية (JUST)', vehicleType: 'باصات مخصصة لطلاب الجامعات', approxFare: '0.45 - 0.60 د.أ', duration: '20 - 25 دقيقة', frequency: 'مستمر طوال اليوم الدراسي' },
-        { name: 'جرش (مجمع جرش)', vehicleType: 'باصات كوستر / سرفيس', approxFare: '0.75 د.أ', duration: '25 - 30 دقيقة', frequency: 'كل 15 دقيقة' },
-        { name: 'المفرق', vehicleType: 'باصات كوستر', approxFare: '1.10 د.أ', duration: '40 دقيقة', frequency: 'كل 20 دقيقة' },
-        { name: 'السلط / مادبا', vehicleType: 'باصات سفر مباشرة', approxFare: '1.75 - 2.00 د.أ', duration: '60 - 75 دقيقة', frequency: 'حسب الجدول الإرشادي' },
-      ]
-    },
-    {
-      id: 'north',
-      name: 'مجمع الشمال (مجمع إربد الشمالي)',
-      location: 'شمال إربد - بالقرب من شارع فلسطين وجامعة اليرموك (البوابة الشمالية)',
-      description: 'المجمع المخصص لنقل الركاب والطلاب بين إربد ولواء الرمثا، وقرى شمال إربد وجامعة اليرموك.',
-      destinationTypes: ['الرمثا', 'جامعة اليرموك', 'قوائم قرى شمال إربد'],
-      destinations: [
-        { name: 'الرمثا (وسط الرمثا / المجمع القديم)', vehicleType: 'باصات كوستر / سرفيس خط أحمر', approxFare: '0.50 د.أ', duration: '15 - 20 دقيقة', frequency: 'كل 5 دقائق' },
-        { name: 'قرى الرمثا والبويضة', vehicleType: 'باصات سرفيس', approxFare: '0.45 - 0.60 د.أ', duration: '20 دقيقة', frequency: 'كل 15 دقيقة' },
-        { name: 'حريما، السيلة، وخرجا', vehicleType: 'باصات كوستر', approxFare: '0.55 د.أ', duration: '25 دقيقة', frequency: 'كل 20 دقيقة' },
-        { name: 'جامعة اليرموك (خط دائري مجمع الشمال - البوابة الشمالية)', vehicleType: 'سرفيس داخلي', approxFare: '0.30 د.أ', duration: '5 - 10 دقائق', frequency: 'مستمر' }
-      ]
-    },
-    {
-      id: 'aghwar',
-      name: 'مجمع الأغوار (القديم والجديد)',
-      location: 'غرب مدينة إربد - شارع الأغوار',
-      description: 'نقطة الانطلاق الرئيسية نحو مناطق الأغوار الشمالية، الشونة الشمالية، دير علا، ودير أبي سعيد.',
-      destinationTypes: ['الشونة الشمالية', 'دير علا', 'الكورة / دير أبي سعيد', 'الشارع الغربي'],
-      destinations: [
-        { name: 'الشونة الشمالية والمشارع', vehicleType: 'باصات كوستر', approxFare: '0.70 - 0.90 د.أ', duration: '35 - 45 دقيقة', frequency: 'كل 15 دقيقة' },
-        { name: 'دير أبي سعيد (لواء الكورة)', vehicleType: 'باصات سرفيس وكوستر', approxFare: '0.65 د.أ', duration: '30 - 40 دقيقة', frequency: 'كل 10 دقائق' },
-        { name: 'دير علا وسد الملك طلال', vehicleType: 'باصات كوستر خط مباشر', approxFare: '1.20 د.أ', duration: '50 - 60 دقيقة', frequency: 'كل 30 دقيقة' },
-        { name: 'كفر أسد وصيدور', vehicleType: 'سرفيس كوستر', approxFare: '0.45 د.أ', duration: '20 دقيقة', frequency: 'كل 15 دقيقة' }
-      ]
-    }
-  ];
-
-  const internalRoutes = [
-    {
-      name: 'خط جامعة اليرموك - وسط البلد - دوار القبة',
-      code: 'خط 1 - سرفيس أبيض',
-      stops: ['مجمع عمان الجديد', 'شارع الجامعة', 'البوابة الجنوبية (اليرموك)', 'دوار القبة', 'وسط البلد (شارع السينما)'],
-      fare: '0.35 د.أ',
-      time: 'من 06:30 ص حتى 10:00 م'
-    },
-    {
-      name: 'خط الحصن - الصريح - مجمع عمان',
-      code: 'خط 4 - سرفيس كابريس/كوستر',
-      stops: ['مجمع عمان الجديد', 'دوار الثقافة', 'الصريح (المثلث)', 'وسط الحصن', 'كلية الحصن الجامعية'],
-      fare: '0.40 د.أ',
-      time: 'من 06:00 ص حتى 09:30 م'
-    },
-    {
-      name: 'خط الحي الشرقي - المستشفى التخصصي - مستشفى البديعة',
-      code: 'خط 8 - باصات حمراء ودائرية',
-      stops: ['وسط البلد', 'دوار النسيم', 'الحي الشرقي', 'مستشفى إربد التخصصي', 'حي الروضة'],
-      fare: '0.35 د.أ',
-      time: 'من 07:00 ص حتى 09:00 م'
-    },
-    {
-      name: 'خط الحي الغربي - مستشفى الأميرة بسمة',
-      code: 'خط 12 - سرفيس',
-      stops: ['وسط البلد', 'شارع حوارة', 'الحي الغربي', 'مستشفى الأميرة بسمة التعليمي'],
-      fare: '0.35 د.أ',
-      time: 'من 06:30 ص حتى 09:30 م'
-    },
-    {
-      name: 'خط جامعة العلوم والتكنولوجيا (طلاب وصحافة)',
-      code: 'خط الحافلات الجامعية السريعة',
-      stops: ['مجمع عمان الجديد', 'دوار الثقافة', 'طريق الرمثا الدولي', 'مجمع الكليات - جامعة التكنولوجيا'],
-      fare: '0.50 - 0.65 د.أ',
-      time: 'من 07:00 ص حتى 06:00 م (أيام الدوام الجامعي)'
-    },
-    {
-      name: 'خط إيدون - مستشفى الراهبات الوردية',
-      code: 'خط 15 - سرفيس',
-      stops: ['مجمع عمان', 'شارع الراهبات', 'إيدون وسط البلد', 'مستشفى الراهبات الوردية'],
-      fare: '0.40 د.أ',
-      time: 'من 06:30 ص حتى 09:00 م'
-    }
-  ];
-
-  const taxiApps: TaxiApp[] = [
-    {
-      name: 'التاكسي الأصفر والتكسي المميز في إربد',
-      type: 'تاكسي جوال تقليدي / العداد',
-      description: 'التاكسي الأصفر متوفر بكثرة في كافة شوارع إربد الرئيسية ومجمعات الحافلات. فتحة العداد تبدأ من 0.35 د.أ.',
-      badge: 'الأكثر انتشاراً'
-    },
-    {
-      name: 'تطبيقات التاكسي والتوصيل الذكي (Uber / Careem / Jeeny)',
-      type: 'تطبيق هاتف ذكي',
-      description: 'تعمل التطبيقات الذكية بكفاءة عالية في مدينة إربد والمناطق المجاورة، وتعتبر الخيار المفضل للتنقل المريح والآمن.',
-      badge: 'طلب عبر التطبيق'
-    },
-    {
-      name: 'مكاتب تاكسي إربد المركزية (طلب هاتفي)',
-      type: 'مكاتب طلب تاكسي بالهاتف',
-      phone: '02-724-4444 / 02-727-8888',
-      description: 'يمكنك الاتصال بطلب تاكسي ليصلك لموقعك داخل أي حي في إربد.',
-      badge: 'حجز بالهاتف'
-    }
-  ];
 
   // Filtered terminals / destinations by search query
   const filteredTerminals = useMemo(() => {
@@ -184,7 +72,7 @@ export function Transportation() {
         };
       }
       return null;
-    }).filter(Boolean) as Terminal[];
+    }).filter(Boolean) as TerminalItem[];
   }, [searchQuery]);
 
   const filteredRoutes = useMemo(() => {
@@ -236,13 +124,25 @@ export function Transportation() {
               </p>
             </div>
 
-            <button
-              onClick={handleCopyGuide}
-              className="inline-flex items-center justify-center gap-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-200 px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer"
-            >
-              {copied ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> : <Share2 className="h-3.5 w-3.5" />}
-              <span>{copied ? 'تم النسخ!' : 'مشاركة الدليل'}</span>
-            </button>
+            <div className="flex items-center gap-2 flex-wrap">
+              {isAdmin && (
+                <Link
+                  to="/admin?tab=transportation"
+                  className="inline-flex items-center justify-center gap-1.5 bg-[#1a4d2e] hover:bg-[#143e25] text-white px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-xl text-xs font-black shadow-xs transition-all shrink-0 cursor-pointer"
+                >
+                  <ShieldCheck className="h-3.5 w-3.5 text-[#ff9f1c]" />
+                  <span>إدارة المواصلات</span>
+                </Link>
+              )}
+
+              <button
+                onClick={handleCopyGuide}
+                className="inline-flex items-center justify-center gap-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-200 px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer"
+              >
+                {copied ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> : <Share2 className="h-3.5 w-3.5" />}
+                <span>{copied ? 'تم النسخ!' : 'مشاركة الدليل'}</span>
+              </button>
+            </div>
           </div>
 
           {/* Search bar */}
@@ -277,7 +177,7 @@ export function Transportation() {
             }`}
           >
             <Building2 className="h-4 w-4 text-[#ff9f1c]" />
-            <span>مجمعات الحافلات الرئيسية (3)</span>
+            <span>مجمعات الحافلات الرئيسية ({terminalsData.length})</span>
           </button>
 
           <button
@@ -289,7 +189,7 @@ export function Transportation() {
             }`}
           >
             <ArrowLeftRight className="h-4 w-4 text-[#ff9f1c]" />
-            <span>خطوط السرفيس والباص الداخلي</span>
+            <span>خطوط السرفيس والباص الداخلي ({internalRoutes.length})</span>
           </button>
 
           <button
@@ -301,7 +201,7 @@ export function Transportation() {
             }`}
           >
             <Car className="h-4 w-4 text-[#ff9f1c]" />
-            <span>التاكسي والتطبيقات الذكية</span>
+            <span>التاكسي والتطبيقات الذكية ({taxiApps.length})</span>
           </button>
 
           <button
@@ -317,6 +217,14 @@ export function Transportation() {
           </button>
         </div>
 
+        {/* Loading Spinner */}
+        {loading && (
+          <div className="bg-white rounded-3xl p-12 text-center border border-[#e5e1da] space-y-3">
+            <div className="w-8 h-8 border-3 border-[#1a4d2e] border-t-transparent rounded-full animate-spin mx-auto" />
+            <p className="text-xs font-bold text-stone-500">جاري تحميل دليل المواصلات...</p>
+          </div>
+        )}
+
         {/* Tab 1: Terminals (المجمعات الرئيسية) */}
         {activeTab === 'terminals' && (
           <div className="space-y-6">
@@ -331,7 +239,18 @@ export function Transportation() {
               </div>
             </div>
 
-            <div className="space-y-6">
+            {filteredTerminals.length === 0 && !loading ? (
+              <div className="bg-white rounded-3xl p-10 text-center border border-stone-200">
+                <Building2 className="h-8 w-8 text-stone-300 mx-auto mb-2" />
+                <p className="text-sm font-bold text-stone-700">لا توجد مجمعات حافلات حالياً</p>
+                {isAdmin && (
+                  <Link to="/admin?tab=transportation" className="inline-block mt-3 text-xs text-[#1a4d2e] font-black underline">
+                    إضافة أو استرجاع المجمعات من لوحة تحكم الإدارة
+                  </Link>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-6">
               {filteredTerminals.map((terminal) => (
                 <div key={terminal.id} className="bg-white rounded-3xl p-6 border border-stone-200 shadow-md space-y-5 hover:border-[#1a4d2e]/30 transition-all">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-stone-100 pb-4">
@@ -386,6 +305,7 @@ export function Transportation() {
                 </div>
               ))}
             </div>
+            )}
           </div>
         )}
 
@@ -401,50 +321,62 @@ export function Transportation() {
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {filteredRoutes.map((route, idx) => (
-                <div key={idx} className="bg-white rounded-3xl p-5 border border-stone-200 shadow-sm space-y-4 hover:shadow-md transition-all">
-                  <div className="flex items-start justify-between gap-2 border-b border-stone-100 pb-3">
-                    <div>
-                      <span className="text-[10px] font-black bg-[#1a4d2e]/10 text-[#1a4d2e] px-2.5 py-0.5 rounded-full block w-fit mb-1">
-                        {route.code}
+            {filteredRoutes.length === 0 && !loading ? (
+              <div className="bg-white rounded-3xl p-10 text-center border border-stone-200">
+                <ArrowLeftRight className="h-8 w-8 text-stone-300 mx-auto mb-2" />
+                <p className="text-sm font-bold text-stone-700">لا توجد خطوط سير حالياً</p>
+                {isAdmin && (
+                  <Link to="/admin?tab=transportation" className="inline-block mt-3 text-xs text-[#1a4d2e] font-black underline">
+                    إضافة أو استرجاع خطوط السير من لوحة تحكم الإدارة
+                  </Link>
+                )}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {filteredRoutes.map((route, idx) => (
+                  <div key={route.id || idx} className="bg-white rounded-3xl p-5 border border-stone-200 shadow-sm space-y-4 hover:shadow-md transition-all">
+                    <div className="flex items-start justify-between gap-2 border-b border-stone-100 pb-3">
+                      <div>
+                        <span className="text-[10px] font-black bg-[#1a4d2e]/10 text-[#1a4d2e] px-2.5 py-0.5 rounded-full block w-fit mb-1">
+                          {route.code}
+                        </span>
+                        <h3 className="font-black text-base text-[#2d2a26]">{route.name}</h3>
+                      </div>
+
+                      <div className="text-left shrink-0">
+                        <span className="text-xs font-black text-[#1a4d2e] bg-emerald-50 px-2.5 py-1 rounded-xl border border-emerald-200 block">
+                          {route.fare}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Route Stops Flow */}
+                    <div className="space-y-1.5">
+                      <span className="text-[11px] font-bold text-stone-400 block">مسار الخط والمواقف الرئيسية:</span>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {route.stops.map((stop, sIdx) => (
+                          <React.Fragment key={sIdx}>
+                            <span className="text-xs font-bold text-stone-700 bg-stone-100 px-2.5 py-1 rounded-lg">
+                              {stop}
+                            </span>
+                            {sIdx < route.stops.length - 1 && (
+                              <span className="text-stone-300 font-bold text-xs">←</span>
+                            )}
+                          </React.Fragment>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-stone-100 flex items-center justify-between text-[11px] text-stone-500 font-medium">
+                      <span className="flex items-center gap-1">
+                        <Clock className="h-3.5 w-3.5 text-[#ff9f1c]" />
+                        ساعات العمل: {route.time}
                       </span>
-                      <h3 className="font-black text-base text-[#2d2a26]">{route.name}</h3>
-                    </div>
-
-                    <div className="text-left shrink-0">
-                      <span className="text-xs font-black text-[#1a4d2e] bg-emerald-50 px-2.5 py-1 rounded-xl border border-emerald-200 block">
-                        {route.fare}
-                      </span>
                     </div>
                   </div>
-
-                  {/* Route Stops Flow */}
-                  <div className="space-y-1.5">
-                    <span className="text-[11px] font-bold text-stone-400 block">مسار الخط والمواقف الرئيسية:</span>
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {route.stops.map((stop, sIdx) => (
-                        <React.Fragment key={sIdx}>
-                          <span className="text-xs font-bold text-stone-700 bg-stone-100 px-2.5 py-1 rounded-lg">
-                            {stop}
-                          </span>
-                          {sIdx < route.stops.length - 1 && (
-                            <span className="text-stone-300 font-bold text-xs">←</span>
-                          )}
-                        </React.Fragment>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="pt-2 border-t border-stone-100 flex items-center justify-between text-[11px] text-stone-500 font-medium">
-                    <span className="flex items-center gap-1">
-                      <Clock className="h-3.5 w-3.5 text-[#ff9f1c]" />
-                      ساعات العمل: {route.time}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -460,36 +392,48 @@ export function Transportation() {
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-              {taxiApps.map((app, idx) => (
-                <div key={idx} className="bg-white rounded-3xl p-6 border border-stone-200 shadow-sm space-y-4 flex flex-col justify-between">
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-black bg-[#ff9f1c]/20 text-amber-900 px-2.5 py-0.5 rounded-full">
-                        {app.badge}
-                      </span>
-                      <Car className="h-5 w-5 text-[#1a4d2e]" />
+            {taxiApps.length === 0 && !loading ? (
+              <div className="bg-white rounded-3xl p-10 text-center border border-stone-200">
+                <Car className="h-8 w-8 text-stone-300 mx-auto mb-2" />
+                <p className="text-sm font-bold text-stone-700">لا توجد خدمات تاكسي مضافة حالياً</p>
+                {isAdmin && (
+                  <Link to="/admin?tab=transportation" className="inline-block mt-3 text-xs text-[#1a4d2e] font-black underline">
+                    إضافة أو استرجاع خدمات التاكسي من لوحة تحكم الإدارة
+                  </Link>
+                )}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                {taxiApps.map((app, idx) => (
+                  <div key={app.id || idx} className="bg-white rounded-3xl p-6 border border-stone-200 shadow-sm space-y-4 flex flex-col justify-between">
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black bg-[#ff9f1c]/20 text-amber-900 px-2.5 py-0.5 rounded-full">
+                          {app.badge}
+                        </span>
+                        <Car className="h-5 w-5 text-[#1a4d2e]" />
+                      </div>
+
+                      <h3 className="font-black text-lg text-[#2d2a26]">{app.name}</h3>
+                      <p className="text-xs text-[#1a4d2e] font-bold">{app.categoryType || (app as any).type}</p>
+                      <p className="text-xs text-stone-600 leading-relaxed">{app.description}</p>
                     </div>
 
-                    <h3 className="font-black text-lg text-[#2d2a26]">{app.name}</h3>
-                    <p className="text-xs text-[#1a4d2e] font-bold">{app.type}</p>
-                    <p className="text-xs text-stone-600 leading-relaxed">{app.description}</p>
+                    {app.phone && (
+                      <div className="pt-3 border-t border-stone-100">
+                        <a
+                          href={`tel:${app.phone.split('/')[0].trim()}`}
+                          className="w-full inline-flex items-center justify-center gap-2 bg-[#1a4d2e] hover:bg-[#133b22] text-white py-2.5 rounded-xl text-xs font-bold transition-colors"
+                        >
+                          <Phone className="h-3.5 w-3.5" />
+                          <span>اتصال: {app.phone}</span>
+                        </a>
+                      </div>
+                    )}
                   </div>
-
-                  {app.phone && (
-                    <div className="pt-3 border-t border-stone-100">
-                      <a
-                        href={`tel:${app.phone.split('/')[0].trim()}`}
-                        className="w-full inline-flex items-center justify-center gap-2 bg-[#1a4d2e] hover:bg-[#133b22] text-white py-2.5 rounded-xl text-xs font-bold transition-colors"
-                      >
-                        <Phone className="h-3.5 w-3.5" />
-                        <span>اتصال: {app.phone}</span>
-                      </a>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

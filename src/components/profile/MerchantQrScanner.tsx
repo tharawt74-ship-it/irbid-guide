@@ -39,11 +39,7 @@ export function MerchantQrScanner({ businesses }: MerchantQrScannerProps) {
       await qrScannerRef.current.start(
         { facingMode: "environment" },
         {
-          fps: 10,
-          qrbox: (width, height) => {
-            const size = Math.min(width, height) * 0.7;
-            return { width: size, height: size };
-          }
+          fps: 10
         },
         (decodedText) => {
           // Found a code!

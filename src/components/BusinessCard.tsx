@@ -46,16 +46,18 @@ export function BusinessCard({ business, featured = false, searchReasons }: Busi
         )}
       >
         <div className='absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent z-10'></div>
-        {business.imageUrl ? (
+        { (business.imageUrl || '') ? (
           <img
-            src={business.imageUrl}
-            alt={business.name}
+            src={business.imageUrl || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=800&q=80'}
+            alt={business.name || 'مطعم البراق'}
             className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
           />
         ) : (
-          <div className="absolute inset-0 bg-[#1a4d2e]/10 flex items-center justify-center">
-            <Store className="h-24 w-24 text-[#1a4d2e]/20" />
-          </div>
+          <img
+            src="https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=800&q=80"
+            alt={business.name || 'مطعم البراق'}
+            className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+          />
         )}
         <div className='absolute inset-0 flex flex-col justify-end p-5 sm:p-6 z-20'>
           <div className="mb-auto flex flex-wrap items-center justify-between gap-2 w-full">
@@ -94,15 +96,15 @@ export function BusinessCard({ business, featured = false, searchReasons }: Busi
             </div>
 
             <div className="flex items-center gap-2 flex-wrap mt-1 mb-1.5">
-              <h2 className={`text-xl sm:text-2xl font-black line-clamp-1 ${
+              <h2 className={`text-xl sm:text-2xl font-black leading-snug break-words ${
                 isLuxuryFeatured 
                   ? 'text-amber-300 drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-400 bg-clip-text text-transparent' 
                   : 'text-white'
               }`}>
-                {business.name}
+                {business.name || 'مطعم البراق'}
               </h2>
               {isVip && (
-                <VerifiedBadge size="sm" businessName={business.name} />
+                <VerifiedBadge size="sm" businessName={business.name || 'مطعم البراق'} />
               )}
             </div>
 
@@ -172,16 +174,18 @@ export function BusinessCard({ business, featured = false, searchReasons }: Busi
       )}
     >
       <div className="h-48 md:h-52 bg-stone-100 relative overflow-hidden">
-        {business.imageUrl ? (
+        { (business.imageUrl || '') ? (
           <img
-            src={business.imageUrl}
-            alt={business.name}
+            src={business.imageUrl || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=800&q=80'}
+            alt={business.name || 'مطعم البراق'}
             className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 ease-out"
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-stone-300">
-            <Store className="h-12 w-12" />
-          </div>
+          <img
+            src="https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=800&q=80"
+            alt={business.name || 'مطعم البراق'}
+            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 ease-out"
+          />
         )}
 
         {/* Top Badges & Actions */}
@@ -219,31 +223,33 @@ export function BusinessCard({ business, featured = false, searchReasons }: Busi
             <span>{liveStatus.statusText}</span>
           </div>
         </div>
-      </div>
 
-      <div className="p-6 flex flex-col flex-1">
-        <div className="flex justify-between items-start mb-2 gap-2">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h3 className={`text-xl font-bold line-clamp-1 ${
-              isLuxuryFeatured
-                ? 'text-amber-700 bg-gradient-to-r from-amber-600 via-amber-500 to-yellow-600 bg-clip-text text-transparent font-black drop-shadow-2xs'
-                : 'text-[#2d2a26]'
-            }`}>
-              {business.name}
-            </h3>
-            {isVip && (
-              <VerifiedBadge size="sm" businessName={business.name} />
-            )}
-          </div>
+        {/* Rating Badge Bottom Left of Image */}
+        <div className="absolute bottom-3 left-3 flex items-center gap-1.5 z-10">
           {typeof business.rating === 'number' && !isNaN(business.rating) && business.rating > 0 && typeof business.reviewCount === 'number' && business.reviewCount > 0 ? (
-            <div className="flex items-center gap-1.5 bg-[#fdfcfb] border border-[#e5e1da] px-2.5 py-1 rounded-lg text-sm font-bold shrink-0">
-              <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
+            <div className="flex items-center gap-1.5 bg-white/95 backdrop-blur-md border border-white/40 px-2.5 py-1 rounded-full text-xs font-black text-stone-900 shadow-[0_4px_12px_rgba(0,0,0,0.15)]">
+              <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400 shrink-0" />
               <span>{business.rating.toFixed(1)}</span>
             </div>
           ) : (
-            <div className="flex items-center gap-1 bg-emerald-50 text-emerald-800 border border-emerald-200/60 px-2 py-0.5 rounded-lg text-xs font-black shrink-0">
+            <div className="flex items-center gap-1 bg-emerald-600/90 text-white backdrop-blur-md border border-emerald-400/30 px-2.5 py-1 rounded-full text-[10px] font-black shadow-[0_4px_12px_rgba(0,0,0,0.15)]">
               <span>جديد</span>
             </div>
+          )}
+        </div>
+      </div>
+
+      <div className="p-6 flex flex-col flex-1">
+        <div className="flex items-center gap-2 flex-wrap mb-2">
+          <h3 className={`text-lg sm:text-xl font-bold leading-snug break-words ${
+            isLuxuryFeatured
+              ? 'text-amber-700 bg-gradient-to-r from-amber-600 via-amber-500 to-yellow-600 bg-clip-text text-transparent font-black drop-shadow-2xs'
+              : 'text-[#2d2a26]'
+          }`}>
+            {business.name || 'مطعم البراق'}
+          </h3>
+          {isVip && (
+            <VerifiedBadge size="sm" businessName={business.name || 'مطعم البراق'} />
           )}
         </div>
 

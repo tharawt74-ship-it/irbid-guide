@@ -35,8 +35,8 @@ export function MedicalMarketingTab({
   const isUpgraded = business.premiumMessagingEnabled;
 
   return (
-    <div className="bg-white p-6 sm:p-8 rounded-[32px] border border-stone-200/80 shadow-xs space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-stone-100">
+    <div className="bg-white p-3.5 sm:p-8 rounded-xl sm:rounded-[32px] border-0 sm:border border-stone-200/80 shadow-none sm:shadow-xs space-y-4 sm:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 sm:pb-6 border-b border-stone-100">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#ff9f1c]/20 to-amber-500/10 text-[#ff9f1c] flex items-center justify-center font-bold shadow-xs">
             <Rocket className="h-6 w-6 text-[#ff9f1c]" />

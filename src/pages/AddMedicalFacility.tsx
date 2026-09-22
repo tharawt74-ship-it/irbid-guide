@@ -50,6 +50,7 @@ import { SearchableSelect } from '../components/ui/SearchableSelect';
 import { WorkingHoursEditor } from '../components/ui/WorkingHoursEditor';
 import { SocialLinksEditor } from '../components/ui/SocialLinksEditor';
 import { ImageUploader } from '../components/ui/ImageUploader';
+import { PaymentMethodsSelector } from '../components/ui/PaymentMethodsSelector';
 import { RichTextEditor } from '../components/common/RichTextEditor';
 import { SEO } from '../components/common/SEO';
 import DOMPurify from 'dompurify';
@@ -186,6 +187,7 @@ export function AddMedicalFacility() {
 
   // Staff & Specialization Details
   const [doctorName, setDoctorName] = useState('');
+  const [doctorAvatarUrl, setDoctorAvatarUrl] = useState('');
   const [professionalTitle, setProfessionalTitle] = useState('طبيب اختصاصي / استشاري');
   const [degrees, setDegrees] = useState('');
   const [licenseNumber, setLicenseNumber] = useState('');
@@ -196,6 +198,7 @@ export function AddMedicalFacility() {
   const [showMedicalStaff, setShowMedicalStaff] = useState(true);
   const [additionalStaff, setAdditionalStaff] = useState<MedicalDoctor[]>([]);
   const [staffMemberName, setStaffMemberName] = useState('');
+  const [staffMemberAvatarUrl, setStaffMemberAvatarUrl] = useState('');
   const [staffMemberTitle, setStaffMemberTitle] = useState('');
   const [staffMemberDegrees, setStaffMemberDegrees] = useState('');
   const [staffMemberSubspecialty, setStaffMemberSubspecialty] = useState('');
@@ -211,10 +214,12 @@ export function AddMedicalFacility() {
       degrees: parsed.length > 0 ? parsed : [isPharmacy ? 'بكالوريوس صيدلة' : isLab ? 'بكالوريوس تحاليل طبية' : isRehab ? 'بكالوريوس علاج طبيعي' : 'بورد اختصاص'],
       subspecialty: staffMemberSubspecialty.trim() || undefined,
       experienceYears: Number(staffMemberExp) || 5,
-      bio: staffMemberBio.trim() || undefined
+      bio: staffMemberBio.trim() || undefined,
+      avatarUrl: staffMemberAvatarUrl.trim() || undefined
     };
     setAdditionalStaff(prev => [...prev, newDoc]);
     setStaffMemberName('');
+    setStaffMemberAvatarUrl('');
     setStaffMemberTitle('');
     setStaffMemberDegrees('');
     setStaffMemberSubspecialty('');
@@ -239,6 +244,7 @@ export function AddMedicalFacility() {
   const [hasFemaleStaff, setHasFemaleStaff] = useState(true);
   const [hasKidsArea, setHasKidsArea] = useState(false);
   const [hasElectronicPayment, setHasElectronicPayment] = useState(true);
+  const [paymentMethods, setPaymentMethods] = useState<string[]>(['كاش', 'فيزا', 'كليك']);
   const [consultationFee, setConsultationFee] = useState('15 - 25 د.أ');
   const [followUpPolicy, setFollowUpPolicy] = useState('المراجعة مجانية خلال 14 يوماً من تاريخ الكشف');
   const [appointmentType, setAppointmentType] = useState<'phone_first' | 'walk_in' | 'both'>('phone_first');
@@ -609,7 +615,8 @@ export function AddMedicalFacility() {
           degrees: parsedDegrees,
           licenseNumber: sanitizeInput(licenseNumber || 'مرخص أصولاً لدى وزارة الصحة'),
           experienceYears: Number(experienceYears) || 10,
-          bio: sanitizeInput(doctorName ? `طبيب اختصاصي في ${mainSpecialtyTitle} (${chosenSubCategory}) في محافظة إربد.` : '')
+          bio: sanitizeInput(doctorName ? `طبيب اختصاصي في ${mainSpecialtyTitle} (${chosenSubCategory}) في محافظة إربد.` : ''),
+          avatarUrl: doctorAvatarUrl.trim() || undefined
         },
         showMedicalStaff: showMedicalStaff,
         doctorsList: [
@@ -620,7 +627,8 @@ export function AddMedicalFacility() {
             licenseNumber: sanitizeInput(licenseNumber || 'مرخص أصولاً لدى وزارة الصحة'),
             experienceYears: Number(experienceYears) || 10,
             bio: sanitizeInput(doctorName ? `طبيب اختصاصي في ${mainSpecialtyTitle} (${chosenSubCategory}) في محافظة إربد.` : ''),
-            subspecialty: sanitizeInput(chosenSubCategory)
+            subspecialty: sanitizeInput(chosenSubCategory),
+            avatarUrl: doctorAvatarUrl.trim() || undefined
           },
           ...additionalStaff.map(st => ({
             name: sanitizeInput(st.name),
@@ -629,7 +637,8 @@ export function AddMedicalFacility() {
             licenseNumber: st.licenseNumber ? sanitizeInput(st.licenseNumber) : undefined,
             experienceYears: Number(st.experienceYears) || 5,
             bio: st.bio ? sanitizeInput(st.bio) : undefined,
-            subspecialty: st.subspecialty ? sanitizeInput(st.subspecialty) : undefined
+            subspecialty: st.subspecialty ? sanitizeInput(st.subspecialty) : undefined,
+            avatarUrl: st.avatarUrl || undefined
           }))
         ],
         procedures: formattedProcedures,
@@ -644,6 +653,7 @@ export function AddMedicalFacility() {
         hasFemaleStaff: hasFemaleStaff,
         hasKidsArea: hasKidsArea,
         hasElectronicPayment: hasElectronicPayment,
+        paymentMethods: paymentMethods,
         consultationFee: consultationFee,
         bookingNotice: isPharmacy
           ? 'تتوفر الأدوية والمستلزمات الصيدلانية مباشرة بالزيارة الفورية أو الطلب المباشر دون الحاجة لحجز مسبق.'
@@ -694,6 +704,7 @@ export function AddMedicalFacility() {
         googlePlaceUrl: googlePlaceUrl ? sanitizeInput(googlePlaceUrl) : '',
         workingHours: workingHours,
         socialLinks: finalSocialLinks,
+        paymentMethods: paymentMethods,
         menuItems: generatedMenuItems,
         medicalProfile: medicalProfileData,
         isVerified: gift.isVerified,
@@ -762,6 +773,32 @@ export function AddMedicalFacility() {
 
       recordSubmissionTime('add_medical_facility');
       invalidateCache();
+
+      // If approved directly (by admin), broadcast welcome notification to all users and visitors
+      if (statusValue === 'approved') {
+        try {
+          const notifMessage = gift.isFeatured
+            ? `تمت إضافة منشأة ${name} (${chosenSubCategory}) بالباقة الذهبية مع ميزة (المميز وصدارة البحث) والإطار المميز وعلامة ممول لمدة أسبوع!`
+            : `انضمت منشأة ${name} (${chosenSubCategory}) في ${district} رسمياً إلى دليل الرعاية الطبية والصحية بشو في بإربد! أهلاً وسهلاً بهم.`;
+
+          const notifDoc = {
+            title: `إضافة طبية مميزة: ${name} 🩺`,
+            message: notifMessage,
+            type: 'business',
+            link: `/business/${createdDocId}`,
+            badge: gift.isFeatured ? 'صدارة وممول ⭐' : 'منشأة طبية جديدة 🩺',
+            userId: 'all',
+            businessId: createdDocId,
+            businessName: name,
+            businessLogoUrl: imageUrl || '',
+            createdAt: now
+          };
+          const sanitizedNotif = await compressAndSanitizeFirestorePayload(notifDoc, false);
+          await addDoc(collection(db, 'notifications'), sanitizedNotif);
+        } catch (notifErr) {
+          console.warn("Could not create medical registration broadcast notification:", notifErr);
+        }
+      }
 
       // Trigger custom events to notify listeners across the app
       window.dispatchEvent(new CustomEvent('medical-business-added', { detail: { id: createdDocId, name } }));
@@ -1324,6 +1361,22 @@ export function AddMedicalFacility() {
                     </p>
                   </div>
 
+                  {/* Primary Doctor / Responsible Officer Image */}
+                  <div className="p-4 bg-emerald-50/50 rounded-2xl border border-emerald-100/80 space-y-2">
+                    <label className="text-xs font-black text-stone-900 block">
+                      صورة الطبيب / الأخصائي المشرف الرئيسي
+                    </label>
+                    <ImageUploader
+                      value={doctorAvatarUrl}
+                      onChange={(url) => setDoctorAvatarUrl(url)}
+                      folder="doctors"
+                      label=""
+                      aspectRatio="square"
+                      placeholder="اضغط لرفع صورة الطبيب أو اسحب الملف هنا"
+                      enableCrop={true}
+                    />
+                  </div>
+
                   {/* Name of Responsible Officer & Professional Title */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
@@ -1565,8 +1618,12 @@ export function AddMedicalFacility() {
                             {additionalStaff.map((staff, idx) => (
                               <div key={idx} className="p-3.5 bg-white rounded-xl border border-stone-200 shadow-3xs flex items-center justify-between gap-3">
                                 <div className="flex items-center gap-3 min-w-0">
-                                  <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-800 flex items-center justify-center font-black text-xs shrink-0 border border-emerald-100">
-                                    {staff.name.substring(0, 2)}
+                                  <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-800 flex items-center justify-center font-black text-xs shrink-0 border border-emerald-100 overflow-hidden">
+                                    {staff.avatarUrl ? (
+                                      <img src={staff.avatarUrl} alt={staff.name} className="w-full h-full object-cover" />
+                                    ) : (
+                                      staff.name.substring(0, 2)
+                                    )}
                                   </div>
                                   <div className="min-w-0">
                                     <h5 className="text-xs font-black text-stone-900 truncate">{staff.name}</h5>
@@ -1598,6 +1655,19 @@ export function AddMedicalFacility() {
                           <div className="text-xs font-black text-stone-800 flex items-center gap-1.5">
                             <Plus className="h-4 w-4 text-[#1a4d2e]" />
                             <span>إضافة عضو كادر {isPharmacy ? 'صيدلاني' : 'طبي'} جديد</span>
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[11px] font-bold text-stone-700 block">صورة الطبيب / عضو الكادر (اختياري)</label>
+                            <ImageUploader
+                              value={staffMemberAvatarUrl}
+                              onChange={(url) => setStaffMemberAvatarUrl(url)}
+                              folder="doctors"
+                              label=""
+                              aspectRatio="square"
+                              placeholder="رفع صورة عضو الكادر"
+                              enableCrop={true}
+                            />
                           </div>
 
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1745,6 +1815,14 @@ export function AddMedicalFacility() {
                         إضافة +
                       </button>
                     </div>
+                  </div>
+
+                  {/* Payment Methods Selector */}
+                  <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200/80">
+                    <PaymentMethodsSelector
+                      value={paymentMethods}
+                      onChange={setPaymentMethods}
+                    />
                   </div>
 
                   {/* Procedures and Clinical Services */}

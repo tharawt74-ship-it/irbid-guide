@@ -108,7 +108,7 @@ export function MedicalAmenitiesTab({
   };
 
   return (
-    <form onSubmit={handleSave} className="p-4 sm:p-6 space-y-6 text-right" dir="rtl">
+    <form onSubmit={handleSave} className="p-2 sm:p-6 space-y-4 sm:space-y-6 text-right" dir="rtl">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-stone-200">
         <div>
           <h3 className="text-base font-black text-[#2d2a26] flex items-center gap-2">
@@ -130,7 +130,7 @@ export function MedicalAmenitiesTab({
       </div>
 
       {/* 1. Facilities & Amenities Section */}
-      <div className="bg-white border border-stone-200 rounded-2xl p-4 sm:p-5 space-y-4">
+      <div className="bg-white border-0 sm:border border-stone-200 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 space-y-4 shadow-none sm:shadow-2xs">
         <div className="flex items-center justify-between pb-3 border-b border-stone-100 flex-wrap gap-2">
           <div className="space-y-0.5">
             <h4 className="text-xs font-black text-stone-900 flex items-center gap-1.5">
@@ -251,7 +251,7 @@ export function MedicalAmenitiesTab({
       </div>
 
       {/* 2. Medical Equipments & Advanced Tech */}
-      <div className="bg-white border border-stone-200 rounded-2xl p-4 sm:p-5 space-y-4">
+      <div className="bg-white border-0 sm:border border-stone-200 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 space-y-4 shadow-none sm:shadow-2xs">
         <div className="flex items-center justify-between pb-3 border-b border-stone-100 flex-wrap gap-2">
           <div className="space-y-0.5">
             <h4 className="text-xs font-black text-stone-900 flex items-center gap-1.5">

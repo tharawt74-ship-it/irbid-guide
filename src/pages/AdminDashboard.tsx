@@ -73,6 +73,7 @@ import { BusinessAddModal } from '../components/admin/BusinessAddModal';
 import { AddMedicalFacilityModal } from '../components/medical/AddMedicalFacilityModal';
 import { AddEntitySelectionModal } from '../components/admin/AddEntitySelectionModal';
 import { BroadcastNotificationModal } from '../components/admin/BroadcastNotificationModal';
+import { NotificationsCenterManager } from '../components/admin/NotificationsCenterManager';
 import { MarketingDetailsModal } from '../components/admin/MarketingDetailsModal';
 import { VipUpgradeModal } from '../components/admin/VipUpgradeModal';
 import { SupervisorsManager } from '../components/admin/SupervisorsManager';
@@ -93,6 +94,7 @@ import { BannersManager } from '../components/admin/BannersManager';
 import { UpgradeRequestsManager } from '../components/admin/UpgradeRequestsManager';
 import { MedicalFacilitiesManager } from '../components/admin/MedicalFacilitiesManager';
 import { RequestDetailsModal } from '../components/admin/RequestDetailsModal';
+import { AdminTransportationManagement } from '../components/admin/AdminTransportationManagement';
 import { recordAuditLog } from '../lib/auditLogHelper';
 import { getBusinessVipStatus, applyNewBusinessWelcomeGift } from '../lib/vipHelper';
 import { sanitizeFirestorePayload, compressAndSanitizeFirestorePayload } from '../lib/firestoreHelper';
@@ -233,6 +235,7 @@ export function AdminDashboard() {
   const [selectedBusinessForVip, setSelectedBusinessForVip] = useState<Business | null>(null);
 
   const [isBroadcastModalOpen, setIsBroadcastModalOpen] = useState(false);
+  const [marketingSubTab, setMarketingSubTab] = useState<'requests' | 'notifications_center'>('requests');
   const [isDeletingAllNotifications, setIsDeletingAllNotifications] = useState(false);
   const [isMarketingDetailsOpen, setIsMarketingDetailsOpen] = useState(false);
   const [selectedMarketingRequest, setSelectedMarketingRequest] = useState<MarketingRequest | null>(null);
@@ -1078,6 +1081,7 @@ export function AdminDashboard() {
             isCustomClosed: false
           },
           socialLinks: request.socialLinks || (request.socialMedia ? { website: request.socialMedia } : {}),
+          paymentMethods: request.paymentMethods || (request.medicalProfile?.paymentMethods) || ['كاش', 'فيزا', 'كليك'],
           views: 0,
           analytics: {
             views: 0,
@@ -1104,21 +1108,42 @@ export function AdminDashboard() {
       setRequests(prev => prev.map(r => r.id === request.id ? { ...r, status: 'approved' } : r));
       invalidateCache();
 
-      // Push notification tailored to the specific welcome gift
+      const isMedical = 
+        request.requestType === 'medical_facility_registration' ||
+        Boolean(request.medicalProfile) ||
+        (request.category || '').includes('طب') ||
+        (request.category || '').includes('صحة') ||
+        (request.category || '').includes('عياد') ||
+        (request.category || '').includes('صيدل') ||
+        (request.category || '').includes('مختبر');
+
+      // Push notification tailored to the specific welcome gift & entity type
       const notifMessage = gift.isFeatured
-        ? `انضم ${request.name} رسمياً بالباقة الذهبية VIP وحصل على ميزة (المميز/صدارة البحث) ذات الإطار الذهبي وعلامة ممول مجاناً لمدة أسبوع!`
-        : `انضم ${request.name} رسمياً إلى دليل شو في بإربد! أهلاً وسهلاً بهم.`;
+        ? (isMedical 
+            ? `انضمت منشأة ${request.name} رسمياً إلى دليل الرعاية الطبية بالباقة الذهبية VIP مع ميزة (صدارة البحث والإطار المميز) وعلامة ممول مجاناً لمدة أسبوع!`
+            : `انضم ${request.name} رسمياً بالباقة الذهبية VIP وحصل على ميزة (المميز/صدارة البحث) ذات الإطار الذهبي وعلامة ممول مجاناً لمدة أسبوع!`)
+        : (isMedical
+            ? `انضمت منشأة ${request.name} رسمياً إلى دليل الرعاية الطبية والصحية في شو في بإربد! أهلاً وسهلاً بهم.`
+            : `انضم ${request.name} رسمياً إلى دليل شو في بإربد! أهلاً وسهلاً بهم.`);
+
+      const notifTitle = isMedical
+        ? `تم توثيق منشأة طبية جديدة: ${request.name} 🩺`
+        : `تم توثيق منشأة جديدة: ${request.name} 🏬`;
+
+      const notifBadge = gift.isFeatured
+        ? 'صدارة وممول ⭐'
+        : (isMedical ? 'منشأة طبية جديدة 🩺' : 'محل جديد 🌟');
 
       await addNotification({
-        title: `تم توثيق منشأة جديدة: ${request.name} 🏬`,
+        title: notifTitle,
         message: notifMessage,
         type: 'business',
         link: `/business/${targetDocId}`,
-        badge: gift.isFeatured ? 'صدارة وممول ⭐' : 'محل جديد 🌟',
+        badge: notifBadge,
         userId: 'all',
         businessId: targetDocId,
         businessName: request.name,
-        businessLogoUrl: request.logoUrl || request.logo || ''
+        businessLogoUrl: request.imageUrl || request.logoUrl || request.logo || ''
       });
 
       const toastMessage = gift.isFeatured
@@ -1944,7 +1969,10 @@ export function AdminDashboard() {
         onRefresh={fetchData}
         onOpenAddEntity={() => setIsAddEntitySelectionOpen(true)}
         onOpenAddBusiness={() => setIsAddBusinessOpen(true)}
-        onOpenBroadcastModal={() => setIsBroadcastModalOpen(true)}
+        onOpenBroadcastModal={() => {
+          setActiveTab('marketing');
+          setMarketingSubTab('notifications_center');
+        }}
         onExportData={handleExportBackup}
         isRefreshing={isRefreshing}
       />
@@ -2002,7 +2030,10 @@ export function AdminDashboard() {
             jobs={jobs}
             onNavigateTab={setActiveTab}
             onOpenAddBusiness={() => setIsAddBusinessOpen(true)}
-            onOpenBroadcastModal={() => setIsBroadcastModalOpen(true)}
+            onOpenBroadcastModal={() => {
+              setActiveTab('marketing');
+              setMarketingSubTab('notifications_center');
+            }}
           />
 
           {/* Site Announcement Banner Control */}
@@ -2781,246 +2812,255 @@ export function AdminDashboard() {
       {/* TAB 4: MARKETING CAMPAIGNS */}
       {activeTab === 'marketing' && (
         <div className="space-y-6">
-          
           {/* Marketing Header Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {[
-              { title: 'صدارة البحث والتصنيف', price: `${appConfigState?.priceSponsored ?? 15} د.أ`, desc: 'ظهور المحل في أعلى نتائج البحث وبانر مميز', type: 'sponsored', count: marketingRequests.filter(m => m.serviceType === 'sponsored').length },
-              { title: 'إشعار جماعي مباشر', price: `${appConfigState?.pricePushNotifications ?? 10} د.أ`, desc: 'إشعار فوري لجميع مستخدمي المنصة في إربد', type: 'push_notifications', count: marketingRequests.filter(m => m.serviceType === 'push_notifications').length },
-              { title: 'بانر الصفحة الرئيسية', price: `${appConfigState?.priceHomepageBanner ?? 25} د.أ`, desc: 'إعلان رئيسي بارز في سلايدر أعلى الصفحة', type: 'homepage_banner', count: marketingRequests.filter(m => m.serviceType === 'homepage_banner').length },
-              { title: 'ترقية نظام الرسائل', price: `يبدأ من ${appConfigState?.priceMessaging1Month ?? 5} د.أ`, desc: 'ترقية نظام استقبال الوسائط والمحادثات', type: 'premium_messaging', count: marketingRequests.filter(m => m.serviceType === 'premium_messaging').length },
-            ].map(pkg => (
-              <div key={pkg.type} className="bg-white p-4.5 rounded-3xl border border-[#e5e1da] shadow-xs space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-black text-purple-700 bg-purple-50 px-2.5 py-0.5 rounded-full">{pkg.price}</span>
-                  <span className="text-xs font-bold text-stone-500">{pkg.count} طلب</span>
-                </div>
-                <h4 className="font-black text-sm text-[#2d2a26]">{pkg.title}</h4>
-                <p className="text-[11px] text-stone-500 leading-relaxed">{pkg.desc}</p>
-              </div>
-            ))}
-          </div>
-
-          {/* Edit Marketing Prices Form */}
-          <div className="bg-white p-5 rounded-3xl border border-[#e5e1da] shadow-xs">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-black text-[#2d2a26]">تسعير الخدمات التسويقية</h3>
-              {!isEditingPrices ? (
-                <button
-                  onClick={() => {
-                    setEditPricesData(appConfigState || {});
-                    setIsEditingPrices(true);
-                  }}
-                  className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold rounded-xl transition-colors"
-                >
-                  تعديل الأسعار
-                </button>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setIsEditingPrices(false)}
-                    className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold rounded-xl transition-colors"
-                  >
-                    إلغاء
-                  </button>
-                  <button
-                    onClick={handleSavePrices}
-                    className="px-4 py-2 bg-[#1a4d2e] hover:bg-[#143a23] text-white text-xs font-bold rounded-xl transition-colors"
-                  >
-                    حفظ التغييرات
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {isEditingPrices && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
-                <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-stone-500">صدارة البحث (د.أ)</label>
-                  <input
-                    type="number"
-                    value={editPricesData.priceSponsored || 15}
-                    onChange={(e) => setEditPricesData({ ...editPricesData, priceSponsored: Number(e.target.value) })}
-                    className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-stone-500">إشعار جماعي (د.أ)</label>
-                  <input
-                    type="number"
-                    value={editPricesData.pricePushNotifications || 10}
-                    onChange={(e) => setEditPricesData({ ...editPricesData, pricePushNotifications: Number(e.target.value) })}
-                    className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-stone-500">بانر رئيسي (د.أ)</label>
-                  <input
-                    type="number"
-                    value={editPricesData.priceHomepageBanner || 25}
-                    onChange={(e) => setEditPricesData({ ...editPricesData, priceHomepageBanner: Number(e.target.value) })}
-                    className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-stone-500">نظام الرسائل (1 شهر)</label>
-                  <input
-                    type="number"
-                    value={editPricesData.priceMessaging1Month || 5}
-                    onChange={(e) => setEditPricesData({ ...editPricesData, priceMessaging1Month: Number(e.target.value) })}
-                    className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-stone-500">نظام الرسائل (3 أشهر)</label>
-                  <input
-                    type="number"
-                    value={editPricesData.priceMessaging3Months || 12}
-                    onChange={(e) => setEditPricesData({ ...editPricesData, priceMessaging3Months: Number(e.target.value) })}
-                    className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-stone-500">نظام الرسائل (6 أشهر)</label>
-                  <input
-                    type="number"
-                    value={editPricesData.priceMessaging6Months || 20}
-                    onChange={(e) => setEditPricesData({ ...editPricesData, priceMessaging6Months: Number(e.target.value) })}
-                    className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-stone-500">نظام الرسائل (سنة)</label>
-                  <input
-                    type="number"
-                    value={editPricesData.priceMessaging1Year || 35}
-                    onChange={(e) => setEditPricesData({ ...editPricesData, priceMessaging1Year: Number(e.target.value) })}
-                    className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Filters Bar */}
-          <div className="bg-white p-4.5 rounded-3xl border border-[#e5e1da] shadow-xs flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="relative flex-1 w-full">
-              <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
-              <input
-                type="text"
-                value={marketingSearch}
-                onChange={e => setMarketingSearch(e.target.value)}
-                placeholder="ابحث باسم المحل أو الخدمة أو بريد التاجر..."
-                className="w-full bg-stone-50 border border-stone-200 rounded-xl pr-10 pl-4 py-2.5 text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
-              />
-            </div>
-
-            <div className="flex items-center gap-2 w-full md:w-auto">
-              <select
-                value={marketingStatusFilter}
-                onChange={e => setMarketingStatusFilter(e.target.value as any)}
-                className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs font-bold text-stone-700"
-              >
-                <option value="all">جميع الحالات</option>
-                <option value="pending">قيد الانتظار ({marketingRequests.filter(m => m.status === 'pending').length})</option>
-                <option value="contacted">تم التواصل</option>
-                <option value="completed">مفعّل ومعتمد</option>
-                <option value="rejected">مرفوض</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Marketing Requests List */}
-          {filteredMarketing.length === 0 ? (
-            <div className="text-center py-16 bg-white rounded-3xl border border-[#e5e1da] space-y-3">
-              <Megaphone className="h-12 w-12 text-stone-300 mx-auto" />
-              <h3 className="font-bold text-stone-700">لا توجد طلبات تسويقية حالياً</h3>
-              <p className="text-xs text-stone-500">تظهر هنا جميع طلبات الترويج من أصحاب المنشآت</p>
-            </div>
-          ) : (
-            <div className="grid gap-4">
-              {filteredMarketing.map(req => {
-                const relatedBiz = businesses.find(b => b.id === req.businessId);
-                return (
-                  <div 
-                    key={req.id}
-                    className="bg-white p-6 rounded-3xl border border-[#e5e1da] shadow-xs flex flex-col lg:flex-row gap-6 justify-between items-start lg:items-center"
-                  >
-                    <div className="space-y-2 flex-1">
-                      <div className="flex flex-wrap items-center gap-2.5">
-                        <h3 className="text-lg font-black text-[#2d2a26]">{req.businessName}</h3>
-                        
-                        <span className={`px-3 py-1 rounded-full text-xs font-black ${
-                          req.status === 'completed' || req.status === 'approved' 
-                            ? 'bg-emerald-100 text-emerald-800' 
-                            : req.status === 'contacted' 
-                            ? 'bg-blue-100 text-blue-800' 
-                            : req.status === 'rejected'
-                            ? 'bg-red-100 text-red-800'
-                            : 'bg-amber-100 text-amber-800 animate-pulse'
-                        }`}>
-                          {req.status === 'completed' || req.status === 'approved' 
-                            ? 'مفعّل ومعتمد ✅' 
-                            : req.status === 'contacted' 
-                            ? 'تم التواصل 📞' 
-                            : req.status === 'rejected'
-                            ? 'مرفوض'
-                            : 'طلب جديد ⏳'}
-                        </span>
-
-                        <span className="bg-purple-100 text-purple-800 px-3 py-0.5 rounded-full text-xs font-bold">
-                          {req.serviceName}
-                        </span>
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-4 text-xs text-stone-500 pt-1">
-                        <span>تاريخ الطلب: {new Date(req.createdAt).toLocaleDateString('ar-EG')}</span>
-                        {req.userEmail && <span>البريد: {req.userEmail}</span>}
-                        {relatedBiz?.phone && <span>الهاتف: <span dir="ltr">{relatedBiz.phone}</span></span>}
-                      </div>
+                {[
+                  { title: 'صدارة البحث والتصنيف', price: `${appConfigState?.priceSponsored ?? 15} د.أ`, desc: 'ظهور المحل في أعلى نتائج البحث وبانر مميز', type: 'sponsored', count: marketingRequests.filter(m => m.serviceType === 'sponsored').length },
+                  { title: 'إشعار جماعي مباشر', price: `${appConfigState?.pricePushNotifications ?? 10} د.أ`, desc: 'إشعار فوري لجميع مستخدمي المنصة في إربد', type: 'push_notifications', count: marketingRequests.filter(m => m.serviceType === 'push_notifications').length },
+                  { title: 'بانر الصفحة الرئيسية', price: `${appConfigState?.priceHomepageBanner ?? 25} د.أ`, desc: 'إعلان رئيسي بارز في سلايدر أعلى الصفحة', type: 'homepage_banner', count: marketingRequests.filter(m => m.serviceType === 'homepage_banner').length },
+                  { title: 'ترقية نظام الرسائل', price: `يبدأ من ${appConfigState?.priceMessaging1Month ?? 5} د.أ`, desc: 'ترقية نظام استقبال الوسائط والمحادثات', type: 'premium_messaging', count: marketingRequests.filter(m => m.serviceType === 'premium_messaging').length },
+                ].map(pkg => (
+                  <div key={pkg.type} className="bg-white p-4.5 rounded-3xl border border-[#e5e1da] shadow-xs space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-black text-purple-700 bg-purple-50 px-2.5 py-0.5 rounded-full">{pkg.price}</span>
+                      <span className="text-xs font-bold text-stone-500">{pkg.count} طلب</span>
                     </div>
+                    <h4 className="font-black text-sm text-[#2d2a26]">{pkg.title}</h4>
+                    <p className="text-[11px] text-stone-500 leading-relaxed">{pkg.desc}</p>
+                  </div>
+                ))}
+              </div>
 
-                    {/* Actions */}
-                    <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+              {/* Edit Marketing Prices Form */}
+              <div className="bg-white p-5 rounded-3xl border border-[#e5e1da] shadow-xs">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-black text-[#2d2a26]">تسعير الخدمات التسويقية</h3>
+                  {!isEditingPrices ? (
+                    <button
+                      onClick={() => {
+                        setEditPricesData(appConfigState || {});
+                        setIsEditingPrices(true);
+                      }}
+                      className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold rounded-xl transition-colors"
+                    >
+                      تعديل الأسعار
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-2">
                       <button
-                        onClick={() => {
-                          setSelectedMarketingRequest(req);
-                          setIsMarketingDetailsOpen(true);
-                        }}
-                        className="flex-1 lg:flex-none bg-stone-100 hover:bg-stone-200 text-stone-800 px-4 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                        onClick={() => setIsEditingPrices(false)}
+                        className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold rounded-xl transition-colors"
                       >
-                        تفاصيل وتواصل 📋
+                        إلغاء
                       </button>
-
-                      {req.status !== 'completed' && req.status !== 'approved' ? (
-                        <button
-                          onClick={() => handleMarketingStatusUpdate(req.id!, 'completed', req.businessId, req.serviceType)}
-                          className="flex-1 lg:flex-none bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl text-xs font-black transition-colors shadow-xs cursor-pointer"
-                        >
-                          موافقة وتفعيل ⭐
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => handleMarketingStatusUpdate(req.id!, 'rejected', req.businessId, req.serviceType)}
-                          className="flex-1 lg:flex-none bg-stone-100 hover:bg-red-50 text-stone-700 hover:text-red-700 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-                        >
-                          إلغاء التفعيل
-                        </button>
-                      )}
-
                       <button
-                        onClick={() => handleDeleteMarketingRequest(req.id)}
-                        className="p-2.5 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors cursor-pointer"
+                        onClick={handleSavePrices}
+                        className="px-4 py-2 bg-[#1a4d2e] hover:bg-[#143a23] text-white text-xs font-bold rounded-xl transition-colors"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        حفظ التغييرات
                       </button>
+                    </div>
+                  )}
+                </div>
+
+                {isEditingPrices && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-stone-500">صدارة البحث (د.أ)</label>
+                      <input
+                        type="number"
+                        value={editPricesData.priceSponsored || 15}
+                        onChange={(e) => setEditPricesData({ ...editPricesData, priceSponsored: Number(e.target.value) })}
+                        className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-stone-500">إشعار جماعي (د.أ)</label>
+                      <input
+                        type="number"
+                        value={editPricesData.pricePushNotifications || 10}
+                        onChange={(e) => setEditPricesData({ ...editPricesData, pricePushNotifications: Number(e.target.value) })}
+                        className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-stone-500">بانر رئيسي (د.أ)</label>
+                      <input
+                        type="number"
+                        value={editPricesData.priceHomepageBanner || 25}
+                        onChange={(e) => setEditPricesData({ ...editPricesData, priceHomepageBanner: Number(e.target.value) })}
+                        className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-stone-500">نظام الرسائل (1 شهر)</label>
+                      <input
+                        type="number"
+                        value={editPricesData.priceMessaging1Month || 5}
+                        onChange={(e) => setEditPricesData({ ...editPricesData, priceMessaging1Month: Number(e.target.value) })}
+                        className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-stone-500">نظام الرسائل (3 أشهر)</label>
+                      <input
+                        type="number"
+                        value={editPricesData.priceMessaging3Months || 12}
+                        onChange={(e) => setEditPricesData({ ...editPricesData, priceMessaging3Months: Number(e.target.value) })}
+                        className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-stone-500">نظام الرسائل (6 أشهر)</label>
+                      <input
+                        type="number"
+                        value={editPricesData.priceMessaging6Months || 20}
+                        onChange={(e) => setEditPricesData({ ...editPricesData, priceMessaging6Months: Number(e.target.value) })}
+                        className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-stone-500">نظام الرسائل (سنة)</label>
+                      <input
+                        type="number"
+                        value={editPricesData.priceMessaging1Year || 35}
+                        onChange={(e) => setEditPricesData({ ...editPricesData, priceMessaging1Year: Number(e.target.value) })}
+                        className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                      />
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
+                )}
+              </div>
+
+              {/* Filters Bar */}
+              <div className="bg-white p-4.5 rounded-3xl border border-[#e5e1da] shadow-xs flex flex-col md:flex-row items-center justify-between gap-4">
+                <div className="relative flex-1 w-full">
+                  <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
+                  <input
+                    type="text"
+                    value={marketingSearch}
+                    onChange={e => setMarketingSearch(e.target.value)}
+                    placeholder="ابحث باسم المحل أو الخدمة أو بريد التاجر..."
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl pr-10 pl-4 py-2.5 text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2 w-full md:w-auto">
+                  <select
+                    value={marketingStatusFilter}
+                    onChange={e => setMarketingStatusFilter(e.target.value as any)}
+                    className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs font-bold text-stone-700"
+                  >
+                    <option value="all">جميع الحالات</option>
+                    <option value="pending">قيد الانتظار ({marketingRequests.filter(m => m.status === 'pending').length})</option>
+                    <option value="contacted">تم التواصل</option>
+                    <option value="completed">مفعّل ومعتمد</option>
+                    <option value="rejected">مرفوض</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Marketing Requests List */}
+              {filteredMarketing.length === 0 ? (
+                <div className="text-center py-16 bg-white rounded-3xl border border-[#e5e1da] space-y-3">
+                  <Megaphone className="h-12 w-12 text-stone-300 mx-auto" />
+                  <h3 className="font-bold text-stone-700">لا توجد طلبات تسويقية حالياً</h3>
+                  <p className="text-xs text-stone-500">تظهر هنا جميع طلبات الترويج من أصحاب المنشآت</p>
+                </div>
+              ) : (
+                <div className="grid gap-4">
+                  {filteredMarketing.map(req => {
+                    const relatedBiz = businesses.find(b => b.id === req.businessId);
+                    return (
+                      <div 
+                        key={req.id}
+                        className="bg-white p-6 rounded-3xl border border-[#e5e1da] shadow-xs flex flex-col lg:flex-row gap-6 justify-between items-start lg:items-center"
+                      >
+                        <div className="space-y-2 flex-1">
+                          <div className="flex flex-wrap items-center gap-2.5">
+                            <h3 className="text-lg font-black text-[#2d2a26]">{req.businessName}</h3>
+                            
+                            <span className={`px-3 py-1 rounded-full text-xs font-black ${
+                              req.status === 'completed' || req.status === 'approved' 
+                                ? 'bg-emerald-100 text-emerald-800' 
+                                : req.status === 'contacted' 
+                                ? 'bg-blue-100 text-blue-800' 
+                                : req.status === 'rejected'
+                                ? 'bg-red-100 text-red-800'
+                                : 'bg-amber-100 text-amber-800 animate-pulse'
+                            }`}>
+                              {req.status === 'completed' || req.status === 'approved' 
+                                ? 'مفعّل ومعتمد ✅' 
+                                : req.status === 'contacted' 
+                                ? 'تم التواصل 📞' 
+                                : req.status === 'rejected'
+                                ? 'مرفوض'
+                                : 'طلب جديد ⏳'}
+                            </span>
+
+                            <span className="bg-purple-100 text-purple-800 px-3 py-0.5 rounded-full text-xs font-bold">
+                              {req.serviceName}
+                            </span>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-4 text-xs text-stone-500 pt-1">
+                            <span>تاريخ الطلب: {new Date(req.createdAt).toLocaleDateString('ar-EG')}</span>
+                            {req.userEmail && <span>البريد: {req.userEmail}</span>}
+                            {relatedBiz?.phone && <span>الهاتف: <span dir="ltr">{relatedBiz.phone}</span></span>}
+                          </div>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+                          <button
+                            onClick={() => {
+                              setSelectedMarketingRequest(req);
+                              setIsMarketingDetailsOpen(true);
+                            }}
+                            className="flex-1 lg:flex-none bg-stone-100 hover:bg-stone-200 text-stone-800 px-4 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                          >
+                            تفاصيل وتواصل 📋
+                          </button>
+
+                          {req.status !== 'completed' && req.status !== 'approved' ? (
+                            <button
+                              onClick={() => handleMarketingStatusUpdate(req.id!, 'completed', req.businessId, req.serviceType)}
+                              className="flex-1 lg:flex-none bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl text-xs font-black transition-colors shadow-xs cursor-pointer"
+                            >
+                              موافقة وتفعيل ⭐
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleMarketingStatusUpdate(req.id!, 'rejected', req.businessId, req.serviceType)}
+                              className="flex-1 lg:flex-none bg-stone-100 hover:bg-red-50 text-stone-700 hover:text-red-700 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                            >
+                              إلغاء التفعيل
+                            </button>
+                          )}
+
+                          <button
+                            onClick={() => handleDeleteMarketingRequest(req.id)}
+                            className="p-2.5 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
         </div>
+      )}
+
+      {/* TAB: NOTIFICATIONS CENTER */}
+      {activeTab === 'broadcast' && (
+        <NotificationsCenterManager
+          onSendBroadcast={handleSendBroadcast}
+          onDeleteAllNotifications={handleDeleteAllGlobalNotifications}
+          isDeletingAllNotifications={isDeletingAllNotifications}
+          showToast={showToast}
+        />
       )}
 
       {/* TAB: MEDICAL FACILITIES & REQUESTS MANAGEMENT */}
@@ -4430,78 +4470,12 @@ export function AdminDashboard() {
         </div>
       )}
 
-      {/* TAB 6: BROADCAST CENTER */}
-      {activeTab === 'broadcast' && (
-        <div className="space-y-6">
-          <div className="bg-white p-6 rounded-3xl border border-[#e5e1da] shadow-xs space-y-6">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-stone-100 pb-4 gap-3">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
-                  <Bell className="h-5 w-5" />
-                </div>
-                <div>
-                  <h3 className="text-xl font-black text-[#2d2a26]">مركز الإشعارات والتنبيهات العامة</h3>
-                  <p className="text-xs text-stone-500">إرسال وتحديث وإدارة إشعارات جميع المستخدمين وأصحاب المحلات في إربد</p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 flex-wrap">
-                <button
-                  onClick={handleDeleteAllGlobalNotifications}
-                  disabled={isDeletingAllNotifications}
-                  className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white px-4 py-2.5 rounded-2xl text-xs font-black shadow-xs transition-colors cursor-pointer"
-                  title="حذف جميع الإشعارات من قاعدة البيانات نهائياً لجميع المستخدمين"
-                >
-                  <Trash2 className="h-4 w-4" />
-                  <span>{isDeletingAllNotifications ? 'جاري الحذف...' : 'حذف جميع الإشعارات لجميع المستخدمين'}</span>
-                </button>
-
-                <button
-                  onClick={() => setIsBroadcastModalOpen(true)}
-                  className="inline-flex items-center gap-2 bg-[#1a4d2e] hover:bg-[#143e25] text-white px-5 py-2.5 rounded-2xl text-xs font-black shadow-xs transition-colors cursor-pointer"
-                >
-                  <Send className="h-4 w-4 text-[#ff9f1c]" />
-                  <span>إرسال إشعار فوري الآن</span>
-                </button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="p-4 bg-stone-50 rounded-2xl border border-stone-200 space-y-2">
-                <div className="font-black text-xs text-stone-800">🔥 إشعارات العروض والتخفيضات</div>
-                <p className="text-[11px] text-stone-500 leading-relaxed">
-                  توجيه المستخدمين لصفحة العروض الحصرية `/offers` لزيادة المبيعات للمحلات الشريكة.
-                </p>
-              </div>
-
-              <div className="p-4 bg-stone-50 rounded-2xl border border-stone-200 space-y-2">
-                <div className="font-black text-xs text-stone-800">💼 إشعارات الشواغر والوظائف</div>
-                <p className="text-[11px] text-stone-500 leading-relaxed">
-                  إبلاغ الباحثين عن عمل والطلاب فور فتح وظيفة عاجلة ومجزية في مطاعم أو شركات إربد.
-                </p>
-              </div>
-
-              <div className="p-4 bg-stone-50 rounded-2xl border border-stone-200 space-y-2">
-                <div className="font-black text-xs text-stone-800">📢 تحديثات وأخبار المنصة</div>
-                <p className="text-[11px] text-stone-500 leading-relaxed">
-                  إعلان إضافة أقسام جديدة كسكنات الطلاب، الأماكن السياحية، أو ميزات حجز واستفسار جديدة.
-                </p>
-              </div>
-            </div>
-
-            <div className="pt-2 flex justify-end">
-              <Link
-                to="/notifications"
-                target="_blank"
-                className="text-xs font-bold text-[#1a4d2e] hover:underline inline-flex items-center gap-1"
-              >
-                <span>معاينة صفحة الإشعارات للمستخدمين</span>
-                <ExternalLink className="h-3.5 w-3.5" />
-              </Link>
-            </div>
-          </div>
-        </div>
+      {/* TAB: TRANSPORTATION MANAGEMENT */}
+      {activeTab === 'transportation' && (
+        <AdminTransportationManagement showToast={showToast} />
       )}
+
+      {/* TAB 6: BROADCAST CENTER - Handled inside Marketing Section */}
 
       {/* TAB: SUPERVISORS */}
       {(activeTab === 'supervisors' || activeTab === 'admins') && (
@@ -4510,7 +4484,7 @@ export function AdminDashboard() {
 
       {/* TAB: ALL ACCOUNTS */}
       {activeTab === 'accounts' && (
-        <AccountsManager />
+        <AccountsManager businesses={businesses} />
       )}
 
       {/* TAB: SUBSCRIPTIONS & PLANS MANAGEMENT (قسم رئيسي كامل لإدارة الاشتراكات والباقات) */}

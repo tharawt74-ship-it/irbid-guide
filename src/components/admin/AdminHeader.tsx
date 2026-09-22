@@ -31,7 +31,8 @@ import {
   Image as ImageIcon,
   Flame,
   Stethoscope,
-  Building2
+  Building2,
+  Bus
 } from 'lucide-react';
 import { Link } from 'react-router';
 
@@ -148,6 +149,7 @@ export function AdminHeader({
         { id: 'housing', label: 'إدارة العقارات', icon: HomeIcon, count: pendingHousingCount, isAlert: (pendingHousingCount || 0) > 0 },
         { id: 'news', label: 'إدارة الأخبار', icon: Newspaper, count: null },
         { id: 'tourism', label: 'السياحة والمعالم', icon: Compass, count: null },
+        { id: 'transportation', label: 'دليل المواصلات والنقل', icon: Bus, count: null },
       ]
     },
     {

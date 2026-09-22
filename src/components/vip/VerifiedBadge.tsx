@@ -47,7 +47,7 @@ export function VerifiedBadge({
           e.stopPropagation();
           setShowModal(true);
         }}
-        title="حساب موثّق بالشارة الزرقاء المعتمدة في منصة شو في بإربد (مثل فيسبوك وX)"
+        title="حساب موثّق معتمد رسمياً في منصة شو في بإربد"
         className={`inline-flex items-center gap-1 hover:scale-110 active:scale-95 transition-transform cursor-pointer select-none shrink-0 ${className}`}
       >
         <BlueCheckIcon className={iconSizes[size]} />
@@ -84,7 +84,7 @@ export function VerifiedBadge({
                 <span>العلامة الزرقاء (حساب موثّق رسمياً)</span>
               </div>
               <h3 className="text-xl font-black text-[#2d2a26]">{businessName}</h3>
-              <p className="text-xs text-stone-500 font-medium">منشأة موثّقة معتمدة تماماً مثل توثيق فيسبوك وX لدى منصة "شو في بإربد"</p>
+              <p className="text-xs text-stone-500 font-medium">منشأة معتمدة وموثّقة بالكامل لدى منصة "شو في بإربد"</p>
             </div>
 
             <div className="bg-sky-50/70 border border-sky-200/80 rounded-2xl p-4 space-y-3 text-xs text-stone-700">
@@ -114,7 +114,7 @@ export function VerifiedBadge({
                 </div>
                 <div>
                   <strong className="block font-bold text-sky-950">أولوية الظهور والمصداقية:</strong>
-                  <span className="text-stone-600">حماية من التنتحل مع أولوية الظهور في نتائج البحث لزوار وسكان إربد.</span>
+                  <span className="text-stone-600">حماية من الانتحال والتزييف مع أولوية الظهور في نتائج البحث لزوار وسكان إربد.</span>
                 </div>
               </div>
             </div>

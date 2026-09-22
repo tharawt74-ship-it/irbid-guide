@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { 
   Users, Stethoscope, Plus, Trash2, Edit3, Award, 
-  Check, Sparkles, GraduationCap, ShieldCheck, Eye, EyeOff 
+  Check, Sparkles, GraduationCap, ShieldCheck, Eye, EyeOff, Camera 
 } from 'lucide-react';
 import { Business, MedicalDoctor, MedicalFacilityInfo } from '../../../types';
 import { db } from '../../../lib/firebase';
 import { doc, updateDoc } from 'firebase/firestore';
+import { ImageUploader } from '../../ui/ImageUploader';
 
 interface MedicalStaffTabProps {
   business: Business;
@@ -30,6 +31,7 @@ export function MedicalStaffTab({ business, onUpdate, showToast }: MedicalStaffT
   };
 
   const [leadName, setLeadName] = useState(defaultLeadDoctor.name || '');
+  const [leadAvatarUrl, setLeadAvatarUrl] = useState(defaultLeadDoctor.avatarUrl || '');
   const [leadTitle, setLeadTitle] = useState(defaultLeadDoctor.title || '');
   const [leadDegreesStr, setLeadDegreesStr] = useState(
     Array.isArray(defaultLeadDoctor.degrees) ? defaultLeadDoctor.degrees.join('، ') : (defaultLeadDoctor.degrees || '')
@@ -45,6 +47,7 @@ export function MedicalStaffTab({ business, onUpdate, showToast }: MedicalStaffT
   // New Doctor Modal/Form State
   const [isAddingDoctor, setIsAddingDoctor] = useState(false);
   const [newDocName, setNewDocName] = useState('');
+  const [newDocAvatarUrl, setNewDocAvatarUrl] = useState('');
   const [newDocTitle, setNewDocTitle] = useState('');
   const [newDocSubspecialty, setNewDocSubspecialty] = useState('');
   const [newDocDegreesStr, setNewDocDegreesStr] = useState('');
@@ -67,17 +70,27 @@ export function MedicalStaffTab({ business, onUpdate, showToast }: MedicalStaffT
       subspecialty: newDocSubspecialty.trim(),
       degrees: degreesArr,
       experienceYears: Number(newDocExpYears) || 5,
-      licenseNumber: newDocLicense.trim()
+      licenseNumber: newDocLicense.trim(),
+      avatarUrl: newDocAvatarUrl.trim() || undefined
     };
 
     setDoctorsList(prev => [...prev, newDoc]);
     setNewDocName('');
+    setNewDocAvatarUrl('');
     setNewDocTitle('');
     setNewDocSubspecialty('');
     setNewDocDegreesStr('');
     setNewDocExpYears(5);
     setNewDocLicense('');
     setIsAddingDoctor(false);
+  };
+
+  const handleUpdateDoctorAvatar = (index: number, avatarUrl: string) => {
+    setDoctorsList(prev => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], avatarUrl: avatarUrl || undefined };
+      return copy;
+    });
   };
 
   const handleRemoveDoctor = (index: number) => {
@@ -101,7 +114,8 @@ export function MedicalStaffTab({ business, onUpdate, showToast }: MedicalStaffT
         subspecialty: leadSubspecialty.trim(),
         experienceYears: Number(leadExpYears) || 10,
         licenseNumber: leadLicense.trim(),
-        bio: leadBio.trim()
+        bio: leadBio.trim(),
+        avatarUrl: leadAvatarUrl.trim() || undefined
       };
 
       const updatedMed: MedicalFacilityInfo = {
@@ -134,7 +148,7 @@ export function MedicalStaffTab({ business, onUpdate, showToast }: MedicalStaffT
   };
 
   return (
-    <form onSubmit={handleSave} className="p-4 sm:p-6 space-y-6 text-right" dir="rtl">
+    <form onSubmit={handleSave} className="p-2 sm:p-6 space-y-4 sm:space-y-6 text-right" dir="rtl">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-stone-200">
         <div>
           <h3 className="text-base font-black text-[#2d2a26] flex items-center gap-2">
@@ -156,7 +170,7 @@ export function MedicalStaffTab({ business, onUpdate, showToast }: MedicalStaffT
       </div>
 
       {/* Visibility Toggle for Staff Section */}
-      <div className="bg-teal-50/60 border border-teal-200/80 p-4 rounded-2xl flex items-center justify-between flex-wrap gap-3">
+      <div className="bg-teal-50/60 border-0 sm:border border-teal-200/80 p-3.5 sm:p-4 rounded-xl sm:rounded-2xl flex items-center justify-between flex-wrap gap-3 shadow-none sm:shadow-2xs">
         <div className="space-y-0.5">
           <span className="text-xs font-black text-teal-950 flex items-center gap-1.5">
             {showMedicalStaff ? <Eye className="h-4 w-4 text-teal-600" /> : <EyeOff className="h-4 w-4 text-stone-400" />}
@@ -178,7 +192,7 @@ export function MedicalStaffTab({ business, onUpdate, showToast }: MedicalStaffT
       </div>
 
       {/* Head Doctor / Consultant Profile */}
-      <div className="bg-white border border-stone-200 rounded-2xl p-4 sm:p-5 space-y-4">
+      <div className="bg-white border-0 sm:border border-stone-200 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 space-y-4 shadow-none sm:shadow-2xs">
         <div className="flex items-center gap-2 pb-3 border-b border-stone-100">
           <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center">
             <Stethoscope className="h-4 w-4" />
@@ -192,6 +206,18 @@ export function MedicalStaffTab({ business, onUpdate, showToast }: MedicalStaffT
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="sm:col-span-2 space-y-1">
+            <ImageUploader
+              value={leadAvatarUrl}
+              onChange={(url) => setLeadAvatarUrl(url)}
+              folder="doctors"
+              label="صورة الطبيب / الاستشاري الرئيسي"
+              aspectRatio="square"
+              placeholder="اضغط لرفع أو تغيير صورة الطبيب الرئيسي"
+              enableCrop={true}
+            />
+          </div>
+
           <div>
             <label className="block text-xs font-bold text-stone-700 mb-1">
               اسم الطبيب / الاستشاري <span className="text-rose-500">*</span>
@@ -276,7 +302,7 @@ export function MedicalStaffTab({ business, onUpdate, showToast }: MedicalStaffT
       </div>
 
       {/* Additional Doctors & Specialists List */}
-      <div className="bg-white border border-stone-200 rounded-2xl p-4 sm:p-5 space-y-4">
+      <div className="bg-white border-0 sm:border border-stone-200 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 space-y-4 shadow-none sm:shadow-2xs">
         <div className="flex items-center justify-between pb-3 border-b border-stone-100 flex-wrap gap-2">
           <div>
             <h4 className="text-xs font-black text-stone-900 flex items-center gap-1.5">
@@ -306,10 +332,23 @@ export function MedicalStaffTab({ business, onUpdate, showToast }: MedicalStaffT
               <button
                 type="button"
                 onClick={() => setIsAddingDoctor(false)}
-                className="text-xs text-stone-400 hover:text-stone-600"
+                className="text-xs text-stone-400 hover:text-stone-600 cursor-pointer"
               >
                 إلغاء ✕
               </button>
+            </div>
+
+            <div className="space-y-1">
+              <label className="block text-[11px] font-bold text-stone-700 mb-1">صورة الطبيب / الأخصائي (اختياري)</label>
+              <ImageUploader
+                value={newDocAvatarUrl}
+                onChange={(url) => setNewDocAvatarUrl(url)}
+                folder="doctors"
+                label=""
+                aspectRatio="square"
+                placeholder="رفع صورة الطبيب"
+                enableCrop={true}
+              />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -320,7 +359,7 @@ export function MedicalStaffTab({ business, onUpdate, showToast }: MedicalStaffT
                   value={newDocName}
                   onChange={(e) => setNewDocName(e.target.value)}
                   placeholder="د. سارة الأحمد"
-                  className="w-full px-3 py-2 rounded-lg border border-stone-200 text-xs font-bold bg-white"
+                  className="w-full px-3 py-2 rounded-lg border border-stone-200 text-xs font-bold bg-white outline-none focus:ring-1 focus:ring-teal-600"
                 />
               </div>
 
@@ -331,7 +370,7 @@ export function MedicalStaffTab({ business, onUpdate, showToast }: MedicalStaffT
                   value={newDocTitle}
                   onChange={(e) => setNewDocTitle(e.target.value)}
                   placeholder="أخصائية طب وجراحة العيون"
-                  className="w-full px-3 py-2 rounded-lg border border-stone-200 text-xs font-bold bg-white"
+                  className="w-full px-3 py-2 rounded-lg border border-stone-200 text-xs font-bold bg-white outline-none focus:ring-1 focus:ring-teal-600"
                 />
               </div>
 
@@ -342,7 +381,7 @@ export function MedicalStaffTab({ business, onUpdate, showToast }: MedicalStaffT
                   value={newDocSubspecialty}
                   onChange={(e) => setNewDocSubspecialty(e.target.value)}
                   placeholder="تصحيح البصر والليزك"
-                  className="w-full px-3 py-2 rounded-lg border border-stone-200 text-xs font-bold bg-white"
+                  className="w-full px-3 py-2 rounded-lg border border-stone-200 text-xs font-bold bg-white outline-none focus:ring-1 focus:ring-teal-600"
                 />
               </div>
 
@@ -354,7 +393,7 @@ export function MedicalStaffTab({ business, onUpdate, showToast }: MedicalStaffT
                   max="60"
                   value={newDocExpYears}
                   onChange={(e) => setNewDocExpYears(Number(e.target.value) || 0)}
-                  className="w-full px-3 py-2 rounded-lg border border-stone-200 text-xs font-bold bg-white"
+                  className="w-full px-3 py-2 rounded-lg border border-stone-200 text-xs font-bold bg-white outline-none focus:ring-1 focus:ring-teal-600"
                 />
               </div>
 
@@ -365,7 +404,7 @@ export function MedicalStaffTab({ business, onUpdate, showToast }: MedicalStaffT
                   value={newDocDegreesStr}
                   onChange={(e) => setNewDocDegreesStr(e.target.value)}
                   placeholder="البورد الأردني، ماجستير طب وجراحة العيون"
-                  className="w-full px-3 py-2 rounded-lg border border-stone-200 text-xs font-bold bg-white"
+                  className="w-full px-3 py-2 rounded-lg border border-stone-200 text-xs font-bold bg-white outline-none focus:ring-1 focus:ring-teal-600"
                 />
               </div>
             </div>
@@ -374,14 +413,14 @@ export function MedicalStaffTab({ business, onUpdate, showToast }: MedicalStaffT
               <button
                 type="button"
                 onClick={() => setIsAddingDoctor(false)}
-                className="px-4 py-2 bg-stone-100 text-stone-600 rounded-lg text-xs font-bold hover:bg-stone-200"
+                className="px-4 py-2 bg-stone-100 text-stone-600 rounded-lg text-xs font-bold hover:bg-stone-200 cursor-pointer"
               >
                 إلغاء
               </button>
               <button
                 type="button"
                 onClick={handleAddDoctor}
-                className="px-5 py-2 bg-teal-700 text-white rounded-lg text-xs font-black hover:bg-teal-800"
+                className="px-5 py-2 bg-teal-700 text-white rounded-lg text-xs font-black hover:bg-teal-800 cursor-pointer"
               >
                 إضافة للقائمة ➕
               </button>
@@ -393,26 +432,43 @@ export function MedicalStaffTab({ business, onUpdate, showToast }: MedicalStaffT
         {doctorsList.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {doctorsList.map((docItem, idx) => (
-              <div key={idx} className="bg-stone-50 border border-stone-200 p-3.5 rounded-xl space-y-2 relative group">
+              <div key={idx} className="bg-stone-50 border border-stone-200 p-3.5 rounded-xl space-y-3 relative group">
                 <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-9 h-9 rounded-lg bg-teal-100 text-teal-800 font-black text-xs flex items-center justify-center">
-                      👨‍⚕️
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-11 h-11 rounded-xl bg-teal-100 text-teal-800 font-black text-xs flex items-center justify-center border border-teal-200 shrink-0 overflow-hidden">
+                      {docItem.avatarUrl ? (
+                        <img src={docItem.avatarUrl} alt={docItem.name} className="w-full h-full object-cover" />
+                      ) : (
+                        '👨‍⚕️'
+                      )}
                     </div>
-                    <div>
-                      <h5 className="text-xs font-black text-stone-900">{docItem.name}</h5>
-                      <span className="text-[11px] text-teal-700 font-bold block">{docItem.title}</span>
+                    <div className="min-w-0">
+                      <h5 className="text-xs font-black text-stone-900 truncate">{docItem.name}</h5>
+                      <span className="text-[11px] text-teal-700 font-bold block truncate">{docItem.title}</span>
                     </div>
                   </div>
 
                   <button
                     type="button"
                     onClick={() => handleRemoveDoctor(idx)}
-                    className="text-stone-400 hover:text-red-600 p-1 transition-colors cursor-pointer"
+                    className="text-stone-400 hover:text-red-600 p-1 transition-colors cursor-pointer shrink-0"
                     title="حذف الطبيب"
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
+                </div>
+
+                {/* Direct Image Editor for Existing Doctor */}
+                <div className="pt-1 border-t border-stone-200/60">
+                  <ImageUploader
+                    value={docItem.avatarUrl || ''}
+                    onChange={(url) => handleUpdateDoctorAvatar(idx, url)}
+                    folder="doctors"
+                    label=""
+                    aspectRatio="square"
+                    placeholder={docItem.avatarUrl ? "تغيير الصورة" : "إضافة صورة الطبيب"}
+                    enableCrop={true}
+                  />
                 </div>
 
                 {docItem.subspecialty && (

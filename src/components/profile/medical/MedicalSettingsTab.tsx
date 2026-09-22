@@ -78,7 +78,7 @@ export function MedicalSettingsTab({
   };
 
   return (
-    <form onSubmit={handleSave} className="p-4 sm:p-6 space-y-6 text-right" dir="rtl">
+    <form onSubmit={handleSave} className="p-2 sm:p-6 space-y-4 sm:space-y-6 text-right" dir="rtl">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-stone-200">
         <div>
           <h3 className="text-base font-black text-[#2d2a26] flex items-center gap-2">
@@ -100,7 +100,7 @@ export function MedicalSettingsTab({
       </div>
 
       {/* Reception / Staff Delegation */}
-      <div className="bg-white border border-stone-200 rounded-2xl p-4 sm:p-5 space-y-4">
+      <div className="bg-white border-0 sm:border border-stone-200 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 space-y-4 shadow-none sm:shadow-2xs">
         <div className="space-y-1">
           <h4 className="text-xs font-black text-stone-900 flex items-center gap-1.5">
             <Users className="h-4 w-4 text-teal-600" />
@@ -158,7 +158,7 @@ export function MedicalSettingsTab({
       </div>
 
       {/* Visibility & Privacy */}
-      <div className="bg-white border border-stone-200 rounded-2xl p-4 sm:p-5 space-y-4">
+      <div className="bg-white border-0 sm:border border-stone-200 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 space-y-4 shadow-none sm:shadow-2xs">
         <h4 className="text-xs font-black text-stone-900 flex items-center gap-1.5">
           <Eye className="h-4 w-4 text-teal-600" />
           خيارات الظهور والخصوصية في دليل بلديتي إربد:
@@ -208,7 +208,7 @@ export function MedicalSettingsTab({
       </div>
 
       {/* QR Poster & Printouts */}
-      <div className="bg-white border border-stone-200 rounded-2xl p-4 sm:p-5 flex items-center justify-between flex-wrap gap-3">
+      <div className="bg-white border-0 sm:border border-stone-200 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 flex items-center justify-between flex-wrap gap-3 shadow-none sm:shadow-2xs">
         <div className="space-y-0.5">
           <h4 className="text-xs font-black text-stone-900 flex items-center gap-1.5">
             <QrCode className="h-4 w-4 text-teal-600" />
@@ -229,7 +229,7 @@ export function MedicalSettingsTab({
       </div>
 
       {/* Danger Zone: Delete Facility */}
-      <div className="bg-rose-50/60 border border-rose-200 rounded-2xl p-4 sm:p-5 flex items-center justify-between flex-wrap gap-3">
+      <div className="bg-rose-50/60 border-0 sm:border border-rose-200 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 flex items-center justify-between flex-wrap gap-3 shadow-none sm:shadow-2xs">
         <div className="space-y-0.5">
           <h4 className="text-xs font-black text-rose-900 flex items-center gap-1.5">
             <AlertTriangle className="h-4 w-4 text-rose-600" />

@@ -8,7 +8,7 @@ interface CachedData<T> {
 
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes fresh in-memory cache
 const PERSISTENT_TTL_MS = 30 * 60 * 1000; // 30 minutes persistent cache
-const BIZ_STORAGE_KEY = 'shoof_cached_businesses_v2';
+const BIZ_STORAGE_KEY = 'shoof_cached_businesses_v3';
 const BANNERS_STORAGE_KEY = 'shoof_cached_banners_v2';
 const OFFERS_STORAGE_KEY = 'shoof_cached_offers_v2';
 const JOBS_STORAGE_KEY = 'shoof_cached_jobs_v2';

@@ -252,4 +252,20 @@
   animation: scanner-pulse-laser 2.2s ease-in-out infinite;
 }
 
+/* Hide any library-generated shaded regions, inner borders, and white corners for html5-qrcode */
+#qr-shaded-region,
+[id$="__scan_region"] > div:not(video),
+[id*="qr-reader-container"] > div:not(video) {
+  display: none !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+#merchant-qr-reader-full video,
+#qr-reader-container video {
+  object-fit: cover !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
 

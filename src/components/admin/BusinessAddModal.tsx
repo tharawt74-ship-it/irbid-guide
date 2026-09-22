@@ -23,6 +23,7 @@ import { WorkingHoursEditor } from '../ui/WorkingHoursEditor';
 import { SocialLinksEditor } from '../ui/SocialLinksEditor';
 import { ImageUploader } from '../ui/ImageUploader';
 import { RichTextEditor } from '../common/RichTextEditor';
+import { PaymentMethodsSelector } from '../ui/PaymentMethodsSelector';
 import { validateJordanianPhone } from '../../lib/medicalHelper';
 
 interface BusinessAddModalProps {
@@ -54,7 +55,8 @@ export function BusinessAddModal({
     isFeatured: false,
     packagePlan: 'golden',
     isVerified: true,
-    hideSiteReviews: false
+    hideSiteReviews: false,
+    paymentMethods: ['كاش', 'فيزا', 'كليك']
   });
 
   const [contactError, setContactError] = useState('');
@@ -133,6 +135,7 @@ export function BusinessAddModal({
         isVipTrial: formData.packagePlan === 'basic',
         billingPeriod: formData.packagePlan === 'basic' ? 'lifetime' : 'yearly',
         hideSiteReviews: formData.hideSiteReviews,
+        paymentMethods: formData.paymentMethods || ['كاش', 'فيزا', 'كليك'],
         workingHours: {
           isOpen24Hours: !!workingHours.isOpen24Hours,
           openTime: workingHours.openTime || '09:00',
@@ -172,7 +175,8 @@ export function BusinessAddModal({
         isFeatured: false,
         packagePlan: 'golden',
         isVerified: true,
-        hideSiteReviews: false
+        hideSiteReviews: false,
+        paymentMethods: ['كاش', 'فيزا', 'كليك']
       });
       setContactError('');
     } catch (error) {
@@ -259,16 +263,6 @@ export function BusinessAddModal({
             </div>
           </div>
 
-          {/* Description */}
-          <div>
-            <label className="block text-xs font-black text-stone-700 mb-1.5">الوصف والخدمات المقدمة</label>
-            <RichTextEditor
-              value={formData.description}
-              onChange={val => setFormData(prev => ({ ...prev, description: val }))}
-              placeholder="اكتب نبذة تعريفية بالمنشأة، المميزات، وقائمة الطعام أو المنتجات..."
-            />
-          </div>
-
           {/* Address & District & Phone */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
@@ -342,6 +336,23 @@ export function BusinessAddModal({
               className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1a4d2e] focus:bg-white transition-all text-left text-stone-800"
             />
           </div>
+
+          {/* Description */}
+          <div>
+            <label className="block text-xs font-black text-stone-700 mb-1.5">نبذة تعريفية عن المكان وما يقدمه لزبائنه *</label>
+            <RichTextEditor
+              value={formData.description}
+              onChange={val => setFormData(prev => ({ ...prev, description: val }))}
+              placeholder="اكتب نبذة تعريفية بالمنشأة، المميزات، وقائمة الطعام أو المنتجات..."
+            />
+          </div>
+
+          {/* Payment Methods Selector */}
+          <PaymentMethodsSelector
+            value={formData.paymentMethods || ['كاش', 'فيزا', 'كليك']}
+            onChange={m => setFormData({ ...formData, paymentMethods: m })}
+            className="bg-stone-50 p-4 rounded-2xl border border-stone-200"
+          />
 
           {/* Live Working Hours Section & Socials */}
           <WorkingHoursEditor

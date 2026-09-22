@@ -136,23 +136,8 @@ export function News() {
           items.push({ id: docSnap.id, ...data } as NewsArticle);
         });
 
-        // Seed default news if empty and showDemoData is active
-        if (items.length === 0 && appConfig.showDemoData) {
-          const seededList: NewsArticle[] = [];
-          for (const item of SEED_NEWS) {
-            const docRef = await addDoc(collection(db, 'news'), {
-              ...item,
-              summary: item.excerpt, // for compatibility
-              image: item.imageUrl, // for compatibility
-              isDemo: true,
-              createdAt: Date.now() - (seededList.length * 86400000)
-            });
-            seededList.push({ id: docRef.id, ...item } as NewsArticle);
-          }
-          setNews(seededList);
-        } else {
-          setNews(items);
-        }
+        // Always respect database content without auto-seeding
+        setNews(items);
       } catch (err) {
         console.error('Error fetching news from Firestore:', err);
         setNews([]);

@@ -60,7 +60,7 @@ export function MedicalAboutTab({ business, onUpdate, showToast }: MedicalAboutT
   };
 
   return (
-    <form onSubmit={handleSave} className="p-4 sm:p-6 space-y-6 text-right" dir="rtl">
+    <form onSubmit={handleSave} className="p-2 sm:p-6 space-y-4 sm:space-y-6 text-right" dir="rtl">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-stone-200">
         <div>
           <h3 className="text-base font-black text-[#2d2a26] flex items-center gap-2">
@@ -82,7 +82,7 @@ export function MedicalAboutTab({ business, onUpdate, showToast }: MedicalAboutT
       </div>
 
       {/* Licenses & Accreditation */}
-      <div className="bg-white border border-stone-200 rounded-2xl p-4 sm:p-5 space-y-4">
+      <div className="bg-white border-0 sm:border border-stone-200 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 space-y-4 shadow-none sm:shadow-2xs">
         <h4 className="text-xs font-black text-stone-900 flex items-center gap-1.5">
           <ShieldCheck className="h-4 w-4 text-teal-600" />
           التراخيص والاعتمادات الرسمية:
@@ -120,7 +120,7 @@ export function MedicalAboutTab({ business, onUpdate, showToast }: MedicalAboutT
       </div>
 
       {/* Rich Text Editor for About Facility */}
-      <div className="bg-white border border-stone-200 rounded-2xl p-4 sm:p-5 space-y-3">
+      <div className="bg-white border-0 sm:border border-stone-200 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 space-y-3 shadow-none sm:shadow-2xs">
         <div className="flex items-center justify-between">
           <label className="block text-xs font-black text-stone-800">
             نبذة "عن المنشأة" (باستخدام محرر النصوص المنسق):
@@ -141,13 +141,13 @@ export function MedicalAboutTab({ business, onUpdate, showToast }: MedicalAboutT
       </div>
 
       {/* Live Preview of About Section as shown on public page */}
-      <div className="bg-stone-50 border border-stone-200/80 rounded-2xl p-4 sm:p-5 space-y-3">
+      <div className="bg-stone-50 border-0 sm:border border-stone-200/80 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 space-y-3 shadow-none sm:shadow-2xs">
         <div className="flex items-center gap-2 text-xs font-black text-stone-700 pb-2 border-b border-stone-200">
           <Eye className="h-4 w-4 text-teal-600" />
           <span>معاينة حية لقسم "عن المنشأة" كما يظهر للمراجعين والمرضى:</span>
         </div>
 
-        <div className="bg-white rounded-2xl border border-stone-200/80 p-4 sm:p-5 space-y-4 shadow-2xs">
+        <div className="bg-white rounded-xl sm:rounded-2xl border-0 sm:border border-stone-200/80 p-3.5 sm:p-5 space-y-4 shadow-none sm:shadow-2xs">
           <div className="flex items-center gap-2.5 border-b border-stone-100 pb-3">
             <div className="p-2 bg-emerald-50 text-emerald-800 rounded-xl border border-emerald-100">
               <Building2 className="h-4 w-4 text-emerald-700" />

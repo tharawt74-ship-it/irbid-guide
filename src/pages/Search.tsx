@@ -6,9 +6,12 @@ import { getCachedBusinesses, setCachedBusinesses, getCachedOffers, setCachedOff
 import { 
   Search as SearchIcon, X, Store, Briefcase, Building, Newspaper, 
   MapPin, Star, Clock, ChevronRight, Loader2, Flame, MenuSquare, 
-  Percent, Building2, SlidersHorizontal, FilterX, ChevronDown, ChevronUp
+  Percent, Building2, SlidersHorizontal, FilterX, ChevronDown, ChevronUp,
+  Stethoscope, Bus, Compass, Phone, ArrowLeftRight, Car
 } from 'lucide-react';
-import { Business, MenuItem, NewsArticle, JobOffer, HousingItem } from '../types';
+import { Business, MenuItem, NewsArticle, JobOffer, HousingItem, TerminalItem, RouteItem, TaxiItem } from '../types';
+import { fetchTransportation } from '../lib/transportationService';
+import { TourismSpot, SEED_TOURISM_SPOTS } from './Tourism';
 import { getAppConfig, DEMO_SEED_DATA } from '../lib/demoDataHelper';
 import { normalizeArabic } from '../lib/arabicSearch';
 import { getBusinessVipStatus, compareBusinessesByTier } from '../lib/vipHelper';
@@ -52,7 +55,30 @@ interface MatchedProduct {
   parentBusiness: Business;
 }
 
-type FilterTab = 'all' | 'businesses' | 'products' | 'offers' | 'housing' | 'jobs' | 'news';
+type FilterTab = 'all' | 'businesses' | 'products' | 'offers' | 'medical' | 'housing' | 'jobs' | 'transportation' | 'tourism' | 'news';
+
+const isMedicalFacility = (b: Business) => {
+  if (b.medicalProfile) return true;
+  const cat = (b.category || '').toLowerCase();
+  const name = (b.name || '').toLowerCase();
+  const desc = (b.description || '').toLowerCase();
+  return (
+    cat.includes('طب') ||
+    cat.includes('صحة') ||
+    cat.includes('عياد') ||
+    cat.includes('مستشف') ||
+    cat.includes('مختبر') ||
+    cat.includes('صيدل') ||
+    cat.includes('علاج طبيعي') ||
+    cat.includes('أسنان') ||
+    name.includes('دكتور') ||
+    name.includes('عيادة') ||
+    name.includes('مركز طبي') ||
+    name.includes('صيدلية') ||
+    name.includes('مختبر') ||
+    desc.includes('طبيب')
+  );
+};
 
 export function Search() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -87,6 +113,13 @@ export function Search() {
   const [jobs, setJobs] = useState<JobOffer[]>([]);
   const [housings, setHousings] = useState<HousingItem[]>([]);
   const [news, setNews] = useState<NewsArticle[]>([]);
+  
+  // New Category States
+  const [terminalsData, setTerminalsData] = useState<TerminalItem[]>([]);
+  const [internalRoutes, setInternalRoutes] = useState<RouteItem[]>([]);
+  const [taxiApps, setTaxiApps] = useState<TaxiItem[]>([]);
+  const [tourismSpots, setTourismSpots] = useState<TourismSpot[]>([]);
+  
   const [loading, setLoading] = useState(true);
 
   // Filter States
@@ -95,14 +128,47 @@ export function Search() {
   const [selectedSubCategory, setSelectedSubCategory] = useState<string>('الكل');
   const [showFiltersDropdown, setShowFiltersDropdown] = useState(false);
   const [businessPage, setBusinessPage] = useState(1);
+  const [medicalPage, setMedicalPage] = useState(1);
 
   useEffect(() => {
     setBusinessPage(1);
+    setMedicalPage(1);
   }, [inputVal, selectedLocation, selectedMainCategory, selectedSubCategory, activeTab]);
 
   // Load all datasets on mount with caching & query limits
   useEffect(() => {
     async function loadSearchData() {
+      // Fetch transportation and tourism data
+      fetchTransportation()
+        .then(res => {
+          setTerminalsData(res.terminals || []);
+          setInternalRoutes(res.routes || []);
+          setTaxiApps(res.taxis || []);
+        })
+        .catch(err => console.error("Error loading transportation in Search:", err));
+
+      if (db) {
+        const tourismRef = collection(db, 'tourism');
+        getDocs(tourismRef)
+          .then(snap => {
+            let items: TourismSpot[] = [];
+            snap.forEach(d => {
+              items.push({ id: d.id, ...d.data() } as TourismSpot);
+            });
+            if (items.length === 0) {
+              setTourismSpots(SEED_TOURISM_SPOTS);
+            } else {
+              setTourismSpots(items);
+            }
+          })
+          .catch(err => {
+            console.error("Error loading tourism in Search:", err);
+            setTourismSpots(SEED_TOURISM_SPOTS);
+          });
+      } else {
+        setTourismSpots(SEED_TOURISM_SPOTS);
+      }
+
       if (!db) {
         setLoading(false);
         return;
@@ -210,6 +276,9 @@ export function Search() {
   // 1. FILTERED BUSINESSES
   const filteredBusinesses = useMemo(() => {
     const list = businesses.filter(b => {
+      // Exclude medical facilities from standard businesses list
+      if (isMedicalFacility(b)) return false;
+
       const isSearchMatch = queryTokens.length === 0 || queryTokens.every(token => 
         normalizeArabic(b.name || '').includes(token) ||
         normalizeArabic(b.category || '').includes(token) ||
@@ -238,6 +307,104 @@ export function Search() {
       return compareBusinessesByTier(a, b, undefined, now);
     });
   }, [businesses, queryTokens, selectedLocation, selectedMainCategory, selectedSubCategory]);
+
+  // 1b. FILTERED MEDICAL BUSINESSES
+  const filteredMedical = useMemo(() => {
+    const list = businesses.filter(b => {
+      // ONLY include medical facilities
+      if (!isMedicalFacility(b)) return false;
+
+      const isSearchMatch = queryTokens.length === 0 || queryTokens.every(token => 
+        normalizeArabic(b.name || '').includes(token) ||
+        normalizeArabic(b.category || '').includes(token) ||
+        normalizeArabic(b.district || '').includes(token) ||
+        normalizeArabic(b.description || '').includes(token)
+      );
+
+      const isLocMatch = selectedLocation === 'الكل' || b.district === selectedLocation;
+
+      let isCatMatch = true;
+      if (selectedMainCategory !== 'الكل') {
+        const subCats = BUSINESS_CATEGORIES[selectedMainCategory as keyof typeof BUSINESS_CATEGORIES] || [];
+        isCatMatch = b.category === selectedMainCategory || subCats.includes(b.category);
+      }
+      if (selectedMainCategory !== 'الكل' && selectedSubCategory !== 'الكل') {
+        isCatMatch = b.category === selectedSubCategory;
+      }
+
+      return isSearchMatch && isLocMatch && isCatMatch;
+    });
+
+    const now = Date.now();
+    return list.sort((a, b) => {
+      return compareBusinessesByTier(a, b, undefined, now);
+    });
+  }, [businesses, queryTokens, selectedLocation, selectedMainCategory, selectedSubCategory]);
+
+  // FILTERED TERMINALS
+  const filteredTerminals = useMemo(() => {
+    if (queryTokens.length === 0) return terminalsData;
+    return terminalsData.map(t => {
+      const matchingDest = t.destinations.filter(d => 
+        queryTokens.every(token => 
+          normalizeArabic(d.name || '').includes(token) || 
+          normalizeArabic(d.vehicleType || '').includes(token)
+        )
+      );
+      const nameMatch = queryTokens.every(token => 
+        normalizeArabic(t.name || '').includes(token) || 
+        normalizeArabic(t.description || '').includes(token) ||
+        normalizeArabic(t.location || '').includes(token)
+      );
+      if (nameMatch || matchingDest.length > 0) {
+        return {
+          ...t,
+          destinations: matchingDest.length > 0 ? matchingDest : t.destinations
+        };
+      }
+      return null;
+    }).filter(Boolean) as TerminalItem[];
+  }, [terminalsData, queryTokens]);
+
+  // FILTERED ROUTES
+  const filteredRoutes = useMemo(() => {
+    if (queryTokens.length === 0) return internalRoutes;
+    return internalRoutes.filter(r => 
+      queryTokens.every(token => 
+        normalizeArabic(r.name || '').includes(token) || 
+        normalizeArabic(r.code || '').includes(token) || 
+        r.stops.some(s => normalizeArabic(s || '').includes(token))
+      )
+    );
+  }, [internalRoutes, queryTokens]);
+
+  // FILTERED TAXIS
+  const filteredTaxis = useMemo(() => {
+    if (queryTokens.length === 0) return taxiApps;
+    return taxiApps.filter(app => 
+      queryTokens.every(token => 
+        normalizeArabic(app.name || '').includes(token) || 
+        normalizeArabic(app.badge || '').includes(token) || 
+        normalizeArabic(app.categoryType || (app as any).type || '').includes(token) || 
+        normalizeArabic(app.description || '').includes(token)
+      )
+    );
+  }, [taxiApps, queryTokens]);
+
+  // FILTERED TOURISM
+  const filteredTourism = useMemo(() => {
+    return tourismSpots.filter(spot => {
+      const isSearchMatch = queryTokens.length === 0 || queryTokens.every(token =>
+        normalizeArabic(spot.name || '').includes(token) ||
+        normalizeArabic(spot.description || '').includes(token) ||
+        normalizeArabic(spot.location || '').includes(token) ||
+        normalizeArabic(spot.category || '').includes(token) ||
+        (spot.tags || []).some(t => normalizeArabic(t || '').includes(token))
+      );
+      const isLocMatch = selectedLocation === 'الكل' || spot.location.includes(selectedLocation);
+      return isSearchMatch && isLocMatch;
+    });
+  }, [tourismSpots, queryTokens, selectedLocation]);
 
   // 2. FILTERED PRODUCTS (MENU ITEMS)
   const filteredProducts = useMemo(() => {
@@ -358,17 +525,22 @@ export function Search() {
     (activeTab === 'all' || activeTab === 'businesses' ? filteredBusinesses.length : 0) + 
     (activeTab === 'all' || activeTab === 'products' ? filteredProducts.length : 0) + 
     (activeTab === 'all' || activeTab === 'offers' ? filteredOffers.length : 0) + 
+    (activeTab === 'all' || activeTab === 'medical' ? filteredMedical.length : 0) + 
     (activeTab === 'all' || activeTab === 'housing' ? filteredHousings.length : 0) + 
     (activeTab === 'all' || activeTab === 'jobs' ? filteredJobs.length : 0) + 
+    (activeTab === 'all' || activeTab === 'transportation' ? (filteredTerminals.length + filteredRoutes.length + filteredTaxis.length) : 0) + 
+    (activeTab === 'all' || activeTab === 'tourism' ? filteredTourism.length : 0) + 
     (activeTab === 'all' || activeTab === 'news' ? filteredNews.length : 0);
 
   // Dynamic filter dropdown options based on Active Tab
-  const showMainCategoryFilter = activeTab !== 'news';
+  const showMainCategoryFilter = activeTab !== 'news' && activeTab !== 'transportation' && activeTab !== 'tourism';
   const showSubCategoryFilter = showMainCategoryFilter && selectedMainCategory !== 'الكل' && (activeTab === 'all' || activeTab === 'businesses' || activeTab === 'products' || activeTab === 'offers');
 
   let mainCategoryOptions: string[] = [];
   if (activeTab === 'all' || activeTab === 'businesses' || activeTab === 'products' || activeTab === 'offers') {
     mainCategoryOptions = Object.keys(BUSINESS_CATEGORIES);
+  } else if (activeTab === 'medical') {
+    mainCategoryOptions = BUSINESS_CATEGORIES["🏥 صحة وطب"] as string[];
   } else if (activeTab === 'jobs') {
     mainCategoryOptions = jobCategories;
   } else if (activeTab === 'housing') {
@@ -525,25 +697,28 @@ export function Search() {
         <div className="px-1 sm:px-4 w-full max-w-7xl mx-auto sm:mt-0 pt-2 sm:pt-0">
           <div className="flex items-center gap-1 overflow-x-auto pb-2 scrollbar-none snap-x px-2">
             {[
-              { id: 'all', label: 'الكل', count: (filteredBusinesses.length + filteredProducts.length + filteredOffers.length + filteredHousings.length + filteredJobs.length + filteredNews.length) },
+              { id: 'all', label: 'الكل', count: (filteredBusinesses.length + filteredProducts.length + filteredOffers.length + filteredMedical.length + filteredHousings.length + filteredJobs.length + filteredTerminals.length + filteredRoutes.length + filteredTaxis.length + filteredTourism.length + filteredNews.length) },
               { id: 'businesses', label: 'محلات وشركات', count: filteredBusinesses.length, icon: Store, color: 'text-emerald-500' },
               { id: 'products', label: 'المنيو والمنتجات', count: filteredProducts.length, icon: MenuSquare, color: 'text-amber-500' },
               { id: 'offers', label: 'عروض', count: filteredOffers.length, icon: Percent, color: 'text-red-500' },
+              { id: 'medical', label: 'الصحة والطب', count: filteredMedical.length, icon: Stethoscope, color: 'text-rose-500' },
               { id: 'housing', label: 'عقارات', count: filteredHousings.length, icon: Building, color: 'text-blue-500' },
               { id: 'jobs', label: 'وظائف', count: filteredJobs.length, icon: Briefcase, color: 'text-teal-500' },
+              { id: 'transportation', label: 'المواصلات', count: (filteredTerminals.length + filteredRoutes.length + filteredTaxis.length), icon: Bus, color: 'text-indigo-500' },
+              { id: 'tourism', label: 'الأماكن السياحية', count: filteredTourism.length, icon: Compass, color: 'text-[#ff9f1c]' },
               { id: 'news', label: 'أخبار', count: filteredNews.length, icon: Newspaper, color: 'text-sky-500' },
             ].map(tab => {
               const isActive = activeTab === tab.id;
               const Icon = tab.icon;
               return (
                 <button
-                  key={tab.id}
-                  onClick={() => handleTabChange(tab.id as FilterTab)}
-                  className={`relative px-4 py-2.5 rounded-full text-xs sm:text-sm font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 shrink-0 snap-center ${
-                    isActive
-                      ? 'bg-stone-900 text-white shadow-md'
-                      : 'bg-white hover:bg-stone-50 text-stone-600 border border-stone-200/80 shadow-2xs'
-                  }`}
+                   key={tab.id}
+                   onClick={() => handleTabChange(tab.id as FilterTab)}
+                   className={`relative px-4 py-2.5 rounded-full text-xs sm:text-sm font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 shrink-0 snap-center ${
+                     isActive
+                       ? 'bg-stone-900 text-white shadow-md'
+                       : 'bg-white hover:bg-stone-50 text-stone-600 border border-stone-200/80 shadow-2xs'
+                   }`}
                 >
                   {Icon && <Icon className={`h-4 w-4 ${isActive ? 'text-white' : tab.color}`} />}
                   <span>{tab.label}</span>
@@ -602,7 +777,7 @@ export function Search() {
                 <span className="text-xs font-bold text-stone-400 bg-stone-100 px-2 py-0.5 rounded-md">{filteredBusinesses.length}</span>
               </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
                 {filteredBusinesses
                   .slice((businessPage - 1) * 15, businessPage * 15)
                   .map(b => {
@@ -612,72 +787,119 @@ export function Search() {
 
                   const isCurrentlyFeatured = b.isFeatured && (!b.featuredStartDate || b.featuredStartDate <= Date.now()) && (!b.featuredExpiryDate || b.featuredExpiryDate > Date.now());
 
+                  // Strictly use profile image / logo, never the cover image
+                  const profileImg = b.logoUrl || (b as any).profileImage || (b as any).logo || (b as any).avatar || (b as any).profileImg;
+
                   return (
                     <Link 
                       key={b.id} 
                       to={targetUrl} 
                       className={cn(
-                        "bg-white rounded-2xl p-4 border transition-all flex flex-col justify-between h-full group relative overflow-hidden",
+                        "bg-white rounded-3xl p-4 sm:p-5 border transition-all duration-300 flex flex-col justify-between h-full group relative overflow-hidden shadow-2xs hover:shadow-lg hover:-translate-y-0.5",
                         isCurrentlyFeatured 
-                          ? "border-2 border-amber-400/90 ring-2 ring-amber-400/20 shadow-[0_0_15px_rgba(245,158,11,0.2)] hover:shadow-[0_0_25px_rgba(245,158,11,0.45)]" 
-                          : "border-stone-200 hover:border-emerald-500/50 hover:shadow-md"
+                          ? "border-amber-400/90 ring-2 ring-amber-400/20 shadow-[0_0_15px_rgba(245,158,11,0.15)] hover:shadow-[0_0_20px_rgba(245,158,11,0.3)]" 
+                          : "border-stone-200/90 hover:border-emerald-600/50"
                       )}
                     >
-                      {/* Subtle background gradient only for Sponsored */}
-                      {isCurrentlyFeatured && <div className="absolute inset-0 bg-gradient-to-tr from-amber-50/20 to-transparent pointer-events-none" />}
+                      {/* Subtle background glow for featured */}
+                      {isCurrentlyFeatured && <div className="absolute inset-0 bg-gradient-to-tr from-amber-50/30 via-transparent to-transparent pointer-events-none" />}
                       
-                      <div className="flex gap-4 relative z-10">
-                        {b.imageUrl ? (
-                          <img src={b.imageUrl} alt={b.name} className="w-16 h-16 rounded-xl object-cover border border-stone-100 shrink-0 shadow-2xs bg-stone-50" />
-                        ) : (
-                          <div className="w-16 h-16 rounded-xl bg-stone-50 border border-stone-100 flex items-center justify-center text-stone-400 shrink-0 text-xl shadow-2xs">🏢</div>
-                        )}
-                        <div className="space-y-1 min-w-0 flex-1">
-                          <div className="flex justify-between items-start gap-1">
-                            <h4 className={cn(
-                              "font-black text-base transition-colors truncate pr-1",
-                              isCurrentlyFeatured
-                                ? "text-amber-700 bg-gradient-to-r from-amber-600 via-amber-500 to-yellow-600 bg-clip-text text-transparent group-hover:from-amber-800 group-hover:to-amber-600 font-black"
-                                : "text-stone-800 group-hover:text-emerald-700"
-                            )}>
-                              {b.name}
-                            </h4>
-                            <div className="flex items-center gap-1 shrink-0 flex-wrap">
+                      <div className="relative z-10 flex flex-col justify-between h-full gap-3">
+                        <div>
+                          {/* Header: Profile image on right + badges on left (RTL) */}
+                          <div className="flex items-center justify-between gap-3 mb-2.5">
+                            {/* Profile Image (الصورة الشخصية للمحل) */}
+                            <div className="relative shrink-0">
+                              {profileImg ? (
+                                <img 
+                                  src={profileImg} 
+                                  alt={b.name} 
+                                  className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl object-cover border border-stone-200/80 shadow-xs bg-stone-50 group-hover:scale-105 transition-transform duration-300" 
+                                />
+                              ) : (
+                                <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-emerald-50 border border-emerald-200/80 flex items-center justify-center text-emerald-800 font-black text-xl shadow-xs">
+                                  {b.name ? b.name.trim().charAt(0) : <Store className="h-6 w-6 text-emerald-600" />}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Status & verification badges */}
+                            <div className="flex flex-wrap items-center justify-end gap-1.5 min-w-0">
                               {isCurrentlyFeatured && (
-                                <span className="text-[9px] bg-gradient-to-r from-amber-400 to-yellow-500 text-yellow-950 font-black px-2 py-0.5 rounded-full shadow-2xs border border-amber-300/40">
+                                <span className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] bg-gradient-to-r from-amber-400 to-amber-500 text-amber-950 font-black px-2.5 py-0.5 rounded-full shadow-2xs border border-amber-300/60 shrink-0">
                                   ⭐ ممول
                                 </span>
                               )}
                               {vipInfo.isVip && (
-                                <span className="text-[9px] bg-sky-50 text-sky-700 border border-sky-200/70 font-black px-2 py-0.5 rounded-full shadow-2xs">
+                                <span className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] bg-sky-50 text-sky-700 border border-sky-200 font-black px-2.5 py-0.5 rounded-full shadow-2xs shrink-0">
                                   ✓ موثّق
                                 </span>
                               )}
+                              <span className={cn(
+                                "inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-full shrink-0 border",
+                                liveStatus.isOpen
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200/70"
+                                  : "bg-stone-100 text-stone-500 border-stone-200"
+                              )}>
+                                <span className={cn("w-1.5 h-1.5 rounded-full", liveStatus.dotColor)} />
+                                <span>{liveStatus.statusText}</span>
+                              </span>
                             </div>
                           </div>
-                          <p className="text-xs text-stone-500 line-clamp-1">{b.description}</p>
-                          <div className="flex items-center gap-1.5 text-[10px] text-stone-500 flex-wrap pt-1 font-medium">
-                            <span className="text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-md font-bold">{b.category}</span>
-                            {b.district && <span className="flex items-center gap-0.5"><MapPin className="h-3 w-3" />{b.district}</span>}
+
+                          {/* Full Business Name - 100% full width, completely visible without any cropping or ellipsis */}
+                          <h4 className={cn(
+                            "font-black text-base sm:text-lg leading-snug transition-colors break-words whitespace-normal pt-1",
+                            isCurrentlyFeatured
+                              ? "text-amber-950 group-hover:text-amber-700"
+                              : "text-stone-900 group-hover:text-[#1a4d2e]"
+                          )}>
+                            {b.name}
+                          </h4>
+
+                          {/* Description if present */}
+                          {b.description && (
+                            <p className="text-xs text-stone-500 leading-relaxed line-clamp-2 mt-1.5">
+                              {b.description}
+                            </p>
+                          )}
+
+                          {/* Category and Location */}
+                          <div className="flex flex-wrap items-center gap-2 text-xs text-stone-500 mt-2.5 pt-1">
+                            {b.category && (
+                              <span className="text-[#1a4d2e] bg-[#1a4d2e]/7 border border-[#1a4d2e]/15 px-2.5 py-0.5 rounded-lg font-bold text-[11px]">
+                                {b.category}
+                              </span>
+                            )}
+                            {(b.district || b.address) && (
+                              <span className="inline-flex items-center gap-1 text-[11px] text-stone-500 font-medium">
+                                <MapPin className="h-3 w-3 text-stone-400 shrink-0" />
+                                <span className="break-words">{b.district || b.address}</span>
+                              </span>
+                            )}
                           </div>
                         </div>
-                      </div>
-                      <div className="border-t border-stone-100 mt-4 pt-3 flex items-center justify-between text-xs font-bold relative z-10">
-                        <div className="flex items-center gap-2">
-                          {b.rating ? (
-                            <span className="flex items-center gap-1 text-amber-600 bg-amber-50 px-2 py-1 rounded-md">⭐ {b.rating.toFixed(1)}</span>
-                          ) : (
-                            <span className="bg-emerald-50 text-emerald-700 px-2 py-1 rounded-md">جديد</span>
-                          )}
-                          {liveStatus.isOpen ? (
-                            <span className="text-emerald-600 bg-emerald-50/50 px-1.5 py-0.5 rounded">مفتوح</span>
-                          ) : (
-                            <span className="text-stone-400 bg-stone-50 px-1.5 py-0.5 rounded">مغلق</span>
-                          )}
+
+                        {/* Card Footer: Rating & CTA */}
+                        <div className="border-t border-stone-100 pt-3 mt-1 flex items-center justify-between text-xs font-bold">
+                          <div className="flex items-center gap-1.5">
+                            {typeof b.rating === 'number' && b.rating > 0 ? (
+                              <span className="flex items-center gap-1 text-amber-700 bg-amber-50 border border-amber-200/60 px-2 py-0.5 rounded-lg text-xs font-bold">
+                                ⭐ {b.rating.toFixed(1)}
+                                {typeof b.reviewCount === 'number' && b.reviewCount > 0 && (
+                                  <span className="text-[10px] text-stone-400 font-normal">({b.reviewCount})</span>
+                                )}
+                              </span>
+                            ) : (
+                              <span className="bg-emerald-50 text-emerald-700 border border-emerald-200/50 px-2 py-0.5 rounded-lg text-xs">
+                                جديد
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-xs font-bold text-[#1a4d2e] group-hover:text-emerald-700 group-hover:-translate-x-1 transition-all flex items-center gap-1">
+                            عرض المحل <ChevronRight className="h-3.5 w-3.5 rotate-180" />
+                          </span>
                         </div>
-                        <span className="group-hover:translate-x-1 transition-transform flex items-center gap-1 text-emerald-600">
-                          التفاصيل <ChevronRight className="h-3.5 w-3.5 rotate-180" />
-                        </span>
                       </div>
                     </Link>
                   );
@@ -776,6 +998,143 @@ export function Search() {
             </div>
           )}
 
+          {/* CATEGORY 3b: MEDICAL FACILITIES */}
+          {(activeTab === 'all' || activeTab === 'medical') && filteredMedical.length > 0 && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 border-b border-stone-200/60 pb-2">
+                <div className="p-1.5 bg-rose-100 text-rose-700 rounded-lg"><Stethoscope className="h-5 w-5" /></div>
+                <h3 className="font-black text-lg text-stone-800">المنشآت الطبية والرعاية الصحية</h3>
+                <span className="text-xs font-bold text-stone-400 bg-stone-100 px-2 py-0.5 rounded-md">{filteredMedical.length}</span>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+                {filteredMedical
+                  .slice((medicalPage - 1) * 15, medicalPage * 15)
+                  .map(b => {
+                    const vipInfo = getBusinessVipStatus(b);
+                    const liveStatus = getLiveWorkingStatus(b.workingHours);
+                    const targetUrl = b.username && b.username.trim() ? `/@${b.username.trim()}` : `/business/${b.id}`;
+                    const isCurrentlyFeatured = b.isFeatured && (!b.featuredStartDate || b.featuredStartDate <= Date.now()) && (!b.featuredExpiryDate || b.featuredExpiryDate > Date.now());
+                    const profileImg = b.logoUrl || (b as any).profileImage || (b as any).logo || (b as any).avatar || (b as any).profileImg;
+
+                    return (
+                      <Link 
+                        key={b.id} 
+                        to={targetUrl} 
+                        className={cn(
+                          "bg-white rounded-3xl p-4 sm:p-5 border transition-all duration-300 flex flex-col justify-between h-full group relative overflow-hidden shadow-2xs hover:shadow-lg hover:-translate-y-0.5",
+                          isCurrentlyFeatured 
+                            ? "border-amber-400/90 ring-2 ring-amber-400/20 shadow-[0_0_15px_rgba(245,158,11,0.15)] hover:shadow-[0_0_20px_rgba(245,158,11,0.3)]" 
+                            : "border-stone-200/90 hover:border-emerald-600/50"
+                        )}
+                      >
+                        {isCurrentlyFeatured && <div className="absolute inset-0 bg-gradient-to-tr from-amber-50/30 via-transparent to-transparent pointer-events-none" />}
+                        
+                        <div className="relative z-10 flex flex-col justify-between h-full gap-3">
+                          <div>
+                            <div className="flex items-center justify-between gap-3 mb-2.5">
+                              <div className="relative shrink-0">
+                                {profileImg ? (
+                                  <img 
+                                    src={profileImg} 
+                                    alt={b.name} 
+                                    className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl object-cover border border-stone-200/80 shadow-xs bg-stone-50 group-hover:scale-105 transition-transform duration-300" 
+                                  />
+                                ) : (
+                                  <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-[#fff0f3] border border-rose-200 flex items-center justify-center text-rose-800 font-black text-xl shadow-xs">
+                                    {b.name ? b.name.trim().charAt(0) : <Stethoscope className="h-6 w-6 text-rose-600" />}
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="flex flex-wrap items-center justify-end gap-1.5 min-w-0">
+                                {isCurrentlyFeatured && (
+                                  <span className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] bg-gradient-to-r from-amber-400 to-amber-500 text-amber-950 font-black px-2.5 py-0.5 rounded-full shadow-2xs border border-amber-300/60 shrink-0">
+                                    ⭐ ممول
+                                  </span>
+                                )}
+                                {vipInfo.isVip && (
+                                  <span className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] bg-sky-50 text-sky-700 border border-sky-200 font-black px-2.5 py-0.5 rounded-full shadow-2xs shrink-0">
+                                    ✓ موثّق
+                                  </span>
+                                )}
+                                <span className={cn(
+                                  "inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-full shrink-0 border",
+                                  liveStatus.isOpen
+                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200/70"
+                                    : "bg-stone-100 text-stone-500 border-stone-200"
+                                )}>
+                                  <span className={cn("w-1.5 h-1.5 rounded-full", liveStatus.dotColor)} />
+                                  <span>{liveStatus.statusText}</span>
+                                </span>
+                              </div>
+                            </div>
+
+                            <h4 className={cn(
+                              "font-black text-base sm:text-lg leading-snug transition-colors break-words whitespace-normal pt-1",
+                              isCurrentlyFeatured
+                                ? "text-amber-950 group-hover:text-amber-700"
+                                : "text-stone-900 group-hover:text-rose-700"
+                            )}>
+                              {b.name}
+                            </h4>
+
+                            {b.description && (
+                              <p className="text-xs text-stone-500 leading-relaxed line-clamp-2 mt-1.5">
+                                {b.description}
+                              </p>
+                            )}
+
+                            <div className="flex flex-wrap items-center gap-2 text-xs text-stone-500 mt-2.5 pt-1">
+                              {b.category && (
+                                <span className="text-rose-700 bg-rose-50 border border-rose-200/40 px-2.5 py-0.5 rounded-lg font-bold text-[11px]">
+                                  {b.category}
+                                </span>
+                              )}
+                              {(b.district || b.address) && (
+                                <span className="inline-flex items-center gap-1 text-[11px] text-stone-500 font-medium">
+                                  <MapPin className="h-3 w-3 text-stone-400 shrink-0" />
+                                  <span className="break-words">{b.district || b.address}</span>
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="border-t border-stone-100 pt-3 mt-1 flex items-center justify-between text-xs font-bold">
+                            <div className="flex items-center gap-1.5">
+                              {typeof b.rating === 'number' && b.rating > 0 ? (
+                                <span className="flex items-center gap-1 text-amber-700 bg-amber-50 border border-amber-200/60 px-2 py-0.5 rounded-lg text-xs font-bold">
+                                  ⭐ {b.rating.toFixed(1)}
+                                  {typeof b.reviewCount === 'number' && b.reviewCount > 0 && (
+                                    <span className="text-[10px] text-stone-400 font-normal">({b.reviewCount})</span>
+                                  )}
+                                </span>
+                              ) : (
+                                <span className="bg-rose-50 text-rose-700 border border-rose-200/50 px-2 py-0.5 rounded-lg text-xs">
+                                  مركز معتمد
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-xs font-bold text-rose-700 group-hover:text-rose-800 group-hover:-translate-x-1 transition-all flex items-center gap-1">
+                              عرض الملف الطبي <ChevronRight className="h-3.5 w-3.5 rotate-180" />
+                            </span>
+                          </div>
+                        </div>
+                      </Link>
+                    );
+                  })}
+              </div>
+
+              <Pagination
+                currentPage={medicalPage}
+                totalPages={Math.ceil(filteredMedical.length / 15)}
+                onPageChange={(p) => setMedicalPage(p)}
+                totalItems={filteredMedical.length}
+                itemsPerPage={15}
+              />
+            </div>
+          )}
+
           {/* CATEGORY 4: HOUSING / REAL ESTATE */}
           {(activeTab === 'all' || activeTab === 'housing') && filteredHousings.length > 0 && (
             <div className="space-y-4">
@@ -838,6 +1197,194 @@ export function Search() {
                     <div className="border-t border-stone-100 mt-4 pt-3 flex items-center justify-between text-xs font-bold">
                       <span className="text-stone-500 flex items-center gap-1"><MapPin className="h-3.5 w-3.5 text-stone-400" /> {j.location}</span>
                       <span className="text-teal-600 flex items-center gap-1 group-hover:translate-x-1 transition-transform">قدّم الآن <ChevronRight className="h-3.5 w-3.5 rotate-180" /></span>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* CATEGORY 5b: TRANSPORTATION */}
+          {(activeTab === 'all' || activeTab === 'transportation') && (filteredTerminals.length > 0 || filteredRoutes.length > 0 || filteredTaxis.length > 0) && (
+            <div className="space-y-6">
+              <div className="flex items-center gap-2 border-b border-stone-200/60 pb-2">
+                <div className="p-1.5 bg-indigo-100 text-indigo-700 rounded-lg"><Bus className="h-5 w-5" /></div>
+                <h3 className="font-black text-lg text-stone-800">دليل المواصلات والنقل</h3>
+                <span className="text-xs font-bold text-stone-400 bg-stone-100 px-2 py-0.5 rounded-md">
+                  {filteredTerminals.length + filteredRoutes.length + filteredTaxis.length}
+                </span>
+              </div>
+
+              {/* Terminals Sub-Section */}
+              {filteredTerminals.length > 0 && (
+                <div className="space-y-4">
+                  <h4 className="font-black text-sm text-stone-700 flex items-center gap-2">
+                    <Building2 className="h-4 w-4 text-[#ff9f1c]" />
+                    <span>مجمعات الحافلات الرئيسية</span>
+                  </h4>
+                  <div className="space-y-4">
+                    {filteredTerminals.slice(0, 3).map((terminal) => (
+                      <div key={terminal.id} className="bg-white rounded-2xl p-5 border border-stone-200 shadow-2xs space-y-4">
+                        <div className="flex items-start justify-between gap-2 border-b border-stone-100 pb-3">
+                          <div>
+                            <h5 className="font-black text-base text-[#2d2a26]">{terminal.name}</h5>
+                            <p className="text-xs text-stone-500 flex items-center gap-1 mt-1">
+                              <MapPin className="h-3.5 w-3.5 text-[#ff9f1c]" />
+                              <span>{terminal.location}</span>
+                            </p>
+                          </div>
+                          <Link to="/transportation" className="text-xs text-[#1a4d2e] font-black hover:underline shrink-0">عرض الدليل الكامل</Link>
+                        </div>
+                        {terminal.description && (
+                          <p className="text-xs text-stone-600 leading-relaxed font-medium">
+                            {terminal.description}
+                          </p>
+                        )}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {terminal.destinations.slice(0, 4).map((dest, idx) => (
+                            <div key={idx} className="bg-stone-50 rounded-xl p-3.5 border border-stone-200/80 flex flex-col justify-between gap-1.5">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="font-black text-xs text-[#2d2a26]">{dest.name}</span>
+                                <span className="text-[10px] font-black text-[#1a4d2e] bg-emerald-100/80 px-2 py-0.5 rounded-full">
+                                  {dest.approxFare}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-3 text-[10px] text-stone-500 font-medium pt-1 border-t border-stone-200/60">
+                                <span className="flex items-center gap-1">
+                                  <Bus className="h-3 w-3 text-stone-400" />
+                                  {dest.vehicleType}
+                                </span>
+                                <span className="flex items-center gap-1">
+                                  <Clock className="h-3 w-3 text-stone-400" />
+                                  {dest.duration}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Routes Sub-Section */}
+              {filteredRoutes.length > 0 && (
+                <div className="space-y-4">
+                  <h4 className="font-black text-sm text-stone-700 flex items-center gap-2 pt-2">
+                    <ArrowLeftRight className="h-4 w-4 text-[#ff9f1c]" />
+                    <span>خطوط السرفيس والباص الداخلي</span>
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {filteredRoutes.slice(0, 4).map((route, idx) => (
+                      <div key={route.id || idx} className="bg-white rounded-2xl p-4.5 border border-stone-200 shadow-2xs space-y-3">
+                        <div className="flex items-start justify-between gap-2 border-b border-stone-100 pb-2.5">
+                          <div>
+                            <span className="text-[9px] font-black bg-[#1a4d2e]/10 text-[#1a4d2e] px-2 py-0.5 rounded-full block w-fit mb-1">
+                              {route.code}
+                            </span>
+                            <h5 className="font-black text-sm text-[#2d2a26]">{route.name}</h5>
+                          </div>
+                          <span className="text-xs font-black text-[#1a4d2e] bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200 shrink-0">
+                            {route.fare}
+                          </span>
+                        </div>
+                        {route.stops && route.stops.length > 0 && (
+                          <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-medium text-stone-500">
+                            <span className="text-stone-400">مسار السير:</span>
+                            {route.stops.map((stop, sIdx) => (
+                              <span key={sIdx} className="bg-stone-50 text-stone-600 px-1.5 py-0.5 rounded-md flex items-center gap-1">
+                                <span>{stop}</span>
+                                {sIdx < route.stops.length - 1 && <span className="text-stone-300">←</span>}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Taxis Sub-Section */}
+              {filteredTaxis.length > 0 && (
+                <div className="space-y-4">
+                  <h4 className="font-black text-sm text-stone-700 flex items-center gap-2 pt-2">
+                    <Car className="h-4 w-4 text-[#ff9f1c]" />
+                    <span>التاكسي والتطبيقات الذكية</span>
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {filteredTaxis.slice(0, 3).map((taxi) => (
+                      <div key={taxi.id} className="bg-white rounded-2xl p-4 border border-stone-200 shadow-2xs flex gap-3 group">
+                        <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 border border-amber-100 flex items-center justify-center font-black text-lg shrink-0">🚖</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <h5 className="font-black text-sm text-stone-800 truncate">{taxi.name}</h5>
+                            {taxi.badge && (
+                              <span className="text-[9px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded-full font-bold">
+                                {taxi.badge}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-stone-500 line-clamp-2 mt-1 leading-relaxed">{taxi.description}</p>
+                          <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-stone-50">
+                            {taxi.phone && (
+                              <a href={`tel:${taxi.phone}`} className="text-[11px] font-bold text-stone-600 hover:text-emerald-700 flex items-center gap-1">
+                                <Phone className="h-3 w-3 text-stone-400" />
+                                <span>{taxi.phone}</span>
+                              </a>
+                            )}
+                            {taxi.badge === 'تطبيقات ذكية' && (
+                              <span className="text-[10px] font-black text-[#1a4d2e]">متاح للتنزيل</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* CATEGORY 5c: TOURISM SPOTS */}
+          {(activeTab === 'all' || activeTab === 'tourism') && filteredTourism.length > 0 && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 border-b border-stone-200/60 pb-2">
+                <div className="p-1.5 bg-[#ff9f1c]/10 text-[#ff9f1c] rounded-lg"><Compass className="h-5 w-5" /></div>
+                <h3 className="font-black text-lg text-[#2d2a26]">الأماكن السياحية والمعالم</h3>
+                <span className="text-xs font-bold text-stone-400 bg-stone-100 px-2 py-0.5 rounded-md">{filteredTourism.length}</span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+                {filteredTourism.map(spot => (
+                  <Link key={spot.id} to="/tourism" className="bg-white rounded-2xl overflow-hidden border border-stone-200 hover:border-[#ff9f1c]/50 hover:shadow-md transition-all flex flex-col group">
+                    <div className="relative aspect-[16/10] w-full bg-stone-100 overflow-hidden shrink-0">
+                      <img src={spot.image} alt={spot.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                      <div className="absolute top-3 right-3 bg-[#ff9f1c] text-white font-black text-xs px-3 py-1.5 rounded-full shadow-md">
+                        {spot.category}
+                      </div>
+                    </div>
+                    <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-[10px] text-stone-500 font-bold">
+                          <MapPin className="h-3 w-3 text-[#ff9f1c]" />
+                          <span className="truncate">{spot.location}</span>
+                        </div>
+                        <h4 className="font-black text-base text-stone-800 line-clamp-1 group-hover:text-[#ff9f1c] transition-colors">{spot.name}</h4>
+                        <p className="text-xs text-stone-500 line-clamp-2 leading-relaxed">{spot.description}</p>
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {(spot.tags || []).slice(0, 3).map((tag, tIdx) => (
+                          <span key={tIdx} className="text-[9px] font-bold bg-stone-50 text-stone-500 px-2 py-0.5 rounded-md">
+                            #{tag}
+                          </span>
+                        ))}
+                      </div>
+                      <div className="border-t border-stone-100 pt-3 flex items-center justify-between text-[11px] font-bold text-[#ff9f1c]">
+                        <span className="text-stone-500 flex items-center gap-1 font-medium"><Clock className="h-3 w-3" /> {spot.openingHours}</span>
+                        <span className="flex items-center gap-1 group-hover:translate-x-1 transition-transform">شاهد التفاصيل <ChevronRight className="h-3 w-3 rotate-180" /></span>
+                      </div>
                     </div>
                   </Link>
                 ))}

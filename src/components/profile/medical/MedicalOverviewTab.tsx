@@ -49,11 +49,11 @@ export function MedicalOverviewTab({
   const reviewsCount = business.reviewCount || 0;
 
   return (
-    <div className="p-4 sm:p-6 space-y-6 text-right" dir="rtl">
+    <div className="p-2 sm:p-6 space-y-4 sm:space-y-6 text-right" dir="rtl">
       {/* 1. Quick Stats Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
         {/* Total Views */}
-        <div className="bg-white border border-stone-200/90 rounded-2xl p-4 sm:p-5 relative overflow-hidden group hover:border-teal-300 transition-all shadow-2xs">
+        <div className="bg-white border-0 sm:border border-stone-200/90 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 relative overflow-hidden group hover:border-teal-300 transition-all shadow-none sm:shadow-2xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-stone-500">مشاهدات الصفحة</span>
             <div className="w-8 h-8 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center">
@@ -69,7 +69,7 @@ export function MedicalOverviewTab({
         </div>
 
         {/* Phone Calls */}
-        <div className="bg-white border border-stone-200/90 rounded-2xl p-4 sm:p-5 relative overflow-hidden group hover:border-teal-300 transition-all shadow-2xs">
+        <div className="bg-white border-0 sm:border border-stone-200/90 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 relative overflow-hidden group hover:border-teal-300 transition-all shadow-none sm:shadow-2xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-stone-500">اتصالات الحجز</span>
             <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
@@ -85,7 +85,7 @@ export function MedicalOverviewTab({
         </div>
 
         {/* Directions / Maps */}
-        <div className="bg-white border border-stone-200/90 rounded-2xl p-4 sm:p-5 relative overflow-hidden group hover:border-teal-300 transition-all shadow-2xs">
+        <div className="bg-white border-0 sm:border border-stone-200/90 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 relative overflow-hidden group hover:border-teal-300 transition-all shadow-none sm:shadow-2xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-stone-500">طلبات الاتجاهات</span>
             <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center">
@@ -101,7 +101,7 @@ export function MedicalOverviewTab({
         </div>
 
         {/* Reviews & Rating */}
-        <div className="bg-white border border-stone-200/90 rounded-2xl p-4 sm:p-5 relative overflow-hidden group hover:border-teal-300 transition-all shadow-2xs">
+        <div className="bg-white border-0 sm:border border-stone-200/90 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 relative overflow-hidden group hover:border-teal-300 transition-all shadow-none sm:shadow-2xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-stone-500">تقييم المراجعين</span>
             <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
@@ -118,7 +118,7 @@ export function MedicalOverviewTab({
       </div>
 
       {/* 1.5. Advanced VIP Analytics Section for Medical Facilities */}
-      <div className="bg-white border border-stone-200/90 rounded-2xl p-4 sm:p-6 shadow-sm space-y-4">
+      <div className="bg-white border-0 sm:border border-stone-200/90 rounded-xl sm:rounded-2xl p-3.5 sm:p-6 shadow-none sm:shadow-sm space-y-4">
         <div className="flex items-center justify-between border-b border-stone-100 pb-3 flex-wrap gap-2">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold">
@@ -153,7 +153,7 @@ export function MedicalOverviewTab({
           </div>
         ) : (
           /* Locked VIP Analytics Teaser for Medical Facilities */
-          <div className="bg-gradient-to-r from-stone-50 via-amber-50/20 to-amber-50/50 border border-amber-200/80 p-5 rounded-2xl space-y-4">
+          <div className="bg-gradient-to-r from-stone-50 via-amber-50/20 to-amber-50/50 border-0 sm:border border-amber-200/80 p-3.5 sm:p-5 rounded-xl sm:rounded-2xl space-y-4">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
               <div className="space-y-1 text-right">
                 <span className="text-sm font-black text-amber-950 flex items-center gap-1.5">
@@ -205,7 +205,7 @@ export function MedicalOverviewTab({
       </div>
 
       {/* 1.8. Marketing Services Promo Card */}
-      <div className="bg-gradient-to-r from-amber-900 via-[#1a4d2e] to-teal-900 text-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-md relative overflow-hidden flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="bg-gradient-to-r from-amber-900 via-[#1a4d2e] to-teal-900 text-white rounded-xl sm:rounded-3xl p-4 sm:p-6 shadow-none sm:shadow-md relative overflow-hidden flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="space-y-1.5 max-w-xl">
           <div className="inline-flex items-center gap-1.5 bg-amber-400/20 border border-amber-300/30 px-3 py-0.5 rounded-full text-amber-200 text-xs font-black mb-1">
             <Rocket className="h-3.5 w-3.5 text-amber-300" />
@@ -229,7 +229,7 @@ export function MedicalOverviewTab({
       </div>
 
       {/* 2. Profile Completion Bar */}
-      <div className="bg-gradient-to-r from-teal-900 via-teal-800 to-emerald-900 text-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-md relative overflow-hidden">
+      <div className="bg-gradient-to-r from-teal-900 via-teal-800 to-emerald-900 text-white rounded-xl sm:rounded-3xl p-4 sm:p-6 shadow-none sm:shadow-md relative overflow-hidden">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1.5 max-w-xl">
             <div className="flex items-center gap-2">
@@ -267,9 +267,9 @@ export function MedicalOverviewTab({
       </div>
 
       {/* 3. Operational Health & Features Status */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
         {/* Insurance Status */}
-        <div className="bg-white border border-stone-200 rounded-2xl p-4 space-y-2">
+        <div className="bg-white border-0 sm:border border-stone-200 rounded-xl sm:rounded-2xl p-3.5 sm:p-4 space-y-2 shadow-none sm:shadow-2xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-black text-stone-900 flex items-center gap-1.5">
               <ShieldCheck className="h-4 w-4 text-teal-600" />
@@ -296,7 +296,7 @@ export function MedicalOverviewTab({
         </div>
 
         {/* Staff Status */}
-        <div className="bg-white border border-stone-200 rounded-2xl p-4 space-y-2">
+        <div className="bg-white border-0 sm:border border-stone-200 rounded-xl sm:rounded-2xl p-3.5 sm:p-4 space-y-2 shadow-none sm:shadow-2xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-black text-stone-900 flex items-center gap-1.5">
               <Users className="h-4 w-4 text-teal-600" />
@@ -321,7 +321,7 @@ export function MedicalOverviewTab({
         </div>
 
         {/* Emergency & Working Hours */}
-        <div className="bg-white border border-stone-200 rounded-2xl p-4 space-y-2">
+        <div className="bg-white border-0 sm:border border-stone-200 rounded-xl sm:rounded-2xl p-3.5 sm:p-4 space-y-2 shadow-none sm:shadow-2xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-black text-stone-900 flex items-center gap-1.5">
               <Clock className="h-4 w-4 text-teal-600" />
@@ -351,7 +351,7 @@ export function MedicalOverviewTab({
       </div>
 
       {/* Quick Medical Tools Row: Clean QR Poster Print */}
-      <div className="p-4 sm:p-5 bg-gradient-to-r from-teal-950 via-teal-900 to-[#0f331e] rounded-2xl text-white shadow-sm border border-teal-800/40">
+      <div className="p-4 sm:p-5 bg-gradient-to-r from-teal-950 via-teal-900 to-[#0f331e] rounded-xl sm:rounded-2xl text-white shadow-none sm:shadow-sm border-0 sm:border border-teal-800/40">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-teal-400/20 text-teal-300 flex items-center justify-center font-bold shrink-0">
@@ -375,7 +375,7 @@ export function MedicalOverviewTab({
       </div>
 
       {/* Welcome Banner Card */}
-      <div className="bg-teal-50/50 border border-teal-200 p-4 sm:p-5 rounded-2xl flex items-center justify-between flex-wrap gap-3">
+      <div className="bg-teal-50/50 border-0 sm:border border-teal-200 p-3.5 sm:p-5 rounded-xl sm:rounded-2xl flex items-center justify-between flex-wrap gap-3 shadow-none sm:shadow-2xs">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-teal-100 text-teal-700 flex items-center justify-center shrink-0">
             <Sparkles className="h-5 w-5 text-teal-700 fill-teal-500" />
@@ -396,7 +396,7 @@ export function MedicalOverviewTab({
       </div>
 
       {/* 4. Quick Action Hub */}
-      <div className="bg-white border border-stone-200 rounded-2xl p-4 sm:p-5 space-y-3">
+      <div className="bg-white border-0 sm:border border-stone-200 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 space-y-3 shadow-none sm:shadow-2xs">
         <h4 className="text-xs font-black text-stone-900">
           إجراءات سريعة واختصارات لوحة التحكم:
         </h4>

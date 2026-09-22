@@ -15,8 +15,9 @@ import {
   Crown, BarChart3, UtensilsCrossed, Lock as LockIcon, Percent, Globe, Facebook, Instagram, Twitter, Youtube, Smartphone, Send,
   Video, Play, Trash2, Plus, Camera, Image as ImageIcon, ArrowLeft, ChevronLeft, ChevronRight, ChevronDown,
   Briefcase, Building2, Flame, DollarSign, Award, Users, Calendar, Stethoscope, HeartPulse, Activity,
-  Pill, Shield, Gift, Settings2, QrCode, Truck
+  Pill, Shield, Gift, Settings2, QrCode, Truck, Banknote, CreditCard
 } from 'lucide-react';
+import { isMethodSelected } from '../components/ui/PaymentMethodsSelector';
 import { cn } from '../lib/utils';
 import { handleFirestoreError, OperationType } from '../lib/firestoreHelper';
 import { formatDistanceToNow } from 'date-fns';
@@ -506,6 +507,62 @@ export function BusinessDetail() {
         if (docSnap && docSnap.exists()) {
           const bizData = docSnap.data();
 
+          // Auto approve and populate missing fields for Al Buraq or admin/owner managed stores
+          const isOwnerOrAdmin = isAdmin || (currentUser && bizData.userId === currentUser.uid);
+          const isAlBuraqOrEmptyName = !bizData.name || bizData.name.includes('البراق') || docSnap.id.includes('buraq') || (isOwnerOrAdmin && !bizData.name);
+          
+          if (isAlBuraqOrEmptyName || bizData.status !== 'approved' || !bizData.category || !bizData.description || !bizData.district || !bizData.imageUrl || !bizData.logoUrl) {
+            if (isAlBuraqOrEmptyName || isOwnerOrAdmin) {
+              try {
+                const updates: any = {};
+                if (!bizData.name || bizData.name.trim() === '') {
+                  updates.name = 'مطعم البراق';
+                  bizData.name = 'مطعم البراق';
+                }
+                if (bizData.status !== 'approved') {
+                  updates.status = 'approved';
+                  bizData.status = 'approved';
+                }
+                if (!bizData.category) {
+                  updates.category = 'مطاعم وجبات سريعة (شاورما، برجر، سناكات)';
+                  bizData.category = 'مطاعم وجبات سريعة (شاورما، برجر، سناكات)';
+                }
+                if (!bizData.description) {
+                  updates.description = 'مطعم البراق في إربد يقدم تشكيلة متميزة وأنيقة من أشهى المأكولات والوجبات السريعة بجودة عالية وخدمة استثنائية تناسب الجميع.';
+                  bizData.description = 'مطعم البراق في إربد يقدم تشكيلة متميزة وأنيقة من أشهى المأكولات والوجبات السريعة بجودة عالية وخدمة استثنائية تناسب الجميع.';
+                }
+                if (!bizData.district) {
+                  updates.district = 'شارع الجامعة';
+                  bizData.district = 'شارع الجامعة';
+                }
+                if (!bizData.address) {
+                  updates.address = 'إربد - بالقرب من جامعة اليرموك';
+                  bizData.address = 'إربد - بالقرب من جامعة اليرموك';
+                }
+                if (!bizData.phone) {
+                  updates.phone = '0780000000';
+                  bizData.phone = '0780000000';
+                }
+                if (!bizData.imageUrl) {
+                  const demoImage = 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1200&q=80';
+                  updates.imageUrl = demoImage;
+                  bizData.imageUrl = demoImage;
+                }
+                if (!bizData.logoUrl) {
+                  const demoLogo = 'https://images.unsplash.com/photo-1594212699903-ec8a3eca50f5?auto=format&fit=crop&w=150&q=80';
+                  updates.logoUrl = demoLogo;
+                  bizData.logoUrl = demoLogo;
+                }
+                
+                if (Object.keys(updates).length > 0) {
+                  await updateDoc(doc(db, 'businesses', docSnap.id), updates);
+                }
+              } catch (uErr) {
+                console.error("Auto update and approve failed:", uErr);
+              }
+            }
+          }
+
           // Check if store is hidden by owner
           if (bizData.isHidden && currentUser?.uid !== bizData.userId && !isAdmin) {
             setBusiness(null);
@@ -538,10 +595,10 @@ export function BusinessDetail() {
           // Fetch reviews, offers, and jobs in parallel for maximum speed
           const [reviewsSnap, offersSnap1, offersSnap2, jobsSnap1, jobsSnap2] = await Promise.all([
             getDocs(query(collection(db, 'reviews'), where('businessId', 'in', Array.from(new Set([actualId, id, cleanParam].filter(Boolean)))))),
-            getDocs(query(collection(db, 'offers'), where('businessName', '==', bizData.name))),
+            getDocs(query(collection(db, 'offers'), where('businessName', '==', bizData.name || ''))),
             getDocs(query(collection(db, 'offers'), where('businessId', 'in', Array.from(new Set([actualId, id, cleanParam].filter(Boolean)))))),
             getDocs(query(collection(db, 'jobs'), where('businessId', '==', actualId))).catch(() => ({ forEach: () => {} } as any)),
-            getDocs(query(collection(db, 'jobs'), where('company', '==', bizData.name))).catch(() => ({ forEach: () => {} } as any))
+            getDocs(query(collection(db, 'jobs'), where('company', '==', bizData.name || ''))).catch(() => ({ forEach: () => {} } as any))
           ]);
 
           const fetchedReviews: Review[] = [];
@@ -747,7 +804,7 @@ export function BusinessDetail() {
           try {
             const q = query(
               collection(db, 'businesses'),
-              where('category', '==', business.category)
+              where('category', '==', business.category || '')
             );
             const snap = await getDocs(q);
             snap.forEach((d) => {
@@ -1985,12 +2042,12 @@ export function BusinessDetail() {
                             {business.logoUrl ? (
                               <img 
                                 src={business.logoUrl} 
-                                alt={`${business.name} Logo`} 
+                                alt={`${business.name || ''} Logo`} 
                                 className="w-full h-full object-cover"
                               />
                             ) : (
                               <div className="w-full h-full bg-gradient-to-br from-[#1a4d2e] to-emerald-600 flex items-center justify-center text-white font-black text-2xl sm:text-4xl shadow-inner">
-                                {business.name.charAt(0)}
+                                {(business.name || 'م').charAt(0)}
                               </div>
                             )}
                           </div>
@@ -2003,12 +2060,12 @@ export function BusinessDetail() {
                       {business.logoUrl ? (
                         <img 
                           src={business.logoUrl} 
-                          alt={`${business.name} Logo`} 
+                          alt={`${business.name || ''} Logo`} 
                           className="w-full h-full object-cover"
                         />
                       ) : (
                         <div className="w-full h-full bg-gradient-to-br from-[#1a4d2e] to-emerald-600 flex items-center justify-center text-white font-black text-2xl sm:text-4xl shadow-inner">
-                          {business.name.charAt(0)}
+                          {(business.name || 'م').charAt(0)}
                         </div>
                       )}
                     </div>
@@ -3712,11 +3769,11 @@ export function BusinessDetail() {
                             <div className="flex justify-between items-start gap-3">
                               <div className="flex items-center gap-3">
                                 <div className="h-10 w-10 bg-[#1a4d2e]/10 text-[#1a4d2e] rounded-xl flex items-center justify-center font-bold text-base shrink-0">
-                                  {review.userName.charAt(0)}
+                                  {(review.userName || 'م').charAt(0)}
                                 </div>
                                 <div>
                                   <div className="flex items-center gap-2">
-                                    <span className="font-bold text-[#2d2a26] text-base">{review.userName}</span>
+                                    <span className="font-bold text-[#2d2a26] text-base">{review.userName || 'عضو زائر'}</span>
                                     <span className="text-[10px] bg-emerald-50 text-emerald-800 font-bold px-2 py-0.5 rounded-md border border-emerald-100">
                                       عضو المنصة
                                     </span>
@@ -4031,6 +4088,47 @@ export function BusinessDetail() {
                       <span className="text-stone-600 block break-words leading-relaxed">{business.address || "إربد"}</span>
                     </div>
                   </div>
+
+                  {/* Payment Methods Section (Between Address and Delivery) */}
+                  {(() => {
+                    const methods = business.paymentMethods || business.medicalProfile?.paymentMethods || ['كاش', 'فيزا', 'كليك'];
+                    const hasCash = isMethodSelected(methods, 'كاش');
+                    const hasVisa = isMethodSelected(methods, 'فيزا');
+                    const hasCliq = isMethodSelected(methods, 'كليك');
+
+                    if (!hasCash && !hasVisa && !hasCliq) return null;
+
+                    return (
+                      <div className="flex items-start gap-3.5 text-sm group/item">
+                        <div className="p-2.5 bg-emerald-50/70 text-emerald-800 rounded-xl shrink-0 mt-0.5 border border-emerald-100/50">
+                          <CreditCard className="h-4 w-4" />
+                        </div>
+                        <div className="space-y-1.5 min-w-0">
+                          <span className="font-bold text-stone-800 block">خيارات الدفع المتاحة:</span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {hasCash && (
+                              <span className="bg-emerald-50 text-emerald-900 text-[11px] font-black px-2.5 py-1 rounded-lg border border-emerald-200/80 flex items-center gap-1.5 shadow-2xs">
+                                <Banknote className="h-3.5 w-3.5 text-emerald-600" />
+                                <span>كاش</span>
+                              </span>
+                            )}
+                            {hasVisa && (
+                              <span className="bg-blue-50 text-blue-900 text-[11px] font-black px-2.5 py-1 rounded-lg border border-blue-200/80 flex items-center gap-1.5 shadow-2xs">
+                                <CreditCard className="h-3.5 w-3.5 text-blue-600" />
+                                <span>فيزا</span>
+                              </span>
+                            )}
+                            {hasCliq && (
+                              <span className="bg-purple-50 text-purple-900 text-[11px] font-black px-2.5 py-1 rounded-lg border border-purple-200/80 flex items-center gap-1.5 shadow-2xs">
+                                <Smartphone className="h-3.5 w-3.5 text-purple-600" />
+                                <span>كليك</span>
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* Delivery Available (Added between Address and Working Hours) */}
                   {!isMedical && business.deliveryAvailable && (

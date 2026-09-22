@@ -38,6 +38,7 @@ import { invalidateCache } from '../../lib/dataCache';
 import { ImageUploader } from '../ui/ImageUploader';
 import { WorkingHoursEditor } from '../ui/WorkingHoursEditor';
 import { SocialLinksEditor } from '../ui/SocialLinksEditor';
+import { PaymentMethodsSelector } from '../ui/PaymentMethodsSelector';
 import { RichTextEditor } from '../common/RichTextEditor';
 import DOMPurify from 'dompurify';
 import { Link } from 'react-router';
@@ -148,6 +149,7 @@ export function AddMedicalFacilityModal({ isOpen, onClose, onFacilityAdded }: Ad
 
   // Staff & Specialization Details (Step 2)
   const [doctorName, setDoctorName] = useState('');
+  const [doctorAvatarUrl, setDoctorAvatarUrl] = useState('');
   const [professionalTitle, setProfessionalTitle] = useState('طبيب اختصاصي / استشاري');
   const [degrees, setDegrees] = useState('');
   const [licenseNumber, setLicenseNumber] = useState('');
@@ -158,6 +160,7 @@ export function AddMedicalFacilityModal({ isOpen, onClose, onFacilityAdded }: Ad
   const [showMedicalStaff, setShowMedicalStaff] = useState(true);
   const [additionalStaff, setAdditionalStaff] = useState<MedicalDoctor[]>([]);
   const [staffMemberName, setStaffMemberName] = useState('');
+  const [staffMemberAvatarUrl, setStaffMemberAvatarUrl] = useState('');
   const [staffMemberTitle, setStaffMemberTitle] = useState('');
   const [staffMemberDegrees, setStaffMemberDegrees] = useState('');
   const [staffMemberSubspecialty, setStaffMemberSubspecialty] = useState('');
@@ -191,6 +194,7 @@ export function AddMedicalFacilityModal({ isOpen, onClose, onFacilityAdded }: Ad
   const [hasKidsArea, setHasKidsArea] = useState(false);
   const [hasElectronicPayment, setHasElectronicPayment] = useState(true);
   const [hasEmergency24h, setHasEmergency24h] = useState(false);
+  const [paymentMethods, setPaymentMethods] = useState<string[]>(['كاش', 'فيزا', 'كليك']);
 
   // Working Hours (Step 5)
   const [workingHours, setWorkingHours] = useState<WorkingHours>({
@@ -273,10 +277,12 @@ export function AddMedicalFacilityModal({ isOpen, onClose, onFacilityAdded }: Ad
         title: sanitizeInput(staffMemberTitle || 'أخصائي معتمد'),
         degrees: staffMemberDegrees ? [sanitizeInput(staffMemberDegrees)] : [],
         experienceYears: Number(staffMemberExp) || 5,
-        subspecialty: sanitizeInput(staffMemberSubspecialty)
+        subspecialty: sanitizeInput(staffMemberSubspecialty),
+        avatarUrl: staffMemberAvatarUrl.trim() || undefined
       }
     ]);
     setStaffMemberName('');
+    setStaffMemberAvatarUrl('');
     setStaffMemberTitle('');
     setStaffMemberDegrees('');
     setStaffMemberSubspecialty('');
@@ -517,7 +523,8 @@ export function AddMedicalFacilityModal({ isOpen, onClose, onFacilityAdded }: Ad
           degrees: parsedDegrees,
           licenseNumber: sanitizeInput(licenseNumber || 'مرخص أصولاً لدى وزارة الصحة'),
           experienceYears: Number(experienceYears) || 10,
-          bio: sanitizeInput(doctorName ? `طبيب اختصاصي في ${mainSpecialtyTitle} (${chosenSubCategory}) في محافظة إربد.` : '')
+          bio: sanitizeInput(doctorName ? `طبيب اختصاصي في ${mainSpecialtyTitle} (${chosenSubCategory}) في محافظة إربد.` : ''),
+          avatarUrl: doctorAvatarUrl.trim() || undefined
         },
         showMedicalStaff: showMedicalStaff,
         doctorsList: [
@@ -528,7 +535,8 @@ export function AddMedicalFacilityModal({ isOpen, onClose, onFacilityAdded }: Ad
             licenseNumber: sanitizeInput(licenseNumber || 'مرخص أصولاً لدى وزارة الصحة'),
             experienceYears: Number(experienceYears) || 10,
             bio: sanitizeInput(doctorName ? `طبيب اختصاصي في ${mainSpecialtyTitle} (${chosenSubCategory}) في محافظة إربد.` : ''),
-            subspecialty: sanitizeInput(chosenSubCategory)
+            subspecialty: sanitizeInput(chosenSubCategory),
+            avatarUrl: doctorAvatarUrl.trim() || undefined
           },
           ...additionalStaff.map(st => ({
             name: sanitizeInput(st.name),
@@ -537,7 +545,8 @@ export function AddMedicalFacilityModal({ isOpen, onClose, onFacilityAdded }: Ad
             licenseNumber: st.licenseNumber ? sanitizeInput(st.licenseNumber) : undefined,
             experienceYears: Number(st.experienceYears) || 5,
             bio: st.bio ? sanitizeInput(st.bio) : undefined,
-            subspecialty: st.subspecialty ? sanitizeInput(st.subspecialty) : undefined
+            subspecialty: st.subspecialty ? sanitizeInput(st.subspecialty) : undefined,
+            avatarUrl: st.avatarUrl || undefined
           }))
         ],
         procedures: formattedProcedures,
@@ -552,6 +561,7 @@ export function AddMedicalFacilityModal({ isOpen, onClose, onFacilityAdded }: Ad
         hasFemaleStaff: hasFemaleStaff,
         hasKidsArea: hasKidsArea,
         hasElectronicPayment: hasElectronicPayment,
+        paymentMethods: paymentMethods,
         consultationFee: consultationFee,
         bookingNotice: isPharmacy
           ? 'تتوفر الأدوية والمستلزمات الصيدلانية مباشرة بالزيارة الفورية أو الطلب المباشر دون الحاجة لحجز مسبق.'
@@ -601,6 +611,7 @@ export function AddMedicalFacilityModal({ isOpen, onClose, onFacilityAdded }: Ad
         googlePlaceUrl: googlePlaceUrl ? sanitizeInput(googlePlaceUrl) : '',
         workingHours: workingHours,
         socialLinks: finalSocialLinks,
+        paymentMethods: paymentMethods,
         menuItems: generatedMenuItems,
         medicalProfile: medicalProfileData,
         isVerified: gift.isVerified,
@@ -668,6 +679,31 @@ export function AddMedicalFacilityModal({ isOpen, onClose, onFacilityAdded }: Ad
       }
 
       invalidateCache();
+
+      // Broadcast welcome notification to all users and visitors
+      try {
+        const notifMessage = gift.isFeatured
+          ? `تمت إضافة منشأة ${name} (${chosenSubCategory}) بالباقة الذهبية مع ميزة (المميز وصدارة البحث) والإطار المميز وعلامة ممول لمدة أسبوع!`
+          : `تمت إضافة ${name} (${chosenSubCategory}) في ${district} بنجاح إلى دليل الرعاية الطبية والصحية! أهلاً وسهلاً بهم.`;
+
+        const notifDoc = {
+          title: `إضافة طبية مميزة: ${name} 🩺`,
+          message: notifMessage,
+          type: 'business',
+          link: `/business/${newDocId}`,
+          badge: gift.isFeatured ? 'صدارة وممول ⭐' : 'منشأة طبية جديدة 🩺',
+          userId: 'all',
+          businessId: newDocId,
+          businessName: name,
+          businessLogoUrl: imageUrl || '',
+          createdAt: now
+        };
+        const sanitizedNotif = await compressAndSanitizeFirestorePayload(notifDoc, false);
+        await addDoc(collection(db, 'notifications'), sanitizedNotif);
+      } catch (notifErr) {
+        console.warn("Could not create medical addition broadcast notification:", notifErr);
+      }
+
       if (onFacilityAdded) {
         onFacilityAdded(newDocId);
       }
@@ -1101,6 +1137,22 @@ export function AddMedicalFacilityModal({ isOpen, onClose, onFacilityAdded }: Ad
                       </p>
                     </div>
 
+                    {/* Primary Doctor Image Uploader */}
+                    <div className="p-4 bg-emerald-50/50 rounded-2xl border border-emerald-100/80 space-y-2">
+                      <label className="text-xs font-black text-stone-900 block">
+                        صورة الطبيب / الأخصائي المشرف الرئيسي
+                      </label>
+                      <ImageUploader
+                        value={doctorAvatarUrl}
+                        onChange={(url) => setDoctorAvatarUrl(url)}
+                        folder="doctors"
+                        label=""
+                        aspectRatio="square"
+                        placeholder="اضغط لرفع صورة الطبيب أو اسحب الملف هنا"
+                        enableCrop={true}
+                      />
+                    </div>
+
                     {/* Doctor / In-Charge Name & Title */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-1.5">
@@ -1279,8 +1331,12 @@ export function AddMedicalFacilityModal({ isOpen, onClose, onFacilityAdded }: Ad
                               {additionalStaff.map((staff, idx) => (
                                 <div key={idx} className="p-3.5 bg-white rounded-xl border border-stone-200 shadow-3xs flex items-center justify-between gap-3">
                                   <div className="flex items-center gap-3 min-w-0">
-                                    <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-800 flex items-center justify-center font-black text-xs shrink-0 border border-emerald-100">
-                                      {staff.name.substring(0, 2)}
+                                    <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-800 flex items-center justify-center font-black text-xs shrink-0 border border-emerald-100 overflow-hidden">
+                                      {staff.avatarUrl ? (
+                                        <img src={staff.avatarUrl} alt={staff.name} className="w-full h-full object-cover" />
+                                      ) : (
+                                        staff.name.substring(0, 2)
+                                      )}
                                     </div>
                                     <div className="min-w-0">
                                       <h5 className="text-xs font-black text-stone-900 truncate">{staff.name}</h5>
@@ -1306,6 +1362,19 @@ export function AddMedicalFacilityModal({ isOpen, onClose, onFacilityAdded }: Ad
                             <div className="text-xs font-black text-stone-800 flex items-center gap-1.5">
                               <Plus className="h-4 w-4 text-[#1a4d2e]" />
                               <span>إضافة عضو كادر {isPharmacy ? 'صيدلاني' : 'طبي'} جديد</span>
+                            </div>
+
+                            <div className="space-y-1">
+                              <label className="text-[11px] font-bold text-stone-700 block">صورة الطبيب / عضو الكادر (اختياري)</label>
+                              <ImageUploader
+                                value={staffMemberAvatarUrl}
+                                onChange={(url) => setStaffMemberAvatarUrl(url)}
+                                folder="doctors"
+                                label=""
+                                aspectRatio="square"
+                                placeholder="رفع صورة عضو الكادر"
+                                enableCrop={true}
+                              />
                             </div>
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1453,6 +1522,14 @@ export function AddMedicalFacilityModal({ isOpen, onClose, onFacilityAdded }: Ad
                           إضافة +
                         </button>
                       </div>
+                    </div>
+
+                    {/* Payment Methods Selector */}
+                    <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200/80">
+                      <PaymentMethodsSelector
+                        value={paymentMethods}
+                        onChange={setPaymentMethods}
+                      />
                     </div>
 
                     {/* Procedures and Clinical Services */}

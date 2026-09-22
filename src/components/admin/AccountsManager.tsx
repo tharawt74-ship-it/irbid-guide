@@ -1,23 +1,34 @@
 import React, { useEffect, useState } from 'react';
 import { db } from '../../lib/firebase';
 import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, addDoc } from 'firebase/firestore';
-import { UserProfile, UserRole } from '../../types';
+import { UserProfile, UserRole, Business } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { 
   Users, Search, Filter, ShieldCheck, UserCheck, UserX, 
   Plus, Edit3, Trash2, Mail, Phone, Calendar, Lock, Unlock, 
   Store, Shield, Send, Check, X, Eye, AlertTriangle, Sparkles,
-  CheckCircle2, RefreshCw
+  CheckCircle2, RefreshCw, Stethoscope
 } from 'lucide-react';
 
-export function AccountsManager() {
+interface AccountsManagerProps {
+  businesses?: Business[];
+}
+
+export function AccountsManager({ businesses: initialBusinesses = [] }: AccountsManagerProps = {}) {
   const { currentUser, isAdmin } = useAuth();
   const [users, setUsers] = useState<UserProfile[]>([]);
+  const [allBusinesses, setAllBusinesses] = useState<Business[]>(initialBusinesses);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [toastMsg, setToastMsg] = useState<{ text: string; type?: 'success' | 'error' | 'info' } | null>(null);
+
+  useEffect(() => {
+    if (initialBusinesses && initialBusinesses.length > 0) {
+      setAllBusinesses(initialBusinesses);
+    }
+  }, [initialBusinesses]);
 
   // Selection states
   const [selectedUids, setSelectedUids] = useState<string[]>([]);
@@ -144,7 +155,7 @@ export function AccountsManager() {
     'tharawt74@gmail.com'
   ];
 
-  // Fetch all user accounts from Firestore
+  // Fetch all user accounts & businesses from Firestore
   const fetchUsers = async () => {
     if (!db) {
       setLoading(false);
@@ -152,6 +163,20 @@ export function AccountsManager() {
     }
     setLoading(true);
     try {
+      // Also fetch businesses to ensure fresh link mapping
+      try {
+        const bizSnap = await getDocs(collection(db, 'businesses'));
+        const fetchedBiz: Business[] = [];
+        bizSnap.forEach(d => {
+          fetchedBiz.push({ id: d.id, ...d.data() } as Business);
+        });
+        if (fetchedBiz.length > 0) {
+          setAllBusinesses(fetchedBiz);
+        }
+      } catch (bErr) {
+        console.warn('Could not refresh businesses in AccountsManager:', bErr);
+      }
+
       const snap = await getDocs(collection(db, 'users'));
       const fetchedMap = new Map<string, UserProfile>();
 
@@ -260,6 +285,38 @@ export function AccountsManager() {
   useEffect(() => {
     fetchUsers();
   }, []);
+
+  // Helper to find all shops and medical facilities owned by or registered under a user account
+  const getUserBusinesses = (user: UserProfile) => {
+    if (!user || !allBusinesses.length) return [];
+    const userUid = user.uid;
+    const userEmail = (user.email || '').toLowerCase().trim();
+    const userPhone = (user.phone || '').replace(/\D/g, '');
+    const merchantIds = user.merchantBusinessIds || [];
+
+    return allBusinesses.filter(b => {
+      // 1. Direct UID match
+      if (b.userId && b.userId === userUid) return true;
+      if (b.ownerId && b.ownerId === userUid) return true;
+
+      // 2. merchantBusinessIds array on user profile
+      if (merchantIds.includes(b.id)) return true;
+
+      // 3. Email match
+      if (userEmail && userEmail !== 'بدون بريد') {
+        if (b.ownerEmail && b.ownerEmail.toLowerCase().trim() === userEmail) return true;
+        if (b.ownerContact && b.ownerContact.toLowerCase().trim() === userEmail) return true;
+        if (Array.isArray((b as any).staffEmails) && (b as any).staffEmails.map((e: string) => e.toLowerCase().trim()).includes(userEmail)) return true;
+      }
+
+      // 4. Phone match (if valid phone)
+      if (userPhone && userPhone.length >= 7) {
+        if (b.ownerPhone && b.ownerPhone.replace(/\D/g, '') === userPhone) return true;
+      }
+
+      return false;
+    });
+  };
 
   // Filtered users
   const filteredUsers = users.filter(u => {
@@ -705,26 +762,59 @@ export function AccountsManager() {
                         />
                       </td>
 
-                      {/* Name & Email */}
+                      {/* Name & Email & Linked Businesses */}
                       <td className="py-3.5 px-4">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-9 h-9 rounded-2xl flex items-center justify-center font-black text-xs shrink-0 ${
-                            user.role === 'super_admin' ? 'bg-purple-100 text-purple-800' :
-                            user.role === 'supervisor' ? 'bg-emerald-100 text-emerald-800' :
-                            user.role === 'merchant' ? 'bg-amber-100 text-amber-800' : 'bg-stone-100 text-stone-700'
-                          }`}>
-                            {user.displayName.charAt(0).toUpperCase()}
-                          </div>
-                          <div>
-                            <div className="font-black text-stone-900 flex items-center gap-1.5">
-                              <span>{user.displayName}</span>
-                              {user.uid === currentUser?.uid && (
-                                <span className="bg-sky-100 text-sky-800 text-[9px] font-bold px-1.5 py-0.5 rounded-full">أنت</span>
-                              )}
+                        {(() => {
+                          const userBiz = getUserBusinesses(user);
+                          return (
+                            <div className="flex items-center gap-3">
+                              <div 
+                                onClick={() => setSelectedUserForDetails(user)}
+                                className={`w-9 h-9 rounded-2xl flex items-center justify-center font-black text-xs shrink-0 cursor-pointer transition-transform hover:scale-105 shadow-2xs ${
+                                  user.role === 'super_admin' ? 'bg-purple-100 text-purple-800' :
+                                  user.role === 'supervisor' ? 'bg-emerald-100 text-emerald-800' :
+                                  user.role === 'merchant' ? 'bg-amber-100 text-amber-800' : 'bg-stone-100 text-stone-700'
+                                }`}
+                                title="انقر لعرض تفاصيل الحساب والمحلات/المنشآت التابعة له"
+                              >
+                                {user.displayName.charAt(0).toUpperCase()}
+                              </div>
+                              <div className="space-y-0.5">
+                                <div className="font-black text-stone-900 flex items-center gap-1.5 flex-wrap">
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedUserForDetails(user)}
+                                    className="hover:text-[#1a4d2e] transition-colors text-right font-black cursor-pointer underline decoration-dotted underline-offset-2"
+                                    title="انقر لعرض المحلات والمنشآت المسجلة باسم هذا الحساب"
+                                  >
+                                    {user.displayName}
+                                  </button>
+                                  {user.uid === currentUser?.uid && (
+                                    <span className="bg-sky-100 text-sky-800 text-[9px] font-bold px-1.5 py-0.5 rounded-full">أنت</span>
+                                  )}
+                                </div>
+                                <div className="text-[11px] text-stone-400 font-mono">{user.email}</div>
+                                
+                                {/* Badge of registered businesses */}
+                                <div className="pt-0.5">
+                                  {userBiz.length > 0 ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => setSelectedUserForDetails(user)}
+                                      className="bg-emerald-50 hover:bg-emerald-100 text-[#1a4d2e] border border-emerald-200 px-2 py-0.5 rounded-full text-[10px] font-bold inline-flex items-center gap-1 transition-colors cursor-pointer"
+                                      title="اضغط لعرض كافة المحلات والمنشآت"
+                                    >
+                                      <Store className="h-3 w-3 text-emerald-600" />
+                                      <span>{userBiz.length} محلات / منشآت مسجلة</span>
+                                    </button>
+                                  ) : (
+                                    <span className="text-[10px] text-stone-400 font-normal">لا توجد محلات مسجلة</span>
+                                  )}
+                                </div>
+                              </div>
                             </div>
-                            <div className="text-[11px] text-stone-400 font-mono">{user.email}</div>
-                          </div>
-                        </div>
+                          );
+                        })()}
                       </td>
 
                       {/* Phone */}
@@ -831,19 +921,19 @@ export function AccountsManager() {
 
       {/* MODAL 1: Add New User */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-stone-200 space-y-5 animate-in zoom-in-95">
-            <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+        <div className="fixed inset-0 z-[100000] bg-black/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-stone-200 animate-in zoom-in-95 my-auto max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3rem)] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between border-b border-stone-100 pb-3 shrink-0">
               <h3 className="font-black text-lg text-stone-900 flex items-center gap-2">
                 <Plus className="h-5 w-5 text-[#1a4d2e]" />
                 <span>إضافة وتوثيق حساب جديد</span>
               </h3>
-              <button onClick={() => setIsAddModalOpen(false)} className="text-stone-400 hover:text-stone-700">
+              <button onClick={() => setIsAddModalOpen(false)} className="text-stone-400 hover:text-stone-700 p-1.5 rounded-xl hover:bg-stone-100 transition-colors">
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <form onSubmit={handleAddUser} className="space-y-4 text-xs">
+            <form onSubmit={handleAddUser} className="space-y-4 text-xs overflow-y-auto flex-1 my-3 pr-1">
               <div>
                 <label className="font-bold text-stone-700 mb-1 block">اسم المستخدم الثلاثي *</label>
                 <input
@@ -893,7 +983,7 @@ export function AccountsManager() {
                 </select>
               </div>
 
-              <div className="pt-3 flex items-center justify-end gap-2">
+              <div className="pt-3 border-t border-stone-100 flex items-center justify-end gap-2 shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsAddModalOpen(false)}
@@ -916,19 +1006,19 @@ export function AccountsManager() {
 
       {/* MODAL 2: Change Role Modal */}
       {selectedUserForEdit && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-stone-200 space-y-5 animate-in zoom-in-95">
-            <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+        <div className="fixed inset-0 z-[100000] bg-black/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-stone-200 animate-in zoom-in-95 my-auto max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3rem)] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between border-b border-stone-100 pb-3 shrink-0">
               <div>
                 <h3 className="font-black text-base text-stone-900">تعديل رتبة وصلاحيات الحساب</h3>
                 <p className="text-xs text-stone-500">{selectedUserForEdit.displayName} ({selectedUserForEdit.email})</p>
               </div>
-              <button onClick={() => setSelectedUserForEdit(null)} className="text-stone-400 hover:text-stone-700">
+              <button onClick={() => setSelectedUserForEdit(null)} className="text-stone-400 hover:text-stone-700 p-1.5 rounded-xl hover:bg-stone-100 transition-colors">
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <div className="space-y-4 text-xs">
+            <div className="space-y-4 text-xs overflow-y-auto flex-1 my-3 pr-1">
               <label className="font-bold text-stone-700 block">اختر الرتبة الجديدة:</label>
               <div className="space-y-2">
                 {[
@@ -959,7 +1049,7 @@ export function AccountsManager() {
                 ))}
               </div>
 
-              <div className="pt-3 flex items-center justify-end gap-2">
+              <div className="pt-3 border-t border-stone-100 flex items-center justify-end gap-2 shrink-0">
                 <button
                   onClick={() => setSelectedUserForEdit(null)}
                   className="px-4 py-2 bg-stone-100 text-stone-700 rounded-xl font-bold cursor-pointer"
@@ -981,9 +1071,9 @@ export function AccountsManager() {
 
       {/* MODAL 3: Suspend / Reactivate Status Modal */}
       {selectedUserForStatus && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-stone-200 space-y-4 animate-in zoom-in-95">
-            <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+        <div className="fixed inset-0 z-[100000] bg-black/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-stone-200 animate-in zoom-in-95 my-auto max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3rem)] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between border-b border-stone-100 pb-3 shrink-0">
               <h3 className="font-black text-base text-stone-900 flex items-center gap-2">
                 {selectedUserForStatus.status === 'suspended' ? (
                   <Unlock className="h-5 w-5 text-emerald-600" />
@@ -992,28 +1082,30 @@ export function AccountsManager() {
                 )}
                 <span>{selectedUserForStatus.status === 'suspended' ? 'إعادة تنشيط الحساب' : 'إيقاف وتجميد الحساب'}</span>
               </h3>
-              <button onClick={() => setSelectedUserForStatus(null)} className="text-stone-400 hover:text-stone-700">
+              <button onClick={() => setSelectedUserForStatus(null)} className="text-stone-400 hover:text-stone-700 p-1.5 rounded-xl hover:bg-stone-100 transition-colors">
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <p className="text-xs text-stone-600 leading-relaxed">
-              أنت على وشك {selectedUserForStatus.status === 'suspended' ? 'إعادة تنشيط' : 'إيقاف'} حساب <span className="font-bold text-stone-900">{selectedUserForStatus.displayName}</span>.
-            </p>
+            <div className="space-y-4 my-3 overflow-y-auto flex-1 pr-1 text-xs">
+              <p className="text-stone-600 leading-relaxed">
+                أنت على وشك {selectedUserForStatus.status === 'suspended' ? 'إعادة تنشيط' : 'إيقاف'} حساب <span className="font-bold text-stone-900">{selectedUserForStatus.displayName}</span>.
+              </p>
 
-            {selectedUserForStatus.status !== 'suspended' && (
-              <div>
-                <label className="font-bold text-xs text-stone-700 mb-1 block">سبب الإيقاف (يظهر للمستخدم):</label>
-                <textarea
-                  value={suspendReason}
-                  onChange={e => setSuspendReason(e.target.value)}
-                  placeholder="مثال: مخالفة شروط النشر أو إساءة استخدام المنصة..."
-                  className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3 text-xs font-bold text-stone-800 h-24 focus:outline-none focus:ring-2 focus:ring-rose-500"
-                />
-              </div>
-            )}
+              {selectedUserForStatus.status !== 'suspended' && (
+                <div>
+                  <label className="font-bold text-xs text-stone-700 mb-1 block">سبب الإيقاف (يظهر للمستخدم):</label>
+                  <textarea
+                    value={suspendReason}
+                    onChange={e => setSuspendReason(e.target.value)}
+                    placeholder="مثال: مخالفة شروط النشر أو إساءة استخدام المنصة..."
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3 text-xs font-bold text-stone-800 h-24 focus:outline-none focus:ring-2 focus:ring-rose-500"
+                  />
+                </div>
+              )}
+            </div>
 
-            <div className="pt-2 flex items-center justify-end gap-2">
+            <div className="pt-3 border-t border-stone-100 flex items-center justify-end gap-2 shrink-0">
               <button
                 onClick={() => setSelectedUserForStatus(null)}
                 className="px-4 py-2 bg-stone-100 text-stone-700 rounded-xl font-bold cursor-pointer text-xs"
@@ -1036,23 +1128,23 @@ export function AccountsManager() {
 
       {/* MODAL 4: Send Direct Message Modal */}
       {selectedUserForMessage && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-stone-200 space-y-4 animate-in zoom-in-95">
-            <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+        <div className="fixed inset-0 z-[100000] bg-black/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-stone-200 animate-in zoom-in-95 my-auto max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3rem)] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between border-b border-stone-100 pb-3 shrink-0">
               <h3 className="font-black text-base text-stone-900 flex items-center gap-2">
                 <Send className="h-5 w-5 text-purple-600" />
                 <span>إرسال إشعار خاص ومباشر</span>
               </h3>
-              <button onClick={() => setSelectedUserForMessage(null)} className="text-stone-400 hover:text-stone-700">
+              <button onClick={() => setSelectedUserForMessage(null)} className="text-stone-400 hover:text-stone-700 p-1.5 rounded-xl hover:bg-stone-100 transition-colors">
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <div className="text-xs text-stone-500">
+            <div className="text-xs text-stone-500 pt-2 shrink-0">
               سيصل هذا الإشعار المباشر فوراً إلى حساب: <span className="font-bold text-stone-900">{selectedUserForMessage.displayName}</span>
             </div>
 
-            <form onSubmit={handleSendDirectMessage} className="space-y-3 text-xs">
+            <form onSubmit={handleSendDirectMessage} className="space-y-3 text-xs overflow-y-auto flex-1 my-3 pr-1">
               <div>
                 <label className="font-bold text-stone-700 mb-1 block">عنوان الإشعار *</label>
                 <input
@@ -1076,7 +1168,7 @@ export function AccountsManager() {
                 />
               </div>
 
-              <div className="pt-2 flex items-center justify-end gap-2">
+              <div className="pt-3 border-t border-stone-100 flex items-center justify-end gap-2 shrink-0">
                 <button
                   type="button"
                   onClick={() => setSelectedUserForMessage(null)}
@@ -1097,86 +1189,199 @@ export function AccountsManager() {
         </div>
       )}
 
-      {/* MODAL 5: View Full Details Modal */}
-      {selectedUserForDetails && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-stone-200 space-y-5 animate-in zoom-in-95">
-            <div className="flex items-center justify-between border-b border-stone-100 pb-3">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-[#1a4d2e] text-white flex items-center justify-center font-black text-sm">
-                  {selectedUserForDetails.displayName.charAt(0).toUpperCase()}
+      {/* MODAL 5: View Full Details & Registered Businesses Modal */}
+      {selectedUserForDetails && (() => {
+        const userBizList = getUserBusinesses(selectedUserForDetails);
+        return (
+          <div className="fixed inset-0 z-[100000] bg-black/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
+            <div className="bg-white rounded-3xl max-w-2xl w-full p-5 sm:p-6 shadow-2xl border border-stone-200 animate-in zoom-in-95 my-auto max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3rem)] flex flex-col overflow-hidden">
+              {/* Header */}
+              <div className="flex items-center justify-between border-b border-stone-100 pb-3 shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-[#1a4d2e] text-white flex items-center justify-center font-black text-base shadow-xs">
+                    {selectedUserForDetails.displayName.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <h3 className="font-black text-lg text-stone-900 flex items-center gap-2 flex-wrap">
+                      <span>{selectedUserForDetails.displayName}</span>
+                      {getRoleBadge(selectedUserForDetails.role)}
+                    </h3>
+                    <p className="text-xs text-stone-500 font-mono mt-0.5">{selectedUserForDetails.email}</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-black text-base text-stone-900">{selectedUserForDetails.displayName}</h3>
-                  <p className="text-xs text-stone-500 font-mono">{selectedUserForDetails.email}</p>
+                <button 
+                  onClick={() => setSelectedUserForDetails(null)} 
+                  className="p-2 text-stone-400 hover:text-stone-700 rounded-xl hover:bg-stone-100 transition-colors cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* Scrollable Body */}
+              <div className="overflow-y-auto flex-1 space-y-5 my-3 pr-1 text-xs">
+                {/* User Info Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <div className="p-3 bg-stone-50 rounded-2xl border border-stone-200 space-y-1">
+                    <span className="text-stone-400 font-bold block">رتبة الحساب:</span>
+                    <span className="font-black text-stone-800">{getRoleLabel(selectedUserForDetails.role)}</span>
+                  </div>
+
+                  <div className="p-3 bg-stone-50 rounded-2xl border border-stone-200 space-y-1">
+                    <span className="text-stone-400 font-bold block">حالة الحساب:</span>
+                    <span className="font-bold text-stone-800">{selectedUserForDetails.status === 'suspended' ? '❌ موقوف' : '✅ نشط'}</span>
+                  </div>
+
+                  <div className="p-3 bg-stone-50 rounded-2xl border border-stone-200 space-y-1">
+                    <span className="text-stone-400 font-bold block">رقم الهاتف:</span>
+                    <span className="font-bold font-mono text-stone-800">{selectedUserForDetails.phone || 'غير مسجل'}</span>
+                  </div>
+
+                  <div className="p-3 bg-stone-50 rounded-2xl border border-stone-200 space-y-1 sm:col-span-2">
+                    <span className="text-stone-400 font-bold block">المعرف UID:</span>
+                    <span className="font-mono text-[11px] text-stone-700 select-all font-bold">{selectedUserForDetails.uid}</span>
+                  </div>
+
+                  <div className="p-3 bg-stone-50 rounded-2xl border border-stone-200 space-y-1">
+                    <span className="text-stone-400 font-bold block">تاريخ التسجيل:</span>
+                    <span className="font-bold text-stone-800">{selectedUserForDetails.createdAt ? new Date(selectedUserForDetails.createdAt).toLocaleDateString('ar-JO') : 'غير محدد'}</span>
+                  </div>
+                </div>
+
+                {selectedUserForDetails.statusReason && (
+                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl space-y-1">
+                    <span className="font-bold text-rose-900 block">سبب الإيقاف المسجل:</span>
+                    <p className="text-rose-800">{selectedUserForDetails.statusReason}</p>
+                  </div>
+                )}
+
+                {/* REGISTERED BUSINESSES & FACILITIES SECTION */}
+                <div className="space-y-3 pt-2">
+                  <div className="flex items-center justify-between border-b border-stone-200 pb-2.5">
+                    <h4 className="font-black text-stone-900 text-sm flex items-center gap-2">
+                      <Store className="h-4.5 w-4.5 text-[#1a4d2e]" />
+                      <span>المحلات والمنشآت المسجلة باسم هذا الحساب</span>
+                      <span className="bg-[#1a4d2e] text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                        {userBizList.length}
+                      </span>
+                    </h4>
+                  </div>
+
+                  {userBizList.length === 0 ? (
+                    <div className="bg-stone-50 border border-dashed border-stone-300 rounded-2xl p-6 text-center space-y-2">
+                      <Store className="h-8 w-8 text-stone-300 mx-auto" />
+                      <p className="font-bold text-stone-600 text-xs">لا توجد محلات تجارية أو منشآت طبية مسجلة باسم هذا الحساب حتى الآن</p>
+                      <p className="text-[11px] text-stone-400">عندما يقوم هذا المستخدم بإنشاء محل أو منشأة طبية أو توثيق ملكية محل، ستظهر قائمة منشآته التفصيلية هنا فوراً.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {userBizList.map(biz => {
+                        const isMedical = biz.category === 'medical' || biz.category === 'طبي' || (biz as any).isMedicalFacility;
+                        const publicUrl = biz.username ? `/b/${biz.username}` : `/business/${biz.id}`;
+
+                        return (
+                          <div 
+                            key={biz.id}
+                            className="bg-stone-50 hover:bg-stone-100/80 border border-stone-200 rounded-2xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors"
+                          >
+                            <div className="flex items-center gap-3">
+                              {/* Thumbnail */}
+                              <div className="w-12 h-12 rounded-xl bg-white border border-stone-200 overflow-hidden shrink-0 flex items-center justify-center font-bold text-stone-400 shadow-2xs">
+                                {biz.logoUrl || biz.imageUrl ? (
+                                  <img src={biz.logoUrl || biz.imageUrl} alt={biz.name} className="w-full h-full object-cover" />
+                                ) : isMedical ? (
+                                  <Stethoscope className="h-6 w-6 text-sky-600" />
+                                ) : (
+                                  <Store className="h-6 w-6 text-[#1a4d2e]" />
+                                )}
+                              </div>
+
+                              <div className="space-y-1">
+                                <div className="font-black text-stone-900 text-xs flex items-center gap-2 flex-wrap">
+                                  <span>{biz.name}</span>
+                                  {isMedical ? (
+                                    <span className="bg-sky-100 text-sky-900 border border-sky-200 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                                      🩺 منشأة طبية
+                                    </span>
+                                  ) : (
+                                    <span className="bg-amber-50 text-amber-900 border border-amber-200 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                                      🏪 {biz.category || 'محل تجاري'}
+                                    </span>
+                                  )}
+
+                                  {/* Status badge */}
+                                  {biz.status === 'pending' ? (
+                                    <span className="bg-yellow-100 text-yellow-900 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                                      ⏳ قيد المراجعة
+                                    </span>
+                                  ) : biz.status === 'hidden' || biz.isHidden ? (
+                                    <span className="bg-stone-200 text-stone-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                                      🙈 مخفي
+                                    </span>
+                                  ) : (
+                                    <span className="bg-emerald-100 text-emerald-900 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                                      ✅ نشط ومفعل
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div className="text-[11px] text-stone-500 flex items-center gap-3 flex-wrap font-medium">
+                                  {biz.district && <span>📍 {biz.district}</span>}
+                                  {biz.address && !biz.district && <span>📍 {biz.address}</span>}
+                                  {biz.phone && <span dir="ltr">📞 {biz.phone}</span>}
+                                  {biz.rating > 0 && <span>⭐ {biz.rating} ({biz.reviewCount || 0})</span>}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Actions */}
+                            <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                              <a
+                                href={publicUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="bg-white hover:bg-stone-100 text-stone-800 border border-stone-300 px-3 py-1.5 rounded-xl text-[11px] font-bold inline-flex items-center gap-1.5 transition-colors shadow-3xs"
+                              >
+                                <Eye className="h-3.5 w-3.5 text-[#1a4d2e]" />
+                                <span>معاينة البطاقة</span>
+                              </a>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
-              <button onClick={() => setSelectedUserForDetails(null)} className="text-stone-400 hover:text-stone-700">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
 
-            <div className="grid grid-cols-2 gap-3 text-xs">
-              <div className="p-3 bg-stone-50 rounded-2xl border border-stone-200 space-y-1">
-                <span className="text-stone-400 font-bold block">رتبة الحساب:</span>
-                {getRoleBadge(selectedUserForDetails.role)}
+              {/* Footer */}
+              <div className="pt-3 border-t border-stone-100 flex justify-end shrink-0">
+                <button
+                  onClick={() => setSelectedUserForDetails(null)}
+                  className="px-5 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors"
+                >
+                  إغلاق
+                </button>
               </div>
-
-              <div className="p-3 bg-stone-50 rounded-2xl border border-stone-200 space-y-1">
-                <span className="text-stone-400 font-bold block">حالة الحساب:</span>
-                <span className="font-bold text-stone-800">{selectedUserForDetails.status === 'suspended' ? '❌ موقوف' : '✅ نشط'}</span>
-              </div>
-
-              <div className="p-3 bg-stone-50 rounded-2xl border border-stone-200 space-y-1">
-                <span className="text-stone-400 font-bold block">رقم الهاتف:</span>
-                <span className="font-bold font-mono text-stone-800">{selectedUserForDetails.phone || 'غير مسجل'}</span>
-              </div>
-
-              <div className="p-3 bg-stone-50 rounded-2xl border border-stone-200 space-y-1">
-                <span className="text-stone-400 font-bold block">تاريخ التسجيل:</span>
-                <span className="font-bold text-stone-800">{selectedUserForDetails.createdAt ? new Date(selectedUserForDetails.createdAt).toLocaleString('ar-JO') : 'غير محدد'}</span>
-              </div>
-            </div>
-
-            <div className="p-3 bg-stone-50 rounded-2xl border border-stone-200 space-y-1 text-xs">
-              <span className="text-stone-400 font-bold block">المعرف UID:</span>
-              <span className="font-mono text-[11px] text-stone-700 select-all font-bold">{selectedUserForDetails.uid}</span>
-            </div>
-
-            {selectedUserForDetails.statusReason && (
-              <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl text-xs space-y-1">
-                <span className="font-bold text-rose-900 block">سبب الإيقاف المسجل:</span>
-                <p className="text-rose-800">{selectedUserForDetails.statusReason}</p>
-              </div>
-            )}
-
-            <div className="pt-2 flex justify-end">
-              <button
-                onClick={() => setSelectedUserForDetails(null)}
-                className="px-5 py-2 bg-stone-900 text-white rounded-xl text-xs font-bold cursor-pointer"
-              >
-                إغلاق
-              </button>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* MODAL 6: Custom Delete Confirmation Modal */}
       {selectedUserForDelete && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-stone-200 space-y-5 animate-in zoom-in-95 text-right">
-            <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+        <div className="fixed inset-0 z-[100000] bg-black/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-stone-200 animate-in zoom-in-95 my-auto max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3rem)] flex flex-col overflow-hidden text-right">
+            <div className="flex items-center justify-between border-b border-stone-100 pb-3 shrink-0">
               <h3 className="font-black text-base text-rose-600 flex items-center gap-2">
                 <AlertTriangle className="h-5 w-5 text-rose-500" />
                 <span>حذف الحساب نهائياً</span>
               </h3>
-              <button onClick={() => setSelectedUserForDelete(null)} className="text-stone-400 hover:text-stone-700">
+              <button onClick={() => setSelectedUserForDelete(null)} className="text-stone-400 hover:text-stone-700 p-1.5 rounded-xl hover:bg-stone-100 transition-colors">
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-3 my-3 overflow-y-auto flex-1 pr-1">
               <div className="p-4 bg-rose-50 rounded-2xl border border-rose-100 text-rose-950 text-xs leading-relaxed space-y-1">
                 <p className="font-bold">⚠️ تحذير أمني هام:</p>
                 <p>
@@ -1188,7 +1393,7 @@ export function AccountsManager() {
               </p>
             </div>
 
-            <div className="pt-3 flex items-center justify-end gap-2">
+            <div className="pt-3 border-t border-stone-100 flex items-center justify-end gap-2 shrink-0">
               <button
                 type="button"
                 onClick={() => setSelectedUserForDelete(null)}

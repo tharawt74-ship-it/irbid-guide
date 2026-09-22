@@ -119,7 +119,7 @@ export function MedicalReviewsTab({ business, showToast }: MedicalReviewsTabProp
     : (business.rating || 5.0).toFixed(1);
 
   return (
-    <div className="p-4 sm:p-6 space-y-6 text-right" dir="rtl">
+    <div className="p-2 sm:p-6 space-y-4 sm:space-y-6 text-right" dir="rtl">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-stone-200">
         <div>
           <h3 className="text-base font-black text-[#2d2a26] flex items-center gap-2">
@@ -147,7 +147,7 @@ export function MedicalReviewsTab({ business, showToast }: MedicalReviewsTabProp
           جاري تحميل آراء المراجعين...
         </div>
       ) : reviews.length === 0 ? (
-        <div className="bg-stone-50 border border-stone-200/80 rounded-2xl p-8 text-center space-y-2">
+        <div className="bg-stone-50 border-0 sm:border border-stone-200/80 rounded-xl sm:rounded-2xl p-6 sm:p-8 text-center space-y-2 shadow-none sm:shadow-2xs">
           <Star className="h-8 w-8 text-stone-300 mx-auto" />
           <h4 className="text-xs font-black text-stone-700">لا توجد تقييمات مسجلة بعد</h4>
           <p className="text-[11px] text-stone-400 max-w-sm mx-auto">
@@ -157,7 +157,7 @@ export function MedicalReviewsTab({ business, showToast }: MedicalReviewsTabProp
       ) : (
         <div className="space-y-4">
           {reviews.map((rev) => (
-            <div key={rev.id} className="bg-white border border-stone-200 rounded-2xl p-4 sm:p-5 space-y-3">
+            <div key={rev.id} className="bg-white border-0 sm:border border-stone-200 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 space-y-3 shadow-none sm:shadow-2xs">
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-full bg-stone-100 text-stone-700 font-black text-xs flex items-center justify-center">

@@ -53,6 +53,10 @@ export function MerchantScannerPage() {
   const [isScanning, setIsScanning] = useState<boolean>(false);
   const [cameraError, setCameraError] = useState<'permission_denied' | 'general_error' | string | null>(null);
   const [facingMode, setFacingMode] = useState<"environment" | "user">("environment");
+  const [isSwitchingCamera, setIsSwitchingCamera] = useState<boolean>(false);
+  const facingModeRef = useRef<"environment" | "user">("environment");
+  const isCameraBusyRef = useRef<boolean>(false);
+  const hasEverHadCameraPermissionRef = useRef<boolean>(false);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [shakeScreen, setShakeScreen] = useState<boolean>(false);
   const qrScannerRef = useRef<Html5Qrcode | null>(null);
@@ -128,12 +132,49 @@ export function MerchantScannerPage() {
     }
   };
 
+  // Stop QR Scanner and completely release mobile camera hardware
+  const stopScanner = async () => {
+    if (qrScannerRef.current) {
+      try {
+        if (qrScannerRef.current.isScanning) {
+          await qrScannerRef.current.stop();
+        }
+      } catch (err) {
+        console.info("Notice stopping scanner:", err);
+      }
+    }
+
+    // Force-release any lingering video tracks on the viewfinder DOM element
+    try {
+      const container = document.getElementById("merchant-qr-reader-full");
+      if (container) {
+        const videoEls = container.querySelectorAll("video");
+        videoEls.forEach((vid) => {
+          if (vid.srcObject) {
+            const stream = vid.srcObject as MediaStream;
+            stream.getTracks().forEach((track) => {
+              try { track.stop(); } catch (e) {}
+            });
+            vid.srcObject = null;
+          }
+        });
+      }
+    } catch (e) {}
+
+    setIsScanning(false);
+  };
+
   // Start QR Scanner
-  const startScanner = async () => {
+  const startScanner = async (targetMode?: "environment" | "user") => {
+    if (isCameraBusyRef.current) return;
+    isCameraBusyRef.current = true;
+
     setCameraError(null);
     setLookupError(null);
     setVerifiedReward(null);
     setConsumeSuccess(false);
+
+    const mode = targetMode || facingModeRef.current;
 
     try {
       if (!qrScannerRef.current) {
@@ -144,54 +185,68 @@ export function MerchantScannerPage() {
         await qrScannerRef.current.stop();
       }
 
-      setIsScanning(true);
-      await qrScannerRef.current.start(
-        { facingMode },
-        {
-          fps: 12,
-          qrbox: (width, height) => {
-            const minSide = Math.min(width, height);
-            const size = Math.min(280, Math.floor(minSide * 0.75));
-            return { width: size, height: size };
-          }
-        },
-        (decodedText) => {
-          handleProcessCode(decodedText);
-          stopScanner();
-        },
-        () => {
-          // Ignored per-frame warnings
-        }
-      );
-    } catch (err: any) {
-      const errString = String(err?.message || err || '');
-      const isPermissionDenied = 
-        err?.name === 'NotAllowedError' || 
-        errString.includes('Permission denied') ||
-        errString.includes('NotAllowedError') ||
-        errString.includes('PermissionDeniedError');
+      // Small pause to let the device camera hardware settle
+      await new Promise((r) => setTimeout(r, 120));
 
-      if (isPermissionDenied) {
-        console.info("Camera permission not granted by user or browser iframe policy:", err);
-        setCameraError("permission_denied");
-      } else {
-        console.warn("Camera scanner notice:", err);
+      const qrConfig = {
+        fps: 12
+      };
+
+      const qrSuccessCallback = (decodedText: string) => {
+        handleProcessCode(decodedText);
+        stopScanner();
+      };
+
+      try {
+        await qrScannerRef.current.start(
+          { facingMode: mode },
+          qrConfig,
+          qrSuccessCallback,
+          () => {}
+        );
+      } catch (primaryErr: any) {
+        // If the switch threw an error (e.g. sensor hardware was still switching), retry once after 300ms
+        console.info("Primary camera start notice, attempting recovery retry:", primaryErr);
+        await new Promise((r) => setTimeout(r, 300));
+        await qrScannerRef.current.start(
+          { facingMode: mode },
+          qrConfig,
+          qrSuccessCallback,
+          () => {}
+        );
+      }
+
+      hasEverHadCameraPermissionRef.current = true;
+      setIsScanning(true);
+      setCameraError(null);
+    } catch (err: any) {
+      console.warn("Camera scanner notice:", err);
+      const errString = String(err?.message || err || '');
+
+      // If camera permission was already granted previously in this session,
+      // a failure during switching is a hardware transition glitch, NEVER permission denial!
+      if (hasEverHadCameraPermissionRef.current) {
+        console.info("Camera switch transition glitch detected; keeping permission verified.");
         setCameraError("general_error");
+      } else {
+        const isPermissionDenied = 
+          err?.name === 'NotAllowedError' || 
+          errString.includes('Permission denied') ||
+          errString.includes('NotAllowedError') ||
+          errString.includes('PermissionDeniedError');
+
+        if (isPermissionDenied) {
+          console.info("Camera permission not granted by user or browser iframe policy:", err);
+          setCameraError("permission_denied");
+        } else {
+          setCameraError("general_error");
+        }
       }
       setIsScanning(false);
+    } finally {
+      isCameraBusyRef.current = false;
+      setIsSwitchingCamera(false);
     }
-  };
-
-  // Stop QR Scanner
-  const stopScanner = async () => {
-    if (qrScannerRef.current && qrScannerRef.current.isScanning) {
-      try {
-        await qrScannerRef.current.stop();
-      } catch (err) {
-        console.info("Notice stopping scanner:", err);
-      }
-    }
-    setIsScanning(false);
   };
 
   // Scan QR Code from an Image file (e.g. screenshot or photo taken from gallery)
@@ -229,15 +284,27 @@ export function MerchantScannerPage() {
     }
   };
 
-  // Flip Camera
+  // Flip Camera (Front / Back)
   const toggleCamera = async () => {
-    const nextMode = facingMode === "environment" ? "user" : "environment";
+    if (isSwitchingCamera || isCameraBusyRef.current) return;
+
+    const nextMode = facingModeRef.current === "environment" ? "user" : "environment";
+    facingModeRef.current = nextMode;
     setFacingMode(nextMode);
-    if (isScanning) {
-      await stopScanner();
-      setTimeout(() => {
-        startScanner();
-      }, 300);
+
+    if (activeTab === 'scan') {
+      setIsSwitchingCamera(true);
+      setCameraError(null);
+      try {
+        await stopScanner();
+        // Give the OS camera daemon (AVFoundation on iOS / Camera2 on Android) 200ms to completely release hardware
+        await new Promise((r) => setTimeout(r, 200));
+        await startScanner(nextMode);
+      } catch (err) {
+        console.warn("Camera toggle failed:", err);
+      } finally {
+        setIsSwitchingCamera(false);
+      }
     }
   };
 
@@ -245,8 +312,10 @@ export function MerchantScannerPage() {
   useEffect(() => {
     if (activeTab === 'scan') {
       const timer = setTimeout(() => {
-        startScanner();
-      }, 400);
+        if (!isScanning && !isCameraBusyRef.current) {
+          startScanner();
+        }
+      }, 300);
       return () => {
         clearTimeout(timer);
         stopScanner();
@@ -254,7 +323,7 @@ export function MerchantScannerPage() {
     } else {
       stopScanner();
     }
-  }, [activeTab, facingMode]);
+  }, [activeTab]);
 
   // Clean on unmount
   useEffect(() => {
@@ -712,16 +781,6 @@ export function MerchantScannerPage() {
                   )} />
                 </div>
 
-                {/* Laser animation bar */}
-                {isScanning && (
-                  <div className={cn(
-                    "w-4/5 h-0.5 animate-laser-scan absolute left-1/2 -translate-x-1/2 shadow-lg transition-all",
-                    isBlueState && "bg-gradient-to-r from-transparent via-cyan-400 to-transparent shadow-[0_0_15px_#38bdf8]",
-                    isGreenState && "bg-gradient-to-r from-transparent via-emerald-400 to-transparent shadow-[0_0_15px_#34d399]",
-                    isRedState && "bg-gradient-to-r from-transparent via-rose-500 to-transparent shadow-[0_0_15px_#f43f5e]"
-                  )} />
-                )}
-
                 {/* Bottom brackets */}
                 <div className="w-full flex justify-between">
                   <div className={cn(
@@ -738,6 +797,18 @@ export function MerchantScannerPage() {
                   )} />
                 </div>
               </div>
+
+              {/* Camera Switching Indicator */}
+              {isSwitchingCamera && (
+                <div className="absolute inset-0 bg-stone-950/85 backdrop-blur-sm p-4 flex flex-col items-center justify-center text-center space-y-2.5 z-20 transition-all">
+                  <div className="w-12 h-12 rounded-2xl bg-cyan-500/20 border border-cyan-400/40 text-cyan-300 flex items-center justify-center shadow-lg">
+                    <RefreshCw className="h-6 w-6 animate-spin text-cyan-300" />
+                  </div>
+                  <p className="text-xs text-white font-bold tracking-wide">
+                    جاري تبديل الكاميرا...
+                  </p>
+                </div>
+              )}
 
               {/* Camera Error Fallback */}
               {cameraError && (
@@ -780,7 +851,7 @@ export function MerchantScannerPage() {
                     <div className="flex items-center justify-center gap-3 pt-1">
                       <button
                         type="button"
-                        onClick={startScanner}
+                        onClick={() => startScanner()}
                         className="text-[11px] text-cyan-300 hover:text-white font-medium cursor-pointer flex items-center gap-1"
                       >
                         <RefreshCw className="h-3 w-3" />
@@ -828,11 +899,15 @@ export function MerchantScannerPage() {
               <button
                 type="button"
                 onClick={toggleCamera}
-                className="w-full aspect-square rounded-full bg-white hover:bg-stone-100 text-stone-900 shadow-xl hover:shadow-2xl transition-all active:scale-95 cursor-pointer flex items-center justify-center border border-white/80"
+                disabled={isSwitchingCamera}
+                className={cn(
+                  "w-full aspect-square rounded-full bg-white hover:bg-stone-100 text-stone-900 shadow-xl hover:shadow-2xl transition-all active:scale-95 cursor-pointer flex items-center justify-center border border-white/80",
+                  isSwitchingCamera && "opacity-60 cursor-not-allowed"
+                )}
                 aria-label="تبديل الكاميرا (أمامية / خلفية)"
                 title="تبديل الكاميرا (أمامية / خلفية)"
               >
-                <SwitchCamera className="h-6 w-6 text-stone-900" />
+                <SwitchCamera className={cn("h-6 w-6 text-stone-900 transition-transform duration-300", isSwitchingCamera && "animate-spin text-cyan-700")} />
               </button>
 
               {/* Button 3: التبديل بين مسح رمز وإدخال الكود يدوي (Switch QR / Manual) */}
@@ -957,11 +1032,15 @@ export function MerchantScannerPage() {
               <button
                 type="button"
                 onClick={toggleCamera}
-                className="w-full aspect-square rounded-full bg-white hover:bg-stone-100 text-stone-900 shadow-xl hover:shadow-2xl transition-all active:scale-95 cursor-pointer flex items-center justify-center border border-white/80"
+                disabled={isSwitchingCamera}
+                className={cn(
+                  "w-full aspect-square rounded-full bg-white hover:bg-stone-100 text-stone-900 shadow-xl hover:shadow-2xl transition-all active:scale-95 cursor-pointer flex items-center justify-center border border-white/80",
+                  isSwitchingCamera && "opacity-60 cursor-not-allowed"
+                )}
                 aria-label="تبديل الكاميرا (أمامية / خلفية)"
                 title="تبديل الكاميرا (أمامية / خلفية)"
               >
-                <SwitchCamera className="h-6 w-6 text-stone-900" />
+                <SwitchCamera className={cn("h-6 w-6 text-stone-900 transition-transform duration-300", isSwitchingCamera && "animate-spin text-cyan-700")} />
               </button>
 
               {/* Button 3: التبديل إلى مسح الكاميرا */}
@@ -970,7 +1049,6 @@ export function MerchantScannerPage() {
                 onClick={() => {
                   setActiveTab('scan');
                   setLookupError(null);
-                  startScanner();
                 }}
                 className="w-full aspect-square rounded-full bg-white hover:bg-stone-100 text-stone-900 shadow-xl hover:shadow-2xl transition-all active:scale-95 cursor-pointer flex items-center justify-center border border-white/80"
                 aria-label="التبديل إلى مسح رمز QR بالكاميرا"

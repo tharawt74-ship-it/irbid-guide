@@ -48,6 +48,7 @@ import { PrintableQrPosterModal } from '../components/profile/PrintableQrPosterM
 import { MultiBranchModal } from '../components/profile/MultiBranchModal';
 import { ScheduledNotificationModal } from '../components/profile/ScheduledNotificationModal';
 import { MerchantQrScanner } from '../components/profile/MerchantQrScanner';
+import { MenuQrTab } from '../components/profile/MenuQrTab';
 
 export function Profile() {
   const { confirm } = useConfirm();
@@ -182,7 +183,7 @@ export function Profile() {
   // Active business management state
   const [selectedBusiness, setSelectedBusiness] = useState<Business | null>(null);
   const [merchantSubTab, setMerchantSubTab] = useState<'businesses' | 'housings' | 'jobs' | 'qr-scanner'>('businesses');
-  const [activeSectionTab, setActiveSectionTab] = useState<'overview' | 'edit_info' | 'offers' | 'jobs' | 'marketing' | 'reviews' | 'homepage_banner' | 'shared_accounts' | 'housings'>('overview');
+  const [activeSectionTab, setActiveSectionTab] = useState<'overview' | 'edit_info' | 'menu_qr' | 'offers' | 'jobs' | 'marketing' | 'reviews' | 'homepage_banner' | 'shared_accounts' | 'housings'>('overview');
 
   // Custom Banner request state
   const [currentBannerRequest, setCurrentBannerRequest] = useState<any | null>(null);
@@ -1176,6 +1177,15 @@ export function Profile() {
     aboutImageUrl?: string;
     vipPopup?: any;
     deliveryAvailable?: boolean;
+    paymentMethods?: string[];
+    menuQrEnabled?: boolean;
+    menuQrThemeColor?: string;
+    menuQrSecondaryColor?: string;
+    menuQrLayout?: 'grid' | 'list' | 'compact';
+    menuQrWelcomeText?: string;
+    menuQrCoverImage?: string;
+    menuQrShowPrices?: boolean;
+    menuQrPosterStyle?: 'classic_red' | 'gold_luxury' | 'wood_cafe' | 'modern_dark' | 'clean_emerald';
   }) => {
     const targetBusiness = editingBusiness || selectedBusiness;
     if (!targetBusiness || !db || !currentUser) return;
@@ -1222,6 +1232,19 @@ export function Profile() {
       if (updatedData.deliveryAvailable !== undefined) {
         dataToSave.deliveryAvailable = updatedData.deliveryAvailable;
       }
+      if (updatedData.paymentMethods !== undefined) {
+        dataToSave.paymentMethods = updatedData.paymentMethods;
+      }
+
+      // Add Menu and QR Code Customizer properties
+      if (updatedData.menuQrEnabled !== undefined) dataToSave.menuQrEnabled = updatedData.menuQrEnabled;
+      if (updatedData.menuQrThemeColor !== undefined) dataToSave.menuQrThemeColor = updatedData.menuQrThemeColor;
+      if (updatedData.menuQrSecondaryColor !== undefined) dataToSave.menuQrSecondaryColor = updatedData.menuQrSecondaryColor;
+      if (updatedData.menuQrLayout !== undefined) dataToSave.menuQrLayout = updatedData.menuQrLayout;
+      if (updatedData.menuQrWelcomeText !== undefined) dataToSave.menuQrWelcomeText = updatedData.menuQrWelcomeText;
+      if (updatedData.menuQrCoverImage !== undefined) dataToSave.menuQrCoverImage = updatedData.menuQrCoverImage;
+      if (updatedData.menuQrShowPrices !== undefined) dataToSave.menuQrShowPrices = updatedData.menuQrShowPrices;
+      if (updatedData.menuQrPosterStyle !== undefined) dataToSave.menuQrPosterStyle = updatedData.menuQrPosterStyle;
 
       const sanitizedData = await compressAndSanitizeFirestorePayload(dataToSave, true);
       await updateDoc(docRef, sanitizedData);
@@ -1937,8 +1960,8 @@ export function Profile() {
 
       {/* TAB 2: MERCHANT HUB */}
       {profileMainTab === 'merchant' && (
-        <div className="space-y-6 sm:space-y-8 min-w-0">
-          <div className="bg-[#fdfcfb] border border-[#e5e1da] rounded-3xl md:rounded-[32px] p-4 sm:p-8 shadow-sm space-y-5 sm:space-y-6 min-w-0 overflow-hidden">
+        <div className="space-y-4 sm:space-y-8 min-w-0">
+          <div className="bg-[#fdfcfb] border-0 sm:border border-[#e5e1da] rounded-2xl sm:rounded-3xl md:rounded-[32px] p-0 sm:p-8 shadow-none sm:shadow-sm space-y-4 sm:space-y-6 min-w-0 overflow-hidden">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
           <div>
             <h2 className="text-xl sm:text-2xl font-black text-[#2d2a26] flex items-center gap-2">
@@ -2038,14 +2061,14 @@ export function Profile() {
             </div>
           </div>
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             {/* Hierarchical Business & Branch Selector */}
             {commercialBusinesses.length > 0 && (() => {
               const primaryBusinesses = commercialBusinesses.filter(b => !b.parentBusinessId || !commercialBusinesses.some(p => p.id === b.parentBusinessId));
               const hasMultiple = commercialBusinesses.length > 1;
 
               return (
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-white border border-stone-200/80 p-3 sm:p-4 rounded-2xl shadow-2xs gap-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-white border-0 sm:border border-stone-200/80 p-2 sm:p-4 rounded-xl sm:rounded-2xl shadow-none sm:shadow-2xs gap-3">
                   <div className="flex items-center gap-3">
                     <div className="w-12 h-12 rounded-xl bg-[#1a4d2e]/10 text-[#1a4d2e] flex items-center justify-center shrink-0">
                       <Store className="h-6 w-6" />
@@ -2069,11 +2092,13 @@ export function Profile() {
                           >
                             {primaryBusinesses.map(pBiz => {
                               const branches = commercialBusinesses.filter(b => b.id === pBiz.id || b.parentBusinessId === pBiz.id);
+                              const primaryName = pBiz.name || 'مطعم البراق';
                               return (
-                                <optgroup key={pBiz.id} label={pBiz.name.split(' - ')[0].trim()}>
+                                <optgroup key={pBiz.id} label={primaryName.split(' - ')[0].trim()}>
                                   {branches.map((branch, idx) => {
-                                    const branchLocationName = branch.name.includes(' - ') 
-                                      ? branch.name.split(' - ')[1] 
+                                    const bName = branch.name || 'مطعم البراق';
+                                    const branchLocationName = bName.includes(' - ') 
+                                      ? bName.split(' - ')[1] 
                                       : (branch.district || (idx === 0 ? 'الفرع الرئيسي' : `فرع ${idx + 1}`));
                                     return (
                                       <option key={branch.id} value={branch.id}>
@@ -2091,7 +2116,7 @@ export function Profile() {
                         </div>
                       ) : (
                         <h3 className="font-black text-sm text-[#2d2a26] bg-stone-50 px-3 py-1.5 rounded-lg border border-stone-200 inline-block w-full truncate">
-                          {selectedBusiness?.name}
+                          {selectedBusiness?.name || 'مطعم البراق'}
                         </h3>
                       )}
                     </div>
@@ -2110,13 +2135,22 @@ export function Profile() {
             {/* Currently Selected Store WorkSpace */}
             {selectedBusiness && (() => {
               const vipInfo = getBusinessVipStatus(selectedBusiness);
+              const isFoodAndDrink = selectedBusiness && (
+                selectedBusiness.category === "🍔 مأكولات ومشروبات" ||
+                selectedBusiness.category?.includes("مطاعم") ||
+                selectedBusiness.category?.includes("مأكولات") ||
+                selectedBusiness.category?.includes("مقاهي") ||
+                selectedBusiness.category?.includes("كافيهات") ||
+                selectedBusiness.category?.includes("حلويات") ||
+                selectedBusiness.category?.includes("مشروبات")
+              );
               return (
-                <div className="border border-stone-200/80 rounded-2xl bg-white overflow-hidden shadow-2xs">
+                <div className="border-0 sm:border border-stone-200/80 rounded-xl sm:rounded-2xl bg-white overflow-hidden shadow-none sm:shadow-2xs">
                   {/* Shop Info Header Banner */}
-                  <div className="bg-[#1a4d2e]/5 p-5 border-b border-stone-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                  <div className="bg-[#1a4d2e]/5 p-3.5 sm:p-5 border-b border-stone-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
                     <div className="w-full sm:w-auto min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="text-lg font-black text-[#2d2a26] truncate max-w-full">{selectedBusiness.name}</h3>
+                        <h3 className="text-lg font-black text-[#2d2a26] truncate max-w-full">{selectedBusiness.name || 'مطعم البراق'}</h3>
                         {vipInfo.isVip ? (
                           <span className="text-[10px] bg-gradient-to-r from-amber-500 to-amber-600 text-white font-black px-2.5 py-1 rounded-full flex items-center gap-1 shadow-2xs shrink-0">
                             <Crown className="h-3 w-3 fill-white" />
@@ -2157,7 +2191,7 @@ export function Profile() {
                   </div>
 
                   {/* Dashboard Workspace Tab Navigation - Grid Layout for Mobile Friendliness */}
-                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 sm:gap-3 p-2 sm:p-4 bg-stone-50 border-b border-stone-200 shadow-inner">
+                  <div className={`grid grid-cols-3 ${isFoodAndDrink ? 'sm:grid-cols-7 lg:grid-flow-col' : 'sm:grid-cols-6'} gap-1.5 sm:gap-3 p-1.5 sm:p-4 bg-stone-50 border-b border-stone-200 shadow-inner`}>
                     <button
                       type="button"
                       onClick={() => { setActiveSectionTab('overview'); setIsAddingOffer(false); }}
@@ -2183,6 +2217,21 @@ export function Profile() {
                       <Store className={`h-5 w-5 sm:h-7 sm:w-7 mb-1 sm:mb-2 ${activeSectionTab === 'edit_info' ? 'text-emerald-300' : 'text-stone-400'}`} />
                       <span className="text-[10px] sm:text-xs font-black text-center leading-tight truncate w-full">تعديل<br className="hidden sm:block" /> بيانات المحل</span>
                     </button>
+
+                    {isFoodAndDrink && (
+                      <button
+                        type="button"
+                        onClick={() => { setActiveSectionTab('menu_qr'); setIsAddingOffer(false); }}
+                        className={`flex flex-col items-center justify-center p-2 sm:p-3 rounded-2xl transition-all cursor-pointer border ${
+                          activeSectionTab === 'menu_qr' 
+                            ? 'bg-[#1a4d2e] border-[#1a4d2e] text-white shadow-md scale-105 transform z-10' 
+                            : 'bg-white border-stone-200/80 text-stone-600 hover:bg-stone-100 hover:border-stone-300 shadow-2xs'
+                        }`}
+                      >
+                        <QrCode className={`h-5 w-5 sm:h-7 sm:w-7 mb-1 sm:mb-2 ${activeSectionTab === 'menu_qr' ? 'text-emerald-300' : 'text-stone-400'}`} />
+                        <span className="text-[10px] sm:text-xs font-black text-center leading-tight truncate w-full">المنيو<br className="hidden sm:block" /> والباركود</span>
+                      </button>
+                    )}
                     
                     <button
                       type="button"
@@ -2251,10 +2300,10 @@ export function Profile() {
                     </button>
                   </div>
                   {/* Active Panel Content */}
-                  <div className="p-5 min-h-[220px]">
+                  <div className="p-4 sm:p-7 pt-6 sm:pt-9 min-h-[220px]">
                     {/* 1. OVERVIEW PANEL */}
                     {activeSectionTab === 'overview' && (
-                      <div className="space-y-6">
+                      <div className="space-y-4 sm:space-y-6">
                         {/* Core Stats Overview */}
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
                           <div className="bg-stone-50 border border-stone-100 p-3 sm:p-4 rounded-xl text-right col-span-2 sm:col-span-1">
@@ -2423,8 +2472,8 @@ export function Profile() {
 
                     {/* 2. EDIT INFO PANEL */}
                     {activeSectionTab === 'edit_info' && (
-                      <div className="p-4 sm:p-6 space-y-6">
-                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-4 border-b border-stone-100">
+                      <div className="space-y-4 sm:space-y-6">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 sm:pb-4 border-b border-stone-100">
                           <div>
                             <h3 className="text-base font-black text-[#2d2a26] flex items-center gap-2">
                               <Edit3 className="h-5 w-5 text-[#1a4d2e]" />
@@ -2453,13 +2502,22 @@ export function Profile() {
                       </div>
                     )}
 
+                    {/* MENU & QR CODE CUSTOMIZER PANEL */}
+                    {activeSectionTab === 'menu_qr' && isFoodAndDrink && (
+                      <MenuQrTab
+                        business={selectedBusiness}
+                        onSave={handleSaveStoreData}
+                        isSaving={isSavingBusiness}
+                      />
+                    )}
+
                     {/* 3. OFFERS & DEALS PANEL */}
                     {activeSectionTab === 'offers' && (
                       vipInfo.isVip ? (
-                        <div className="space-y-4">
+                        <div className="space-y-4 sm:space-y-6">
                         {isAddingOffer ? (
                           // Add Offer Inline Form
-                          <form onSubmit={handleCreateOffer} className="space-y-4 border border-amber-200 bg-amber-50/10 p-5 rounded-2xl animate-in fade-in zoom-in-95">
+                          <form onSubmit={handleCreateOffer} className="space-y-4 border border-amber-200 bg-amber-50/10 p-4 sm:p-5 rounded-2xl animate-in fade-in zoom-in-95">
                             <div className="flex justify-between items-center pb-2 border-b border-stone-100">
                               <h4 className="text-sm font-black text-stone-800 flex items-center gap-1.5">
                                 <Tag className="h-4 w-4 text-amber-500" />
@@ -2761,13 +2819,21 @@ export function Profile() {
                           </form>
                         ) : (
                           // Offers List Render
-                          <div className="space-y-4">
-                            <div className="flex justify-between items-center">
-                              <span className="text-xs font-bold text-stone-500">العروض المعروضة حالياً على المنصة لمحلّك:</span>
+                          <div className="space-y-4 sm:space-y-5">
+                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 sm:pb-4 border-b border-stone-100">
+                              <div>
+                                <h3 className="text-base font-black text-[#2d2a26] flex items-center gap-2">
+                                  <Tag className="h-5 w-5 text-amber-600" />
+                                  عروض وتخفيضات المحل الترويجية ({selectedBusiness.name})
+                                </h3>
+                                <p className="text-xs text-stone-500 mt-0.5">
+                                  العروض والخصومات المعروضة حالياً على منصة شو في بإربد
+                                </p>
+                              </div>
                               <button
                                 type="button"
                                 onClick={() => setIsAddingOffer(true)}
-                                className="inline-flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white px-3.5 py-2 rounded-xl text-xs font-black shadow-2xs cursor-pointer transition-colors"
+                                className="inline-flex items-center justify-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 sm:px-3.5 sm:py-2 rounded-xl text-xs font-black shadow-2xs cursor-pointer transition-colors w-full sm:w-auto"
                               >
                                 <Plus className="h-4 w-4" />
                                 <span>صمّم وانشر عرضاً جديداً 🔥</span>
@@ -3851,7 +3917,7 @@ export function Profile() {
                   className="bg-transparent text-xs font-black text-stone-800 focus:outline-none cursor-pointer py-1.5 px-1"
                 >
                   {businesses.map(b => (
-                    <option key={b.id} value={b.id}>المحل: {b.name}</option>
+                    <option key={b.id} value={b.id}>المحل: {b.name || 'مطعم البراق'}</option>
                   ))}
                 </select>
               </div>

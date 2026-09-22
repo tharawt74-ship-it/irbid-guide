@@ -35,6 +35,23 @@ interface AdminStatsOverviewProps {
   onOpenBroadcastModal: () => void;
 }
 
+const MONTH_NAMES_AR = [
+  'كانون الثاني (يناير)',
+  'شباط (فبراير)',
+  'آذار (مارس)',
+  'نيسان (أبريل)',
+  'أيار (مايو)',
+  'حزيران (يونيو)',
+  'تموز (يوليو)',
+  'آب (أغسطس)',
+  'أيلول (سبتمبر)',
+  'تشرين الأول (أكتوبر)',
+  'تشرين الثاني (نوفمبر)',
+  'كانون الأول (ديسمبر)'
+];
+
+const ARABIC_DAYS_SHORT = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+
 export function AdminStatsOverview({
   businesses,
   requests,
@@ -45,6 +62,34 @@ export function AdminStatsOverview({
   onOpenBroadcastModal,
 }: AdminStatsOverviewProps) {
   const [config, setConfig] = useState<any>(null);
+
+  // Month selector for daily analytics starting strictly from August 2026 (Month of platform launch)
+  const nowJordan = getJordanNow();
+  const currentMonthVal = `${nowJordan.getFullYear()}-${String(nowJordan.getMonth() + 1).padStart(2, '0')}`;
+  const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthVal);
+
+  const monthOptions = useMemo(() => {
+    const now = getJordanNow();
+    const options = [
+      { value: 'overall', label: '📊 المنحنى الشامل (منذ الانطلاق - أغسطس 2026)' }
+    ];
+
+    const currentY = now.getFullYear();
+    const currentM = now.getMonth();
+
+    // Loop back from current month down to August 2026 (Year 2026, Month Index 7)
+    for (let y = currentY; y >= 2026; y--) {
+      const startM = (y === 2026) ? 7 : 11;
+      const endM = (y === currentY) ? currentM : 11;
+
+      for (let m = endM; m >= startM; m--) {
+        const val = `${y}-${String(m + 1).padStart(2, '0')}`;
+        const label = `📅 ${MONTH_NAMES_AR[m]} ${y}`;
+        options.push({ value: val, label });
+      }
+    }
+    return options;
+  }, []);
 
   useEffect(() => {
     getAppConfig().then(c => setConfig(c));
@@ -81,52 +126,162 @@ export function AdminStatsOverview({
     return total;
   };
 
-  // Time-Series growth chart data strictly computed from real Firestore businesses
-  const timeSeriesData = useMemo(() => {
-    if (!businesses.length) {
-      const currentMonth = formatJordanDateArabic(getJordanNow(), { month: 'short' });
-      return [{ name: currentMonth, 'المحلات النشطة': 0, 'زيارات الدليل': 0 }];
-    }
-
-    const sorted = [...businesses].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+  // Comprehensive analytics calculation (daily curve vs overall) strictly from real Firestore data starting August 2026
+  const chartDetails = useMemo(() => {
     const now = getJordanNow();
-    const monthsMap: { [key: string]: { shops: number; views: number } } = {};
-    const monthLabels: string[] = [];
 
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const label = formatJordanDateArabic(d, { month: 'short' });
-      monthLabels.push(label);
-      monthsMap[label] = { shops: 0, views: 0 };
+    if (selectedMonth === 'overall') {
+      // Build months list strictly from August 2026 up to current month
+      const overallMonthsList: { year: number; monthIdx: number; label: string; key: string }[] = [];
+      const currentY = now.getFullYear();
+      const currentM = now.getMonth();
+
+      for (let y = 2026; y <= currentY; y++) {
+        const startM = (y === 2026) ? 7 : 0;
+        const endM = (y === currentY) ? currentM : 11;
+
+        for (let m = startM; m <= endM; m++) {
+          const key = `${y}-${String(m + 1).padStart(2, '0')}`;
+          const label = `${MONTH_NAMES_AR[m].split(' ')[0]} ${y}`;
+          overallMonthsList.push({ year: y, monthIdx: m, label, key });
+        }
+      }
+
+      let cumulativeShops = 0;
+      let cumulativeViews = 0;
+
+      const data = overallMonthsList.map(({ year, monthIdx, label, key }) => {
+        let monthShopsCount = 0;
+        let monthViewsCount = 0;
+
+        businesses.forEach((b) => {
+          // Check creation date
+          if (b.createdAt) {
+            const cd = new Date(b.createdAt);
+            if (cd.getFullYear() === year && cd.getMonth() === monthIdx) {
+              monthShopsCount += 1;
+            }
+          }
+
+          // Sum real dailyStats views for this month
+          if (b.analytics?.dailyStats) {
+            Object.entries(b.analytics.dailyStats).forEach(([dateKey, statObj]: [string, any]) => {
+              if (dateKey.startsWith(key)) {
+                monthViewsCount += Number(statObj.view || statObj.views || 0);
+              }
+            });
+          }
+        });
+
+        cumulativeShops += monthShopsCount;
+        cumulativeViews += monthViewsCount;
+
+        return {
+          name: label,
+          'المحلات النشطة': cumulativeShops,
+          'زيارات الدليل': cumulativeViews
+        };
+      });
+
+      return {
+        isDaily: false,
+        summaryText: `إجمالي المحلات المسجلة: ${cumulativeShops} | إجمالي الزيارات المسجلة: ${cumulativeViews.toLocaleString('en-US')}`,
+        stats: null,
+        data
+      };
     }
 
-    sorted.forEach((b) => {
-      const bDate = b.createdAt ? new Date(b.createdAt) : now;
-      const bMonthLabel = formatJordanDateArabic(bDate, { month: 'short' });
-      const bViews = b.views || b.analytics?.views || 0;
+    // Daily breakdown for chosen YYYY-MM
+    const [yearStr, monthStr] = selectedMonth.split('-');
+    const year = parseInt(yearStr, 10);
+    const monthIdx = parseInt(monthStr, 10) - 1;
+    const daysInMonth = new Date(year, monthIdx + 1, 0).getDate();
+    const monthNameAr = MONTH_NAMES_AR[monthIdx] || `${monthStr}/${yearStr}`;
 
-      if (monthsMap[bMonthLabel]) {
-        monthsMap[bMonthLabel].shops += 1;
-        monthsMap[bMonthLabel].views += bViews;
-      } else {
-        const firstLabel = monthLabels[0];
-        monthsMap[firstLabel].shops += 1;
-        monthsMap[firstLabel].views += bViews;
+    let totalMonthRecordedViews = 0;
+    let totalMonthShopsAdded = 0;
+
+    const dailyRealViewsMap: { [day: number]: number } = {};
+    const dailyRealShopsMap: { [day: number]: number } = {};
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      dailyRealViewsMap[d] = 0;
+      dailyRealShopsMap[d] = 0;
+    }
+
+    businesses.forEach((b) => {
+      if (b.createdAt) {
+        const cd = new Date(b.createdAt);
+        if (cd.getFullYear() === year && cd.getMonth() === monthIdx) {
+          const day = cd.getDate();
+          if (dailyRealShopsMap[day] !== undefined) {
+            dailyRealShopsMap[day] += 1;
+            totalMonthShopsAdded += 1;
+          }
+        }
+      }
+
+      if (b.analytics?.dailyStats) {
+        Object.entries(b.analytics.dailyStats).forEach(([dateKey, statObj]: [string, any]) => {
+          if (dateKey.startsWith(`${yearStr}-${monthStr}`)) {
+            const dayNum = parseInt(dateKey.split('-')[2], 10);
+            const v = Number(statObj.view || statObj.views || 0);
+            if (dayNum >= 1 && dayNum <= daysInMonth) {
+              dailyRealViewsMap[dayNum] += v;
+              totalMonthRecordedViews += v;
+            }
+          }
+        });
       }
     });
 
-    let runningShops = 0;
-    let runningViews = 0;
-    return monthLabels.map((label) => {
-      runningShops += monthsMap[label].shops;
-      runningViews += monthsMap[label].views;
-      return {
-        name: label,
-        'المحلات النشطة': runningShops,
-        'زيارات الدليل': runningViews
-      };
-    });
-  }, [businesses]);
+    const isCurrentMonth = (now.getFullYear() === year && now.getMonth() === monthIdx);
+    const currentDayLimit = isCurrentMonth ? now.getDate() : daysInMonth;
+
+    const chartData = [];
+    let sumMonthViews = 0;
+    let maxDayViews = 0;
+    let peakDayName = 'لا توجد زيارات بعد';
+
+    for (let d = 1; d <= currentDayLimit; d++) {
+      const dateObj = new Date(year, monthIdx, d);
+      const dayOfWeek = dateObj.getDay();
+      const dayNameAr = ARABIC_DAYS_SHORT[dayOfWeek];
+
+      const dayViews = dailyRealViewsMap[d] || 0; // Strictly real views only!
+      const dayShops = dailyRealShopsMap[d] || 0; // Strictly real shops created on this day!
+
+      sumMonthViews += dayViews;
+      if (dayViews > maxDayViews) {
+        maxDayViews = dayViews;
+        peakDayName = `${dayNameAr} ${d}`;
+      }
+
+      chartData.push({
+        dayNumber: d,
+        name: `${d}`,
+        fullLabel: `${dayNameAr} ${d} ${monthNameAr.split(' ')[0]} ${year}`,
+        'زيارات اليوم': dayViews,
+        'المحلات المضافة': dayShops
+      });
+    }
+
+    const avgDailyViews = currentDayLimit > 0 ? Math.round(sumMonthViews / currentDayLimit) : 0;
+
+    return {
+      isDaily: true,
+      summaryText: `الزيارات اليومية لـ ${monthNameAr} ${year}`,
+      stats: {
+        totalViews: sumMonthViews,
+        avgDailyViews,
+        maxDayViews,
+        peakDayName: maxDayViews > 0 ? peakDayName : '—',
+        totalShopsAdded: totalMonthShopsAdded,
+        activeDays: currentDayLimit
+      },
+      data: chartData
+    };
+  }, [businesses, selectedMonth]);
 
   // Marketing revenues per service distribution
   const marketingDistributionData = useMemo(() => {
@@ -408,36 +563,101 @@ export function AdminStatsOverview({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Growth Over Time */}
         <div className="bg-white p-6 rounded-3xl border border-[#e5e1da] shadow-xs space-y-4">
-          <div className="flex items-center justify-between border-b border-stone-100 pb-3">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-emerald-50 text-[#1a4d2e] flex items-center justify-center font-bold">
-                <Activity className="h-4 w-4" />
+          <div className="flex items-center justify-between border-b border-stone-100 pb-3 flex-wrap gap-2.5">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-emerald-50 text-[#1a4d2e] flex items-center justify-center font-bold border border-emerald-100/80 shrink-0">
+                <Activity className="h-4.5 w-4.5" />
               </div>
-              <h3 className="font-black text-base text-[#2d2a26]">منحنى نمو تسجيل المحلات وزيارات المنصة</h3>
+              <div>
+                <h3 className="font-black text-sm sm:text-base text-[#2d2a26]">منحنى نمو تسجيل المحلات وزيارات المنصة</h3>
+                <p className="text-[11px] text-stone-500 font-bold mt-0.5">{chartDetails.summaryText}</p>
+              </div>
             </div>
-            <span className="text-[10px] bg-emerald-50 text-[#1a4d2e] px-2.5 py-1 rounded-full font-black">تحديث تلقائي مستمر</span>
+
+            {/* Month Selection Dropdown */}
+            <div className="flex items-center gap-2 shrink-0">
+              <select
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className="bg-stone-50 hover:bg-stone-100 border border-stone-200 text-stone-800 text-xs font-black rounded-xl px-3 py-1.5 focus:ring-2 focus:ring-[#1a4d2e] focus:border-transparent outline-none cursor-pointer transition-all shadow-3xs"
+              >
+                {monthOptions.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
           </div>
-          
+
+          {/* Quick Stats Banner for Daily View */}
+          {chartDetails.isDaily && chartDetails.stats && (
+            <div className="grid grid-cols-3 gap-2 bg-gradient-to-r from-stone-50 via-emerald-50/40 to-stone-50 p-2.5 rounded-2xl border border-stone-200/80 text-center">
+              <div className="space-y-0.5">
+                <span className="text-[10px] text-stone-500 font-bold block">مجموع زيارات الشهر</span>
+                <span className="text-xs sm:text-sm font-black text-[#1a4d2e]">{chartDetails.stats.totalViews.toLocaleString('en-US')}</span>
+              </div>
+              <div className="space-y-0.5 border-r border-stone-200">
+                <span className="text-[10px] text-stone-500 font-bold block">المعدل اليومي</span>
+                <span className="text-xs sm:text-sm font-black text-amber-600">{chartDetails.stats.avgDailyViews.toLocaleString('en-US')} / يوم</span>
+              </div>
+              <div className="space-y-0.5 border-r border-stone-200">
+                <span className="text-[10px] text-stone-500 font-bold block">أعلى يوم ({chartDetails.stats.peakDayName})</span>
+                <span className="text-xs sm:text-sm font-black text-blue-600">{chartDetails.stats.maxDayViews.toLocaleString('en-US')}</span>
+              </div>
+            </div>
+          )}
+
           <div className="h-72 w-full pt-2">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={timeSeriesData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+              <AreaChart data={chartDetails.data} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorShop" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#1a4d2e" stopOpacity={0.2}/>
+                    <stop offset="5%" stopColor="#1a4d2e" stopOpacity={0.25}/>
                     <stop offset="95%" stopColor="#1a4d2e" stopOpacity={0}/>
                   </linearGradient>
                   <linearGradient id="colorViews" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#ff9f1c" stopOpacity={0.2}/>
+                    <stop offset="5%" stopColor="#ff9f1c" stopOpacity={0.25}/>
                     <stop offset="95%" stopColor="#ff9f1c" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
                 <XAxis dataKey="name" stroke="#a0a0a0" fontSize={11} tickLine={false} />
                 <YAxis stroke="#a0a0a0" fontSize={11} tickLine={false} />
-                <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid #e5e1da', fontFamily: 'sans-serif' }} />
+                <Tooltip 
+                  content={({ active, payload }) => {
+                    if (active && payload && payload.length) {
+                      const dataItem = payload[0].payload;
+                      return (
+                        <div className="bg-stone-900 text-white p-3 rounded-2xl shadow-xl text-xs space-y-1.5 border border-stone-800 text-right dir-rtl">
+                          <p className="font-bold text-amber-400 border-b border-stone-800 pb-1">
+                            {dataItem.fullLabel || `يوم ${dataItem.name}`}
+                          </p>
+                          {payload.map((entry: any, index: number) => (
+                            <div key={`item-${index}`} className="flex items-center justify-between gap-4">
+                              <span className="flex items-center gap-1.5 font-medium text-stone-300">
+                                <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: entry.color }} />
+                                {entry.name}:
+                              </span>
+                              <span className="font-black text-stone-100">{Number(entry.value).toLocaleString('en-US')}</span>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    }
+                    return null;
+                  }}
+                />
                 <Legend iconType="circle" wrapperStyle={{ fontSize: '11px', fontWeight: 'bold' }} />
-                <Area type="monotone" dataKey="المحلات النشطة" stroke="#1a4d2e" strokeWidth={2.5} fillOpacity={1} fill="url(#colorShop)" />
-                <Area type="monotone" dataKey="زيارات الدليل" stroke="#ff9f1c" strokeWidth={2} fillOpacity={1} fill="url(#colorViews)" />
+                {chartDetails.isDaily ? (
+                  <>
+                    <Area type="monotone" dataKey="زيارات اليوم" stroke="#ff9f1c" strokeWidth={2.5} fillOpacity={1} fill="url(#colorViews)" />
+                    <Area type="monotone" dataKey="المحلات المضافة" stroke="#1a4d2e" strokeWidth={2} fillOpacity={1} fill="url(#colorShop)" />
+                  </>
+                ) : (
+                  <>
+                    <Area type="monotone" dataKey="المحلات النشطة" stroke="#1a4d2e" strokeWidth={2.5} fillOpacity={1} fill="url(#colorShop)" />
+                    <Area type="monotone" dataKey="زيارات الدليل" stroke="#ff9f1c" strokeWidth={2} fillOpacity={1} fill="url(#colorViews)" />
+                  </>
+                )}
               </AreaChart>
             </ResponsiveContainer>
           </div>

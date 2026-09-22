@@ -1215,6 +1215,8 @@ export function Layout() {
         "flex-1 w-full flex flex-col min-h-0",
         location.pathname === '/messages'
           ? "max-w-[1440px] mx-auto p-2 sm:p-3 md:p-4 h-[calc(100dvh-62px)] sm:h-[calc(100dvh-68px)] md:h-[calc(100dvh-72px)] overflow-hidden"
+          : location.pathname.startsWith('/profile')
+          ? "max-w-[1200px] mx-auto px-2 sm:px-6 lg:px-8 py-4 sm:py-8 pb-20 md:py-12"
           : "max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-20 md:py-12"
       )}>
         {currentUser && !isEmailVerified && !['/login', '/register', '/verify', '/terms', '/privacy', '/about', '/contact'].includes(location.pathname) ? (
@@ -1438,13 +1440,15 @@ export function Layout() {
       )}
 
       {/* Mobile Fixed Bottom Navigation Bar */}
-      <BottomNavigation 
-        onOpenSearch={() => navigate('/search')} 
-        hasUnreadMessages={hasUnreadMessages} 
-        onToggleMenu={() => setMobileMenuOpen(!mobileMenuOpen)}
-        onCloseMenu={closeMenu}
-        isMenuOpen={mobileMenuOpen}
-      />
+      {!location.pathname.includes('/menu-offers') && (
+        <BottomNavigation 
+          onOpenSearch={() => navigate('/search')} 
+          hasUnreadMessages={hasUnreadMessages} 
+          onToggleMenu={() => setMobileMenuOpen(!mobileMenuOpen)}
+          onCloseMenu={closeMenu}
+          isMenuOpen={mobileMenuOpen}
+        />
+      )}
     </div>
   );
 }

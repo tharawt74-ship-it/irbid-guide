@@ -29,7 +29,7 @@ import {
 } from 'lucide-react';
 import { RequestDetailsModal } from './RequestDetailsModal';
 import { Business, MedicalFacilityInfo, MedicalProcedure } from '../../types';
-import { doc, updateDoc, deleteDoc, setDoc, collection } from 'firebase/firestore';
+import { doc, updateDoc, deleteDoc, setDoc, collection, addDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { invalidateCache } from '../../lib/dataCache';
 import { deleteBusinessCascading } from '../../lib/businessDeleteHelper';
@@ -248,6 +248,7 @@ export function MedicalFacilitiesManager({
           billingPeriod: billingPeriod,
           vipSubscriptionStartsAt: gift.vipSubscriptionStartsAt,
           vipSubscriptionExpiresAt: gift.vipSubscriptionExpiresAt,
+          paymentMethods: req.paymentMethods || (req.medicalProfile?.paymentMethods) || ['كاش', 'فيزا', 'كليك'],
           status: 'approved',
           createdAt: req.createdAt || now,
           ...(req.googlePlaceUrl ? { googlePlaceUrl: req.googlePlaceUrl } : {}),
@@ -270,6 +271,30 @@ export function MedicalFacilitiesManager({
         } catch (e) {
           // Record might be in businesses only
         }
+      }
+
+      // Broadcast welcome notification to all users and visitors
+      try {
+        const notifMessage = gift.isFeatured
+          ? `انضمت منشأة ${req.name} رسمياً إلى دليل الرعاية الطبية بالباقة الذهبية VIP مع ميزة (صدارة البحث والإطار المميز) وعلامة ممول مجاناً لمدة أسبوع!`
+          : `انضمت منشأة ${req.name} رسمياً إلى دليل الرعاية الطبية والصحية في شو في بإربد! أهلاً وسهلاً بهم.`;
+
+        const notifDoc = {
+          title: `تم توثيق منشأة طبية جديدة: ${req.name} 🩺`,
+          message: notifMessage,
+          type: 'business',
+          link: `/business/${targetId}`,
+          badge: gift.isFeatured ? 'صدارة وممول ⭐' : 'منشأة طبية جديدة 🩺',
+          userId: 'all',
+          businessId: targetId,
+          businessName: req.name,
+          businessLogoUrl: req.imageUrl || req.coverImageUrl || req.image || req.logoUrl || '',
+          createdAt: now
+        };
+        const sanitizedNotif = await compressAndSanitizeFirestorePayload(notifDoc, false);
+        await addDoc(collection(db, 'notifications'), sanitizedNotif);
+      } catch (notifErr) {
+        console.warn("Could not create approval broadcast notification:", notifErr);
       }
 
       invalidateCache();

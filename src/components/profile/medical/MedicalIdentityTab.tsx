@@ -10,6 +10,7 @@ import { MEDICAL_SPECIALTIES } from '../../../lib/medicalCategories';
 import { WorkingHoursEditor } from '../../ui/WorkingHoursEditor';
 import { SocialLinksEditor } from '../../ui/SocialLinksEditor';
 import { ImageUploader } from '../../ui/ImageUploader';
+import { PaymentMethodsSelector } from '../../ui/PaymentMethodsSelector';
 import { db } from '../../../lib/firebase';
 import { doc, updateDoc } from 'firebase/firestore';
 
@@ -38,6 +39,9 @@ export function MedicalIdentityTab({ business, onUpdate, showToast }: MedicalIde
     selectedDays: ['السبت', 'الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس']
   });
   const [socialLinks, setSocialLinks] = useState<SocialLinks>(business.socialLinks || {});
+  const [paymentMethods, setPaymentMethods] = useState<string[]>(
+    business.paymentMethods || business.medicalProfile?.paymentMethods || ['كاش', 'فيزا', 'كليك']
+  );
   const [isSaving, setIsSaving] = useState(false);
 
   // Available subspecialties for active category
@@ -52,7 +56,8 @@ export function MedicalIdentityTab({ business, onUpdate, showToast }: MedicalIde
       const existingMed = business.medicalProfile || {};
       const updatedMedicalProfile = {
         ...existingMed,
-        emergencyPhone: emergencyPhone.trim() || ""
+        emergencyPhone: emergencyPhone.trim() || "",
+        paymentMethods
       };
 
       const updatedPayload: any = {
@@ -68,6 +73,7 @@ export function MedicalIdentityTab({ business, onUpdate, showToast }: MedicalIde
         image: coverUrl.trim() || imageUrl.trim(),
         workingHours: workingHours,
         socialLinks: socialLinks,
+        paymentMethods: paymentMethods,
         medicalProfile: updatedMedicalProfile
       };
 
@@ -103,7 +109,7 @@ export function MedicalIdentityTab({ business, onUpdate, showToast }: MedicalIde
   };
 
   return (
-    <form onSubmit={handleSave} className="p-4 sm:p-6 space-y-6 text-right" dir="rtl">
+    <form onSubmit={handleSave} className="p-2 sm:p-6 space-y-4 sm:space-y-6 text-right" dir="rtl">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-stone-200">
         <div>
           <h3 className="text-base font-black text-[#2d2a26] flex items-center gap-2">
@@ -125,7 +131,7 @@ export function MedicalIdentityTab({ business, onUpdate, showToast }: MedicalIde
       </div>
 
       {/* Basic Identity & Specialty */}
-      <div className="bg-white border border-stone-200 rounded-2xl p-4 sm:p-5 space-y-4">
+      <div className="bg-white border-0 sm:border border-stone-200 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 space-y-4 shadow-none sm:shadow-2xs">
         <h4 className="text-xs font-black text-stone-900 flex items-center gap-1.5">
           <Sparkles className="h-4 w-4 text-teal-600" />
           المعلومات الأساسية والتخصص الطبي:
@@ -195,7 +201,7 @@ export function MedicalIdentityTab({ business, onUpdate, showToast }: MedicalIde
       </div>
 
       {/* Contact Phones & WhatsApp */}
-      <div className="bg-white border border-stone-200 rounded-2xl p-4 sm:p-5 space-y-4">
+      <div className="bg-white border-0 sm:border border-stone-200 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 space-y-4 shadow-none sm:shadow-2xs">
         <h4 className="text-xs font-black text-stone-900 flex items-center gap-1.5">
           <Phone className="h-4 w-4 text-teal-600" />
           أرقام التواصل والحجوزات الفورية:
@@ -250,7 +256,7 @@ export function MedicalIdentityTab({ business, onUpdate, showToast }: MedicalIde
       </div>
 
       {/* Location & Maps */}
-      <div className="bg-white border border-stone-200 rounded-2xl p-4 sm:p-5 space-y-4">
+      <div className="bg-white border-0 sm:border border-stone-200 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 space-y-4 shadow-none sm:shadow-2xs">
         <h4 className="text-xs font-black text-stone-900 flex items-center gap-1.5">
           <MapPin className="h-4 w-4 text-teal-600" />
           الموقع والعنوان في محافظة إربد:
@@ -307,7 +313,7 @@ export function MedicalIdentityTab({ business, onUpdate, showToast }: MedicalIde
       </div>
 
       {/* Media & Photos */}
-      <div className="bg-white border border-stone-200 rounded-2xl p-4 sm:p-5 space-y-4">
+      <div className="bg-white border-0 sm:border border-stone-200 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 space-y-4 shadow-none sm:shadow-2xs">
         <h4 className="text-xs font-black text-stone-900 flex items-center gap-1.5">
           <Camera className="h-4 w-4 text-teal-600" />
           شعار وصورة واجهة المنشأة:
@@ -343,7 +349,7 @@ export function MedicalIdentityTab({ business, onUpdate, showToast }: MedicalIde
       </div>
 
       {/* Working Hours */}
-      <div className="bg-white border border-stone-200 rounded-2xl p-4 sm:p-5 space-y-4">
+      <div className="bg-white border-0 sm:border border-stone-200 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 space-y-4 shadow-none sm:shadow-2xs">
         <h4 className="text-xs font-black text-stone-900 flex items-center gap-1.5">
           <Clock className="h-4 w-4 text-teal-600" />
           ساعات الدوام وأوقات الاستقبال:
@@ -355,8 +361,16 @@ export function MedicalIdentityTab({ business, onUpdate, showToast }: MedicalIde
         />
       </div>
 
+      {/* Payment Methods */}
+      <div className="bg-white border-0 sm:border border-stone-200 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 space-y-4 shadow-none sm:shadow-2xs">
+        <PaymentMethodsSelector
+          value={paymentMethods}
+          onChange={setPaymentMethods}
+        />
+      </div>
+
       {/* Social Links */}
-      <div className="bg-white border border-stone-200 rounded-2xl p-4 sm:p-5 space-y-4">
+      <div className="bg-white border-0 sm:border border-stone-200 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 space-y-4 shadow-none sm:shadow-2xs">
         <h4 className="text-xs font-black text-stone-900 flex items-center gap-1.5">
           <Share2 className="h-4 w-4 text-teal-600" />
           صفحات التواصل الاجتماعي والموقع:

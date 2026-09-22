@@ -11,6 +11,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { SearchableSelect } from '../components/ui/SearchableSelect';
 import { WorkingHoursEditor } from '../components/ui/WorkingHoursEditor';
 import { SocialLinksEditor } from '../components/ui/SocialLinksEditor';
+import { PaymentMethodsSelector } from '../components/ui/PaymentMethodsSelector';
 import { SocialLinks, WorkingHours } from '../types';
 import { SEO } from '../components/common/SEO';
 import { ImageUploader } from '../components/ui/ImageUploader';
@@ -122,6 +123,19 @@ export function Contact() {
       }
     }
     return {};
+  });
+
+  const [paymentMethods, setPaymentMethods] = useState<string[]>(() => {
+    const saved = sessionStorage.getItem('temp_business_form');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed.paymentMethods)) return parsed.paymentMethods;
+      } catch (e) {
+        console.error("Error reading saved payment methods:", e);
+      }
+    }
+    return ['كاش', 'فيزا', 'كليك'];
   });
 
   // Load selected package if stored
@@ -244,7 +258,8 @@ export function Contact() {
     sessionStorage.setItem('temp_business_form', JSON.stringify({
       formData,
       workingHours,
-      socialLinks
+      socialLinks,
+      paymentMethods
     }));
     setCurrentStep('package');
   };
@@ -487,11 +502,9 @@ export function Contact() {
       isCustomClosed: false
     });
     setSocialLinks({});
+    setPaymentMethods(['كاش', 'فيزا', 'كليك']);
+    setShowCancelConfirm(false);
     
-    // If they registered but did not complete the flow, sign them out
-    if (auth?.currentUser) {
-      await firebaseSignOut(auth);
-    }
     await refreshUserData();
     navigate('/');
   };
@@ -557,6 +570,7 @@ export function Contact() {
         ...sanitizedData,
         workingHours: workingHours || null,
         socialLinks: socialLinks || null,
+        paymentMethods: paymentMethods || ['كاش', 'فيزا', 'كليك'],
         packagePlan: selectedPackage,
         selectedPackagePlan: selectedPackage,
         isVipTrial: selectedPackage === 'basic',
@@ -898,6 +912,14 @@ export function Contact() {
                 value={formData.description}
                 onChange={handleChange}
               ></textarea>
+            </div>
+
+            {/* Payment Methods Selector */}
+            <div className="p-4 sm:p-5 rounded-2xl bg-stone-50 border border-stone-200/80">
+              <PaymentMethodsSelector
+                value={paymentMethods}
+                onChange={setPaymentMethods}
+              />
             </div>
 
             <WorkingHoursEditor
@@ -1292,6 +1314,20 @@ export function Contact() {
                 <div className="flex justify-between p-2 bg-white rounded-lg border border-stone-100">
                   <span className="text-stone-400 font-bold">رقم هاتف المحل (العام):</span>
                   <span className="text-stone-800 font-black ltr">{formData.phone}</span>
+                </div>
+                <div className="flex justify-between items-center p-2 bg-white rounded-lg border border-stone-100 sm:col-span-2">
+                  <span className="text-stone-400 font-bold">خيارات الدفع المقبولة:</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {paymentMethods.length > 0 ? (
+                      paymentMethods.map(m => (
+                        <span key={m} className="px-2.5 py-0.5 rounded-md bg-[#1a4d2e]/10 text-[#1a4d2e] font-black text-xs">
+                          {m}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-stone-400 font-medium">غير محدد</span>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

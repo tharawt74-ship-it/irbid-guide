@@ -48,9 +48,17 @@ export function PrintableQrPosterModal({ business, isOpen, onClose }: PrintableQ
 
   // Subtitle / CTA message
   const [subtitle, setSubtitle] = useState(() => 
-    isMedical 
+    business.menuQrPosterSubtitle || (isMedical 
       ? 'امسح الرمز لفتح الملف الطبي، حجز المواعيد، والاطلاع على شبكة التأمين المعتمدة'
-      : 'امسح الرمز للاطلاع على قائمة المنيو، العروض الحصرية، وتقييم تجربتك'
+      : 'امسح الرمز للاطلاع على قائمة المنيو، العروض الحصرية، والطلب المباشر')
+  );
+
+  const [posterTitle, setPosterTitle] = useState(() =>
+    business.menuQrPosterTitle || 'قائمتنا الرقمية وعروضنا الحصرية 🍽️✨'
+  );
+
+  const [englishText, setEnglishText] = useState(() =>
+    business.menuQrPosterEnglishText || 'Scan QR code with your smartphone camera for instant direct access'
   );
 
   const [deskOrTable, setDeskOrTable] = useState('');
@@ -425,258 +433,102 @@ export function PrintableQrPosterModal({ business, isOpen, onClose }: PrintableQ
             </div>
 
             {/* Poster Canvas Element (Target for Print) */}
-            <div id="printable-poster-root" className="w-full max-w-[390px] sm:max-w-[420px] flex justify-center py-1">
+            <div id="printable-poster-root" className="w-full max-w-[420px] flex justify-center py-1">
               
-              <div
-                className={`w-full rounded-[22px] sm:rounded-[28px] overflow-hidden shadow-2xl transition-all relative select-none ${
-                  theme === 'royal_emerald'
-                    ? 'bg-gradient-to-b from-[#143e25] via-[#1a4d2e] to-[#0c2416] text-white border-[2px] sm:border-[3px] border-amber-400/70 shadow-emerald-950/80'
-                    : theme === 'clinical_teal'
-                    ? 'bg-gradient-to-b from-teal-900 via-teal-800 to-[#042f2c] text-white border-[2px] sm:border-[3px] border-teal-400/80 shadow-teal-950/80'
-                    : theme === 'medical_navy'
-                    ? 'bg-gradient-to-b from-slate-900 via-[#0f172a] to-[#020617] text-white border-[2px] sm:border-[3px] border-sky-400/70 shadow-slate-950/80'
-                    : theme === 'dark_luxe'
-                    ? 'bg-gradient-to-b from-stone-900 via-stone-950 to-black text-white border-[2px] sm:border-[3px] border-amber-500/60 shadow-black'
-                    : theme === 'executive_light'
-                    ? 'bg-white text-stone-900 border-[2px] sm:border-[3px] border-stone-300 shadow-xl'
-                    : 'bg-white text-stone-950 border-[2px] border-stone-900'
-                }`}
-                style={{
-                  boxSizing: 'border-box'
-                }}
-              >
+              <div className="bg-white text-stone-900 rounded-[28px] overflow-hidden shadow-2xl flex flex-col justify-between relative transition-all duration-300 w-full aspect-[1/1.41] text-right border border-stone-200">
                 
-                {/* Decorative Frame Line */}
-                <div className={`m-2 sm:m-3 p-3.5 sm:p-6 rounded-[18px] sm:rounded-[22px] border flex flex-col items-center text-center relative ${
-                  theme === 'executive_light'
-                    ? 'border-stone-200 bg-stone-50/50'
-                    : theme === 'minimal_clean'
-                    ? 'border-stone-300 bg-stone-50/30'
-                    : 'border-white/15 bg-black/15 backdrop-blur-xs'
-                }`}>
-
-                  {/* 1. Official Platform Brand Header (Without irbid.shop) */}
-                  <div className="w-full pb-2.5 sm:pb-3.5 mb-2.5 sm:mb-3.5 border-b flex flex-col items-center gap-1.5" style={{
-                    borderColor: theme === 'executive_light' || theme === 'minimal_clean' ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.15)'
-                  }}>
-                    <div className="flex items-center justify-between w-full px-0.5 sm:px-1">
-                      {/* Platform Logo */}
-                      <div className="flex items-center gap-1.5 sm:gap-2">
-                        {officialLogoUrl ? (
-                          <img
-                            src={officialLogoUrl}
-                            alt="Logo"
-                            className="h-6 sm:h-7 w-auto object-contain rounded-md"
-                            referrerPolicy="no-referrer"
-                            onError={(e) => {
-                              (e.target as HTMLElement).style.display = 'none';
-                            }}
-                          />
-                        ) : null}
-                        <div className="text-right">
-                          <span className={`text-[10px] sm:text-[11px] font-black block tracking-tight leading-tight ${
-                            theme === 'executive_light' || theme === 'minimal_clean' ? 'text-stone-900' : 'text-white'
-                          }`}>
-                            {siteOfficialName}
-                          </span>
-                          <span className={`text-[8.5px] sm:text-[9px] font-bold block font-mono ${
-                            theme === 'royal_emerald' ? 'text-amber-300' :
-                            theme === 'clinical_teal' ? 'text-teal-300' :
-                            theme === 'medical_navy' ? 'text-sky-300' :
-                            theme === 'dark_luxe' ? 'text-amber-400' :
-                            'text-emerald-700'
-                          }`}>
-                            🌐 {siteOfficialDomain}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Official Verification Badge */}
-                      <div className={`px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full text-[8.5px] sm:text-[9px] font-black flex items-center gap-1 shrink-0 ${
-                        theme === 'royal_emerald' ? 'bg-amber-400 text-stone-950 shadow-xs' :
-                        theme === 'clinical_teal' ? 'bg-teal-400 text-teal-950 shadow-xs' :
-                        theme === 'medical_navy' ? 'bg-sky-400 text-slate-950 shadow-xs' :
-                        theme === 'dark_luxe' ? 'bg-amber-400 text-stone-950' :
-                        theme === 'executive_light' ? 'bg-[#1a4d2e] text-white' :
-                        'bg-stone-900 text-white'
-                      }`}>
-                        <ShieldCheck className="h-2.5 w-2.5 sm:h-3 sm:w-3 stroke-[2.5]" />
-                        <span>{isMedical ? 'منشأة معتمدة' : 'شريك معتمد'}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 2. Business Entity Identity (Logo & Title) */}
-                  <div className="space-y-1.5 sm:space-y-2.5 my-1 flex flex-col items-center">
-                    {/* Business Logo with crisp frame */}
-                    {business.logoUrl ? (
-                      <div className="relative">
-                        <img
-                          src={business.logoUrl}
-                          alt={business.name}
-                          className={`w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover shadow-lg border-2 ${
-                            theme === 'royal_emerald' ? 'border-amber-400' :
-                            theme === 'clinical_teal' ? 'border-teal-300' :
-                            theme === 'medical_navy' ? 'border-sky-400' :
-                            theme === 'dark_luxe' ? 'border-amber-400' :
-                            'border-stone-300'
-                          }`}
-                          referrerPolicy="no-referrer"
+                {/* TOP WHITE SECTION */}
+                <div className="p-4 sm:p-5 bg-white relative z-10 space-y-2.5">
+                  <div className="flex items-center justify-between border-b border-stone-100 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      {(business.logoUrl || business.imageUrl || (business as any)?.image) ? (
+                        <img 
+                          src={business.logoUrl || business.imageUrl || (business as any)?.image} 
+                          alt={business.name} 
+                          className="w-9 h-9 rounded-xl object-cover border border-stone-200 shadow-xs" 
                         />
-                        <div className="absolute -bottom-1 -right-1 w-4.5 h-4.5 sm:w-5 sm:h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center border-2 border-white shadow-xs">
-                          <CheckCircle2 className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                      ) : (
+                        <div className="w-9 h-9 rounded-xl bg-stone-100 text-[#1a4d2e] font-black flex items-center justify-center border border-stone-200">
+                          {isMedical ? <Stethoscope className="h-4 w-4" /> : <Store className="h-4 w-4" />}
                         </div>
+                      )}
+                      <div>
+                        <h2 className="font-black text-xs sm:text-sm text-stone-950 leading-tight truncate">{business.name}</h2>
+                        <p className="text-[9.5px] text-stone-500 font-bold truncate">{business.subCategory || business.category || 'مأكولات ومشروبات طازجة'}</p>
                       </div>
-                    ) : (
-                      <div className={`w-14 h-14 sm:w-18 sm:h-18 rounded-2xl flex items-center justify-center shadow-md border ${
-                        theme === 'clinical_teal' ? 'bg-teal-700/40 text-teal-200 border-teal-400/40' :
-                        theme === 'royal_emerald' ? 'bg-amber-400/20 text-amber-300 border-amber-400/30' :
-                        theme === 'medical_navy' ? 'bg-sky-500/20 text-sky-300 border-sky-400/30' :
-                        theme === 'executive_light' ? 'bg-stone-100 text-stone-700 border-stone-300' :
-                        'bg-stone-800 text-stone-200 border-stone-700'
-                      }`}>
-                        {isMedical ? <Stethoscope className="h-7 w-7 sm:h-9 sm:w-9" /> : <Store className="h-7 w-7 sm:h-9 sm:w-9" />}
-                      </div>
-                    )}
+                    </div>
 
-                    {/* Name & Specialty */}
-                    <div>
-                      <h2 className={`text-lg sm:text-2xl font-black tracking-tight leading-tight ${
-                        theme === 'executive_light' ? 'text-stone-950' : 
-                        theme === 'minimal_clean' ? 'text-black' : 'text-white'
-                      }`}>
-                        {business.name}
-                      </h2>
-
-                      <div className="flex items-center justify-center gap-1.5 flex-wrap mt-0.5 sm:mt-1">
-                        <span className={`text-[10px] sm:text-[11px] font-bold px-2 sm:px-2.5 py-0.5 rounded-lg ${
-                          theme === 'royal_emerald' ? 'bg-white/15 text-amber-200' :
-                          theme === 'clinical_teal' ? 'bg-white/15 text-teal-200' :
-                          theme === 'medical_navy' ? 'bg-white/15 text-sky-200' :
-                          theme === 'dark_luxe' ? 'bg-white/15 text-amber-300' :
-                          theme === 'executive_light' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' :
-                          'bg-stone-100 text-stone-800 border border-stone-200'
-                        }`}>
-                          {business.category || (isMedical ? 'خدمات ورعاية صحية' : 'محلات وخدمات إربد')}
-                        </span>
-                        
-                        {business.address && (
-                          <span className={`text-[10px] sm:text-[11px] font-medium flex items-center gap-1 ${
-                            theme === 'executive_light' || theme === 'minimal_clean' ? 'text-stone-500' : 'text-stone-300'
-                          }`}>
-                            <MapPin className="h-2.5 w-2.5 sm:h-3 sm:w-3 shrink-0 opacity-75" />
-                            <span>{business.address}</span>
-                          </span>
-                        )}
-                      </div>
+                    <div className="px-2 py-0.5 rounded-full bg-stone-100 text-[#1a4d2e] border border-stone-200 text-[9px] font-black flex items-center gap-1">
+                      <ShieldCheck className="h-2.5 w-2.5" />
+                      <span>{isMedical ? 'منشأة صحية' : 'منيو رقمي 🍽️'}</span>
                     </div>
                   </div>
 
-                  {/* 3. Desk / Room / Table Badge if present */}
-                  {deskOrTable && (
-                    <div className={`mt-1.5 sm:mt-2 mb-1 px-3 sm:px-4 py-1 sm:py-1.5 rounded-xl font-black text-[11px] sm:text-xs inline-flex items-center gap-1.5 shadow-xs border ${
-                      theme === 'royal_emerald' ? 'bg-amber-400 text-stone-950 border-amber-300' :
-                      theme === 'clinical_teal' ? 'bg-teal-300 text-teal-950 border-teal-200' :
-                      theme === 'medical_navy' ? 'bg-sky-400 text-slate-950 border-sky-300' :
-                      theme === 'dark_luxe' ? 'bg-amber-400 text-stone-950 border-amber-300' :
-                      theme === 'executive_light' ? 'bg-[#1a4d2e] text-white border-emerald-600' :
-                      'bg-stone-900 text-white border-stone-800'
-                    }`}>
-                      <Building2 className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                      <span>{deskOrTable}</span>
-                    </div>
-                  )}
-
-                  {/* 4. Executive High-Contrast QR Frame Container */}
-                  <div className="my-2.5 sm:my-3.5 relative">
-                    {/* Background Plate */}
-                    <div className="bg-white p-3 sm:p-5 rounded-2xl shadow-xl border-2 border-stone-200/90 relative inline-block">
-                      
-                      {/* QR Frame Corner Accents */}
-                      <div className="absolute top-1.5 left-1.5 w-3 sm:w-3.5 h-3 sm:h-3.5 border-t-2 border-l-2 border-[#1a4d2e]" />
-                      <div className="absolute top-1.5 right-1.5 w-3 sm:w-3.5 h-3 sm:h-3.5 border-t-2 border-r-2 border-[#1a4d2e]" />
-                      <div className="absolute bottom-1.5 left-1.5 w-3 sm:w-3.5 h-3 sm:h-3.5 border-b-2 border-l-2 border-[#1a4d2e]" />
-                      <div className="absolute bottom-1.5 right-1.5 w-3 sm:w-3.5 h-3 sm:h-3.5 border-b-2 border-r-2 border-[#1a4d2e]" />
-
-                      <img
-                        src={qrCodeUrl}
-                        alt="Store High Resolution QR Code"
-                        className="w-40 h-40 sm:w-52 sm:h-52 object-contain mx-auto rounded-lg"
-                      />
-
-                      {/* Scan directive badge */}
-                      <div className="mt-1.5 sm:mt-2 pt-1 sm:pt-1.5 border-t border-stone-100 flex items-center justify-center gap-1 text-[9px] sm:text-[10px] font-black text-stone-600">
-                        <QrCode className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-emerald-600" />
-                        <span>امسح بكاميرا الهاتف للمعاينة الفورية</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 5. Subtitle Call To Action */}
-                  <div className="space-y-1 px-1.5 sm:px-2 max-w-sm">
-                    <p className={`text-[11.5px] sm:text-[13px] font-bold leading-relaxed ${
-                      theme === 'royal_emerald' ? 'text-amber-100' :
-                      theme === 'clinical_teal' ? 'text-teal-50' :
-                      theme === 'medical_navy' ? 'text-sky-100' :
-                      theme === 'dark_luxe' ? 'text-stone-200' :
-                      theme === 'executive_light' ? 'text-stone-800' :
-                      'text-stone-900'
-                    }`}>
-                      {subtitle}
-                    </p>
-
-                    {showEnglishText && (
-                      <p className={`text-[8.5px] sm:text-[9.5px] font-medium uppercase tracking-wider font-mono ${
-                        theme === 'royal_emerald' ? 'text-amber-300/80' :
-                        theme === 'clinical_teal' ? 'text-teal-300/80' :
-                        theme === 'medical_navy' ? 'text-sky-300/80' :
-                        theme === 'dark_luxe' ? 'text-stone-400' :
-                        'text-stone-500'
-                      }`}>
-                        Scan QR code with your smartphone camera for instant direct access
+                  <div className="flex items-center justify-between gap-2.5 pt-1">
+                    <div className="flex-1 space-y-1">
+                      <h3 className="text-2xl sm:text-3xl font-black text-[#1a4d2e] leading-none tracking-tight">امسـح<br/>الكـود</h3>
+                      <span className="text-[8.5px] sm:text-[9.5px] font-black font-mono tracking-widest text-stone-900 uppercase block">SCAN ME</span>
+                      <p className="text-[9.5px] text-stone-600 font-bold leading-tight pt-0.5">
+                        افتح كاميرا هاتفك وامسح الرمز للاطلاع على التفاصيل والمنيو
                       </p>
+                    </div>
+
+                    {/* Floating QR Card */}
+                    <div className="bg-white p-2 rounded-2xl border-2 border-stone-200/90 shadow-xl flex flex-col items-center shrink-0">
+                      <img src={qrCodeUrl} className="w-24 h-24 sm:w-28 sm:h-28 object-contain" alt="QR" />
+                      {deskOrTable && (
+                        <span className="text-[9px] font-black bg-amber-100 text-amber-950 border border-amber-300 px-1.5 py-0.5 rounded-md mt-1">
+                          {deskOrTable}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* MIDDLE ACCENT SECTION WITH SVG WAVE */}
+                <div className="bg-gradient-to-br from-[#1a4d2e] via-[#1a4d2e] to-emerald-900 text-white p-4 sm:p-5 relative flex-1 flex flex-col justify-center">
+                  <svg className="absolute -top-3.5 left-0 right-0 w-full h-3.5 fill-[#1a4d2e]" viewBox="0 0 500 30" preserveAspectRatio="none">
+                    <path d="M0,0 C150,30 350,-10 500,10 L500,0 L0,0 Z"></path>
+                  </svg>
+
+                  <div className="relative z-10 max-w-[65%] space-y-1">
+                    {posterTitle && (
+                      <h4 className="font-black text-xs sm:text-sm text-white leading-tight">{posterTitle}</h4>
+                    )}
+                    <p className="text-[10px] text-emerald-100 font-bold leading-relaxed">{subtitle}</p>
+                    
+                    {showEnglishText && (
+                      <div className="inline-block bg-amber-400 text-amber-950 text-[9px] sm:text-[10px] font-black px-2 py-0.5 rounded-lg mt-1.5 shadow-xs">
+                        {englishText}
+                      </div>
                     )}
                   </div>
 
-                  {/* 6. Contact & Details Pill (Optional) */}
-                  {showContactDetails && (business.phone || business.whatsapp) && (
-                    <div className={`mt-2.5 sm:mt-3 pt-2 sm:pt-2.5 border-t w-full flex items-center justify-center gap-3 sm:gap-4 text-[9.5px] sm:text-[10px] font-bold ${
-                      theme === 'executive_light' || theme === 'minimal_clean'
-                        ? 'border-stone-200 text-stone-600'
-                        : 'border-white/10 text-stone-300'
-                    }`}>
-                      {business.phone && (
-                        <span className="flex items-center gap-1" dir="ltr">
-                          <Phone className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-emerald-400" />
-                          <span>{business.phone}</span>
-                        </span>
-                      )}
-                      {business.whatsapp && (
-                        <span className="flex items-center gap-1" dir="ltr">
-                          <span className="text-emerald-400 font-bold">WA:</span>
-                          <span>{business.whatsapp}</span>
-                        </span>
-                      )}
-                    </div>
-                  )}
+                  {/* Circular Food Image Overlay */}
+                  <div className="absolute left-2.5 -bottom-2.5 w-20 h-20 sm:w-28 sm:h-28 rounded-full border-4 border-white shadow-2xl overflow-hidden z-20">
+                    <img 
+                      src={business.coverImage || (business as any)?.cover || business.menuQrCoverImage || business.imageUrl || (business as any)?.image || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=600&q=80'} 
+                      alt="Dish" 
+                      className="w-full h-full object-cover" 
+                    />
+                  </div>
+                </div>
 
-                  {/* 7. Official Site Verified Footer (shofibirbid.site) */}
-                  <div className={`mt-2.5 sm:mt-3.5 pt-2 sm:pt-3 border-t w-full flex items-center justify-between text-[8.5px] sm:text-[9.5px] font-black ${
-                    theme === 'executive_light' || theme === 'minimal_clean'
-                      ? 'border-stone-200 text-stone-500'
-                      : 'border-white/15 text-stone-300'
-                  }`}>
-                    <div className="flex items-center gap-1 text-right">
-                      <Sparkles className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-amber-400 shrink-0" />
-                      <span>{siteOfficialName}</span>
-                    </div>
-
-                    <div className="flex items-center gap-1 font-mono font-bold text-left" dir="ltr">
-                      <Globe className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-emerald-400 shrink-0" />
-                      <span>{siteOfficialDomain}</span>
-                    </div>
+                {/* BOTTOM FOOTER SECTION */}
+                <div className="bg-white p-2.5 sm:p-3 border-t border-stone-100 flex items-center justify-between relative z-10">
+                  <div className="text-[9.5px] font-black text-stone-800 space-y-0.5">
+                    <span className="bg-amber-300 text-amber-950 px-1.5 py-0.5 rounded text-[8px] font-black block w-fit">
+                      OPEN DAILY
+                    </span>
+                    <span>{showContactDetails && business.phone ? `📞 ${business.phone}` : 'أهلاً وسهلاً بكم طوال الأسبوع'}</span>
                   </div>
 
+                  <div className="flex flex-col items-end gap-0.5">
+                    {officialLogoUrl && <img src={officialLogoUrl} alt="Logo" className="h-4 sm:h-5 w-auto object-contain" />}
+                    <span className="text-[9.5px] font-mono font-black text-[#1a4d2e] tracking-wide" dir="ltr">
+                      {siteOfficialDomain}
+                    </span>
+                  </div>
                 </div>
 
               </div>

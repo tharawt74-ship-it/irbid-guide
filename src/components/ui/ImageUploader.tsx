@@ -63,8 +63,14 @@ export function ImageUploader({
       return;
     }
 
-    if (file.size > 1 * 1024 * 1024) {
-      alert("حجم الصورة يتجاوز الحد الأقصى المسموح به وهو 1 ميغابايت. يرجى اختيار صورة أصغر الحجم أو مضغوطة مسبقاً.");
+    const isGif = file.type === 'image/gif' || file.name.toLowerCase().endsWith('.gif');
+    if (isGif) {
+      alert("عذراً، رفع الصور المتحركة بصيغة GIF غير مسموح به في الموقع. يرجى اختيار صورة ثابتة بصيغة JPG، JPEG، PNG أو WebP.");
+      return;
+    }
+
+    if (file.size > 1.5 * 1024 * 1024) {
+      alert("حجم الصورة يتجاوز الحد الأقصى المسموح به وهو 1.5 ميغابايت. يرجى اختيار صورة أصغر الحجم أو مضغوطة مسبقاً.");
       return;
     }
 
@@ -234,7 +240,7 @@ export function ImageUploader({
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/jpeg, image/png, image/webp"
                 onChange={(e) => {
                   if (e.target.files?.[0]) {
                     handleFileSelect(e.target.files[0]);

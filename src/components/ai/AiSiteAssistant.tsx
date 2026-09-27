@@ -25,7 +25,10 @@ import {
   Mic,
   MicOff,
   Copy,
-  Check
+  Check,
+  UtensilsCrossed,
+  Building,
+  Briefcase
 } from 'lucide-react';
 import { WhatsAppIcon } from '../common/WhatsAppIcon';
 import { motion, AnimatePresence } from 'motion/react';
@@ -609,7 +612,7 @@ export function AiSiteAssistant() {
                         onClick={() => handleSendMessage('كافيهات ومطاعم مفتوحة الآن')}
                         className="p-3 text-right rounded-2xl bg-white border border-stone-200/60 hover:border-emerald-600/30 hover:bg-emerald-50/25 transition-all text-stone-800 text-xs font-bold shadow-2xs cursor-pointer group active:scale-98"
                       >
-                        <div className="text-base mb-1 group-hover:scale-110 transition-transform">🍔</div>
+                        <div className="text-emerald-700 mb-1.5 group-hover:scale-110 transition-transform"><UtensilsCrossed className="h-5 w-5" /></div>
                         <div className="text-stone-900 font-extrabold">مطاعم مفتوحة</div>
                         <div className="text-[10px] text-stone-400 font-medium mt-0.5">ساعات عمل حية الآن</div>
                       </button>
@@ -619,7 +622,7 @@ export function AiSiteAssistant() {
                         onClick={() => handleSendMessage('قارن بين أقوى العروض الحالية في إربد')}
                         className="p-3 text-right rounded-2xl bg-white border border-stone-200/60 hover:border-emerald-600/30 hover:bg-emerald-50/25 transition-all text-stone-800 text-xs font-bold shadow-2xs cursor-pointer group active:scale-98"
                       >
-                        <div className="text-base mb-1 group-hover:scale-110 transition-transform">🏷️</div>
+                        <div className="text-amber-600 mb-1.5 group-hover:scale-110 transition-transform"><Tag className="h-5 w-5" /></div>
                         <div className="text-stone-900 font-extrabold">مقارنة العروض</div>
                         <div className="text-[10px] text-stone-400 font-medium mt-0.5">أفضل الأسعار والتوفير</div>
                       </button>
@@ -629,7 +632,7 @@ export function AiSiteAssistant() {
                         onClick={() => handleSendMessage('سكن طالبات قرب جامعة اليرموك بسعر أقل من 150')}
                         className="p-3 text-right rounded-2xl bg-white border border-stone-200/60 hover:border-emerald-600/30 hover:bg-emerald-50/25 transition-all text-stone-800 text-xs font-bold shadow-2xs cursor-pointer group active:scale-98"
                       >
-                        <div className="text-base mb-1 group-hover:scale-110 transition-transform">🏠</div>
+                        <div className="text-blue-600 mb-1.5 group-hover:scale-110 transition-transform"><Building className="h-5 w-5" /></div>
                         <div className="text-stone-900 font-extrabold">سكنات طالبات</div>
                         <div className="text-[10px] text-stone-400 font-medium mt-0.5">قرب جامعة اليرموك</div>
                       </button>
@@ -639,7 +642,7 @@ export function AiSiteAssistant() {
                         onClick={() => handleSendMessage('وظائف مناسبة للطلاب والشباب في إربد')}
                         className="p-3 text-right rounded-2xl bg-white border border-stone-200/60 hover:border-emerald-600/30 hover:bg-emerald-50/25 transition-all text-stone-800 text-xs font-bold shadow-2xs cursor-pointer group active:scale-98"
                       >
-                        <div className="text-base mb-1 group-hover:scale-110 transition-transform">💼</div>
+                        <div className="text-purple-600 mb-1.5 group-hover:scale-110 transition-transform"><Briefcase className="h-5 w-5" /></div>
                         <div className="text-stone-900 font-extrabold">شواغر ووظائف</div>
                         <div className="text-[10px] text-stone-400 font-medium mt-0.5">فرص تناسب الطلاب اليوم</div>
                       </button>

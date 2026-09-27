@@ -84,7 +84,7 @@ export function VipAnalyticsModal({
 
   return createPortal(
     <div className="fixed inset-0 z-[100000] bg-stone-950/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 overflow-hidden" dir="rtl">
-      <div className="bg-white rounded-t-3xl sm:rounded-3xl p-5 sm:p-7 md:p-8 w-full max-w-4xl max-h-[88dvh] sm:max-h-[85vh] flex flex-col overflow-hidden shadow-2xl border border-amber-200 relative my-0 sm:my-auto animate-in fade-in zoom-in-95">
+      <div className="bg-white rounded-t-3xl sm:rounded-3xl p-5 sm:p-7 md:p-8 w-full max-w-4xl h-[88dvh] sm:h-[85vh] max-h-[88dvh] sm:max-h-[85vh] flex flex-col overflow-hidden shadow-2xl border border-amber-200 relative my-0 sm:my-auto animate-in fade-in zoom-in-95">
         
         {/* Mobile Drag Indicator */}
         <div className="w-12 h-1.5 bg-stone-300 rounded-full mx-auto my-1 sm:hidden shrink-0 mb-3" />
@@ -132,7 +132,9 @@ export function VipAnalyticsModal({
         </div>
 
         {/* Dashboard Component */}
-        <VipAnalyticsDashboard business={business} isOwner={true} />
+        <div className="flex-1 overflow-y-auto pr-1 pl-1">
+          <VipAnalyticsDashboard business={business} isOwner={true} />
+        </div>
 
       </div>
     </div>,

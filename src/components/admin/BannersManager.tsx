@@ -6,778 +6,778 @@ import { HomepageBanner, Business } from '../../types';
 import { invalidateCache } from '../../lib/dataCache';
 import { clearAllBannersInFirestore } from '../../lib/pageBanners';
 import { 
-  Plus, Edit2, Trash2, Image, Link, Sparkles, 
-  Eye, EyeOff, Save, CheckCircle2, Building2, 
-  PlayCircle, Megaphone, FileText, X, Star, MapPin,
-  Globe, Home, Flame, Briefcase, Bus, Newspaper, Compass, Filter, Layers, Stethoscope
+ Plus, Edit2, Trash2, Image, Link, Sparkles, 
+ Eye, EyeOff, Save, CheckCircle2, Building2, 
+ PlayCircle, Megaphone, FileText, X, Star, MapPin,
+ Globe, Home, Flame, Briefcase, Bus, Newspaper, Compass, Filter, Layers, Stethoscope
 } from 'lucide-react';
 import { ImageUploader } from '../ui/ImageUploader';
 
 interface BannersManagerProps {
-  showToast: (msg: string, type?: 'success' | 'info' | 'error') => void;
+ showToast: (msg: string, type?: 'success' | 'info' | 'error') => void;
 }
 
 const PAGE_TARGETS = [
-  { id: 'all', name: 'جميع الصفحات (عام)', icon: Globe, color: 'bg-stone-800 text-white' },
-  { id: 'home', name: 'الصفحة الرئيسية', icon: Home, color: 'bg-emerald-700 text-white' },
-  { id: 'offers', name: 'صفحة العروض والخصومات', icon: Flame, color: 'bg-amber-600 text-white' },
-  { id: 'jobs', name: 'صفحة الوظائف والشواغر', icon: Briefcase, color: 'bg-blue-600 text-white' },
-  { id: 'housing', name: 'صفحة السكنات والعقارات', icon: Building2, color: 'bg-purple-600 text-white' },
-  { id: 'transportation', name: 'صفحة النقل والمواصلات', icon: Bus, color: 'bg-indigo-600 text-white' },
-  { id: 'news', name: 'صفحة الأخبار والمستجدات', icon: Newspaper, color: 'bg-rose-600 text-white' },
-  { id: 'tourism', name: 'صفحة السياحة والمعالم', icon: Compass, color: 'bg-teal-600 text-white' },
-  { id: 'medical', name: 'صفحة الرعاية الطبية', icon: Stethoscope, color: 'bg-teal-700 text-white' }
+ { id: 'all', name: 'جميع الصفحات (عام)', icon: Globe, color: 'bg-stone-800 text-white' },
+ { id: 'home', name: 'الصفحة الرئيسية', icon: Home, color: 'bg-emerald-700 text-white' },
+ { id: 'offers', name: 'صفحة العروض والخصومات', icon: Flame, color: 'bg-amber-600 text-white' },
+ { id: 'jobs', name: 'صفحة الوظائف والشواغر', icon: Briefcase, color: 'bg-blue-600 text-white' },
+ { id: 'housing', name: 'صفحة السكنات والعقارات', icon: Building2, color: 'bg-purple-600 text-white' },
+ { id: 'transportation', name: 'صفحة النقل والمواصلات', icon: Bus, color: 'bg-indigo-600 text-white' },
+ { id: 'news', name: 'صفحة الأخبار والمستجدات', icon: Newspaper, color: 'bg-rose-600 text-white' },
+ { id: 'tourism', name: 'صفحة السياحة والمعالم', icon: Compass, color: 'bg-teal-600 text-white' },
+ { id: 'medical', name: 'صفحة الرعاية الطبية', icon: Stethoscope, color: 'bg-teal-700 text-white' }
 ];
 
 export function BannersManager({ showToast }: BannersManagerProps) {
-  const { confirm } = useConfirm();
-  const [banners, setBanners] = useState<HomepageBanner[]>([]);
-  const [businesses, setBusinesses] = useState<Business[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingBanner, setEditingBanner] = useState<HomepageBanner | null>(null);
+ const { confirm } = useConfirm();
+ const [banners, setBanners] = useState<HomepageBanner[]>([]);
+ const [businesses, setBusinesses] = useState<Business[]>([]);
+ const [loading, setLoading] = useState(true);
+ const [isFormOpen, setIsFormOpen] = useState(false);
+ const [editingBanner, setEditingBanner] = useState<HomepageBanner | null>(null);
 
-  // Page filter state
-  const [selectedPageFilter, setSelectedPageFilter] = useState<string>('all');
+ // Page filter state
+ const [selectedPageFilter, setSelectedPageFilter] = useState<string>('all');
 
-  // Form Fields
-  const [type, setType] = useState<HomepageBanner['type']>('business');
-  const [pageTarget, setPageTarget] = useState<string>('all');
-  const [title, setTitle] = useState('');
-  const [subtitle, setSubtitle] = useState('');
-  const [imageUrl, setImageUrl] = useState('');
-  const [businessId, setBusinessId] = useState('');
-  const [buttonText, setButtonText] = useState('');
-  const [buttonLink, setButtonLink] = useState('');
-  const [badgeText, setBadgeText] = useState('');
-  const [active, setActive] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+ // Form Fields
+ const [type, setType] = useState<HomepageBanner['type']>('business');
+ const [pageTarget, setPageTarget] = useState<string>('all');
+ const [title, setTitle] = useState('');
+ const [subtitle, setSubtitle] = useState('');
+ const [imageUrl, setImageUrl] = useState('');
+ const [businessId, setBusinessId] = useState('');
+ const [buttonText, setButtonText] = useState('');
+ const [buttonLink, setButtonLink] = useState('');
+ const [badgeText, setBadgeText] = useState('');
+ const [active, setActive] = useState(true);
+ const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Business query state
-  const [searchQuery, setSearchQuery] = useState('');
+ // Business query state
+ const [searchQuery, setSearchQuery] = useState('');
 
-  useEffect(() => {
-    fetchBanners();
-    fetchBusinesses();
-  }, []);
+ useEffect(() => {
+ fetchBanners();
+ fetchBusinesses();
+ }, []);
 
-  const fetchBanners = async () => {
-    try {
-      if (!db) return;
-      const q = query(collection(db, 'banners'), orderBy('createdAt', 'desc'));
-      const snap = await getDocs(q);
-      const list: HomepageBanner[] = [];
-      snap.forEach(docSnap => {
-        list.push({ id: docSnap.id, ...docSnap.data() } as HomepageBanner);
-      });
-      setBanners(list);
-    } catch (err) {
-      console.error("Error fetching banners:", err);
-      showToast("فشل جلب البانرات الإعلانية", "error");
-    } finally {
-      setLoading(false);
-    }
-  };
+ const fetchBanners = async () => {
+ try {
+ if (!db) return;
+ const q = query(collection(db, 'banners'), orderBy('createdAt', 'desc'));
+ const snap = await getDocs(q);
+ const list: HomepageBanner[] = [];
+ snap.forEach(docSnap => {
+ list.push({ id: docSnap.id, ...docSnap.data() } as HomepageBanner);
+ });
+ setBanners(list);
+ } catch (err) {
+ console.error("Error fetching banners:", err);
+ showToast("فشل جلب البانرات الإعلانية", "error");
+ } finally {
+ setLoading(false);
+ }
+ };
 
-  const fetchBusinesses = async () => {
-    try {
-      if (!db) return;
-      const q = query(collection(db, 'businesses'), orderBy('name', 'asc'));
-      const snap = await getDocs(q);
-      const list: Business[] = [];
-      snap.forEach(docSnap => {
-        list.push({ id: docSnap.id, ...docSnap.data() } as Business);
-      });
-      setBusinesses(list);
-    } catch (err) {
-      console.warn("Could not fetch businesses (requires Firestore rules update):", err);
-    }
-  };
+ const fetchBusinesses = async () => {
+ try {
+ if (!db) return;
+ const q = query(collection(db, 'businesses'), orderBy('name', 'asc'));
+ const snap = await getDocs(q);
+ const list: Business[] = [];
+ snap.forEach(docSnap => {
+ list.push({ id: docSnap.id, ...docSnap.data() } as Business);
+ });
+ setBusinesses(list);
+ } catch (err) {
+ console.warn("Could not fetch businesses (requires Firestore rules update):", err);
+ }
+ };
 
-  const handleOpenAdd = () => {
-    setEditingBanner(null);
-    setType('business');
-    setPageTarget(selectedPageFilter !== 'all' ? selectedPageFilter : 'all');
-    setTitle('');
-    setSubtitle('');
-    setImageUrl('');
-    setBusinessId('');
-    setButtonText('');
-    setButtonLink('');
-    setBadgeText('');
-    setActive(true);
-    setSearchQuery('');
-    setIsFormOpen(true);
-  };
+ const handleOpenAdd = () => {
+ setEditingBanner(null);
+ setType('business');
+ setPageTarget(selectedPageFilter !== 'all' ? selectedPageFilter : 'all');
+ setTitle('');
+ setSubtitle('');
+ setImageUrl('');
+ setBusinessId('');
+ setButtonText('');
+ setButtonLink('');
+ setBadgeText('');
+ setActive(true);
+ setSearchQuery('');
+ setIsFormOpen(true);
+ };
 
-  const handleOpenEdit = (banner: HomepageBanner) => {
-    setEditingBanner(banner);
-    setType(banner.type);
-    setPageTarget(banner.pageTarget || 'all');
-    setTitle(banner.title);
-    setSubtitle(banner.subtitle || '');
-    setImageUrl(banner.imageUrl);
-    setBusinessId(banner.businessId || '');
-    setButtonText(banner.buttonText || '');
-    setButtonLink(banner.buttonLink || '');
-    setBadgeText(banner.badgeText || '');
-    setActive(banner.active);
-    setSearchQuery('');
-    
-    // Auto-search business if business type
-    if (banner.type === 'business' && banner.businessName) {
-      setSearchQuery(banner.businessName);
-    }
-    setIsFormOpen(true);
-  };
+ const handleOpenEdit = (banner: HomepageBanner) => {
+ setEditingBanner(banner);
+ setType(banner.type);
+ setPageTarget(banner.pageTarget || 'all');
+ setTitle(banner.title);
+ setSubtitle(banner.subtitle || '');
+ setImageUrl(banner.imageUrl);
+ setBusinessId(banner.businessId || '');
+ setButtonText(banner.buttonText || '');
+ setButtonLink(banner.buttonLink || '');
+ setBadgeText(banner.badgeText || '');
+ setActive(banner.active);
+ setSearchQuery('');
+ 
+ // Auto-search business if business type
+ if (banner.type === 'business' && banner.businessName) {
+ setSearchQuery(banner.businessName);
+ }
+ setIsFormOpen(true);
+ };
 
-  const handleToggleActive = async (banner: HomepageBanner) => {
-    try {
-      if (!db) return;
-      const docRef = doc(db, 'banners', banner.id);
-      const nextActive = !banner.active;
-      await updateDoc(docRef, { active: nextActive });
-      invalidateCache();
-      setBanners(prev => prev.map(b => b.id === banner.id ? { ...b, active: nextActive } : b));
-      showToast(nextActive ? "تم تفعيل البانر بنجاح ✅" : "تم إلغاء تفعيل البانر 🛑", "success");
-    } catch (err) {
-      console.error("Error toggling active state:", err);
-      showToast("فشل تحديث حالة البانر", "error");
-    }
-  };
+ const handleToggleActive = async (banner: HomepageBanner) => {
+ try {
+ if (!db) return;
+ const docRef = doc(db, 'banners', banner.id);
+ const nextActive = !banner.active;
+ await updateDoc(docRef, { active: nextActive });
+ invalidateCache();
+ setBanners(prev => prev.map(b => b.id === banner.id ? { ...b, active: nextActive } : b));
+ showToast(nextActive ? "تم تفعيل البانر بنجاح " : "تم إلغاء تفعيل البانر ", "success");
+ } catch (err) {
+ console.error("Error toggling active state:", err);
+ showToast("فشل تحديث حالة البانر", "error");
+ }
+ };
 
-  const handleDelete = async (id: string) => {
-    if (!(await confirm({ message: "هل أنت متأكد من رغبتك في حذف هذا البانر نهائياً؟" }))) return;
-    try {
-      if (!db) return;
-      await deleteDoc(doc(db, 'banners', id));
-      invalidateCache();
-      setBanners(prev => prev.filter(b => b.id !== id));
-      showToast("تم حذف البانر الإعلاني بنجاح", "success");
-    } catch (err) {
-      console.error("Error deleting banner:", err);
-      showToast("فشل حذف البانر الإعلاني", "error");
-    }
-  };
+ const handleDelete = async (id: string) => {
+ if (!(await confirm({ message: "هل أنت متأكد من رغبتك في حذف هذا البانر نهائياً؟" }))) return;
+ try {
+ if (!db) return;
+ await deleteDoc(doc(db, 'banners', id));
+ invalidateCache();
+ setBanners(prev => prev.filter(b => b.id !== id));
+ showToast("تم حذف البانر الإعلاني بنجاح", "success");
+ } catch (err) {
+ console.error("Error deleting banner:", err);
+ showToast("فشل حذف البانر الإعلاني", "error");
+ }
+ };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim() && type !== 'image_only' && type !== 'animated_image') {
-      showToast("يرجى إدخال عنوان الإعلان الرئيسي", "error");
-      return;
-    }
-    if (!imageUrl.trim()) {
-      showToast("يرجى تزويدنا برابط صورة الإعلان", "error");
-      return;
-    }
+ const handleSubmit = async (e: React.FormEvent) => {
+ e.preventDefault();
+ if (!title.trim() && type !== 'image_only' && type !== 'animated_image') {
+ showToast("يرجى إدخال عنوان الإعلان الرئيسي", "error");
+ return;
+ }
+ if (!imageUrl.trim()) {
+ showToast("يرجى تزويدنا برابط صورة الإعلان", "error");
+ return;
+ }
 
-    setIsSubmitting(true);
+ setIsSubmitting(true);
 
-    try {
-      if (!db) return;
+ try {
+ if (!db) return;
 
-      // Prepare target business info
-      let targetBiz: Partial<HomepageBanner> = {};
-      if (type === 'business' && businessId) {
-        const found = businesses.find(b => b.id === businessId);
-        if (found) {
-          targetBiz = {
-            businessId,
-            businessName: found.name || '',
-            category: found.category || '',
-            rating: (found.rating && found.rating > 0) ? found.rating : 0,
-            reviewCount: found.reviewCount || 0,
-            address: found.address || ''
-          };
-        }
-      }
+ // Prepare target business info
+ let targetBiz: Partial<HomepageBanner> = {};
+ if (type === 'business' && businessId) {
+ const found = businesses.find(b => b.id === businessId);
+ if (found) {
+ targetBiz = {
+ businessId,
+ businessName: found.name || '',
+ category: found.category || '',
+ rating: (found.rating && found.rating > 0) ? found.rating : 0,
+ reviewCount: found.reviewCount || 0,
+ address: found.address || ''
+ };
+ }
+ }
 
-      const rawPayload: any = {
-        type,
-        pageTarget: pageTarget || 'all',
-        title: title.trim(),
-        subtitle: subtitle.trim() || '',
-        imageUrl: imageUrl.trim(),
-        active,
-        createdAt: editingBanner ? editingBanner.createdAt : Date.now(),
-        ...targetBiz
-      };
+ const rawPayload: any = {
+ type,
+ pageTarget: pageTarget || 'all',
+ title: title.trim(),
+ subtitle: subtitle.trim() || '',
+ imageUrl: imageUrl.trim(),
+ active,
+ createdAt: editingBanner ? editingBanner.createdAt : Date.now(),
+ ...targetBiz
+ };
 
-      if (type === 'text_and_button') {
-        if (buttonText.trim()) rawPayload.buttonText = buttonText.trim();
-        if (buttonLink.trim()) rawPayload.buttonLink = buttonLink.trim();
-        if (badgeText.trim()) rawPayload.badgeText = badgeText.trim();
-      }
+ if (type === 'text_and_button') {
+ if (buttonText.trim()) rawPayload.buttonText = buttonText.trim();
+ if (buttonLink.trim()) rawPayload.buttonLink = buttonLink.trim();
+ if (badgeText.trim()) rawPayload.badgeText = badgeText.trim();
+ }
 
-      // Filter out any undefined values to strictly comply with Firestore requirements
-      const payload = Object.fromEntries(
-        Object.entries(rawPayload).filter(([_, v]) => v !== undefined)
-      );
+ // Filter out any undefined values to strictly comply with Firestore requirements
+ const payload = Object.fromEntries(
+ Object.entries(rawPayload).filter(([_, v]) => v !== undefined)
+ );
 
-      if (editingBanner) {
-        // Edit mode
-        await updateDoc(doc(db, 'banners', editingBanner.id), payload);
-        showToast("تم تعديل البانر الإعلاني بنجاح ✨", "success");
-      } else {
-        // Add mode
-        await addDoc(collection(db, 'banners'), payload);
-        showToast("تمت إضافة البانر الإعلاني الجديد بنجاح 🎉", "success");
-      }
+ if (editingBanner) {
+ // Edit mode
+ await updateDoc(doc(db, 'banners', editingBanner.id), payload);
+ showToast("تم تعديل البانر الإعلاني بنجاح ", "success");
+ } else {
+ // Add mode
+ await addDoc(collection(db, 'banners'), payload);
+ showToast("تمت إضافة البانر الإعلاني الجديد بنجاح ", "success");
+ }
 
-      invalidateCache();
-      setIsFormOpen(false);
-      fetchBanners();
-    } catch (err) {
-      console.error("Error saving banner:", err);
-      showToast("حدث خطأ أثناء حفظ البانر", "error");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+ invalidateCache();
+ setIsFormOpen(false);
+ fetchBanners();
+ } catch (err) {
+ console.error("Error saving banner:", err);
+ showToast("حدث خطأ أثناء حفظ البانر", "error");
+ } finally {
+ setIsSubmitting(false);
+ }
+ };
 
-  const handleClearAllBanners = async () => {
-    if (!(await confirm({ message: "هل أنت متأكد من حذف جميع البانرات الإعلانية الحالية من الموقع وقاعدة البيانات بالكامل؟" }))) return;
-    setLoading(true);
-    try {
-      await clearAllBannersInFirestore();
-      setBanners([]);
-      showToast("تم حذف جميع البانرات من قاعدة البيانات بنجاح! ✨", "success");
-    } catch (err) {
-      console.error("Error clearing banners:", err);
-      showToast("حدث خطأ أثناء مسح البانرات", "error");
-    } finally {
-      setLoading(false);
-    }
-  };
+ const handleClearAllBanners = async () => {
+ if (!(await confirm({ message: "هل أنت متأكد من حذف جميع البانرات الإعلانية الحالية من الموقع وقاعدة البيانات بالكامل؟" }))) return;
+ setLoading(true);
+ try {
+ await clearAllBannersInFirestore();
+ setBanners([]);
+ showToast("تم حذف جميع البانرات من قاعدة البيانات بنجاح! ", "success");
+ } catch (err) {
+ console.error("Error clearing banners:", err);
+ showToast("حدث خطأ أثناء مسح البانرات", "error");
+ } finally {
+ setLoading(false);
+ }
+ };
 
-  const filteredBusinesses = searchQuery.trim() === ''
-    ? businesses.slice(0, 5)
-    : businesses.filter(b => b.name.toLowerCase().includes(searchQuery.toLowerCase())).slice(0, 10);
+ const filteredBusinesses = searchQuery.trim() === ''
+ ? businesses.slice(0, 5)
+ : businesses.filter(b => b.name.toLowerCase().includes(searchQuery.toLowerCase())).slice(0, 10);
 
-  const filteredBanners = banners.filter(b => {
-    if (selectedPageFilter === 'all') return true;
-    return (b.pageTarget || 'all') === selectedPageFilter || b.pageTarget === 'all';
-  });
+ const filteredBanners = banners.filter(b => {
+ if (selectedPageFilter === 'all') return true;
+ return (b.pageTarget || 'all') === selectedPageFilter || b.pageTarget === 'all';
+ });
 
-  return (
-    <div className="bg-white rounded-3xl p-6 border border-[#e5e1da] shadow-xs space-y-6" dir="rtl">
-      {/* Header bar with controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-stone-100">
-        <div className="flex items-center gap-3">
-          <div className="p-3 bg-emerald-50 rounded-2xl text-[#1a4d2e]">
-            <Image className="h-6 w-6" />
-          </div>
-          <div>
-            <h2 className="text-xl font-black text-stone-900">إدارة البانرات الإعلانية في جميع الصفحات</h2>
-            <p className="text-stone-500 text-xs">تحكم كامل بالبانرات والعروض الترويجية المخصصة لكل صفحة من صفحات المنصة</p>
-          </div>
-        </div>
+ return (
+ <div className="bg-white rounded-3xl p-6 border border-[#e5e1da] shadow-xs space-y-6" dir="rtl">
+ {/* Header bar with controls */}
+ <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-stone-100">
+ <div className="flex items-center gap-3">
+ <div className="p-3 bg-emerald-50 rounded-2xl text-[#1a4d2e]">
+ <Image className="h-6 w-6" />
+ </div>
+ <div>
+ <h2 className="text-xl font-black text-stone-900">إدارة البانرات الإعلانية في جميع الصفحات</h2>
+ <p className="text-stone-500 text-xs">تحكم كامل بالبانرات والعروض الترويجية المخصصة لكل صفحة من صفحات المنصة</p>
+ </div>
+ </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          {banners.length > 0 && (
-            <button
-              onClick={handleClearAllBanners}
-              className="inline-flex items-center justify-center gap-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer"
-              title="حذف جميع البانرات الحالية من قاعدة البيانات"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              <span>حذف جميع البانرات ({banners.length})</span>
-            </button>
-          )}
-          <button
-            onClick={handleOpenAdd}
-            className="inline-flex items-center justify-center gap-2 bg-[#1a4d2e] hover:bg-[#133b22] text-white px-5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer shadow-xs"
-          >
-            <Plus className="h-4 w-4" />
-            <span>إضافة بانر إعلاني جديد</span>
-          </button>
-        </div>
-      </div>
+ <div className="flex items-center gap-2 flex-wrap">
+ {banners.length > 0 && (
+ <button
+ onClick={handleClearAllBanners}
+ className="inline-flex items-center justify-center gap-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer"
+ title="حذف جميع البانرات الحالية من قاعدة البيانات"
+ >
+ <Trash2 className="h-3.5 w-3.5" />
+ <span>حذف جميع البانرات ({banners.length})</span>
+ </button>
+ )}
+ <button
+ onClick={handleOpenAdd}
+ className="inline-flex items-center justify-center gap-2 bg-[#1a4d2e] hover:bg-[#133b22] text-white px-5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer shadow-xs"
+ >
+ <Plus className="h-4 w-4" />
+ <span>إضافة بانر إعلاني جديد</span>
+ </button>
+ </div>
+ </div>
 
-      {/* Page Target Filter Navigation Tabs */}
-      <div className="space-y-2">
-        <div className="flex items-center gap-2 text-xs font-black text-stone-700">
-          <Filter className="h-4 w-4 text-[#1a4d2e]" />
-          <span>تصفية البانرات حسب الصفحة المستهدفة:</span>
-        </div>
-        <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
-          {PAGE_TARGETS.map(pt => {
-            const Icon = pt.icon;
-            const count = banners.filter(b => pt.id === 'all' ? true : (b.pageTarget || 'all') === pt.id).length;
-            const isSelected = selectedPageFilter === pt.id;
+ {/* Page Target Filter Navigation Tabs */}
+ <div className="space-y-2">
+ <div className="flex items-center gap-2 text-xs font-black text-stone-700">
+ <Filter className="h-4 w-4 text-[#1a4d2e]" />
+ <span>تصفية البانرات حسب الصفحة المستهدفة:</span>
+ </div>
+ <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+ {PAGE_TARGETS.map(pt => {
+ const Icon = pt.icon;
+ const count = banners.filter(b => pt.id === 'all' ? true : (b.pageTarget || 'all') === pt.id).length;
+ const isSelected = selectedPageFilter === pt.id;
 
-            return (
-              <button
-                key={pt.id}
-                type="button"
-                onClick={() => setSelectedPageFilter(pt.id)}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer border ${
-                  isSelected
-                    ? 'bg-[#1a4d2e] text-white border-[#1a4d2e] shadow-xs'
-                    : 'bg-stone-50 hover:bg-stone-100 text-stone-700 border-stone-200'
-                }`}
-              >
-                <Icon className={`h-4 w-4 ${isSelected ? 'text-[#ff9f1c]' : 'text-stone-500'}`} />
-                <span>{pt.name}</span>
-                <span className={`px-1.5 py-0.2 text-[10px] rounded-full font-black ${
-                  isSelected ? 'bg-white/20 text-white' : 'bg-stone-200 text-stone-700'
-                }`}>
-                  {count}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
+ return (
+ <button
+ key={pt.id}
+ type="button"
+ onClick={() => setSelectedPageFilter(pt.id)}
+ className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer border ${
+ isSelected
+ ? 'bg-[#1a4d2e] text-white border-[#1a4d2e] shadow-xs'
+ : 'bg-stone-50 hover:bg-stone-100 text-stone-700 border-stone-200'
+ }`}
+ >
+ <Icon className={`h-4 w-4 ${isSelected ? 'text-[#ff9f1c]' : 'text-stone-500'}`} />
+ <span>{pt.name}</span>
+ <span className={`px-1.5 py-0.2 text-[10px] rounded-full font-black ${
+ isSelected ? 'bg-white/20 text-white' : 'bg-stone-200 text-stone-700'
+ }`}>
+ {count}
+ </span>
+ </button>
+ );
+ })}
+ </div>
+ </div>
 
-      {loading ? (
-        <div className="flex flex-col items-center justify-center py-20 text-stone-500">
-          <div className="w-8 h-8 border-4 border-[#1a4d2e] border-t-transparent rounded-full animate-spin mb-3"></div>
-          <span className="text-xs font-medium">جاري تحميل البانرات الإعلانية...</span>
-        </div>
-      ) : filteredBanners.length === 0 ? (
-        <div className="text-center py-16 border border-dashed border-stone-200 rounded-3xl bg-stone-50/50 space-y-3">
-          <Megaphone className="h-12 w-12 text-stone-300 mx-auto" />
-          <p className="text-sm font-black text-stone-700">لا يوجد بانرات مخصصة مضافة في {PAGE_TARGETS.find(p => p.id === selectedPageFilter)?.name || 'هذه الصفحة'}</p>
-          <p className="text-xs text-stone-500 max-w-sm mx-auto">
-            تُظهر المنصة حالياً بانر "احجز إعلانك" التلقائي للمستخدمين حتى تقوم بإضافة بانر جديد هنا.
-          </p>
-          <div className="flex items-center justify-center gap-2 pt-2">
-            <button
-              onClick={handleOpenAdd}
-              className="inline-flex items-center gap-1.5 bg-[#1a4d2e] text-white px-5 py-2.5 rounded-xl text-xs font-bold cursor-pointer hover:bg-[#133b22] transition-all shadow-xs"
-            >
-              <Plus className="h-4 w-4" />
-              <span>إضافة بانر جديد لهذه الصفحة</span>
-            </button>
-          </div>
-        </div>
-      ) : (
-        /* List of Banners */
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {filteredBanners.map((banner) => {
-            const targetPageInfo = PAGE_TARGETS.find(p => p.id === (banner.pageTarget || 'all')) || PAGE_TARGETS[0];
-            const PageIcon = targetPageInfo.icon;
+ {loading ? (
+ <div className="flex flex-col items-center justify-center py-20 text-stone-500">
+ <div className="w-8 h-8 border-4 border-[#1a4d2e] border-t-transparent rounded-full animate-spin mb-3"></div>
+ <span className="text-xs font-medium">جاري تحميل البانرات الإعلانية...</span>
+ </div>
+ ) : filteredBanners.length === 0 ? (
+ <div className="text-center py-16 border border-dashed border-stone-200 rounded-3xl bg-stone-50/50 space-y-3">
+ <Megaphone className="h-12 w-12 text-stone-300 mx-auto" />
+ <p className="text-sm font-black text-stone-700">لا يوجد بانرات مخصصة مضافة في {PAGE_TARGETS.find(p => p.id === selectedPageFilter)?.name || 'هذه الصفحة'}</p>
+ <p className="text-xs text-stone-500 max-w-sm mx-auto">
+ تُظهر المنصة حالياً بانر "احجز إعلانك" التلقائي للمستخدمين حتى تقوم بإضافة بانر جديد هنا.
+ </p>
+ <div className="flex items-center justify-center gap-2 pt-2">
+ <button
+ onClick={handleOpenAdd}
+ className="inline-flex items-center gap-1.5 bg-[#1a4d2e] text-white px-5 py-2.5 rounded-xl text-xs font-bold cursor-pointer hover:bg-[#133b22] transition-all shadow-xs"
+ >
+ <Plus className="h-4 w-4" />
+ <span>إضافة بانر جديد لهذه الصفحة</span>
+ </button>
+ </div>
+ </div>
+ ) : (
+ /* List of Banners */
+ <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+ {filteredBanners.map((banner) => {
+ const targetPageInfo = PAGE_TARGETS.find(p => p.id === (banner.pageTarget || 'all')) || PAGE_TARGETS[0];
+ const PageIcon = targetPageInfo.icon;
 
-            return (
-            <div 
-              key={banner.id}
-              className={`p-4 rounded-2xl border transition-all flex flex-col justify-between gap-4 bg-stone-50/45 ${
-                banner.active ? 'border-emerald-100 hover:border-emerald-200 hover:shadow-md' : 'border-stone-200 opacity-75'
-              }`}
-            >
-              {/* Banner visual representation preview */}
-              <div className="relative w-full aspect-[21/9] rounded-xl overflow-hidden group select-none bg-stone-900 border border-stone-200 shadow-xs">
-                {/* Overlay gradient */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent z-10"></div>
-                
-                {banner.imageUrl ? (
-                  <img
-                    src={banner.imageUrl}
-                    alt={banner.title}
-                    className="w-full h-full object-cover"
-                    referrerPolicy="no-referrer"
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center bg-stone-800 text-stone-400">
-                    <Image className="h-8 w-8" />
-                  </div>
-                )}
+ return (
+ <div 
+ key={banner.id}
+ className={`p-4 rounded-2xl border transition-all flex flex-col justify-between gap-4 bg-stone-50/45 ${
+ banner.active ? 'border-emerald-100 hover:border-emerald-200 hover:shadow-md' : 'border-stone-200 opacity-75'
+ }`}
+ >
+ {/* Banner visual representation preview */}
+ <div className="relative w-full aspect-[21/9] rounded-xl overflow-hidden group select-none bg-stone-900 border border-stone-200 shadow-xs">
+ {/* Overlay gradient */}
+ <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent z-10"></div>
+ 
+ {banner.imageUrl ? (
+ <img
+ src={banner.imageUrl}
+ alt={banner.title}
+ className="w-full h-full object-cover"
+ referrerPolicy="no-referrer"
+ />
+ ) : (
+ <div className="w-full h-full flex items-center justify-center bg-stone-800 text-stone-400">
+ <Image className="h-8 w-8" />
+ </div>
+ )}
 
-                {/* Targeted Page Badge Top Right */}
-                <div className="absolute top-2.5 right-2.5 z-20 flex items-center gap-1">
-                  <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black flex items-center gap-1 text-white shadow-xs ${targetPageInfo.color}`}>
-                    <PageIcon className="h-3 w-3" />
-                    <span>{targetPageInfo.name}</span>
-                  </span>
-                </div>
+ {/* Targeted Page Badge Top Right */}
+ <div className="absolute top-2.5 right-2.5 z-20 flex items-center gap-1">
+ <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black flex items-center gap-1 text-white shadow-xs ${targetPageInfo.color}`}>
+ <PageIcon className="h-3 w-3" />
+ <span>{targetPageInfo.name}</span>
+ </span>
+ </div>
 
-                {/* Badge top corner info */}
-                <div className="absolute top-2.5 left-2.5 z-20 flex items-center gap-1.5">
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-black text-white ${
-                    banner.type === 'business' ? 'bg-emerald-600' :
-                    banner.type === 'image_only' ? 'bg-blue-600' :
-                    banner.type === 'animated_image' ? 'bg-purple-600 animate-pulse' :
-                    'bg-[#ff9f1c]'
-                  }`}>
-                    {banner.type === 'business' ? '🔗 صفحة محل' :
-                     banner.type === 'image_only' ? '🖼️ صورة ثابتة' :
-                     banner.type === 'animated_image' ? '🎞️ صورة متحركة GIF' :
-                     '🔘 نصوص وأزرار'}
-                  </span>
+ {/* Badge top corner info */}
+ <div className="absolute top-2.5 left-2.5 z-20 flex items-center gap-1.5">
+ <span className={`px-2 py-0.5 rounded-full text-[10px] font-black text-white ${
+ banner.type === 'business' ? 'bg-emerald-600' :
+ banner.type === 'image_only' ? 'bg-blue-600' :
+ banner.type === 'animated_image' ? 'bg-purple-600 animate-pulse' :
+ 'bg-[#ff9f1c]'
+ }`}>
+ {banner.type === 'business' ? ' صفحة محل' :
+ banner.type === 'image_only' ? ' صورة ثابتة' :
+ banner.type === 'animated_image' ? ' صورة متحركة GIF' :
+ ' نصوص وأزرار'}
+ </span>
 
-                  {banner.active ? (
-                    <span className="bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded-full text-[9px] font-bold">نشط معروض</span>
-                  ) : (
-                    <span className="bg-stone-200 text-stone-600 px-2 py-0.5 rounded-full text-[9px] font-bold">معطل</span>
-                  )}
-                </div>
+ {banner.active ? (
+ <span className="bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded-full text-[9px] font-bold">نشط معروض</span>
+ ) : (
+ <span className="bg-stone-200 text-stone-600 px-2 py-0.5 rounded-full text-[9px] font-bold">معطل</span>
+ )}
+ </div>
 
-                {/* Simulated Content preview inside */}
-                <div className="absolute inset-0 p-3 flex flex-col justify-end z-20 text-white text-right" dir="rtl">
-                  {banner.badgeText && (
-                    <span className="self-start mb-1 bg-[#ff9f1c] text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">
-                      {banner.badgeText}
-                    </span>
-                  )}
-                  {banner.type === 'business' && banner.category && (
-                    <span className="self-start mb-1 bg-[#ff9f1c] text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">
-                      {banner.category} {banner.rating && `⭐ ${banner.rating.toFixed(1)}`}
-                    </span>
-                  )}
+ {/* Simulated Content preview inside */}
+ <div className="absolute inset-0 p-3 flex flex-col justify-end z-20 text-white text-right" dir="rtl">
+ {banner.badgeText && (
+ <span className="self-start mb-1 bg-[#ff9f1c] text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">
+ {banner.badgeText}
+ </span>
+ )}
+ {banner.type === 'business' && banner.category && (
+ <span className="self-start mb-1 bg-[#ff9f1c] text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">
+ {banner.category} {banner.rating && ` ${banner.rating.toFixed(1)}`}
+ </span>
+ )}
 
-                  <h3 className="text-sm font-black tracking-tight line-clamp-1">{banner.title || 'إعلان ترويجي'}</h3>
-                  {banner.subtitle && (
-                    <p className="text-white/80 text-[10px] line-clamp-1 mt-0.5">{banner.subtitle}</p>
-                  )}
+ <h3 className="text-sm font-black tracking-tight line-clamp-1">{banner.title || 'إعلان ترويجي'}</h3>
+ {banner.subtitle && (
+ <p className="text-white/80 text-[10px] line-clamp-1 mt-0.5">{banner.subtitle}</p>
+ )}
 
-                  {banner.type === 'text_and_button' && banner.buttonText && (
-                    <div className="mt-1.5">
-                      <span className="inline-block bg-[#ff9f1c] text-white text-[9px] font-black px-2.5 py-0.5 rounded-md">
-                        {banner.buttonText} ➔
-                      </span>
-                    </div>
-                  )}
+ {banner.type === 'text_and_button' && banner.buttonText && (
+ <div className="mt-1.5">
+ <span className="inline-block bg-[#ff9f1c] text-white text-[9px] font-black px-2.5 py-0.5 rounded-md">
+ {banner.buttonText} 
+ </span>
+ </div>
+ )}
 
-                  {banner.type === 'business' && banner.address && (
-                    <div className="flex items-center gap-1 text-[8px] text-white/70 mt-1">
-                      <MapPin className="h-2 w-2" />
-                      <span>{banner.address}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
+ {banner.type === 'business' && banner.address && (
+ <div className="flex items-center gap-1 text-[8px] text-white/70 mt-1">
+ <MapPin className="h-2 w-2" />
+ <span>{banner.address}</span>
+ </div>
+ )}
+ </div>
+ </div>
 
-              {/* Action and details card control */}
-              <div className="space-y-2 text-right">
-                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-stone-100 pt-3">
-                  <div className="text-[11px] text-stone-500">
-                    <span>تاريخ الإضافة: </span>
-                    <span className="font-bold">{new Date(banner.createdAt).toLocaleDateString('ar-JO')}</span>
-                  </div>
-                  
-                  {banner.type === 'business' && banner.businessName && (
-                    <div className="text-[11px] bg-emerald-50 text-emerald-800 px-2 py-1 rounded-lg font-bold flex items-center gap-1">
-                      <Building2 className="h-3 w-3" />
-                      <span>مرتبط بـ: {banner.businessName}</span>
-                    </div>
-                  )}
-                  {banner.type === 'text_and_button' && banner.buttonLink && (
-                    <div className="text-[11px] bg-amber-50 text-amber-800 px-2 py-1 rounded-lg font-bold flex items-center gap-1">
-                      <Link className="h-3 w-3" />
-                      <span className="truncate max-w-[120px]">الوجهة: {banner.buttonLink}</span>
-                    </div>
-                  )}
-                </div>
+ {/* Action and details card control */}
+ <div className="space-y-2 text-right">
+ <div className="flex flex-wrap items-center justify-between gap-2 border-t border-stone-100 pt-3">
+ <div className="text-[11px] text-stone-500">
+ <span>تاريخ الإضافة: </span>
+ <span className="font-bold">{new Date(banner.createdAt).toLocaleDateString('ar-JO')}</span>
+ </div>
+ 
+ {banner.type === 'business' && banner.businessName && (
+ <div className="text-[11px] bg-emerald-50 text-emerald-800 px-2 py-1 rounded-lg font-bold flex items-center gap-1">
+ <Building2 className="h-3 w-3" />
+ <span>مرتبط بـ: {banner.businessName}</span>
+ </div>
+ )}
+ {banner.type === 'text_and_button' && banner.buttonLink && (
+ <div className="text-[11px] bg-amber-50 text-amber-800 px-2 py-1 rounded-lg font-bold flex items-center gap-1">
+ <Link className="h-3 w-3" />
+ <span className="truncate max-w-[120px]">الوجهة: {banner.buttonLink}</span>
+ </div>
+ )}
+ </div>
 
-                <div className="flex items-center justify-end gap-2 pt-1">
-                  <button
-                    onClick={() => handleToggleActive(banner)}
-                    className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer border ${
-                      banner.active 
-                        ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200' 
-                        : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-200'
-                    }`}
-                    title={banner.active ? "تعطيل مؤقت" : "تفعيل وعرض في الواجهة"}
-                  >
-                    {banner.active ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                    <span>{banner.active ? 'تعطيل مؤقت' : 'تفعيل النشر'}</span>
-                  </button>
+ <div className="flex items-center justify-end gap-2 pt-1">
+ <button
+ onClick={() => handleToggleActive(banner)}
+ className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer border ${
+ banner.active 
+ ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200' 
+ : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-200'
+ }`}
+ title={banner.active ? "تعطيل مؤقت" : "تفعيل وعرض في الواجهة"}
+ >
+ {banner.active ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+ <span>{banner.active ? 'تعطيل مؤقت' : 'تفعيل النشر'}</span>
+ </button>
 
-                  <button
-                    onClick={() => handleOpenEdit(banner)}
-                    className="p-1.5 text-blue-700 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer border border-blue-200 bg-white"
-                    title="تعديل تفاصيل الإعلان"
-                  >
-                    <Edit2 className="h-3.5 w-3.5" />
-                  </button>
+ <button
+ onClick={() => handleOpenEdit(banner)}
+ className="p-1.5 text-blue-700 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer border border-blue-200 bg-white"
+ title="تعديل تفاصيل الإعلان"
+ >
+ <Edit2 className="h-3.5 w-3.5" />
+ </button>
 
-                  <button
-                    onClick={() => handleDelete(banner.id)}
-                    className="p-1.5 text-red-700 hover:bg-red-50 rounded-lg transition-colors cursor-pointer border border-red-200 bg-white"
-                    title="حذف نهائي"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-            </div>
-            );
-          })}
-        </div>
-      )}
+ <button
+ onClick={() => handleDelete(banner.id)}
+ className="p-1.5 text-red-700 hover:bg-red-50 rounded-lg transition-colors cursor-pointer border border-red-200 bg-white"
+ title="حذف نهائي"
+ >
+ <Trash2 className="h-3.5 w-3.5" />
+ </button>
+ </div>
+ </div>
+ </div>
+ );
+ })}
+ </div>
+ )}
 
-      {/* MODAL FORM: ADD / EDIT BANNER */}
-      {isFormOpen && (
-        <div className="fixed inset-0 z-[100000] flex items-center justify-center p-3 sm:p-6 bg-stone-900/70 backdrop-blur-sm overflow-y-auto" dir="rtl">
-          <div className="bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl border border-stone-200 animate-in fade-in zoom-in-95 duration-200 my-auto max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3rem)] flex flex-col">
-            {/* Modal Header */}
-            <div className="p-4 sm:p-5 border-b border-stone-100 flex items-center justify-between bg-stone-50 shrink-0">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-[#1a4d2e] text-white rounded-xl">
-                  <Megaphone className="h-5 w-5" />
-                </div>
-                <div>
-                  <h3 className="font-black text-stone-900 text-base">
-                    {editingBanner ? 'تعديل البانر الإعلاني' : 'إضافة بانر إعلاني ترويجي جديد'}
-                  </h3>
-                  <p className="text-stone-500 text-[11px] mt-0.5">قم بإدخال بيانات ومعلومات الإعلان والوجهة لتهيئتها فوراً في التطبيق</p>
-                </div>
-              </div>
-              <button 
-                onClick={() => setIsFormOpen(false)}
-                className="p-1.5 text-stone-400 hover:text-stone-700 rounded-full hover:bg-stone-100 transition-colors cursor-pointer"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
+ {/* MODAL FORM: ADD / EDIT BANNER */}
+ {isFormOpen && (
+ <div className="fixed inset-0 z-[100000] flex items-center justify-center p-3 sm:p-6 bg-stone-900/70 backdrop-blur-sm overflow-y-auto" dir="rtl">
+ <div className="bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl border border-stone-200 animate-in fade-in zoom-in-95 duration-200 my-auto max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3rem)] flex flex-col">
+ {/* Modal Header */}
+ <div className="p-4 sm:p-5 border-b border-stone-100 flex items-center justify-between bg-stone-50 shrink-0">
+ <div className="flex items-center gap-2.5">
+ <div className="p-2 bg-[#1a4d2e] text-white rounded-xl">
+ <Megaphone className="h-5 w-5" />
+ </div>
+ <div>
+ <h3 className="font-black text-stone-900 text-base">
+ {editingBanner ? 'تعديل البانر الإعلاني' : 'إضافة بانر إعلاني ترويجي جديد'}
+ </h3>
+ <p className="text-stone-500 text-[11px] mt-0.5">قم بإدخال بيانات ومعلومات الإعلان والوجهة لتهيئتها فوراً في التطبيق</p>
+ </div>
+ </div>
+ <button 
+ onClick={() => setIsFormOpen(false)}
+ className="p-1.5 text-stone-400 hover:text-stone-700 rounded-full hover:bg-stone-100 transition-colors cursor-pointer"
+ >
+ <X className="h-5 w-5" />
+ </button>
+ </div>
 
-            {/* Modal Body */}
-            <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
-              {/* Page Target Selector */}
-              <div className="bg-stone-50/80 p-3.5 rounded-2xl border border-stone-200/80 space-y-2">
-                <label className="block text-xs font-black text-stone-900 flex items-center justify-between">
-                  <span className="flex items-center gap-1.5">
-                    <Globe className="h-4 w-4 text-[#1a4d2e]" />
-                    <span>الصفحة المستهدفة لعرض هذا البانر الإعلاني</span>
-                  </span>
-                  <span className="text-[10px] text-stone-500 font-normal">حدد وين راح يظهر الإعلان</span>
-                </label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {PAGE_TARGETS.map((pt) => {
-                    const Icon = pt.icon;
-                    const isSelected = pageTarget === pt.id;
-                    return (
-                      <button
-                        key={pt.id}
-                        type="button"
-                        onClick={() => setPageTarget(pt.id)}
-                        className={`p-2.5 rounded-xl border text-right transition-all cursor-pointer flex items-center gap-2 ${
-                          isSelected
-                            ? 'border-[#1a4d2e] bg-[#1a4d2e] text-white font-bold shadow-xs'
-                            : 'border-stone-200 bg-white hover:border-stone-300 text-stone-700'
-                        }`}
-                      >
-                        <Icon className={`h-4 w-4 shrink-0 ${isSelected ? 'text-[#ff9f1c]' : 'text-stone-500'}`} />
-                        <span className="text-xs truncate font-bold">{pt.name}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+ {/* Modal Body */}
+ <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+ {/* Page Target Selector */}
+ <div className="bg-stone-50/80 p-3.5 rounded-2xl border border-stone-200/80 space-y-2">
+ <label className="block text-xs font-black text-stone-900 flex items-center justify-between">
+ <span className="flex items-center gap-1.5">
+ <Globe className="h-4 w-4 text-[#1a4d2e]" />
+ <span>الصفحة المستهدفة لعرض هذا البانر الإعلاني</span>
+ </span>
+ <span className="text-[10px] text-stone-500 font-normal">حدد وين راح يظهر الإعلان</span>
+ </label>
+ <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+ {PAGE_TARGETS.map((pt) => {
+ const Icon = pt.icon;
+ const isSelected = pageTarget === pt.id;
+ return (
+ <button
+ key={pt.id}
+ type="button"
+ onClick={() => setPageTarget(pt.id)}
+ className={`p-2.5 rounded-xl border text-right transition-all cursor-pointer flex items-center gap-2 ${
+ isSelected
+ ? 'border-[#1a4d2e] bg-[#1a4d2e] text-white font-bold shadow-xs'
+ : 'border-stone-200 bg-white hover:border-stone-300 text-stone-700'
+ }`}
+ >
+ <Icon className={`h-4 w-4 shrink-0 ${isSelected ? 'text-[#ff9f1c]' : 'text-stone-500'}`} />
+ <span className="text-xs truncate font-bold">{pt.name}</span>
+ </button>
+ );
+ })}
+ </div>
+ </div>
 
-              {/* Type Selection */}
-              <div>
-                <label className="block text-xs font-black text-stone-700 mb-2">نوع ومحتوى الإعلان الترويجي</label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {[
-                    { id: 'business', label: 'صفحة محل', desc: 'توجيه لصفحة محل بالدليل' },
-                    { id: 'image_only', label: 'صورة فقط', desc: 'صورة ترويجية بدون توجيه' },
-                    { id: 'animated_image', label: 'صورة متحركة GIF', desc: 'صيغ ديناميكية متحركة' },
-                    { id: 'text_and_button', label: 'نصوص وأزرار', desc: 'نص مخصص وزر توجيه خارجي' }
-                  ].map((opt) => (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => setType(opt.id as HomepageBanner['type'])}
-                      className={`p-3 rounded-xl border text-right transition-all cursor-pointer flex flex-col justify-between h-full ${
-                        type === opt.id 
-                          ? 'border-[#1a4d2e] bg-[#1a4d2e]/5 text-[#1a4d2e] ring-2 ring-[#1a4d2e]/10 font-bold' 
-                          : 'border-stone-200 hover:border-stone-300 text-stone-700'
-                      }`}
-                    >
-                      <span className="text-xs block font-bold">{opt.label}</span>
-                      <span className="text-[9px] block text-stone-500 font-medium leading-tight mt-1">{opt.desc}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
+ {/* Type Selection */}
+ <div>
+ <label className="block text-xs font-black text-stone-700 mb-2">نوع ومحتوى الإعلان الترويجي</label>
+ <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+ {[
+ { id: 'business', label: 'صفحة محل', desc: 'توجيه لصفحة محل بالدليل' },
+ { id: 'image_only', label: 'صورة فقط', desc: 'صورة ترويجية بدون توجيه' },
+ { id: 'animated_image', label: 'صورة متحركة GIF', desc: 'صيغ ديناميكية متحركة' },
+ { id: 'text_and_button', label: 'نصوص وأزرار', desc: 'نص مخصص وزر توجيه خارجي' }
+ ].map((opt) => (
+ <button
+ key={opt.id}
+ type="button"
+ onClick={() => setType(opt.id as HomepageBanner['type'])}
+ className={`p-3 rounded-xl border text-right transition-all cursor-pointer flex flex-col justify-between h-full ${
+ type === opt.id 
+ ? 'border-[#1a4d2e] bg-[#1a4d2e]/5 text-[#1a4d2e] ring-2 ring-[#1a4d2e]/10 font-bold' 
+ : 'border-stone-200 hover:border-stone-300 text-stone-700'
+ }`}
+ >
+ <span className="text-xs block font-bold">{opt.label}</span>
+ <span className="text-[9px] block text-stone-500 font-medium leading-tight mt-1">{opt.desc}</span>
+ </button>
+ ))}
+ </div>
+ </div>
 
-              {/* Title & Subtitle */}
-              {type !== 'image_only' && type !== 'animated_image' && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-stone-700 mb-1">العنوان الرئيسي للإعلان</label>
-                    <input
-                      type="text"
-                      required
-                      value={title}
-                      onChange={e => setTitle(e.target.value)}
-                      placeholder="مثال: مطعم البركة - عروض حصرية"
-                      className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2 text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-stone-700 mb-1">العنوان الفرعي / الوصف الموجز</label>
-                    <input
-                      type="text"
-                      value={subtitle}
-                      onChange={e => setSubtitle(e.target.value)}
-                      placeholder="مثال: خصم 20% على الوجبات العائلية لطلاب جامعة اليرموك"
-                      className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2 text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
-                    />
-                  </div>
-                </div>
-              )}
+ {/* Title & Subtitle */}
+ {type !== 'image_only' && type !== 'animated_image' && (
+ <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+ <div>
+ <label className="block text-xs font-bold text-stone-700 mb-1">العنوان الرئيسي للإعلان</label>
+ <input
+ type="text"
+ required
+ value={title}
+ onChange={e => setTitle(e.target.value)}
+ placeholder="مثال: مطعم البركة - عروض حصرية"
+ className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2 text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+ />
+ </div>
+ <div>
+ <label className="block text-xs font-bold text-stone-700 mb-1">العنوان الفرعي / الوصف الموجز</label>
+ <input
+ type="text"
+ value={subtitle}
+ onChange={e => setSubtitle(e.target.value)}
+ placeholder="مثال: خصم 20% على الوجبات العائلية لطلاب جامعة اليرموك"
+ className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2 text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+ />
+ </div>
+ </div>
+ )}
 
-              {/* Image Uploader */}
-              <div>
-                <ImageUploader
-                  label="صورة الإعلان (رفع ملف من الجهاز)"
-                  folder="banners"
-                  value={imageUrl}
-                  onChange={(url) => setImageUrl(url)}
-                  aspectRatio="banner"
-                  placeholder="اختر ملف صورة البانر من جهازك أو اسحب التصميم هنا"
-                />
-                {type === 'animated_image' && (
-                  <p className="text-[10px] text-purple-600 font-bold mt-1.5 flex items-center gap-1 bg-purple-50 p-2 rounded-lg">
-                    <PlayCircle className="h-3.5 w-3.5" />
-                    <span>نصيحة: يمكنك أيضاً رفع صور بصيغة GIF أو APNG متحركة للحصول على تفاعل بصري مذهل لدى المستخدمين.</span>
-                  </p>
-                )}
-              </div>
+ {/* Image Uploader */}
+ <div>
+ <ImageUploader
+ label="صورة الإعلان (رفع ملف من الجهاز)"
+ folder="banners"
+ value={imageUrl}
+ onChange={(url) => setImageUrl(url)}
+ aspectRatio="banner"
+ placeholder="اختر ملف صورة البانر من جهازك أو اسحب التصميم هنا"
+ />
+ {type === 'animated_image' && (
+ <p className="text-[10px] text-purple-600 font-bold mt-1.5 flex items-center gap-1 bg-purple-50 p-2 rounded-lg">
+ <PlayCircle className="h-3.5 w-3.5" />
+ <span>نصيحة: يمكنك أيضاً رفع صور بصيغة GIF أو APNG متحركة للحصول على تفاعل بصري مذهل لدى المستخدمين.</span>
+ </p>
+ )}
+ </div>
 
-              {/* Conditional Business Link Selector */}
-              {type === 'business' && (
-                <div className="p-4 rounded-2xl border border-emerald-100 bg-emerald-50/20 space-y-3">
-                  <div className="flex items-center gap-2">
-                    <Building2 className="h-4 w-4 text-[#1a4d2e]" />
-                    <span className="text-xs font-black text-[#1a4d2e]">ربط الإعلان بصفحة محل من الدليل</span>
-                  </div>
+ {/* Conditional Business Link Selector */}
+ {type === 'business' && (
+ <div className="p-4 rounded-2xl border border-emerald-100 bg-emerald-50/20 space-y-3">
+ <div className="flex items-center gap-2">
+ <Building2 className="h-4 w-4 text-[#1a4d2e]" />
+ <span className="text-xs font-black text-[#1a4d2e]">ربط الإعلان بصفحة محل من الدليل</span>
+ </div>
 
-                  <div>
-                    <label className="block text-[10px] font-bold text-stone-600 mb-1">ابحث عن المحل لتحديده وتعبئة بياناته تلقائياً</label>
-                    <input
-                      type="text"
-                      value={searchQuery}
-                      onChange={e => setSearchQuery(e.target.value)}
-                      placeholder="اكتب اسم المحل للبحث..."
-                      className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2 text-xs font-medium text-stone-800 focus:outline-none focus:ring-1 focus:ring-[#1a4d2e]"
-                    />
-                  </div>
+ <div>
+ <label className="block text-[10px] font-bold text-stone-600 mb-1">ابحث عن المحل لتحديده وتعبئة بياناته تلقائياً</label>
+ <input
+ type="text"
+ value={searchQuery}
+ onChange={e => setSearchQuery(e.target.value)}
+ placeholder="اكتب اسم المحل للبحث..."
+ className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2 text-xs font-medium text-stone-800 focus:outline-none focus:ring-1 focus:ring-[#1a4d2e]"
+ />
+ </div>
 
-                  {businesses.length > 0 && searchQuery && (
-                    <div className="bg-white border border-stone-200 rounded-xl max-h-40 overflow-y-auto divide-y divide-stone-100 text-xs">
-                      {filteredBusinesses.map(biz => (
-                        <button
-                          key={biz.id}
-                          type="button"
-                          onClick={() => {
-                            setBusinessId(biz.id);
-                            setSearchQuery(biz.name);
-                            // Auto populate titles if empty
-                            if (!title) setTitle(biz.name);
-                            if (!subtitle) setSubtitle(biz.description);
-                          }}
-                          className={`w-full text-right px-3 py-2.5 hover:bg-stone-50 font-bold transition-all flex items-center justify-between ${
-                            businessId === biz.id ? 'bg-emerald-50/60 text-[#1a4d2e]' : 'text-stone-700'
-                          }`}
-                        >
-                          <span className="font-black">{biz.name}</span>
-                          <span className="text-[10px] text-stone-500">{biz.category} • {biz.address}</span>
-                        </button>
-                      ))}
-                      {filteredBusinesses.length === 0 && (
-                        <div className="p-3 text-center text-stone-400">لا يوجد محلات مطابقة للبحث</div>
-                      )}
-                    </div>
-                  )}
+ {businesses.length > 0 && searchQuery && (
+ <div className="bg-white border border-stone-200 rounded-xl max-h-40 overflow-y-auto divide-y divide-stone-100 text-xs">
+ {filteredBusinesses.map(biz => (
+ <button
+ key={biz.id}
+ type="button"
+ onClick={() => {
+ setBusinessId(biz.id);
+ setSearchQuery(biz.name);
+ // Auto populate titles if empty
+ if (!title) setTitle(biz.name);
+ if (!subtitle) setSubtitle(biz.description);
+ }}
+ className={`w-full text-right px-3 py-2.5 hover:bg-stone-50 font-bold transition-all flex items-center justify-between ${
+ businessId === biz.id ? 'bg-emerald-50/60 text-[#1a4d2e]' : 'text-stone-700'
+ }`}
+ >
+ <span className="font-black">{biz.name}</span>
+ <span className="text-[10px] text-stone-500">{biz.category} {biz.address}</span>
+ </button>
+ ))}
+ {filteredBusinesses.length === 0 && (
+ <div className="p-3 text-center text-stone-400">لا يوجد محلات مطابقة للبحث</div>
+ )}
+ </div>
+ )}
 
-                  {businessId && (
-                    <div className="p-2.5 rounded-xl bg-white border border-emerald-100 flex items-center justify-between text-xs font-bold text-emerald-800">
-                      <span>تم ربط الإعلان بنجاح بصفحة المحل المعتمدة.</span>
-                      <button 
-                        type="button" 
-                        onClick={() => { setBusinessId(''); setSearchQuery(''); }}
-                        className="text-red-600 hover:underline text-[10px]"
-                      >
-                        إلغاء الربط
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
+ {businessId && (
+ <div className="p-2.5 rounded-xl bg-white border border-emerald-100 flex items-center justify-between text-xs font-bold text-emerald-800">
+ <span>تم ربط الإعلان بنجاح بصفحة المحل المعتمدة.</span>
+ <button 
+ type="button" 
+ onClick={() => { setBusinessId(''); setSearchQuery(''); }}
+ className="text-red-600 hover:underline text-[10px]"
+ >
+ إلغاء الربط
+ </button>
+ </div>
+ )}
+ </div>
+ )}
 
-              {/* Conditional Texts and Buttons Options */}
-              {type === 'text_and_button' && (
-                <div className="p-4 rounded-2xl border border-amber-100 bg-amber-50/25 space-y-4">
-                  <div className="flex items-center gap-2 text-amber-800 font-bold text-xs">
-                    <Sparkles className="h-4 w-4 text-amber-500 animate-pulse" />
-                    <span>خيارات الأزرار والنصوص المتقدمة التفاعلية</span>
-                  </div>
+ {/* Conditional Texts and Buttons Options */}
+ {type === 'text_and_button' && (
+ <div className="p-4 rounded-2xl border border-amber-100 bg-amber-50/25 space-y-4">
+ <div className="flex items-center gap-2 text-amber-800 font-bold text-xs">
+ <Sparkles className="h-4 w-4 text-amber-500 animate-pulse" />
+ <span>خيارات الأزرار والنصوص المتقدمة التفاعلية</span>
+ </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold text-stone-700 mb-1">نص الزر التفاعلي</label>
-                      <input
-                        type="text"
-                        value={buttonText}
-                        onChange={e => setButtonText(e.target.value)}
-                        placeholder="مثال: احجز الآن، طلب فوري، سجل معنا"
-                        className="w-full bg-white border border-stone-200 rounded-xl px-3 py-1.5 text-xs font-bold text-stone-800 focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-stone-700 mb-1">رابط توجيه الزر (URL خارجي أو داخلي)</label>
-                      <input
-                        type="text"
-                        value={buttonLink}
-                        onChange={e => setButtonLink(e.target.value)}
-                        placeholder="مثال: https://wa.me/962770000"
-                        className="w-full bg-white border border-stone-200 rounded-xl px-3 py-1.5 text-xs font-bold text-stone-800 focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-stone-700 mb-1">شارة ترويجية مخصصة (Badge)</label>
-                      <input
-                        type="text"
-                        value={badgeText}
-                        onChange={e => setBadgeText(e.target.value)}
-                        placeholder="مثال: عرض محدود، لفترة وجيزة، جديد"
-                        className="w-full bg-white border border-stone-200 rounded-xl px-3 py-1.5 text-xs font-bold text-stone-800 focus:outline-none"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
+ <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+ <div>
+ <label className="block text-xs font-bold text-stone-700 mb-1">نص الزر التفاعلي</label>
+ <input
+ type="text"
+ value={buttonText}
+ onChange={e => setButtonText(e.target.value)}
+ placeholder="مثال: احجز الآن، طلب فوري، سجل معنا"
+ className="w-full bg-white border border-stone-200 rounded-xl px-3 py-1.5 text-xs font-bold text-stone-800 focus:outline-none"
+ />
+ </div>
+ <div>
+ <label className="block text-xs font-bold text-stone-700 mb-1">رابط توجيه الزر (URL خارجي أو داخلي)</label>
+ <input
+ type="text"
+ value={buttonLink}
+ onChange={e => setButtonLink(e.target.value)}
+ placeholder="مثال: https://wa.me/962770000"
+ className="w-full bg-white border border-stone-200 rounded-xl px-3 py-1.5 text-xs font-bold text-stone-800 focus:outline-none"
+ />
+ </div>
+ <div>
+ <label className="block text-xs font-bold text-stone-700 mb-1">شارة ترويجية مخصصة (Badge)</label>
+ <input
+ type="text"
+ value={badgeText}
+ onChange={e => setBadgeText(e.target.value)}
+ placeholder="مثال: عرض محدود، لفترة وجيزة، جديد"
+ className="w-full bg-white border border-stone-200 rounded-xl px-3 py-1.5 text-xs font-bold text-stone-800 focus:outline-none"
+ />
+ </div>
+ </div>
+ </div>
+ )}
 
-              {/* Active Status */}
-              <div className="flex items-center gap-3 pt-2">
-                <input
-                  type="checkbox"
-                  id="active_status"
-                  checked={active}
-                  onChange={e => setActive(e.target.checked)}
-                  className="w-4 h-4 text-[#1a4d2e] border-stone-300 rounded-sm focus:ring-[#1a4d2e] cursor-pointer"
-                />
-                <label htmlFor="active_status" className="text-xs font-bold text-stone-800 cursor-pointer select-none">
-                  نشر وتفعيل البانر مباشرة في أعلى الصفحة الرئيسية للموقع والزوار
-                </label>
-              </div>
+ {/* Active Status */}
+ <div className="flex items-center gap-3 pt-2">
+ <input
+ type="checkbox"
+ id="active_status"
+ checked={active}
+ onChange={e => setActive(e.target.checked)}
+ className="w-4 h-4 text-[#1a4d2e] border-stone-300 rounded-sm focus:ring-[#1a4d2e] cursor-pointer"
+ />
+ <label htmlFor="active_status" className="text-xs font-bold text-stone-800 cursor-pointer select-none">
+ نشر وتفعيل البانر مباشرة في أعلى الصفحة الرئيسية للموقع والزوار
+ </label>
+ </div>
 
-              {/* Submit Buttons */}
-              <div className="flex items-center justify-end gap-2 border-t border-stone-100 pt-5">
-                <button
-                  type="button"
-                  onClick={() => setIsFormOpen(false)}
-                  className="px-5 py-2.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl text-xs font-bold cursor-pointer"
-                >
-                  إلغاء
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="inline-flex items-center justify-center gap-2 bg-[#1a4d2e] hover:bg-[#133b22] text-white px-6 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer shadow-xs disabled:opacity-50"
-                >
-                  <Save className="h-4 w-4 text-[#ff9f1c]" />
-                  <span>{isSubmitting ? 'جاري الحفظ والرفع...' : editingBanner ? 'تعديل وحفظ التغييرات' : 'نشر وتثبيت البانر الإعلاني'}</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+ {/* Submit Buttons */}
+ <div className="flex items-center justify-end gap-2 border-t border-stone-100 pt-5">
+ <button
+ type="button"
+ onClick={() => setIsFormOpen(false)}
+ className="px-5 py-2.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl text-xs font-bold cursor-pointer"
+ >
+ إلغاء
+ </button>
+ <button
+ type="submit"
+ disabled={isSubmitting}
+ className="inline-flex items-center justify-center gap-2 bg-[#1a4d2e] hover:bg-[#133b22] text-white px-6 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer shadow-xs disabled:opacity-50"
+ >
+ <Save className="h-4 w-4 text-[#ff9f1c]" />
+ <span>{isSubmitting ? 'جاري الحفظ والرفع...' : editingBanner ? 'تعديل وحفظ التغييرات' : 'نشر وتثبيت البانر الإعلاني'}</span>
+ </button>
+ </div>
+ </form>
+ </div>
+ </div>
+ )}
+ </div>
+ );
 }

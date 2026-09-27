@@ -3,7 +3,7 @@ import {
   Store, User, MapPin, Phone, Globe, Image as ImageIcon,
   MessageSquare, EyeOff, Sparkles, Check, Clock, ShieldCheck, 
   ExternalLink, Info, AtSign, Copy, Trash2, AlertTriangle, Eye,
-  Video, Play, HelpCircle, Crown, Truck
+  Video, Play, HelpCircle, Crown, Truck, Search, X
 } from 'lucide-react';
 import { Business, WorkingHours, SocialLinks, AboutMediaConfig, VipPopupConfig } from '../../types';
 import { BUSINESS_CATEGORIES, IRBID_REGIONS_CATEGORIZED, MainCategory } from '../../lib/categories';
@@ -11,6 +11,7 @@ import { SearchableSelect } from '../ui/SearchableSelect';
 import { WorkingHoursEditor } from '../ui/WorkingHoursEditor';
 import { SocialLinksEditor } from '../ui/SocialLinksEditor';
 import { ImageUploader } from '../ui/ImageUploader';
+import { VideoUploader } from '../common/VideoUploader';
 import { MediaRenderer } from '../common/MediaRenderer';
 import { RichTextEditor } from '../common/RichTextEditor';
 import { PaymentMethodsSelector } from '../ui/PaymentMethodsSelector';
@@ -27,11 +28,13 @@ interface StoreEditFormProps {
     username?: string;
     isHidden?: boolean;
     category: string;
+    subCategory?: string;
     description: string;
     district: string;
     address: string;
     phone?: string;
     imageUrl?: string;
+    coverVideoUrl?: string;
     logoUrl?: string;
     googlePlaceUrl?: string;
     workingHours?: WorkingHours;
@@ -41,6 +44,7 @@ interface StoreEditFormProps {
     aboutVideoUrl?: string | null;
     aboutImageUrl?: string | null;
     deliveryAvailable?: boolean;
+    deliveryRegions?: string;
     paymentMethods?: string[];
   }) => Promise<void>;
   onDelete?: (businessId: string) => Promise<void>;
@@ -66,10 +70,13 @@ export function StoreEditForm({
   const [district, setDistrict] = useState(business.district || 'شارع الجامعة');
   const [phone, setPhone] = useState(business.phone || '');
   const [imageUrl, setImageUrl] = useState(business.imageUrl || '');
+  const [coverVideoUrl, setCoverVideoUrl] = useState(business.coverVideoUrl || '');
   const [logoUrl, setLogoUrl] = useState(business.logoUrl || '');
   const [googlePlaceUrl, setGooglePlaceUrl] = useState(business.googlePlaceUrl || '');
   const [hideSiteReviews, setHideSiteReviews] = useState(!!business.hideSiteReviews);
   const [deliveryAvailable, setDeliveryAvailable] = useState(!!business.deliveryAvailable);
+  const [deliveryRegions, setDeliveryRegions] = useState(business.deliveryRegions || '');
+  const [regionsSearch, setRegionsSearch] = useState('');
   const [paymentMethods, setPaymentMethods] = useState<string[]>(
     business.paymentMethods || business.medicalProfile?.paymentMethods || ['كاش', 'فيزا', 'كليك']
   );
@@ -96,8 +103,8 @@ export function StoreEditForm({
   const [isDeleting, setIsDeleting] = useState(false);
 
   // Category state
-  const [mainCategory, setMainCategory] = useState<MainCategory>('🍔 مأكولات ومشروبات');
-  const [subCategory, setSubCategory] = useState<string>(business.category || 'مطاعم وجبات سريعة (شاورما، برجر، سناكات)');
+  const [mainCategory, setMainCategory] = useState<MainCategory>('مأكولات ومشروبات');
+  const [subCategory, setSubCategory] = useState<string>(business.category || business.subCategory || 'مطاعم وجبات سريعة (شاورما، برجر، سناكات)');
 
   // Working hours
   const [workingHours, setWorkingHours] = useState<WorkingHours>({
@@ -135,6 +142,7 @@ export function StoreEditForm({
     setGooglePlaceUrl(business.googlePlaceUrl || '');
     setHideSiteReviews(!!business.hideSiteReviews);
     setDeliveryAvailable(!!business.deliveryAvailable);
+    setDeliveryRegions(business.deliveryRegions || '');
 
     const bAboutType = business.aboutMedia?.type || (business.aboutVideoUrl ? 'video' : business.aboutImageUrl ? 'image' : 'video');
     const bAboutUrl = business.aboutMedia?.url || business.aboutVideoUrl || business.aboutImageUrl || '';
@@ -144,9 +152,19 @@ export function StoreEditForm({
 
     // Find main category
     let foundMain: MainCategory | null = null;
-    if (business.category) {
+    const rawCat = (business.category || '').replace(/^[^\p{L}\p{N}]+/u, '').trim();
+    const rawSubCat = (business.subCategory || '').replace(/^[^\p{L}\p{N}]+/u, '').trim();
+    
+    if (business.category || business.subCategory) {
       for (const [main, subs] of Object.entries(BUSINESS_CATEGORIES)) {
-        if ((subs as string[]).includes(business.category)) {
+        if (
+          main === business.category ||
+          main === rawCat ||
+          (subs as string[]).includes(business.category) ||
+          (subs as string[]).includes(rawCat) ||
+          (subs as string[]).includes(business.subCategory || '') ||
+          (subs as string[]).includes(rawSubCat)
+        ) {
           foundMain = main as MainCategory;
           break;
         }
@@ -155,10 +173,10 @@ export function StoreEditForm({
 
     if (foundMain) {
       setMainCategory(foundMain);
-      setSubCategory(business.category);
+      setSubCategory(business.subCategory || business.category);
     } else {
-      setMainCategory('🍔 مأكولات ومشروبات');
-      setSubCategory(business.category || 'مطاعم وجبات سريعة (شاورما، برجر، سناكات)');
+      setMainCategory('مأكولات ومشروبات');
+      setSubCategory(business.category || business.subCategory || 'مطاعم وجبات سريعة (شاورما، برجر، سناكات)');
     }
 
     setWorkingHours({
@@ -212,11 +230,13 @@ export function StoreEditForm({
       username: username.trim() ? cleanUsername(username.trim()) : undefined,
       isHidden,
       category: subCategory,
+      subCategory: subCategory,
       description: description.trim(),
       district,
       address: address.trim(),
       phone: phone.trim(),
       imageUrl: imageUrl.trim(),
+      coverVideoUrl: coverVideoUrl.trim(),
       logoUrl: logoUrl.trim(),
       googlePlaceUrl: googlePlaceUrl.trim(),
       workingHours,
@@ -230,6 +250,7 @@ export function StoreEditForm({
       aboutVideoUrl: aboutMediaType === 'video' && aboutMediaUrl.trim() ? aboutMediaUrl.trim() : null,
       aboutImageUrl: aboutMediaType === 'image' && aboutMediaUrl.trim() ? aboutMediaUrl.trim() : null,
       deliveryAvailable: !isMedicalBusiness(business) ? deliveryAvailable : false,
+      deliveryRegions: !isMedicalBusiness(business) ? (deliveryAvailable ? deliveryRegions.trim() : '') : '',
       paymentMethods,
     });
   };
@@ -484,7 +505,7 @@ export function StoreEditForm({
           </div>
 
           {!isMedicalBusiness(business) && (
-            <div className="pt-3 border-t border-stone-100">
+            <div className="pt-3 border-t border-stone-100 space-y-3">
               <label className={cn(
                 "flex items-start gap-3.5 p-4 rounded-xl border cursor-pointer transition-all flex-col sm:flex-row sm:items-center",
                 deliveryAvailable 
@@ -507,6 +528,168 @@ export function StoreEditForm({
                   سيظهر وسم <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded-md font-bold text-[10px]">توفر التوصيل</span> بوضوح في صفحة المحل وبطاقة العرض لتعريف الزبائن بإمكانية الطلب والتوصيل.
                 </div>
               </label>
+
+              {deliveryAvailable && (() => {
+                const selectedRegions = deliveryRegions 
+                  ? deliveryRegions.split(',').map(r => r.trim()).filter(Boolean) 
+                  : [];
+
+                const handleToggleRegion = (regionName: string) => {
+                  let updated: string[];
+                  if (selectedRegions.includes(regionName)) {
+                    updated = selectedRegions.filter(r => r !== regionName);
+                  } else {
+                    updated = [...selectedRegions, regionName];
+                  }
+                  setDeliveryRegions(updated.join(', '));
+                };
+
+                const handleToggleAllGroup = (areas: string[], isAllSelected: boolean) => {
+                  let updated: string[];
+                  if (isAllSelected) {
+                    // Deselect all in this group
+                    updated = selectedRegions.filter(r => !areas.includes(r));
+                  } else {
+                    // Select all in this group
+                    const toAdd = areas.filter(r => !selectedRegions.includes(r));
+                    updated = [...selectedRegions, ...toAdd];
+                  }
+                  setDeliveryRegions(updated.join(', '));
+                };
+
+                // Filter categories based on search
+                const filteredRegions = IRBID_REGIONS_CATEGORIZED.map(group => {
+                  const matchedAreas = group.areas.filter(area => 
+                    area.toLowerCase().includes(regionsSearch.trim().toLowerCase())
+                  );
+                  return { ...group, areas: matchedAreas };
+                }).filter(group => group.areas.length > 0);
+
+                return (
+                  <div className="bg-blue-50/30 border border-blue-100/80 rounded-xl p-4 space-y-4 animate-fadeIn">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <label className="text-xs font-black text-stone-700 flex items-center gap-1.5">
+                        <MapPin className="h-4 w-4 text-blue-500" />
+                        تحديد المناطق المشمولة بالتوصيل
+                      </label>
+                      <span className="text-[10px] font-bold text-blue-600 bg-blue-100/60 px-2 py-0.5 rounded-full">
+                        تم اختيار {selectedRegions.length} منطقة
+                      </span>
+                    </div>
+
+                    {/* Selected Regions Chips */}
+                    {selectedRegions.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5 p-2 bg-white/75 border border-stone-150 rounded-xl max-h-[120px] overflow-y-auto">
+                        {selectedRegions.map(region => (
+                          <span 
+                            key={region}
+                            className="bg-blue-50 text-blue-700 border border-blue-100/80 pl-1.5 pr-2.5 py-1 rounded-lg text-[10px] font-black flex items-center gap-1 transition-all hover:bg-blue-100"
+                          >
+                            <span>{region}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleRegion(region)}
+                              className="p-0.5 hover:bg-blue-200 rounded-md transition-colors text-blue-500 hover:text-blue-700 shrink-0 cursor-pointer animate-fade-in"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-stone-400 italic">لم يتم اختيار أي منطقة بعد (سيتم اعتبار التوصيل شاملاً لجميع المناطق افتراضياً).</p>
+                    )}
+
+                    {/* Search Field */}
+                    <div className="relative">
+                      <Search className="absolute right-3.5 top-2.5 h-4 w-4 text-stone-400" />
+                      <input
+                        type="text"
+                        value={regionsSearch}
+                        onChange={e => setRegionsSearch(e.target.value)}
+                        placeholder="ابحث عن منطقة، حي، أو بلدة في إربد..."
+                        className="w-full bg-white border border-stone-200 rounded-xl pr-10 pl-4 py-2 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-hidden placeholder:text-stone-400 placeholder:font-normal text-stone-800"
+                      />
+                      {regionsSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setRegionsSearch('')}
+                          className="absolute left-3 top-2.5 text-[10px] font-bold text-stone-400 hover:text-stone-700"
+                        >
+                          مسح
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Regions Grid (Categorized) */}
+                    <div className="bg-white border border-stone-150 rounded-xl p-3 max-h-[300px] overflow-y-auto space-y-4">
+                      {filteredRegions.length > 0 ? (
+                        filteredRegions.map(group => {
+                          const groupSelectedCount = group.areas.filter(r => selectedRegions.includes(r)).length;
+                          const isAllSelected = groupSelectedCount === group.areas.length;
+
+                          return (
+                            <div key={group.groupName} className="space-y-2 border-b border-stone-50 pb-3 last:border-0 last:pb-0">
+                              <div className="flex items-center justify-between gap-2 flex-wrap">
+                                <h5 className="text-[11px] font-black text-[#1a4d2e]">{group.groupName}</h5>
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleAllGroup(group.areas, isAllSelected)}
+                                  className="text-[10px] font-bold text-blue-600 hover:underline cursor-pointer"
+                                >
+                                  {isAllSelected ? 'إلغاء تحديد الكل' : 'تحديد كل المجموعة'}
+                                </button>
+                              </div>
+
+                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                {group.areas.map(area => {
+                                  const isChecked = selectedRegions.includes(area);
+                                  return (
+                                    <button
+                                      type="button"
+                                      key={area}
+                                      onClick={() => handleToggleRegion(area)}
+                                      className={cn(
+                                        "p-2 rounded-xl border text-right transition-all flex items-center justify-between gap-1.5 cursor-pointer text-[10px] sm:text-xs font-bold",
+                                        isChecked 
+                                          ? "bg-blue-50 border-blue-200 text-blue-900 shadow-3xs" 
+                                          : "bg-stone-50 hover:bg-stone-100 border-stone-100 text-stone-700"
+                                      )}
+                                    >
+                                      <span className="truncate">{area}</span>
+                                      <input
+                                        type="checkbox"
+                                        checked={isChecked}
+                                        readOnly
+                                        className="h-3.5 w-3.5 rounded text-blue-600 border-stone-300 focus:ring-blue-500 shrink-0 pointer-events-none"
+                                      />
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <p className="text-center py-4 text-xs font-semibold text-stone-400">لا توجد مناطق تطابق بحثك.</p>
+                      )}
+                    </div>
+
+                    {selectedRegions.length > 0 && (
+                      <div className="flex justify-between items-center pt-1 border-t border-blue-50">
+                        <span className="text-[10px] text-stone-500 font-medium">سيتم عرض هذه المناطق بوضوح للمستخدمين.</span>
+                        <button
+                          type="button"
+                          onClick={() => setDeliveryRegions('')}
+                          className="text-[10px] font-black text-red-600 hover:underline cursor-pointer"
+                        >
+                          إلغاء تحديد جميع المناطق
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           )}
         </div>
@@ -546,6 +729,18 @@ export function StoreEditForm({
               />
               <p className="text-[11px] text-stone-500 font-medium">
                 الصورة العريضة الرئيسية التي تعكس واجهة المحل أو الديكور الداخلي وتظهر كغلاف لصفحة المحل.
+              </p>
+            </div>
+
+            {/* Store Main Cover Video (Optional) */}
+            <div className="space-y-1">
+              <VideoUploader
+                value={coverVideoUrl}
+                onChange={(url) => setCoverVideoUrl(url)}
+                label="فيديو الغلاف التفاعلي (اختياري)"
+              />
+              <p className="text-[11px] text-stone-500 font-medium">
+                💡 عند رفع فيديو هنا، تظل صورة الغلاف تظهر افتراضياً على البطاقة، وعندما يمرر الزائر الماوس فوق بطاقة المحل يشتغل الفيديو تلقائياً!
               </p>
             </div>
           </div>
@@ -614,31 +809,16 @@ export function StoreEditForm({
           {/* Video Input */}
           {aboutMediaType === 'video' && (
             <div className="space-y-2 bg-stone-50 p-4 rounded-xl border border-stone-200">
-              <label className="block text-xs font-black text-stone-800">
-                رابط مقطع الفيديو
-              </label>
-              <div className="relative">
-                <input
-                  type="url"
-                  dir="ltr"
-                  value={aboutMediaUrl}
-                  onChange={e => setAboutMediaUrl(e.target.value)}
-                  placeholder="https://www.youtube.com/watch?v=... أو https://www.instagram.com/reel/..."
-                  className="w-full bg-white border border-stone-300 rounded-xl px-3.5 py-2.5 pl-9 text-xs text-left font-mono text-stone-900 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]/20 focus:border-[#1a4d2e]"
-                />
-                <Video className="h-4 w-4 text-stone-400 absolute top-3 left-3 pointer-events-none" />
-              </div>
-              <p className="text-[11px] text-stone-500 flex items-center gap-1.5">
+              <VideoUploader
+                value={aboutMediaUrl}
+                onChange={url => setAboutMediaUrl(url)}
+                label="فيديو قسم عن المحل"
+                placeholder="ضع رابط الفيديو أو ارفعه من جهازك..."
+              />
+              <p className="text-[11px] text-stone-500 flex items-center gap-1.5 pt-1">
                 <HelpCircle className="h-3.5 w-3.5 text-[#1a4d2e]" />
-                <span>يدعم يوتيوب، شورتس، ريلز إنستغرام، فيسبوك وتيك توك، أو ملفات الفيديو المباشرة.</span>
+                <span>يمكنك رفع فيديو مباشر من جهازك أو لصق رابط فيديو من يوتيوب، إنستغرام، أو فيسبوك.</span>
               </p>
-
-              {aboutMediaUrl && (
-                <div className="mt-3 pt-3 border-t border-stone-200">
-                  <div className="text-[11px] font-bold text-stone-600 mb-1.5">معاينة مشغل الفيديو لقسم (عن المحل):</div>
-                  <MediaRenderer type="video" url={aboutMediaUrl} aspectRatio="video" />
-                </div>
-              )}
             </div>
           )}
 

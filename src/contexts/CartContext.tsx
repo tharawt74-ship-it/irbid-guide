@@ -16,6 +16,7 @@ export interface CartItem {
   businessId: string;
   businessName: string;
   businessPhone?: string;
+  prepTimeMinutes?: number;
 }
 
 export interface BusinessCartInfo {

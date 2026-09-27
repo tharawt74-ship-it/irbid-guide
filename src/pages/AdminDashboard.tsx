@@ -95,6 +95,8 @@ import { UpgradeRequestsManager } from '../components/admin/UpgradeRequestsManag
 import { MedicalFacilitiesManager } from '../components/admin/MedicalFacilitiesManager';
 import { RequestDetailsModal } from '../components/admin/RequestDetailsModal';
 import { AdminTransportationManagement } from '../components/admin/AdminTransportationManagement';
+import { QrPosterStudio } from '../components/admin/qr-designer/QrPosterStudio';
+import { WheelBoxStudio } from '../components/admin/WheelBoxStudio';
 import { recordAuditLog } from '../lib/auditLogHelper';
 import { getBusinessVipStatus, applyNewBusinessWelcomeGift } from '../lib/vipHelper';
 import { sanitizeFirestorePayload, compressAndSanitizeFirestorePayload } from '../lib/firestoreHelper';
@@ -103,12 +105,19 @@ import { getWhatsAppUrl } from '../lib/contactHelper';
 import { WhatsAppIcon } from '../components/common/WhatsAppIcon';
 import { getAppConfig, setAppConfig, seedDemoDataToFirestore, clearDemoDataFromFirestore } from '../lib/demoDataHelper';
 import { deleteBusinessCascading } from '../lib/businessDeleteHelper';
+import { useSystemSettings } from '../contexts/SystemSettingsContext';
 
 export function AdminDashboard() {
   const navigate = useNavigate();
   const { confirm } = useConfirm();
   const { currentUser, isAdmin, isSupervisor, isStaff, userRole, supervisorPermissions } = useAuth();
   const { addNotification } = useNotifications();
+  const { 
+    defaultQrPosterTemplate, 
+    updateDefaultQrPosterTemplate,
+    defaultReviewsQrPosterTemplate,
+    updateDefaultReviewsQrPosterTemplate
+  } = useSystemSettings();
 
   // Primary Data State
   const [requests, setRequests] = useState<any[]>([]);
@@ -1052,7 +1061,7 @@ export function AdminDashboard() {
           address: request.address || '',
           district: request.district || 'شارع الجامعة',
           phone: request.phone || '',
-          imageUrl: request.imageUrl || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&q=80',
+          imageUrl: request.imageUrl || '',
           logoUrl: request.logoUrl || request.logo || '',
           googlePlaceUrl: request.googlePlaceUrl || '',
           userId: request.userId || null,
@@ -2094,6 +2103,9 @@ export function AdminDashboard() {
       {/* TAB: GLOBAL SETTINGS MANAGER */}
       {activeTab === 'globalSettings' && <GlobalSettingsManager showToast={showToast} />}
 
+      {/* TAB: WHEEL BOX 3D STUDIO & EDITOR */}
+      {activeTab === 'wheel_studio' && <WheelBoxStudio showToast={showToast} />}
+
       {/* TAB: NEIGHBORHOODS MANAGER */}
       {activeTab === 'neighborhoods' && <NeighborhoodsManager showToast={showToast} />}
 
@@ -3063,6 +3075,23 @@ export function AdminDashboard() {
         />
       )}
 
+      {/* TAB: QR POSTER STUDIO & TEMPLATES DESIGNER */}
+      {activeTab === 'qr_studio' && (
+        <div className="space-y-4">
+          <QrPosterStudio 
+            businesses={businesses} 
+            initialTemplate={defaultQrPosterTemplate || undefined}
+            onSaveSystemDefaultTemplate={async (tpl) => {
+              await updateDefaultQrPosterTemplate(tpl);
+            }}
+            initialReviewsTemplate={defaultReviewsQrPosterTemplate || undefined}
+            onSaveSystemDefaultReviewsTemplate={async (tpl) => {
+              await updateDefaultReviewsQrPosterTemplate(tpl);
+            }}
+          />
+        </div>
+      )}
+
       {/* TAB: MEDICAL FACILITIES & REQUESTS MANAGEMENT */}
       {(activeTab === 'medical' || activeTab === 'medical_requests') && (
         <MedicalFacilitiesManager 
@@ -3158,13 +3187,13 @@ export function AdminDashboard() {
                     onChange={e => setNewJob({...newJob, category: e.target.value})}
                     className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none"
                   >
-                    <option value="مطاعم ومقاهي">مطاعم ومقاهي 🍔</option>
-                    <option value="مبيعات وتسويق">مبيعات وتسويق 📈</option>
-                    <option value="برمجة وتقنية">برمجة وتقنية 💻</option>
-                    <option value="تعليم وتدريس">تعليم وتدريس 📚</option>
-                    <option value="طب وصيدلة">طب وصيدلة 🩺</option>
-                    <option value="حرف يدوية وصيانة">حرف يدوية وصيانة 🛠️</option>
-                    <option value="أخرى">تصنيفات أخرى ✨</option>
+                    <option value="مطاعم ومقاهي">مطاعم ومقاهي</option>
+                    <option value="مبيعات وتسويق">مبيعات وتسويق</option>
+                    <option value="برمجة وتقنية">برمجة وتقنية</option>
+                    <option value="تعليم وتدريس">تعليم وتدريس</option>
+                    <option value="طب وصيدلة">طب وصيدلة</option>
+                    <option value="حرف يدوية وصيانة">حرف يدوية وصيانة</option>
+                    <option value="أخرى">تصنيفات أخرى</option>
                   </select>
                 </div>
                 <div className="space-y-1.5">

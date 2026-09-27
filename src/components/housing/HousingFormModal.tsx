@@ -263,25 +263,26 @@ export function HousingFormModal({
         <div className="w-12 h-1.5 bg-stone-300 rounded-full mx-auto my-2.5 sm:hidden shrink-0" />
 
         {/* Header */}
-        <div className="bg-gradient-to-l from-[#1a4d2e] to-[#133b22] text-white p-5 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-[#ff9f1c]">
-              <Building2 className="h-5 w-5" />
+        <div className="bg-white border-b border-stone-200/80 p-4 sm:p-5 sm:px-6 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-3.5">
+            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-amber-50 border border-amber-200/80 flex items-center justify-center text-amber-700 shadow-2xs shrink-0">
+              <Building2 className="h-5 w-5 text-amber-600" />
             </div>
             <div>
-              <h3 className="font-black text-base sm:text-lg">
+              <h3 className="font-black text-base sm:text-lg text-stone-900">
                 {initialListing ? 'تعديل بيانات العقار / تمديد العرض' : 'إضافة إعلان عن شقة أو سكن'}
               </h3>
-              <p className="text-xs text-stone-200">ادخل بيانات السكن، مدة الإعلان والخطة المطلوبة</p>
+              <p className="text-xs text-stone-500 font-medium mt-0.5">ادخل بيانات السكن، مدة الإعلان والخطة المطلوبة</p>
             </div>
           </div>
 
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors cursor-pointer"
+            className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-500 hover:text-stone-800 flex items-center justify-center transition-colors cursor-pointer"
+            title="إغلاق"
           >
-            <X className="h-4 w-4" />
+            <X className="h-4 w-4 sm:h-5 sm:w-5" />
           </button>
         </div>
 

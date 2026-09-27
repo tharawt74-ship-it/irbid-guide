@@ -86,31 +86,27 @@ export function RequestDetailsModal({
         <div className="w-12 h-1.5 bg-stone-300 rounded-full mx-auto my-2.5 sm:hidden shrink-0" />
         
         {/* Modal Header */}
-        <div className={`p-5 sm:p-6 border-b text-white flex items-center justify-between shrink-0 ${
-          isMedical 
-            ? 'bg-gradient-to-r from-[#1a4d2e] via-emerald-800 to-[#143d24] border-emerald-700/50' 
-            : 'bg-gradient-to-r from-stone-900 via-stone-800 to-stone-950 border-stone-700'
-        }`}>
-          <div className="flex items-center gap-3">
-            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black shadow-inner shrink-0 ${
-              isMedical ? 'bg-emerald-700/60 text-emerald-200 border border-emerald-500/30' : 'bg-stone-700 text-amber-400 border border-stone-600'
+        <div className="p-5 sm:p-6 border-b border-stone-200/80 bg-white flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-3.5">
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black shadow-2xs shrink-0 ${
+              isMedical ? 'bg-teal-50 text-teal-700 border border-teal-200' : 'bg-stone-100 text-stone-800 border border-stone-200'
             }`}>
-              {isMedical ? <Stethoscope className="h-6 w-6" /> : <Building2 className="h-6 w-6" />}
+              {isMedical ? <Stethoscope className="h-6 w-6 text-teal-700" /> : <Building2 className="h-6 w-6 text-stone-700" />}
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-lg sm:text-xl font-black text-white">{request.name}</h2>
+                <h2 className="text-lg sm:text-xl font-black text-stone-900">{request.name}</h2>
                 <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full border ${
                   request.status === 'approved' 
-                    ? 'bg-emerald-500/20 text-emerald-200 border-emerald-400/40' 
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-300' 
                     : request.status === 'rejected'
-                    ? 'bg-red-500/20 text-red-200 border-red-400/40'
-                    : 'bg-amber-400/20 text-amber-200 border-amber-400/40 animate-pulse'
+                    ? 'bg-red-50 text-red-800 border-red-300'
+                    : 'bg-amber-50 text-amber-800 border-amber-300 animate-pulse'
                 }`}>
                   {request.status === 'approved' ? 'مقبول وموثق ✅' : request.status === 'rejected' ? 'مرفوض ❌' : 'قيد المراجعة ⏳'}
                 </span>
               </div>
-              <p className="text-xs text-stone-200/80 font-medium mt-0.5">
+              <p className="text-xs text-stone-500 font-medium mt-0.5">
                 {isMedical ? 'طلب انضمام منشأة طبية / عيادة' : 'طلب انضمام محل / نشاط تجاري بالدليل'}
               </p>
             </div>
@@ -118,7 +114,8 @@ export function RequestDetailsModal({
 
           <button
             onClick={onClose}
-            className="p-2 text-white/70 hover:text-white bg-white/10 hover:bg-white/20 rounded-full transition-colors cursor-pointer"
+            className="w-9 h-9 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-500 hover:text-stone-800 flex items-center justify-center transition-colors cursor-pointer"
+            title="إغلاق"
           >
             <X className="h-5 w-5" />
           </button>

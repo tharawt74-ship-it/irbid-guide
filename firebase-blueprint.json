@@ -48,6 +48,8 @@
         "userName": { "type": "string", "maxLength": 100 },
         "rating": { "type": "number" },
         "comment": { "type": "string", "maxLength": 1000 },
+        "deviceFingerprint": { "type": "string", "maxLength": 128 },
+        "recaptchaToken": { "type": "string", "maxLength": 500 },
         "createdAt": { "type": "number" }
       },
       "required": ["businessId", "rating", "comment"]
@@ -144,12 +146,60 @@
         "createdAt": { "type": "number" }
       },
       "required": ["type", "name"]
+    },
+    "BusinessPost": {
+      "title": "BusinessPost",
+      "description": "News/updates post published by a VIP business",
+      "type": "object",
+      "properties": {
+        "businessId": { "type": "string", "maxLength": 128 },
+        "businessName": { "type": "string", "maxLength": 200 },
+        "businessLogoUrl": { "type": "string", "maxLength": 1000 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "content": { "type": "string", "minLength": 1, "maxLength": 5000 },
+        "imageUrl": { "type": "string", "maxLength": 1000 },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" },
+        "likesCount": { "type": "number" },
+        "isPinned": { "type": "boolean" },
+        "attachedItem": { "type": "object" }
+      },
+      "required": ["businessId", "title", "content"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Customer order placed at a restaurant or cafe",
+      "type": "object",
+      "properties": {
+        "businessId": { "type": "string", "maxLength": 128 },
+        "businessName": { "type": "string", "maxLength": 200 },
+        "items": { "type": "array" },
+        "totalPrice": { "type": "number" },
+        "customerName": { "type": "string", "maxLength": 100 },
+        "customerPhone": { "type": "string", "maxLength": 50 },
+        "orderType": { "type": "string", "enum": ["dine_in", "takeaway", "delivery"] },
+        "tableNumber": { "type": "string", "maxLength": 50 },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "deviceFingerprint": { "type": "string", "maxLength": 128 },
+        "recaptchaToken": { "type": "string", "maxLength": 500 },
+        "status": { "type": "string", "enum": ["pending", "processing", "completed", "cancelled"] },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["businessId", "businessName", "items", "totalPrice", "customerName", "customerPhone", "orderType", "status", "createdAt"]
     }
   },
   "firestore": {
+    "/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/Order" },
+      "description": "Real-time orders received by restaurants and cafes"
+    },
     "/businesses/{businessId}": {
       "schema": { "$ref": "#/entities/Business" },
       "description": "Public directory of businesses in Irbid"
+    },
+    "/business_posts/{postId}": {
+      "schema": { "$ref": "#/entities/BusinessPost" },
+      "description": "News and posts published by VIP businesses"
     },
     "/businessRequests/{requestId}": {
       "schema": { "$ref": "#/entities/BusinessRequest" },

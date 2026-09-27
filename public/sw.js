@@ -31,8 +31,19 @@ self.addEventListener('activate', (event) => {
 // Cache with network fallback
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
-  // Ignore chrome-extension or dynamic API POST calls
   if (!event.request.url.startsWith('http')) return;
+
+  // Let browser handle dynamic APIs and Firebase endpoints directly
+  const url = new URL(event.request.url);
+  if (
+    url.pathname.startsWith('/api/') ||
+    url.hostname.includes('firestore.googleapis.com') ||
+    url.hostname.includes('firebaseio.com') ||
+    url.hostname.includes('identitytoolkit') ||
+    url.hostname.includes('firebasestorage')
+  ) {
+    return;
+  }
 
   event.respondWith(
     fetch(event.request)
@@ -46,8 +57,18 @@ self.addEventListener('fetch', (event) => {
         }
         return response;
       })
-      .catch(() => {
-        return caches.match(event.request);
+      .catch(async () => {
+        const cached = await caches.match(event.request);
+        if (cached) return cached;
+        if (event.request.mode === 'navigate') {
+          const fallbackIndex = await caches.match('/');
+          if (fallbackIndex) return fallbackIndex;
+        }
+        return new Response('Offline or network timeout', {
+          status: 503,
+          statusText: 'Service Unavailable',
+          headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+        });
       })
   );
 });

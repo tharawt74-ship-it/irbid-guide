@@ -5,6 +5,7 @@ import { collection, getDocs, doc, updateDoc, deleteDoc, query, orderBy } from '
 import { ReviewReport } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { recordAuditLog } from '../../lib/auditLogHelper';
+import { stripUrlsAndLinks } from '../../lib/security';
 import { ShieldAlert, Trash2, CheckCircle2, Search, Sparkles, MessageSquare, AlertTriangle } from 'lucide-react';
 
 interface ReviewReportsPanelProps {
@@ -185,9 +186,9 @@ export function ReviewReportsPanel({ onShowToast, onRefreshTrigger }: ReviewRepo
                       محتوى التقييم المسيء:
                     </span>
                     <blockquote className="text-stone-700 italic border-r-4 border-stone-300 pr-3.5 py-1 text-sm font-medium">
-                      "{r.reviewComment}"
+                      "{stripUrlsAndLinks(r.reviewComment)}"
                     </blockquote>
-                    <span className="text-[10px] text-stone-400 block mt-1">بواسطة الكاتب: <strong className="text-stone-600">{r.reviewAuthorName}</strong></span>
+                    <span className="text-[10px] text-stone-400 block mt-1">بواسطة الكاتب: <strong className="text-stone-600">{stripUrlsAndLinks(r.reviewAuthorName)}</strong></span>
                   </div>
 
                   <div className="border-t border-stone-200 pt-2.5 space-y-1">

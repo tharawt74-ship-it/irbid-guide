@@ -235,20 +235,20 @@ export function Jobs() {
               تصفح أحدث الفرص الشاغرة في محافظة إربد أو انشر إعلان توظيف لمحلك واستقطب أصحاب الكفاءات.
             </p>
           </div>
-
-          {/* Quick Actions */}
-          {hasBusiness && (
-            <div className="shrink-0">
-              <button
-                onClick={openAddModal}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 bg-[#1a4d2e] hover:bg-[#143e25] text-white px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-xs cursor-pointer"
-              >
-                <Plus className="h-4 w-4" />
-                <span>انشر وظيفة لمحلك</span>
-              </button>
-            </div>
-          )}
         </div>
+
+        {/* Quick Action for Shop Owners */}
+        {hasBusiness && (
+          <div className="pt-1">
+            <button
+              type="button"
+              onClick={openAddModal}
+              className="w-full py-3.5 sm:py-4 px-6 bg-gradient-to-r from-[#1a4d2e] via-emerald-800 to-[#1a4d2e] hover:from-emerald-800 hover:to-emerald-700 text-white font-black text-sm sm:text-base rounded-2xl sm:rounded-3xl shadow-md hover:shadow-lg transition-all duration-300 flex items-center justify-center cursor-pointer active:scale-[0.99] border border-emerald-700/60"
+            >
+              <span className="tracking-wide">انشر وظيفة شاغرة جديدة لمشروعك</span>
+            </button>
+          </div>
+        )}
 
         {/* Search Bar */}
         <div className="relative">

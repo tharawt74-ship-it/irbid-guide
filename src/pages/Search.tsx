@@ -540,7 +540,7 @@ export function Search() {
   if (activeTab === 'all' || activeTab === 'businesses' || activeTab === 'products' || activeTab === 'offers') {
     mainCategoryOptions = Object.keys(BUSINESS_CATEGORIES);
   } else if (activeTab === 'medical') {
-    mainCategoryOptions = BUSINESS_CATEGORIES["🏥 صحة وطب"] as string[];
+    mainCategoryOptions = BUSINESS_CATEGORIES["صحة وطب"] as string[];
   } else if (activeTab === 'jobs') {
     mainCategoryOptions = jobCategories;
   } else if (activeTab === 'housing') {

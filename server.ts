@@ -7,6 +7,8 @@ import { getAuth } from "firebase-admin/auth";
 import { getFirestore as getAdminFirestore } from "firebase-admin/firestore";
 import { GoogleGenAI } from "@google/genai";
 import rateLimit from "express-rate-limit";
+import FormData from "form-data";
+import https from "https";
 
 dotenv.config();
 
@@ -637,6 +639,8 @@ async function startServer() {
       return res.status(500).json({ error: err.message || "Internal server error" });
     }
   });
+
+  // Video uploads are handled directly from the client browser to Imgur Video API for maximum speed and stability without datacenter IP blocks
 
   // Server-side in-memory cache for lightning-fast system settings delivery
   let cachedSystemSettings: any = null;

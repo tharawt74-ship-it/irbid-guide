@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { Business, VipPopupConfig } from '../../types';
 import { ImageUploader } from '../ui/ImageUploader';
+import { VideoUploader } from '../common/VideoUploader';
 import { VipWelcomePopupModal } from './VipWelcomePopupModal';
 import { MediaRenderer } from '../common/MediaRenderer';
 import { db } from '../../lib/firebase';
@@ -57,12 +58,12 @@ export function VipPopupManagerModal({
   const currentPreviewConfig: VipPopupConfig = {
     enabled,
     type,
-    title: title.trim() || undefined,
-    description: description.trim() || undefined,
-    videoUrl: videoUrl.trim() || undefined,
-    imageUrl: imageUrl.trim() || undefined,
-    buttonText: buttonText.trim() || undefined,
-    buttonUrl: buttonUrl.trim() || undefined
+    title: title.trim() || '',
+    description: description.trim() || '',
+    videoUrl: videoUrl.trim() || '',
+    imageUrl: imageUrl.trim() || '',
+    buttonText: buttonText.trim() || '',
+    buttonUrl: buttonUrl.trim() || ''
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -125,18 +126,21 @@ export function VipPopupManagerModal({
         <div className="w-12 h-1.5 bg-stone-300 rounded-full mx-auto my-2.5 sm:hidden shrink-0" />
 
         {/* Header */}
-        <div className="bg-gradient-to-r from-amber-500 via-amber-600 to-[#1a4d2e] p-5 text-white flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-white/20 backdrop-blur-xs flex items-center justify-center text-amber-200 shadow-xs">
-              <Crown className="h-5 w-5 fill-amber-300" />
+        <div className="bg-white border-b border-stone-200/80 p-4 sm:p-5 sm:px-6 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-3.5">
+            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-amber-50 border border-amber-200/80 flex items-center justify-center text-amber-600 shadow-2xs shrink-0">
+              <Crown className="h-5 w-5 fill-amber-400 text-amber-600" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-black uppercase tracking-wider bg-white/20 px-2 py-0.5 rounded-md">
-                  ميزة حصرية لـ VIP
+                <span className="text-[10px] sm:text-[11px] font-black tracking-wider text-amber-900 bg-amber-100 border border-amber-200/80 px-2 py-0.5 rounded-md flex items-center gap-1">
+                  👑 ميزة حصرية لـ VIP
+                </span>
+                <span className="text-[10px] sm:text-[11px] font-bold text-stone-500 truncate max-w-[180px]">
+                  {business.name}
                 </span>
               </div>
-              <h2 className="text-base sm:text-lg font-black text-white mt-0.5">
+              <h2 className="text-base sm:text-lg font-black text-stone-900 mt-0.5">
                 إدارة النافذة المنبثقة الترحيبية (صورة أو فيديو)
               </h2>
             </div>
@@ -145,9 +149,10 @@ export function VipPopupManagerModal({
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-black/20 hover:bg-black/40 text-white flex items-center justify-center transition-colors cursor-pointer"
+            className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-500 hover:text-stone-800 flex items-center justify-center transition-colors cursor-pointer"
+            title="إغلاق"
           >
-            <X className="h-4 w-4" />
+            <X className="h-4 w-4 sm:h-5 sm:w-5" />
           </button>
         </div>
 
@@ -219,7 +224,7 @@ export function VipPopupManagerModal({
                 }`}
               >
                 <Video className="h-4 w-4" />
-                <span>رابط مقطع فيديو (يوتيوب / ريلز / تيك توك)</span>
+                <span>مقطع فيديو (رفع مباشر أو رابط)</span>
               </button>
 
               <button
@@ -237,34 +242,19 @@ export function VipPopupManagerModal({
             </div>
           </div>
 
-          {/* Video URL Input */}
+          {/* Video Uploader */}
           {type === 'video' && (
             <div className="space-y-2 bg-stone-50 p-4 rounded-2xl border border-stone-200">
-              <label className="block text-xs font-black text-stone-800">
-                رابط مقطع الفيديو (YouTube / Shorts / Instagram Reels / TikTok / Facebook / MP4)
-              </label>
-              <div className="relative">
-                <input
-                  type="url"
-                  dir="ltr"
-                  value={videoUrl}
-                  onChange={e => setVideoUrl(e.target.value)}
-                  placeholder="https://www.youtube.com/watch?v=... أو https://www.instagram.com/reel/..."
-                  className="w-full bg-white border border-stone-300 rounded-xl px-3.5 py-2.5 pl-9 text-xs text-left font-mono text-stone-900 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]/20 focus:border-[#1a4d2e]"
-                />
-                <Video className="h-4 w-4 text-stone-400 absolute top-3 left-3 pointer-events-none" />
-              </div>
+              <VideoUploader
+                value={videoUrl}
+                onChange={url => setVideoUrl(url)}
+                label="فيديو العرض المنبثق الترحيبي"
+                placeholder="ضع رابط الفيديو أو اختر فيديو من جهازك..."
+              />
               <p className="text-[11px] text-stone-500 flex items-center gap-1.5 pt-1">
                 <HelpCircle className="h-3.5 w-3.5 text-[#1a4d2e]" />
-                <span>يدعم روابط يوتيوب العادية وشورتس، وريلز إنستغرام، وفيديوهات فيسبوك وملفات الفيديو المباشرة.</span>
+                <span>يمكنك رفع فيديو مباشر من الجهاز أو وضع رابط فيديو من يوتيوب، إنستغرام، فيسبوك، أو تيك توك.</span>
               </p>
-
-              {videoUrl && (
-                <div className="mt-3 pt-3 border-t border-stone-200">
-                  <div className="text-[11px] font-bold text-stone-600 mb-1.5">معاينة مشغل الفيديو:</div>
-                  <MediaRenderer type="video" url={videoUrl} aspectRatio="video" />
-                </div>
-              )}
             </div>
           )}
 

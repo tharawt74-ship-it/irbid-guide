@@ -110,7 +110,7 @@ export function Messages() {
               className="inline-flex items-center gap-1 bg-amber-100 text-amber-950 border border-amber-300 px-2 py-0.5 rounded-lg mx-1 font-bold text-[11px]"
             >
               <ShoppingBag className="h-3 w-3 text-amber-700" />
-              <span>🍔 {name} ({price} د.أ)</span>
+              <span>{name} ({price} د.أ)</span>
             </span>
           );
         }

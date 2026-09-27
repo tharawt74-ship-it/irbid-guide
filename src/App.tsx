@@ -26,28 +26,28 @@ import { NotFound } from './pages/NotFound';
 
 // Helper for resilient lazy component loading
 function lazyWithRetry<T extends React.ComponentType<any>>(
-  factory: () => Promise<{ default: T }>
+ factory: () => Promise<{ default: T }>
 ) {
-  return lazy(async () => {
-    try {
-      return await factory();
-    } catch (error: any) {
-      const pageKey = 'lazy_retry_' + window.location.pathname;
-      if (!sessionStorage.getItem(pageKey)) {
-        sessionStorage.setItem(pageKey, 'true');
-        window.location.reload();
-      }
-      throw error;
-    }
-  });
+ return lazy(async () => {
+ try {
+ return await factory();
+ } catch (error: any) {
+ const pageKey = 'lazy_retry_' + window.location.pathname;
+ if (!sessionStorage.getItem(pageKey)) {
+ sessionStorage.setItem(pageKey, 'true');
+ window.location.reload();
+ }
+ throw error;
+ }
+ });
 }
 
 // Lazy load secondary pages
-const BusinessDetail = lazyWithRetry(() => import('./pages/BusinessDetail').then(m => ({ default: m.BusinessDetail })));
+const BusinessDetail = lazyWithRetry(() => import('./pages/BusinessDetail').then(m => ({ default: m.default || m.BusinessDetail })));
 const Contact = lazyWithRetry(() => import('./pages/Contact').then(m => ({ default: m.Contact })));
-const AdminDashboard = lazyWithRetry(() => import('./pages/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
-const Profile = lazyWithRetry(() => import('./pages/Profile').then(m => ({ default: m.Profile })));
-const ProfileSettings = lazyWithRetry(() => import('./pages/ProfileSettings').then(m => ({ default: m.ProfileSettings })));
+const AdminDashboard = lazyWithRetry(() => import('./pages/AdminDashboard').then(m => ({ default: (m as any).default || m.AdminDashboard })));
+const Profile = lazyWithRetry(() => import('./pages/Profile').then(m => ({ default: m.default || m.Profile })));
+const ProfileSettings = lazyWithRetry(() => import('./pages/ProfileSettings').then(m => ({ default: (m as any).default || m.ProfileSettings })));
 const Offers = lazyWithRetry(() => import('./pages/Offers').then(m => ({ default: m.default || m.Offers })));
 const OfferDetail = lazyWithRetry(() => import('./pages/OfferDetail').then(m => ({ default: m.OfferDetail })));
 const Housing = lazyWithRetry(() => import('./pages/Housing').then(m => ({ default: m.Housing })));
@@ -69,102 +69,108 @@ const Medical = lazyWithRetry(() => import('./pages/Medical').then(m => ({ defau
 const AddMedicalFacility = lazyWithRetry(() => import('./pages/AddMedicalFacility').then(m => ({ default: m.AddMedicalFacility })));
 const MerchantScannerPage = lazyWithRetry(() => import('./pages/MerchantScannerPage').then(m => ({ default: m.MerchantScannerPage })));
 const BusinessMenuOffers = lazyWithRetry(() => import('./pages/BusinessMenuOffers'));
+const LiveOrdersPage = lazyWithRetry(() => import('./pages/LiveOrdersPage'));
+const ReviewLandingPage = lazyWithRetry(() => import('./pages/ReviewLandingPage').then(m => ({ default: m.ReviewLandingPage })));
 
 export default function App() {
-  return (
-    <ErrorBoundary>
-      <SystemSettingsProvider>
-        <AuthProvider>
-          <NotificationsProvider>
-            <CartProvider>
-              <ConfirmProvider>
-                <BrowserRouter>
-                  <ScrollToTop />
-                  <Suspense fallback={null}>
-                    <Routes>
-                      {/* Standalone Fullscreen Merchant QR Scanner (No Navbar/Header) */}
-                      <Route
-                        path="/merchant/scanner"
-                        element={
-                          <ProtectedRoute>
-                            <MerchantScannerPage />
-                          </ProtectedRoute>
-                        }
-                      />
+ return (
+ <ErrorBoundary>
+ <SystemSettingsProvider>
+ <AuthProvider>
+ <NotificationsProvider>
+ <CartProvider>
+ <ConfirmProvider>
+ <BrowserRouter>
+ <ScrollToTop />
+ <Suspense fallback={null}>
+ <Routes>
+ {/* Standalone Fullscreen Merchant QR Scanner (No Navbar/Header) */}
+ <Route path="/merchant/scanner" element={<MerchantScannerPage />} />
 
-                      {/* Standalone Fullscreen Merchant Menu and Offers Platform */}
-                      <Route path="/business/:id/menu-offers" element={<BusinessMenuOffers />} />
-                      <Route path="/b/:id/menu-offers" element={<BusinessMenuOffers />} />
+ {/* Standalone Fullscreen Merchant Menu and Offers Platform */}
+ <Route path="/business/:id/menu-offers" element={<BusinessMenuOffers />} />
+ <Route path="/b/:id/menu-offers" element={<BusinessMenuOffers />} />
 
-                      <Route path="/" element={<Layout />}>
-                        <Route index element={<Home />} />
-                    <Route path="admin" element={
-                      <ProtectedRoute requireStaff={true}>
-                        <AdminDashboard />
-                      </ProtectedRoute>
-                    } />
-                    <Route path="profile" element={
-                      <ProtectedRoute>
-                        <Profile />
-                      </ProtectedRoute>
-                    } />
-                    <Route path="profile/settings" element={
-                      <ProtectedRoute>
-                        <ProfileSettings />
-                      </ProtectedRoute>
-                    } />
-                    <Route path="settings" element={
-                      <ProtectedRoute>
-                        <ProfileSettings />
-                      </ProtectedRoute>
-                    } />
-                    <Route path="notifications" element={<NotificationsPage />} />
-                    <Route path="messages" element={
-                      <ProtectedRoute>
-                        <Messages />
-                      </ProtectedRoute>
-                    } />
-                    <Route path="cart" element={<CartPage />} />
-                    <Route path="search" element={<Search />} />
-                    <Route path="medical" element={<Medical />} />
-                    <Route path="medical/add" element={<AddMedicalFacility />} />
-                    <Route path="medical/register" element={<AddMedicalFacility />} />
-                    <Route path="add-medical" element={<AddMedicalFacility />} />
-                    <Route path="add-medical-facility" element={<AddMedicalFacility />} />
-                    <Route path="business/:id" element={<BusinessDetail />} />
-                    <Route path="b/:id" element={<BusinessDetail />} />
-                    <Route path="news" element={<News />} />
-                    <Route path="news/:id" element={<News />} />
-                    <Route path="jobs" element={<Jobs />} />
-                    <Route path="offers" element={<Offers />} />
-                    <Route path="offers/:id" element={<OfferDetail />} />
-                    <Route path="housing" element={<Housing />} />
-                    <Route path="housing/:id" element={<HousingDetail />} />
-                    <Route path="tourism" element={<Tourism />} />
-                    <Route path="tourism/:id" element={<Tourism />} />
-                    <Route path="transportation" element={<Transportation />} />
-                    <Route path="prayer-times" element={<PrayerTimes />} />
-                    <Route path="packages" element={<Pricing />} />
-                    <Route path="pricing" element={<Pricing />} />
-                    <Route path="contact" element={<Contact />} />
-                    <Route path="terms" element={<Terms />} />
-                    <Route path="privacy" element={<Privacy />} />
-                    <Route path="about" element={<AboutUs />} />
-                    <Route path="login" element={<Login />} />
-                    <Route path="register" element={<Register />} />
-                    <Route path="verify" element={<Verify />} />
-                    <Route path="reset-password" element={<ResetPassword />} />
-                    <Route path=":id" element={<BusinessDetail />} />
-                    <Route path="*" element={<NotFound />} />
-                  </Route>
-                </Routes>
-              </Suspense>
-            </BrowserRouter>
-          </ConfirmProvider>
-        </CartProvider>
-      </NotificationsProvider>
-    </AuthProvider>
-      </SystemSettingsProvider>
-    </ErrorBoundary>
-  );
+ {/* Standalone Public Review Landing Page for Scanned QR Posters */}
+ <Route path="/rate/:id" element={<ReviewLandingPage />} />
+ <Route path="/review/:id" element={<ReviewLandingPage />} />
+ <Route path="/b/:id/rate" element={<ReviewLandingPage />} />
+ <Route path="/business/:id/rate" element={<ReviewLandingPage />} />
+
+ <Route path="/" element={<Layout />}>
+ <Route index element={<Home />} />
+ <Route path="admin" element={
+ <ProtectedRoute requireStaff={true}>
+ <AdminDashboard />
+ </ProtectedRoute>
+ } />
+ <Route path="profile" element={
+ <ProtectedRoute>
+ <Profile />
+ </ProtectedRoute>
+ } />
+ <Route path="profile/live-orders" element={
+ <ProtectedRoute>
+ <LiveOrdersPage />
+ </ProtectedRoute>
+ } />
+ <Route path="profile/settings" element={
+ <ProtectedRoute>
+ <ProfileSettings />
+ </ProtectedRoute>
+ } />
+ <Route path="settings" element={
+ <ProtectedRoute>
+ <ProfileSettings />
+ </ProtectedRoute>
+ } />
+ <Route path="notifications" element={<NotificationsPage />} />
+ <Route path="messages" element={
+ <ProtectedRoute>
+ <Messages />
+ </ProtectedRoute>
+ } />
+ <Route path="cart" element={<CartPage />} />
+ <Route path="search" element={<Search />} />
+ <Route path="medical" element={<Medical />} />
+ <Route path="medical/add" element={<AddMedicalFacility />} />
+ <Route path="medical/register" element={<AddMedicalFacility />} />
+ <Route path="add-medical" element={<AddMedicalFacility />} />
+ <Route path="add-medical-facility" element={<AddMedicalFacility />} />
+ <Route path="business/:id" element={<BusinessDetail />} />
+ <Route path="b/:id" element={<BusinessDetail />} />
+ <Route path="news" element={<News />} />
+ <Route path="news/:id" element={<News />} />
+ <Route path="jobs" element={<Jobs />} />
+ <Route path="offers" element={<Offers />} />
+ <Route path="offers/:id" element={<OfferDetail />} />
+ <Route path="housing" element={<Housing />} />
+ <Route path="housing/:id" element={<HousingDetail />} />
+ <Route path="tourism" element={<Tourism />} />
+ <Route path="tourism/:id" element={<Tourism />} />
+ <Route path="transportation" element={<Transportation />} />
+ <Route path="prayer-times" element={<PrayerTimes />} />
+ <Route path="packages" element={<Pricing />} />
+ <Route path="pricing" element={<Pricing />} />
+ <Route path="contact" element={<Contact />} />
+ <Route path="terms" element={<Terms />} />
+ <Route path="privacy" element={<Privacy />} />
+ <Route path="about" element={<AboutUs />} />
+ <Route path="login" element={<Login />} />
+ <Route path="register" element={<Register />} />
+ <Route path="verify" element={<Verify />} />
+ <Route path="reset-password" element={<ResetPassword />} />
+ <Route path=":id" element={<BusinessDetail />} />
+ <Route path="*" element={<NotFound />} />
+ </Route>
+ </Routes>
+ </Suspense>
+ </BrowserRouter>
+ </ConfirmProvider>
+ </CartProvider>
+ </NotificationsProvider>
+ </AuthProvider>
+ </SystemSettingsProvider>
+ </ErrorBoundary>
+ );
 }

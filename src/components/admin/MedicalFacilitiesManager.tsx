@@ -236,7 +236,7 @@ export function MedicalFacilitiesManager({
           phone: req.phone || '',
           ownerName: req.ownerName || '',
           ownerEmail: req.userEmail || req.ownerEmail || '',
-          imageUrl: req.imageUrl || req.coverImageUrl || 'https://images.unsplash.com/photo-1629909613654-28e377c37b09?auto=format&fit=crop&q=80&w=600',
+          imageUrl: req.imageUrl || req.coverImageUrl || '',
           isVerified: gift.isVerified,
           isFeatured: gift.isFeatured,
           featuredStartDate: gift.featuredStartDate || null,
@@ -790,11 +790,23 @@ export function MedicalFacilitiesManager({
                       {/* Name & Doctor */}
                       <td className="py-3.5 px-4 min-w-[220px]">
                         <div className="flex items-center gap-3">
-                          <img
-                            src={b.imageUrl || 'https://images.unsplash.com/photo-1629909613654-28e377c37b09?auto=format&fit=crop&q=80&w=200'}
-                            alt={b.name}
-                            className="w-11 h-11 rounded-xl object-cover border border-stone-200 shrink-0"
-                          />
+                          {b.logoUrl && !b.logoUrl.includes('photo-1594212699903') ? (
+                            <img
+                              src={b.logoUrl}
+                              alt={b.name}
+                              className="w-11 h-11 rounded-xl object-cover border border-stone-200 shrink-0"
+                            />
+                          ) : (b.imageUrl && !b.imageUrl.includes('photo-1629909613654')) ? (
+                            <img
+                              src={b.imageUrl}
+                              alt={b.name}
+                              className="w-11 h-11 rounded-xl object-cover border border-stone-200 shrink-0"
+                            />
+                          ) : (
+                            <div className="w-11 h-11 rounded-xl bg-rose-50 border border-rose-200 shrink-0 flex items-center justify-center font-black text-rose-800 text-sm">
+                              {(b.name || 'ع').trim().charAt(0)}
+                            </div>
+                          )}
                           <div className="min-w-0">
                             <Link
                               to={`/business/${b.id}`}

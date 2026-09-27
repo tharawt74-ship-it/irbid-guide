@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Alexandria:wght@300;400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Alexandria:wght@300;400;500;600;700;800;900&family=Almarai:wght@300;400;700;800&family=Amiri:ital,wght@0,400;0,700;1,400;1,700&family=Cairo:wght@400;600;700;800;900&family=Changa:wght@400;600;700;800&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;600;700;800;900&family=Tajawal:wght@400;500;700;800;900&display=swap');
 @import "tailwindcss";
 
 @theme {
@@ -7,12 +7,12 @@
 
 @layer base {
   html {
-    scroll-behavior: smooth;
     -webkit-tap-highlight-color: transparent;
+    overflow-x: clip;
   }
   body {
     @apply font-sans antialiased text-[#2d2a26] bg-[#fdfcfb];
-    overscroll-behavior-y: contain;
+    overflow-x: clip;
     font-variant-numeric: lining-nums tabular-nums;
   }
   

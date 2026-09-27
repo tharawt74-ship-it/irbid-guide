@@ -15,8 +15,12 @@ import {
   Crown, BarChart3, UtensilsCrossed, Lock as LockIcon, Percent, Globe, Facebook, Instagram, Twitter, Youtube, Smartphone, Send,
   Video, Play, Trash2, Plus, Camera, Image as ImageIcon, ArrowLeft, ChevronLeft, ChevronRight, ChevronDown,
   Briefcase, Building2, Flame, DollarSign, Award, Users, Calendar, Stethoscope, HeartPulse, Activity,
-  Pill, Shield, Gift, Settings2, QrCode, Truck, Banknote, CreditCard
+  Pill, Shield, Gift, Settings2, QrCode, Truck, Banknote, CreditCard, Newspaper, Megaphone,
+  AlertTriangle
 } from 'lucide-react';
+import { BusinessNewsTab } from '../components/business/BusinessNewsTab';
+import { JobFormModal } from '../components/jobs/JobFormModal';
+import { CoverVideoPlayer } from '../components/common/CoverVideoPlayer';
 import { isMethodSelected } from '../components/ui/PaymentMethodsSelector';
 import { cn } from '../lib/utils';
 import { handleFirestoreError, OperationType } from '../lib/firestoreHelper';
@@ -43,7 +47,18 @@ import { DEMO_SEED_DATA } from '../lib/demoDataHelper';
 import { trackBusinessInteraction } from '../lib/analyticsTracker';
 import { SEO } from '../components/common/SEO';
 import { getJordanNow } from '../lib/jordanTime';
-import { isBotSubmission, checkSubmissionRateLimit, recordSubmissionTime, sanitizeInput, executeReCaptcha } from '../lib/security';
+import { 
+  isBotSubmission, 
+  checkSubmissionRateLimit, 
+  recordSubmissionTime, 
+  sanitizeInput, 
+  executeReCaptcha, 
+  containsUrlOrLink, 
+  stripUrlsAndLinks,
+  getDeviceFingerprint,
+  checkReviewRateLimit,
+  recordReviewSubmission
+} from '../lib/security';
 import { NotFound } from './NotFound';
 import { WhatsApp3DIcon, WhatsAppIcon, Phone3DIcon } from '../components/common/PremiumContactButtons';
 import { WorkingHoursEditor } from '../components/ui/WorkingHoursEditor';
@@ -54,6 +69,7 @@ import { saveUserReward, findExistingRewardForBusiness, fetchUserRewards, UserRe
 import { MedicalInsurancesTab } from '../components/medical/MedicalInsurancesTab';
 import { MedicalStaffTab } from '../components/medical/MedicalStaffTab';
 import { isTodayWorkingDay } from '../lib/businessHoursHelper';
+import { useSystemSettings } from '../contexts/SystemSettingsContext';
 
 function getLiveWorkingStatus(hours?: WorkingHours) {
   if (!hours || (!hours.isOpen24Hours && !hours.openTime && !hours.closeTime)) {
@@ -177,6 +193,7 @@ export function BusinessDetail() {
   const { confirm } = useConfirm();
   const { id } = useParams<{ id: string }>();
   const { currentUser, isAdmin } = useAuth();
+  const { globalSettings } = useSystemSettings();
   const location = useLocation();
   const navigate = useNavigate();
   
@@ -190,6 +207,9 @@ export function BusinessDetail() {
   const [newComment, setNewComment] = useState('');
   const [submittingReview, setSubmittingReview] = useState(false);
   const [activeTab, setActiveTab] = useState('about');
+  const [newsCount, setNewsCount] = useState<number>(0);
+  const [isCoverExpanded, setIsCoverExpanded] = useState(false);
+  const [coverImageFailed, setCoverImageFailed] = useState(false);
   const tabsAnchorRef = useRef<HTMLDivElement>(null);
 
   const handleTabChange = (tab: string) => {
@@ -298,6 +318,7 @@ export function BusinessDetail() {
   const [activeJobs, setActiveJobs] = useState<JobOffer[]>([]);
   const [selectedDetailJob, setSelectedDetailJob] = useState<JobOffer | null>(null);
   const [isOfferModalOpen, setIsOfferModalOpen] = useState(false);
+  const [isAddJobModalOpen, setIsAddJobModalOpen] = useState(false);
   const [newOfferForm, setNewOfferForm] = useState({
     title: '',
     discountType: 'percentage', // 'percentage' | 'fixed'
@@ -427,6 +448,7 @@ export function BusinessDetail() {
 
   // Edit / Privacy Modal State for Business Owner
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [showDeliveryModal, setShowDeliveryModal] = useState(false);
   const [isGiftCodeCustomizationOpen, setIsGiftCodeCustomizationOpen] = useState(false);
   const [isGiftCodeStatsOpen, setIsGiftCodeStatsOpen] = useState(false);
   const [awardedGiftCode, setAwardedGiftCode] = useState<{ code: string; discountPercent: number; businessName: string } | null>(null);
@@ -465,6 +487,7 @@ export function BusinessDetail() {
 
   useEffect(() => {
     async function fetchData() {
+      setCoverImageFailed(false);
       if (!db || !id) {
         setLoading(false);
         return;
@@ -507,60 +530,8 @@ export function BusinessDetail() {
         if (docSnap && docSnap.exists()) {
           const bizData = docSnap.data();
 
-          // Auto approve and populate missing fields for Al Buraq or admin/owner managed stores
-          const isOwnerOrAdmin = isAdmin || (currentUser && bizData.userId === currentUser.uid);
-          const isAlBuraqOrEmptyName = !bizData.name || bizData.name.includes('البراق') || docSnap.id.includes('buraq') || (isOwnerOrAdmin && !bizData.name);
-          
-          if (isAlBuraqOrEmptyName || bizData.status !== 'approved' || !bizData.category || !bizData.description || !bizData.district || !bizData.imageUrl || !bizData.logoUrl) {
-            if (isAlBuraqOrEmptyName || isOwnerOrAdmin) {
-              try {
-                const updates: any = {};
-                if (!bizData.name || bizData.name.trim() === '') {
-                  updates.name = 'مطعم البراق';
-                  bizData.name = 'مطعم البراق';
-                }
-                if (bizData.status !== 'approved') {
-                  updates.status = 'approved';
-                  bizData.status = 'approved';
-                }
-                if (!bizData.category) {
-                  updates.category = 'مطاعم وجبات سريعة (شاورما، برجر، سناكات)';
-                  bizData.category = 'مطاعم وجبات سريعة (شاورما، برجر، سناكات)';
-                }
-                if (!bizData.description) {
-                  updates.description = 'مطعم البراق في إربد يقدم تشكيلة متميزة وأنيقة من أشهى المأكولات والوجبات السريعة بجودة عالية وخدمة استثنائية تناسب الجميع.';
-                  bizData.description = 'مطعم البراق في إربد يقدم تشكيلة متميزة وأنيقة من أشهى المأكولات والوجبات السريعة بجودة عالية وخدمة استثنائية تناسب الجميع.';
-                }
-                if (!bizData.district) {
-                  updates.district = 'شارع الجامعة';
-                  bizData.district = 'شارع الجامعة';
-                }
-                if (!bizData.address) {
-                  updates.address = 'إربد - بالقرب من جامعة اليرموك';
-                  bizData.address = 'إربد - بالقرب من جامعة اليرموك';
-                }
-                if (!bizData.phone) {
-                  updates.phone = '0780000000';
-                  bizData.phone = '0780000000';
-                }
-                if (!bizData.imageUrl) {
-                  const demoImage = 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1200&q=80';
-                  updates.imageUrl = demoImage;
-                  bizData.imageUrl = demoImage;
-                }
-                if (!bizData.logoUrl) {
-                  const demoLogo = 'https://images.unsplash.com/photo-1594212699903-ec8a3eca50f5?auto=format&fit=crop&w=150&q=80';
-                  updates.logoUrl = demoLogo;
-                  bizData.logoUrl = demoLogo;
-                }
-                
-                if (Object.keys(updates).length > 0) {
-                  await updateDoc(doc(db, 'businesses', docSnap.id), updates);
-                }
-              } catch (uErr) {
-                console.error("Auto update and approve failed:", uErr);
-              }
-            }
+          if (!bizData.name || bizData.name.trim() === '') {
+            bizData.name = '';
           }
 
           // Check if store is hidden by owner
@@ -855,7 +826,7 @@ export function BusinessDetail() {
   const vipInfo = getBusinessVipStatus(business);
 
   useEffect(() => {
-    if (business && !vipInfo.isVip && ['menu', 'products', 'offers', 'reels', 'gallery', 'analytics'].includes(activeTab)) {
+    if (business && !vipInfo.isVip && ['menu', 'products', 'offers', 'news', 'reels', 'gallery', 'analytics'].includes(activeTab)) {
       setActiveTab('about');
     } else if (business && isMedical && activeTab === 'offers') {
       setActiveTab('about');
@@ -900,6 +871,8 @@ export function BusinessDetail() {
   const isOwner = Boolean(
     currentUser && business && (
       business.userId === currentUser.uid ||
+      (business.ownerId && business.ownerId === currentUser.uid) ||
+      (currentUser.email && business.ownerEmail && currentUser.email.toLowerCase() === business.ownerEmail.toLowerCase()) ||
       isAdmin
     )
   );
@@ -1285,6 +1258,12 @@ export function BusinessDetail() {
     e.preventDefault();
     if (!currentUser || !id || !db || !newComment.trim()) return;
 
+    // Strict no-links policy in reviews
+    if (containsUrlOrLink(newComment)) {
+      alert('عذراً، يمنع إدراج الروابط أو عناوين المواقع الإلكترونية في التقييمات نهائياً. التقييم مخصص للملاحظات والآراء النصية فقط.');
+      return;
+    }
+
     // 1. Honeypot check (Bot protection)
     if (isBotSubmission(hpValue)) {
       // Trick the bot silently
@@ -1293,32 +1272,50 @@ export function BusinessDetail() {
       return;
     }
 
-    // 2. Rate limit check (Prevention of review spamming)
-    const rateLimit = checkSubmissionRateLimit('review_submit', 15);
+    // 2. Enhanced Rate limit check (Prevention of review spamming)
+    const targetBizId = business?.id || id || 'unknown_biz';
+    const rateLimit = checkReviewRateLimit(targetBizId);
     if (!rateLimit.allowed) {
-      alert(`يرجى الانتظار ${rateLimit.timeLeft} ثانية قبل إضافة تقييم آخر لحماية المنصة من التعليقات العشوائية.`);
+      alert(rateLimit.reason || 'يرجى الانتظار قبل إضافة تقييم جديد لحماية المنصة من التعليقات المتكررة.');
       return;
     }
 
-    // 2.5 Google reCAPTCHA v3 check
-    try {
-      await executeReCaptcha('review_submit');
-    } catch (rcError) {
-      console.warn("⚠️ reCAPTCHA execution skipped or failed:", rcError);
-    }
-    
     setSubmittingReview(true);
     try {
+      // 2.5 Google reCAPTCHA Enterprise check
+      let recaptchaToken = '';
+      try {
+        recaptchaToken = await executeReCaptcha('review_submit');
+      } catch (rcError) {
+        console.warn("reCAPTCHA execution fallback:", rcError);
+      }
+
+      // 2.6 Device Fingerprinting
+      const deviceFingerprint = await getDeviceFingerprint();
+
+      const cleanComment = stripUrlsAndLinks(sanitizeInput(newComment.trim()));
+      if (!cleanComment) {
+        alert('عذراً، يمنع إدراج الروابط في التقييمات. التقييم مخصص للملاحظات والآراء النصية فقط.');
+        setSubmittingReview(false);
+        return;
+      }
+
+      const rawUserName = currentUser.displayName || currentUser.email?.split('@')[0] || 'مستخدم';
+      const cleanUserName = stripUrlsAndLinks(sanitizeInput(rawUserName)) || 'مستخدم';
+
       const reviewData = {
-        businessId: business?.id || id,
+        businessId: targetBizId,
         userId: currentUser.uid,
-        userName: currentUser.displayName || currentUser.email?.split('@')[0] || 'مستخدم',
+        userName: cleanUserName,
         rating: newRating,
-        comment: sanitizeInput(newComment.trim()),
+        comment: cleanComment,
+        deviceFingerprint,
+        recaptchaToken: recaptchaToken || 'token_generated',
         createdAt: Date.now()
       };
       
       const docRef = await addDoc(collection(db, 'reviews'), reviewData);
+      recordReviewSubmission(targetBizId);
       
       const updatedReviews = [{ id: docRef.id, ...reviewData } as Review, ...reviews];
       setReviews(updatedReviews);
@@ -1727,11 +1724,16 @@ export function BusinessDetail() {
     const replyText = replyTextMap[reviewId]?.trim();
     if (!replyText) return;
 
+    if (containsUrlOrLink(replyText)) {
+      alert('عذراً، يمنع إدراج الروابط أو المواقع الإلكترونية في الردود. الرد مخصص للنصوص والتوضيحات فقط.');
+      return;
+    }
+
     setSubmittingReply(true);
     try {
       const reviewRef = doc(db, 'reviews', reviewId);
       const replyData = {
-        text: replyText,
+        text: stripUrlsAndLinks(sanitizeInput(replyText)),
         createdAt: Date.now(),
         authorName: business.name,
         authorUid: currentUser.uid
@@ -2008,16 +2010,46 @@ export function BusinessDetail() {
           {/* Main Hero Header */}
           <div className="bg-white rounded-2xl sm:rounded-3xl lg:rounded-[32px] border border-[#e5e1da] shadow-xs relative">
             {/* 1. Cover Image Section */}
-            <div className="h-44 sm:h-60 md:h-[280px] lg:h-[320px] bg-stone-100 relative rounded-t-2xl sm:rounded-t-3xl lg:rounded-t-[32px] overflow-hidden">
-              {business.imageUrl ? (
+            <div className={`w-full bg-stone-100 relative rounded-t-2xl sm:rounded-t-3xl lg:rounded-t-[32px] overflow-hidden transition-all duration-500 ease-in-out ${isCoverExpanded ? 'h-64 sm:h-96 md:h-[480px] lg:h-[560px]' : 'h-44 sm:h-60 md:h-[280px] lg:h-[320px]'}`}>
+              {business.coverVideoUrl ? (
+                <CoverVideoPlayer
+                  videoUrl={business.coverVideoUrl}
+                  posterImage={business.coverImage || business.imageUrl}
+                  autoPlay={true}
+                  isExpanded={isCoverExpanded}
+                  onToggleExpand={() => setIsCoverExpanded(prev => !prev)}
+                  className="w-full h-full object-cover"
+                />
+              ) : (!coverImageFailed && business.coverImage) ? (
+                <img 
+                  src={business.coverImage} 
+                  alt={business.name} 
+                  onError={() => setCoverImageFailed(true)}
+                  className="w-full h-full object-cover"
+                />
+              ) : (!coverImageFailed && business.imageUrl && !business.imageUrl.includes('photo-1555396273') && !business.imageUrl.includes('photo-1517248135467') && !business.imageUrl.includes('photo-1629909613654')) ? (
                 <img 
                   src={business.imageUrl} 
                   alt={business.name} 
+                  onError={() => setCoverImageFailed(true)}
                   className="w-full h-full object-cover"
                 />
               ) : (
-                <div className="absolute inset-0 flex items-center justify-center bg-[#1a4d2e]/5">
-                  <Store className="h-16 w-16 md:h-24 md:w-24 text-[#1a4d2e]/20" />
+                <div className="absolute inset-0 w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-[#e5e5e5] via-[#dcdcdc] to-[#bebebe] overflow-hidden select-none">
+                  {/* Premium subtle diagonal metallic glare */}
+                  <div className="absolute inset-0 bg-linear-to-tr from-transparent via-white/15 to-transparent pointer-events-none rotate-12 scale-150" />
+                  
+                  {globalSettings.logoUrl || '/logo.png' ? (
+                    <img 
+                      src={globalSettings.logoUrl || '/logo.png'} 
+                      alt="Site Logo" 
+                      className="h-16 sm:h-20 md:h-24 lg:h-28 w-auto object-contain grayscale opacity-45 contrast-150 brightness-50 select-none pointer-events-none relative z-10"
+                    />
+                  ) : isMedical ? (
+                    <Stethoscope className="h-16 w-16 md:h-24 md:w-24 text-stone-500/40 relative z-10" />
+                  ) : (
+                    <Store className="h-16 w-16 md:h-24 md:w-24 text-stone-500/40 relative z-10" />
+                  )}
                 </div>
               )}
             </div>
@@ -2039,15 +2071,15 @@ export function BusinessDetail() {
                         {/* Inner Spacing / Gap like Instagram */}
                         <div className="w-full h-full rounded-[21px] bg-white p-[3px] flex items-center justify-center overflow-hidden">
                           <div className="w-full h-full rounded-2xl overflow-hidden bg-white flex items-center justify-center">
-                            {business.logoUrl ? (
+                            {business.logoUrl && !business.logoUrl.includes('photo-1594212699903') ? (
                               <img 
                                 src={business.logoUrl} 
                                 alt={`${business.name || ''} Logo`} 
                                 className="w-full h-full object-cover"
                               />
                             ) : (
-                              <div className="w-full h-full bg-gradient-to-br from-[#1a4d2e] to-emerald-600 flex items-center justify-center text-white font-black text-2xl sm:text-4xl shadow-inner">
-                                {(business.name || 'م').charAt(0)}
+                              <div className="w-full h-full bg-gradient-to-br from-[#1a4d2e] to-emerald-600 flex items-center justify-center text-white font-black text-2xl sm:text-4xl shadow-inner select-none">
+                                {(business.name || 'م').trim().charAt(0)}
                               </div>
                             )}
                           </div>
@@ -2057,15 +2089,15 @@ export function BusinessDetail() {
                   ) : (
                     /* Default Regular Profile Picture */
                     <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-2xl border-4 border-white shadow-md bg-white flex items-center justify-center overflow-hidden shrink-0">
-                      {business.logoUrl ? (
+                      {business.logoUrl && !business.logoUrl.includes('photo-1594212699903') ? (
                         <img 
                           src={business.logoUrl} 
                           alt={`${business.name || ''} Logo`} 
                           className="w-full h-full object-cover"
                         />
                       ) : (
-                        <div className="w-full h-full bg-gradient-to-br from-[#1a4d2e] to-emerald-600 flex items-center justify-center text-white font-black text-2xl sm:text-4xl shadow-inner">
-                          {(business.name || 'م').charAt(0)}
+                        <div className="w-full h-full bg-gradient-to-br from-[#1a4d2e] to-emerald-600 flex items-center justify-center text-white font-black text-2xl sm:text-4xl shadow-inner select-none">
+                          {(business.name || 'م').trim().charAt(0)}
                         </div>
                       )}
                     </div>
@@ -2082,10 +2114,14 @@ export function BusinessDetail() {
                         معتمد في إربد
                       </span>
                       {!isMedical && business.deliveryAvailable && (
-                        <span className="bg-blue-50 text-blue-700 border border-blue-100 px-3 py-0.5 rounded-full text-xs font-semibold flex items-center gap-1">
-                          <Truck className="h-3.5 w-3.5 text-blue-600" />
-                          توفر التوصيل
-                        </span>
+                        <button
+                          onClick={() => setShowDeliveryModal(true)}
+                          className="bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-100 px-3 py-0.5 rounded-full text-xs font-semibold flex items-center gap-1 transition-all hover:scale-102 cursor-pointer shadow-3xs"
+                          title="عرض المناطق المشمولة بالتوصيل"
+                        >
+                          <Truck className="h-3.5 w-3.5 text-blue-600 animate-bounce" style={{ animationDuration: '3s' }} />
+                          <span>توفر التوصيل (عرض المناطق)</span>
+                        </button>
                       )}
                       {isOwner && (
                         <span className="bg-stone-100 text-stone-700 border border-stone-200 px-3 py-0.5 rounded-full text-xs font-bold flex items-center gap-1">
@@ -2149,10 +2185,13 @@ export function BusinessDetail() {
                     معتمد في إربد
                   </span>
                   {!isMedical && business.deliveryAvailable && (
-                    <span className="bg-blue-50 text-blue-700 border border-blue-100 px-2.5 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-0.5 animate-pulse">
+                    <button
+                      onClick={() => setShowDeliveryModal(true)}
+                      className="bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-100 px-2.5 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-0.5 animate-pulse cursor-pointer transition-all"
+                    >
                       <Truck className="h-3 w-3 text-blue-600" />
-                      توفر التوصيل
-                    </span>
+                      <span>توفر التوصيل</span>
+                    </button>
                   )}
                   {isOwner && (
                     <span className="bg-stone-50 text-stone-700 border border-stone-200 px-2.5 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-0.5">
@@ -2515,6 +2554,26 @@ export function BusinessDetail() {
                 )}
               </button>
 
+              {/* VIP & OWNER: LATEST NEWS / POSTS TAB */}
+              {(vipInfo.isVip || isOwner || isAdmin || newsCount > 0) && (
+                <button 
+                  onClick={() => handleTabChange('news')}
+                  className={`whitespace-nowrap transition-all flex items-center gap-1.5 snap-start font-bold text-sm md:text-base px-4 py-2 md:px-0 md:py-4 rounded-full md:rounded-none border md:border-0 md:border-b-2 ${
+                    activeTab === 'news' 
+                      ? 'bg-amber-50 border-amber-200 text-amber-800 font-black md:bg-transparent md:border-b-amber-600' 
+                      : 'bg-white border-stone-200/60 text-stone-600 shadow-xs md:bg-transparent md:border-b-transparent md:text-stone-500 md:shadow-none hover:text-amber-700'
+                  }`}
+                >
+                  <Newspaper className="h-4 w-4 text-amber-600" />
+                  <span>آخر الأخبار</span>
+                  {newsCount > 0 && (
+                    <span className="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded-full font-bold">
+                      {newsCount}
+                    </span>
+                  )}
+                </button>
+              )}
+
               {vipInfo.isVip && (
                 <button 
                   onClick={() => handleTabChange('reels')}
@@ -2743,26 +2802,30 @@ export function BusinessDetail() {
                         <h3 className="text-lg font-bold text-stone-900">العروض الترويجية والخصومات الحصرية</h3>
                         <p className="text-xs text-stone-500">العروض والصفقات النشطة حالياً لدى هذا المحل</p>
                       </div>
-                      {isOwner && (
-                        vipInfo.isVip ? (
+                    </div>
+
+                    {/* Broad action button for owner */}
+                    {isOwner && (
+                      <div className="pt-1">
+                        {vipInfo.isVip ? (
                           <button
+                            type="button"
                             onClick={() => setIsOfferModalOpen(true)}
-                            className="inline-flex items-center justify-center gap-2 bg-[#1a4d2e] hover:bg-[#133b22] text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
+                            className="w-full py-4 px-6 bg-gradient-to-r from-[#1a4d2e] via-emerald-800 to-[#1a4d2e] hover:from-emerald-800 hover:to-emerald-700 text-white font-black text-sm sm:text-base rounded-2xl sm:rounded-3xl shadow-md hover:shadow-lg transition-all duration-300 flex items-center justify-center cursor-pointer active:scale-[0.99] border border-emerald-700/60"
                           >
-                            <Tag className="h-4 w-4" />
-                            <span>إضافة عرض جديد للمحل</span>
+                            <span className="tracking-wide">إضافة عرض جديد</span>
                           </button>
                         ) : (
                           <button
+                            type="button"
                             onClick={() => setIsUpgradeModalOpen(true)}
-                            className="inline-flex items-center justify-center gap-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer shadow-xs"
+                            className="w-full py-4 px-6 bg-gradient-to-r from-amber-600 via-amber-700 to-amber-800 hover:from-amber-700 hover:to-amber-900 text-white font-black text-sm sm:text-base rounded-2xl sm:rounded-3xl shadow-md hover:shadow-lg transition-all duration-300 flex items-center justify-center cursor-pointer active:scale-[0.99] border border-amber-500/60"
                           >
-                            <Crown className="h-4 w-4 text-amber-600 fill-amber-500" />
-                            <span>نشر العروض (حصري لباقة VIP) 🔒</span>
+                            <span className="tracking-wide">نشر العروض (حصري لباقة VIP)</span>
                           </button>
-                        )
-                      )}
-                    </div>
+                        )}
+                      </div>
+                    )}
 
                     {activeOffers.length === 0 ? (
                       <div className="py-12 text-center bg-red-50/40 rounded-2xl border border-dashed border-red-200 p-6 space-y-4">
@@ -2884,6 +2947,25 @@ export function BusinessDetail() {
                   </div>
                 )}
 
+                {activeTab === 'news' && (
+                  (vipInfo.isVip || isOwner || isAdmin || newsCount > 0) ? (
+                    <BusinessNewsTab 
+                      business={business} 
+                      isOwner={isOwner || isAdmin} 
+                      onNewsCountChange={(count) => setNewsCount(count)}
+                      offers={activeOffers}
+                      jobs={activeJobs}
+                      onSelectTab={(tab) => handleTabChange(tab as any)}
+                    />
+                  ) : (
+                    <div className="p-8 text-center bg-amber-50/50 rounded-2xl border border-amber-200 space-y-3 dir-rtl">
+                      <Crown className="h-10 w-10 text-amber-600 mx-auto" />
+                      <h3 className="text-base font-black text-amber-950">ميزة VIP حصرياً 👑</h3>
+                      <p className="text-xs text-amber-800">تبويب آخر الأخبار متاح للمشتركين بالباقة الذهبية / VIP وأصحاب المحل.</p>
+                    </div>
+                  )
+                )}
+
                 {activeTab === 'reels' && (
                   vipInfo.isVip ? (
                     <div className="space-y-6 text-right">
@@ -2899,79 +2981,99 @@ export function BusinessDetail() {
                               : 'شاهد اللقطات والفيديوهات الحصرية لهذا المحل لتعيش التجربة التفاعلية'}
                           </p>
                         </div>
-                        {isOwner && (
-                          <button
-                            onClick={() => setIsAddReelOpen(!isAddReelOpen)}
-                            className="inline-flex items-center justify-center gap-1.5 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
-                          >
-                            <Plus className="h-4 w-4" />
-                            <span>{isMedical ? 'إضافة فيديو ريلزت جديد' : 'إضافة فيديو ريلز جديد'}</span>
-                          </button>
-                        )}
                       </div>
 
-                      {/* Add Reel Form */}
-                      {isOwner && isAddReelOpen && (
-                        <form onSubmit={handleSaveReel} className="bg-stone-50 border border-stone-200 p-5 rounded-2xl space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
-                          <h4 className="text-xs font-black text-stone-800 uppercase tracking-wider">
-                            {isMedical ? 'إضافة فيديو ريلزت جديد' : 'إضافة فيديو ترويجي جديد (ريلز)'}
-                          </h4>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="space-y-1">
-                              <label className="block text-xs font-bold text-stone-700">عنوان توضيحي للفيديو</label>
-                              <input 
-                                type="text"
-                                value={newReelTitle}
-                                onChange={(e) => setNewReelTitle(e.target.value)}
-                                placeholder={isMedical ? "مثال: نصيحة طبية، جولة داخل العيادة، أو شرح إجراء علاجي" : "مثال: استعراض تشكيلة الملابس الجديدة أو أجواء المحل"}
-                                className="w-full text-xs px-3.5 py-2 rounded-xl border border-stone-200 bg-white focus:outline-none focus:border-purple-600 text-right"
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <label className="block text-xs font-bold text-stone-700">رابط الفيديو (فيسبوك، إنستغرام، يوتيوب شورتس)</label>
-                              <input 
-                                type="url"
-                                required
-                                value={newReelUrl}
-                                onChange={(e) => setNewReelUrl(e.target.value)}
-                                placeholder="انسخ الرابط والصقه هنا (مثال: https://www.instagram.com/reel/...)"
-                                className="w-full text-xs px-3.5 py-2 rounded-xl border border-stone-200 bg-white focus:outline-none focus:border-purple-600 text-left"
-                                style={{ direction: 'ltr' }}
-                              />
-                            </div>
-                          </div>
-                          
-                          <div className="bg-purple-50 text-purple-950 p-3 rounded-xl text-[11px] leading-relaxed border border-purple-100 flex items-start gap-2">
-                            <Sparkles className="h-4 w-4 text-purple-600 shrink-0 mt-0.5" />
-                            <p>
-                              <strong>ملاحظة للمبرمج التاجر:</strong> النظام يدعم روابط الفيديوهات المباشرة من 
-                              <span className="font-bold"> فيسبوك ريلز</span>، 
-                              <span className="font-bold"> إنستغرام ريلز</span>، و 
-                              <span className="font-bold"> يوتيوب شورتس (YouTube Shorts)</span>. سيتم تضمين الفيديو تلقائياً بشكل أنيق لزوار الصفحة.
-                            </p>
-                          </div>
-
-                          <div className="flex items-center gap-2 justify-end pt-1">
+                      {/* BROAD ACTION BUTTON & EXPANDING FORM FOR REELS */}
+                      {isOwner && (
+                        <div className="space-y-4">
+                          {!isAddReelOpen && (
                             <button
                               type="button"
-                              onClick={() => {
-                                setIsAddReelOpen(false);
-                                setNewReelUrl('');
-                                setNewReelTitle('');
-                              }}
-                              className="px-4 py-2 rounded-xl text-xs font-bold text-stone-600 hover:bg-stone-100 transition-colors"
+                              onClick={() => setIsAddReelOpen(true)}
+                              className="w-full py-4 px-6 bg-gradient-to-r from-purple-800 via-indigo-900 to-purple-800 hover:from-purple-900 hover:to-indigo-950 text-white font-black text-sm sm:text-base rounded-2xl sm:rounded-3xl shadow-md hover:shadow-lg transition-all duration-300 flex items-center justify-center cursor-pointer active:scale-[0.99] border border-purple-600/50"
                             >
-                              إلغاء
+                              <span className="tracking-wide">{isMedical ? 'إضافة فيديو ريلزت جديد' : 'إضافة فيديو ريلز جديد'}</span>
                             </button>
-                            <button
-                              type="submit"
-                              disabled={submittingReel}
-                              className="bg-purple-600 hover:bg-purple-700 text-white px-5 py-2 rounded-xl text-xs font-black transition-all shadow-sm flex items-center gap-1.5"
-                            >
-                              {submittingReel ? 'جاري الحفظ...' : 'حفظ ونشر الفيديو'}
-                            </button>
-                          </div>
-                        </form>
+                          )}
+
+                          {/* Add Reel Form */}
+                          {isAddReelOpen && (
+                            <form onSubmit={handleSaveReel} className="bg-white border-2 border-purple-300 p-5 sm:p-7 rounded-3xl space-y-4 shadow-lg animate-in fade-in zoom-in-98 duration-200">
+                              <div className="flex items-center justify-between border-b border-stone-100 pb-2">
+                                <h4 className="text-sm font-black text-stone-900 flex items-center gap-2">
+                                  <Sparkles className="h-4 w-4 text-purple-600" />
+                                  <span>{isMedical ? 'إضافة فيديو ريلزت جديد' : 'إضافة فيديو ترويجي جديد (ريلز)'}</span>
+                                </h4>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setIsAddReelOpen(false);
+                                    setNewReelUrl('');
+                                    setNewReelTitle('');
+                                  }}
+                                  className="text-stone-400 hover:text-stone-600 p-1 cursor-pointer"
+                                >
+                                  <X className="h-4 w-4" />
+                                </button>
+                              </div>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                  <label className="block text-xs font-bold text-stone-700">عنوان توضيحي للفيديو</label>
+                                  <input 
+                                    type="text"
+                                    value={newReelTitle}
+                                    onChange={(e) => setNewReelTitle(e.target.value)}
+                                    placeholder={isMedical ? "مثال: نصيحة طبية، جولة داخل العيادة، أو شرح إجراء علاجي" : "مثال: استعراض تشكيلة الملابس الجديدة أو أجواء المحل"}
+                                    className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-stone-200 bg-stone-50 focus:bg-white focus:outline-none focus:border-purple-600 text-right font-medium"
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="block text-xs font-bold text-stone-700">رابط الفيديو (فيسبوك، إنستغرام، يوتيوب شورتس)</label>
+                                  <input 
+                                    type="url"
+                                    required
+                                    value={newReelUrl}
+                                    onChange={(e) => setNewReelUrl(e.target.value)}
+                                    placeholder="https://www.instagram.com/reel/..."
+                                    className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-stone-200 bg-stone-50 focus:bg-white focus:outline-none focus:border-purple-600 text-left font-mono"
+                                    style={{ direction: 'ltr' }}
+                                  />
+                                </div>
+                              </div>
+                              
+                              <div className="bg-purple-50 text-purple-950 p-3.5 rounded-2xl text-[11px] leading-relaxed border border-purple-200 flex items-start gap-2">
+                                <Sparkles className="h-4 w-4 text-purple-600 shrink-0 mt-0.5" />
+                                <p>
+                                  <strong>ملاحظة للمنشأة:</strong> يدعم النظام روابط الفيديوهات من 
+                                  <span className="font-bold"> فيسبوك ريلز</span>، 
+                                  <span className="font-bold"> إنستغرام ريلز</span>، و 
+                                  <span className="font-bold"> يوتيوب شورتس (YouTube Shorts)</span>. يتم تضمين الفيديو تلقائياً بشكل جذاب للزوار.
+                                </p>
+                              </div>
+
+                              <div className="flex items-center gap-2 justify-end pt-2 border-t border-stone-100">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setIsAddReelOpen(false);
+                                    setNewReelUrl('');
+                                    setNewReelTitle('');
+                                  }}
+                                  className="px-4 py-2.5 rounded-xl text-xs font-bold text-stone-600 bg-stone-100 hover:bg-stone-200 transition-colors cursor-pointer"
+                                >
+                                  إلغاء
+                                </button>
+                                <button
+                                  type="submit"
+                                  disabled={submittingReel}
+                                  className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2.5 rounded-xl text-xs font-black transition-all shadow-md flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                                >
+                                  {submittingReel ? 'جاري الحفظ...' : 'حفظ ونشر الفيديو 🎉'}
+                                </button>
+                              </div>
+                            </form>
+                          )}
+                        </div>
                       )}
 
                       {/* Reels Grid */}
@@ -3126,6 +3228,19 @@ export function BusinessDetail() {
                         <span>عرض كافة وظائف إربد</span>
                       </Link>
                     </div>
+
+                    {/* BROAD ACTION BUTTON FOR JOBS */}
+                    {isOwner && (
+                      <div className="pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setIsAddJobModalOpen(true)}
+                          className="w-full py-4 px-6 bg-gradient-to-r from-[#1a4d2e] via-emerald-800 to-[#1a4d2e] hover:from-emerald-800 hover:to-emerald-700 text-white font-black text-sm sm:text-base rounded-2xl sm:rounded-3xl shadow-md hover:shadow-lg transition-all duration-300 flex items-center justify-center cursor-pointer active:scale-[0.99] border border-emerald-700/60"
+                        >
+                          <span className="tracking-wide">إضافة وظيفة شاغرة جديدة</span>
+                        </button>
+                      </div>
+                    )}
 
                     {activeJobs.length === 0 ? (
                       <div className="py-12 text-center bg-stone-50/70 rounded-2xl border border-dashed border-stone-200 p-6 space-y-4">
@@ -3648,22 +3763,34 @@ export function BusinessDetail() {
                         </div>
                         
                         <div>
-                          <label htmlFor="comment" className="block text-sm font-bold text-stone-600 mb-2">رأيك بالتفصيل</label>
+                          <div className="flex items-center justify-between mb-2">
+                            <label htmlFor="comment" className="block text-sm font-bold text-stone-600">رأيك بالتفصيل</label>
+                          </div>
                           <textarea
                             id="comment"
                             rows={3}
                             required
-                            className="block w-full p-4 border border-[#e5e1da] rounded-2xl focus:ring-2 focus:ring-[#1a4d2e]/20 focus:border-[#1a4d2e] outline-none transition-all resize-none text-[#2d2a26] text-base"
+                            className={`block w-full p-4 border rounded-2xl focus:ring-2 outline-none transition-all resize-none text-[#2d2a26] text-base ${
+                              containsUrlOrLink(newComment)
+                                ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-500/20 bg-rose-50/20'
+                                : 'border-[#e5e1da] focus:ring-[#1a4d2e]/20 focus:border-[#1a4d2e]'
+                            }`}
                             placeholder="اكتب تعليقك، ملاحظاتك عن الخدمة، الجودة، أو الأسعار..."
                             value={newComment}
                             onChange={(e) => setNewComment(e.target.value)}
                           ></textarea>
+                          {containsUrlOrLink(newComment) && (
+                            <div className="mt-2.5 p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold rounded-xl flex items-center gap-2 animate-in fade-in">
+                              <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
+                              <span>عذراً، يمنع إدراج الروابط والمواقع الإلكترونية في التقييم نهائياً (مسموح بالنصوص فقط).</span>
+                            </div>
+                          )}
                         </div>
                         
                         <div className="flex justify-end">
                           <button
                             type="submit"
-                            disabled={submittingReview || !newComment.trim()}
+                            disabled={submittingReview || !newComment.trim() || containsUrlOrLink(newComment)}
                             className="w-full sm:w-auto px-7 py-3 bg-[#1a4d2e] text-white rounded-xl font-bold hover:bg-[#133b22] focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-xs"
                           >
                             {submittingReview ? 'جاري النشر...' : 'نشر التقييم في المنصة'}
@@ -3692,11 +3819,11 @@ export function BusinessDetail() {
                           <div className="flex flex-wrap gap-1.5">
                             {[
                               { label: 'الكل', value: 0 },
-                              { label: '5 ⭐', value: 5 },
-                              { label: '4 فأكثر ⭐', value: 4 },
-                              { label: '3 فأكثر ⭐', value: 3 },
-                              { label: '2 فأكثر ⭐', value: 2 },
-                              { label: '1 فأكثر ⭐', value: 1 }
+                              { label: '5 نجوم', value: 5 },
+                              { label: '4 نجوم فأكثر', value: 4 },
+                              { label: '3 نجوم فأكثر', value: 3 },
+                              { label: 'نجمتان فأكثر', value: 2 },
+                              { label: 'نجمة فأكثر', value: 1 }
                             ].map((tab) => (
                               <button
                                 key={tab.value}
@@ -3773,7 +3900,7 @@ export function BusinessDetail() {
                                 </div>
                                 <div>
                                   <div className="flex items-center gap-2">
-                                    <span className="font-bold text-[#2d2a26] text-base">{review.userName || 'عضو زائر'}</span>
+                                    <span className="font-bold text-[#2d2a26] text-base">{stripUrlsAndLinks(review.userName) || 'عضو زائر'}</span>
                                     <span className="text-[10px] bg-emerald-50 text-emerald-800 font-bold px-2 py-0.5 rounded-md border border-emerald-100">
                                       عضو المنصة
                                     </span>
@@ -3809,7 +3936,7 @@ export function BusinessDetail() {
                             </div>
                             
                             <p className="text-stone-700 text-base leading-relaxed bg-[#fdfcfb] p-3.5 rounded-xl border border-stone-100 break-words">
-                              {review.comment}
+                              {stripUrlsAndLinks(review.comment)}
                             </p>
 
                             {/* Existing Owner Reply */}
@@ -3819,7 +3946,7 @@ export function BusinessDetail() {
                                   <Store className="h-3.5 w-3.5" />
                                   <span>رد المنشأة ({review.reply.authorName}):</span>
                                 </div>
-                                <p className="text-stone-700 text-sm leading-relaxed">{review.reply.text}</p>
+                                <p className="text-stone-700 text-sm leading-relaxed">{stripUrlsAndLinks(review.reply.text)}</p>
                               </div>
                             )}
 
@@ -3831,11 +3958,18 @@ export function BusinessDetail() {
                                     <div className="w-full space-y-2">
                                       <textarea
                                         rows={2}
-                                        className="block w-full p-3 border border-[#e5e1da] rounded-xl focus:ring-2 focus:ring-[#1a4d2e]/20 focus:border-[#1a4d2e] outline-none text-sm resize-none"
-                                        placeholder="اكتب رد صاحب العمل هنا بكل لباقة..."
+                                        className={`block w-full p-3 border rounded-xl focus:ring-2 focus:ring-[#1a4d2e]/20 focus:border-[#1a4d2e] outline-none text-sm resize-none ${
+                                          containsUrlOrLink(replyTextMap[review.id])
+                                            ? 'border-rose-400 bg-rose-50/20'
+                                            : 'border-[#e5e1da]'
+                                        }`}
+                                        placeholder="اكتب رد صاحب العمل هنا بكل لباقة (نصوص فقط دون روابط)..."
                                         value={replyTextMap[review.id] || ''}
                                         onChange={(e) => setReplyTextMap(prev => ({ ...prev, [review.id]: e.target.value }))}
                                       />
+                                      {containsUrlOrLink(replyTextMap[review.id]) && (
+                                        <p className="text-[11px] text-rose-600 font-bold">عذراً، يمنع إدراج الروابط في الردود.</p>
+                                      )}
                                       <div className="flex justify-end gap-2">
                                         <button
                                           onClick={() => setReplyActiveId(null)}
@@ -3845,7 +3979,7 @@ export function BusinessDetail() {
                                         </button>
                                         <button
                                           onClick={() => handleSaveOwnerReply(review.id)}
-                                          disabled={submittingReply || !(replyTextMap[review.id] || '').trim()}
+                                          disabled={submittingReply || !(replyTextMap[review.id] || '').trim() || containsUrlOrLink(replyTextMap[review.id])}
                                           className="px-4 py-1.5 bg-[#1a4d2e] text-white rounded-lg text-xs font-bold disabled:opacity-50 transition-colors cursor-pointer"
                                         >
                                           {submittingReply ? 'جاري الحفظ...' : 'حفظ الرد'}
@@ -4138,12 +4272,18 @@ export function BusinessDetail() {
                       </div>
                       <div className="space-y-1">
                         <span className="font-bold text-stone-800 block">خدمة التوصيل:</span>
-                        <div className="flex items-center gap-2">
-                          <span className="bg-blue-100 text-blue-800 text-[11px] font-black px-2.5 py-0.5 rounded-md border border-blue-200/60 flex items-center gap-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <button
+                            onClick={() => setShowDeliveryModal(true)}
+                            className="bg-blue-100 text-blue-800 text-[11px] font-black px-2.5 py-0.5 rounded-md border border-blue-200/60 flex items-center gap-1 hover:bg-blue-200 transition-all cursor-pointer shadow-3xs"
+                            title="عرض المناطق المشمولة بالتوصيل"
+                          >
                             <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
-                            التوصيل متوفر
+                            التوصيل متوفر (المناطق المشمولة)
+                          </button>
+                          <span className="text-xs text-stone-500">
+                            {business.deliveryRegions ? 'مناطق محددة' : 'جميع مناطق إربد'}
                           </span>
-                          <span className="text-xs text-stone-500">متاح لجميع مناطق إربد</span>
                         </div>
                       </div>
                     </div>
@@ -5747,6 +5887,19 @@ export function BusinessDetail() {
             document.body
           )}
 
+          {/* 1b. Add Job Modal (For Business Owners) */}
+          {business && isOwner && isAddJobModalOpen && (
+            <JobFormModal
+              isOpen={isAddJobModalOpen}
+              onClose={() => setIsAddJobModalOpen(false)}
+              defaultBusinessId={business.id}
+              onJobSaved={(savedJob) => {
+                setActiveJobs(prev => [savedJob, ...prev]);
+                setIsAddJobModalOpen(false);
+              }}
+            />
+          )}
+
           {/* 2. Suggest an Edit Modal */}
           {business && isEditSuggestionOpen && typeof document !== 'undefined' && createPortal(
             <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto" dir="rtl">
@@ -6307,6 +6460,104 @@ export function BusinessDetail() {
           </div>
         </div>
       )}
+
+      {/* Delivery Regions Modal (Interactive Regions Lookup) */}
+      {showDeliveryModal && business && (
+        <div className="fixed inset-0 z-[110000] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in" dir="rtl">
+          <div 
+            className="bg-white rounded-3xl p-6 max-w-lg w-full shadow-2xl border border-stone-200 text-right space-y-4 animate-scale-up"
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-stone-100">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 bg-blue-50 text-blue-600 rounded-2xl">
+                  <Truck className="h-5.5 w-5.5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-stone-900">المناطق المشمولة بالتوصيل</h3>
+                  <p className="text-[11px] text-stone-500 font-medium">المناطق والأحياء التي يخدمها ({business.name})</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDeliveryModal(false)}
+                className="p-1.5 hover:bg-stone-100 rounded-xl transition-colors text-stone-400 hover:text-stone-700 cursor-pointer text-xs font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="space-y-4 py-2">
+              <div className="p-4 bg-emerald-50/50 border border-emerald-100 rounded-2xl flex items-start gap-3">
+                <MapPin className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
+                <div className="space-y-0.5 text-xs">
+                  <span className="font-bold text-emerald-950 block">موقع المحل الرئيسي:</span>
+                  <span className="text-emerald-800 font-medium">{business.address} - {business.district || 'إربد'}</span>
+                </div>
+              </div>
+
+              {business.deliveryRegions ? (
+                <div className="space-y-3">
+                  <div className="text-xs font-bold text-stone-700 flex items-center gap-1.5">
+                    <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+                    المناطق المتاحة للتوصيل حالياً:
+                  </div>
+                  <div className="flex flex-wrap gap-2 max-h-[220px] overflow-y-auto p-1">
+                    {business.deliveryRegions.split(/[,،\n]+/).map((region, idx) => {
+                      const trimmed = region.trim();
+                      if (!trimmed) return null;
+                      return (
+                        <span 
+                          key={idx}
+                          className="bg-blue-50 hover:bg-blue-100/85 text-blue-700 border border-blue-100 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors"
+                        >
+                          <span className="w-1.5 h-1.5 bg-blue-400 rounded-full" />
+                          {trimmed}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <div className="p-5 bg-blue-50/40 border border-blue-100/50 rounded-2xl text-center space-y-2">
+                  <Truck className="h-8 w-8 text-blue-500 mx-auto animate-bounce" style={{ animationDuration: '4s' }} />
+                  <h4 className="text-xs font-black text-blue-900">خدمة التوصيل تغطي جميع المناطق!</h4>
+                  <p className="text-[11px] text-stone-600 leading-relaxed max-w-sm mx-auto font-medium">
+                    يقدم هذا المحل خدمة التوصيل السريع لجميع أحياء ومناطق مدينة إربد وضواحيها دون استثناء. يرجى الاتصال والتنسيق المباشر مع المتجر للطلب.
+                  </p>
+                </div>
+              )}
+
+              {/* Contact/Call to order button if phone is available */}
+              {business.phone && (
+                <div className="pt-2">
+                  <a
+                    href={`tel:${business.phone}`}
+                    className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-xl text-xs transition-all shadow-sm active:scale-95 cursor-pointer flex items-center justify-center gap-2 text-center"
+                  >
+                    <Phone className="h-4 w-4" />
+                    <span>اتصل الآن للطلب والتوصيل: {business.phone}</span>
+                  </a>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setShowDeliveryModal(false)}
+                className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold rounded-xl text-xs transition-colors cursor-pointer"
+              >
+                إغلاق
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+export default BusinessDetail;

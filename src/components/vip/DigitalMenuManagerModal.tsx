@@ -7,7 +7,7 @@ import {
   Tag, Info, HelpCircle, AlertCircle, ArrowUp, ArrowDown, Play,
   Home, Building, Activity, ShieldCheck, GraduationCap, Wrench, Gift, ShoppingBag,
   Layers, PlusCircle, Eye, SlidersHorizontal, ArrowRight, CheckCircle2, ChevronDown,
-  Percent, Sparkle, RefreshCw, Search, Package
+  Percent, Sparkle, RefreshCw, Search, Package, Clock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Business, MenuItem, MenuItemVersion } from '../../types';
@@ -442,6 +442,7 @@ export function DigitalMenuManagerModal({
   const [badge, setBadge] = useState<'popular' | 'new' | 'spicy' | 'vegetarian' | 'none'>('none');
   const [trackStock, setTrackStock] = useState(false);
   const [stockCount, setStockCount] = useState<number | ''>('');
+  const [prepTimeMinutes, setPrepTimeMinutes] = useState<number | ''>('');
   
   // Custom Options/Modifiers state
   const [options, setOptions] = useState<string[]>([]);
@@ -561,6 +562,7 @@ export function DigitalMenuManagerModal({
     setBadge(item.badge || (item.isPopular ? 'popular' : 'none'));
     setTrackStock(!!item.trackStock);
     setStockCount(item.stockCount !== undefined ? item.stockCount : '');
+    setPrepTimeMinutes(item.prepTimeMinutes !== undefined ? item.prepTimeMinutes : '');
     setOptions(item.options || []);
     setNewOptionInput('');
     setVersions(item.versions || []);
@@ -591,6 +593,7 @@ export function DigitalMenuManagerModal({
     setBadge('none');
     setTrackStock(false);
     setStockCount('');
+    setPrepTimeMinutes('');
     setOptions([]);
     setNewOptionInput('');
     setVersions([]);
@@ -692,6 +695,7 @@ export function DigitalMenuManagerModal({
       createdAt: editingItem ? (editingItem.createdAt || Date.now()) : Date.now(),
       trackStock: trackStock || undefined,
       stockCount: trackStock ? (isNaN(Number(parsedStock)) ? 0 : Number(parsedStock)) : undefined,
+      prepTimeMinutes: prepTimeMinutes !== '' ? Number(prepTimeMinutes) : undefined,
     };
 
     if (editingItem) {
@@ -858,16 +862,16 @@ export function DigitalMenuManagerModal({
         <div className="w-12 h-1.5 bg-stone-300 rounded-full mx-auto my-2 sm:hidden shrink-0" />
         
         {/* Top Sticky Bar */}
-        <div className="flex items-center justify-between border-b border-stone-200 px-5 py-4 bg-gradient-to-r from-stone-50 via-white to-amber-50/30">
+        <div className="flex items-center justify-between border-b border-stone-200 px-5 py-4 bg-white">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#1a4d2e] to-[#2d6a4f] text-white flex items-center justify-center shadow-md shadow-[#1a4d2e]/20">
+            <div className="w-11 h-11 rounded-2xl bg-stone-100 border border-stone-200/80 text-stone-800 flex items-center justify-center shadow-2xs">
               {renderHeaderIcon()}
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-base sm:text-lg font-black text-stone-900">{theme.title}</h2>
-                <span className="text-[10px] bg-amber-500 text-amber-950 px-2 py-0.5 rounded-full font-black flex items-center gap-1 shadow-3xs">
-                  <Sparkles className="h-2.5 w-2.5" /> VIP 👑
+                <span className="text-[10px] bg-amber-100 text-amber-900 border border-amber-200 px-2 py-0.5 rounded-full font-black flex items-center gap-1">
+                  <Sparkles className="h-2.5 w-2.5 text-amber-600" /> VIP 👑
                 </span>
               </div>
               <p className="text-xs text-stone-500 mt-0.5">{business.name} • {items.length} أصناف مضافة</p>
@@ -1374,6 +1378,32 @@ export function DigitalMenuManagerModal({
                           </span>
                         </div>
                       )}
+
+                      {/* Estimated Preparation Time Input */}
+                      <div className="p-3.5 bg-amber-50/50 border border-amber-200/80 rounded-2xl space-y-1.5">
+                        <label className="block text-xs font-black text-stone-900 flex items-center justify-between">
+                          <span className="flex items-center gap-1.5 text-amber-950">
+                            <Clock className="h-4 w-4 text-amber-600" />
+                            <span>وقت التحضير المتوقع للوجبة (اختياري)</span>
+                          </span>
+                          <span className="text-[10px] text-amber-800 font-bold">بالدقائق (مثال: 15)</span>
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            min="1"
+                            max="180"
+                            value={prepTimeMinutes}
+                            onChange={(e) => setPrepTimeMinutes(e.target.value === '' ? '' : Math.max(1, parseInt(e.target.value) || 0))}
+                            placeholder="مثال: 15"
+                            className="w-full p-2.5 pl-16 bg-white border border-stone-200 rounded-xl text-xs font-bold text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                          />
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-stone-500 font-bold">دقيقة</span>
+                        </div>
+                        <p className="text-[10px] text-stone-500 font-medium leading-snug">
+                          ⏱️ يظهر وقت التحضير المتوقع للزبائن على كرت الوجبة وفي تفاصيل السلة لضبط توقعات الوقت قبل الطلب.
+                        </p>
+                      </div>
 
                       {/* Instant Availability Toggler */}
                       <div className="flex items-center justify-between p-3.5 bg-stone-50 border border-stone-200 rounded-2xl">

@@ -7,11 +7,12 @@ export function FloatingScrollToTop() {
   const location = useLocation();
 
   useEffect(() => {
+    let wasVisible = false;
     const handleScroll = () => {
-      if (window.scrollY > 280) {
-        setVisible(true);
-      } else {
-        setVisible(false);
+      const isOver = window.scrollY > 280;
+      if (isOver !== wasVisible) {
+        wasVisible = isOver;
+        setVisible(isOver);
       }
     };
 

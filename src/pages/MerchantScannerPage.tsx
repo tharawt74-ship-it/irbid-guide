@@ -28,18 +28,54 @@ import {
   ImageIcon,
   ExternalLink,
   RefreshCw,
-  UploadCloud
+  UploadCloud,
+  Utensils,
+  X
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../lib/firebase';
 import { doc, getDoc, updateDoc, collection, query, where, getDocs, increment, setDoc } from 'firebase/firestore';
 import { markRewardUsed, recordCodeRedemption, checkCodeRedeemedStatus, UserReward } from '../lib/rewardHelper';
+import { getLocalOrders, saveLocalOrder, broadcastOrderUpdate } from '../lib/ordersSyncHelper';
 import { cn } from '../lib/utils';
 import { Business } from '../types';
 
+// Helper to extract potential business ID from store/menu/rate URLs
+function extractBusinessIdFromUrl(text: string): string | null {
+  try {
+    const trimmedText = text.trim();
+    if (!trimmedText) return null;
+
+    // Check relative or absolute URL format
+    let urlStr = trimmedText;
+    if (!trimmedText.includes('://')) {
+      urlStr = `https://shoofi.app/${trimmedText.startsWith('/') ? trimmedText.substring(1) : trimmedText}`;
+    }
+
+    const url = new URL(urlStr);
+    const pathname = url.pathname;
+    const segments = pathname.split('/').filter(Boolean);
+
+    if (segments.length === 0) return null;
+
+    // Patterns:
+    // 1. /business/:id or /b/:id
+    // 2. /rate/:id or /review/:id
+    // 3. /business/:id/rate or /b/:id/rate or /business/:id/menu-offers or /b/:id/menu-offers
+    if (['business', 'b', 'rate', 'review'].includes(segments[0])) {
+      if (segments[1]) {
+        return segments[1];
+      }
+    }
+  } catch (e) {
+    // Ignore URL parse errors
+  }
+  return null;
+}
+
 export function MerchantScannerPage() {
   const navigate = useNavigate();
-  const { currentUser, ownedBusinesses } = useAuth();
+  const { currentUser, ownedBusinesses, isAdmin } = useAuth();
 
   // Active businesses that have gift code enabled
   const activeBusinesses = (ownedBusinesses || []).filter(b => 
@@ -78,6 +114,10 @@ export function MerchantScannerPage() {
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [isConsuming, setIsConsuming] = useState<boolean>(false);
   const [consumeSuccess, setConsumeSuccess] = useState<boolean>(false);
+
+  // Scanned Food Order state
+  const [scannedOrder, setScannedOrder] = useState<any | null>(null);
+  const [isUpdatingOrder, setIsUpdatingOrder] = useState<boolean>(false);
 
   // Trigger Haptic Vibration & Screen Shake
   const triggerShake = () => {
@@ -342,7 +382,84 @@ export function MerchantScannerPage() {
     setIsSearching(true);
     setLookupError(null);
     setVerifiedReward(null);
+    setScannedOrder(null);
     setConsumeSuccess(false);
+
+    const ownedBizIds = (ownedBusinesses || []).map(b => b.id);
+
+    // Enforce absolute ownership verification for any business URLs (e.g., store/menu QR codes)
+    const scannedBizId = extractBusinessIdFromUrl(trimmed);
+    if (scannedBizId) {
+      const isOwned = ownedBizIds.includes(scannedBizId);
+      if (!isOwned && !isAdmin) {
+        triggerShake();
+        playBeep(false);
+        setLookupError("عذراً، هذا الكود مخصص لمحل/منشأة أخرى ولا يتبع لحسابك الحالي. لا يمكنك مسح أو استخدام هذا الكود.");
+        setIsSearching(false);
+        return;
+      }
+    }
+
+    // Intercept Food Orders starting with ORD_ or 4-digit numeric code or order QR
+    const normalizedUpper = trimmed.toUpperCase();
+    const isOrderPattern = normalizedUpper.startsWith('ORD_') || (/^\d{4}$/.test(trimmed) && trimmed.length === 4);
+
+    if (isOrderPattern) {
+      let foundOrder: any = null;
+
+      // 1. Try finding in local orders first
+      const localOrdersList = getLocalOrders();
+      if (normalizedUpper.startsWith('ORD_')) {
+        foundOrder = localOrdersList.find(o => o.id === normalizedUpper || (o.id && o.id.toUpperCase() === normalizedUpper));
+      } else {
+        foundOrder = localOrdersList.find(o => String(o.shortCode) === trimmed || String(o.id).endsWith(trimmed));
+      }
+
+      // 2. If not found locally, query Firestore
+      if (!foundOrder && db) {
+        try {
+          if (normalizedUpper.startsWith('ORD_')) {
+            const orderRef = doc(db, 'orders', normalizedUpper);
+            const orderSnap = await getDoc(orderRef);
+            if (orderSnap.exists()) {
+              foundOrder = { id: orderSnap.id, ...orderSnap.data() };
+            }
+          } else {
+            const q = query(collection(db, 'orders'), where('shortCode', '==', trimmed));
+            const snap = await getDocs(q);
+            if (!snap.empty) {
+              foundOrder = { id: snap.docs[0].id, ...snap.docs[0].data() };
+            }
+          }
+        } catch (err) {
+          console.warn("Firestore query notice for order:", err);
+        }
+      }
+
+      if (foundOrder) {
+        // Enforce ownership check for order
+        const isOwnedOrder = ownedBizIds.includes(foundOrder.businessId);
+        if (!isOwnedOrder && !isAdmin) {
+          triggerShake();
+          playBeep(false);
+          setLookupError("عذراً، هذا الطلب مخصص لمحل/منشأة أخرى ولا يتبع لحسابك الحالي. لا يمكنك مسح أو تعديل هذا الطلب.");
+          setIsSearching(false);
+          return;
+        }
+
+        setScannedOrder(foundOrder);
+        saveLocalOrder(foundOrder);
+        playBeep(true);
+        setIsSearching(false);
+        return;
+      } else if (normalizedUpper.startsWith('ORD_')) {
+        triggerShake();
+        playBeep(false);
+        setLookupError("لم يتم العثور على أي طلب طعام مطابق لهذا الكود 🔍");
+        setIsSearching(false);
+        return;
+      }
+    }
 
     try {
       let targetCode = trimmed;
@@ -464,6 +581,15 @@ export function MerchantScannerPage() {
         triggerShake();
         playBeep(false);
         setLookupError("رمز الخصم هذا غير صالح أو غير موجود في النظام. يرجى التحقق من صحة الكود.");
+        return;
+      }
+
+      // Enforce absolute account/ownership limits for scanned rewards/discounts
+      const isOwnedReward = ownedBizIds.includes(foundReward.businessId);
+      if (!isOwnedReward && !isAdmin) {
+        triggerShake();
+        playBeep(false);
+        setLookupError("عذراً، هذا الكود مخصص لمحل/منشأة أخرى ولا يتبع لحسابك الحالي. لا يمكنك مسح أو استخدام هذا الكود.");
         return;
       }
 
@@ -627,6 +753,7 @@ export function MerchantScannerPage() {
   // Reset for next scan
   const handleResetForNextScan = () => {
     setVerifiedReward(null);
+    setScannedOrder(null);
     setLookupError(null);
     setConsumeSuccess(false);
     setManualCode('');
@@ -638,6 +765,12 @@ export function MerchantScannerPage() {
   // Determine Screen Dynamic Theme State: 'blue' (default) | 'green' (valid active code) | 'yellow' (consumed successfully) | 'red' (already consumed / invalid / error)
   const screenTheme: 'blue' | 'green' | 'yellow' | 'red' = (() => {
     if (consumeSuccess) return 'yellow';
+    if (scannedOrder) {
+      if (scannedOrder.status === 'pending') return 'green';
+      if (scannedOrder.status === 'processing') return 'blue';
+      if (scannedOrder.status === 'completed') return 'yellow';
+      return 'blue';
+    }
     if (verifiedReward) {
       if (!verifiedReward.isOwnedByMerchant || verifiedReward.isAlreadyUsed || verifiedReward.isExpired) {
         return 'red';
@@ -708,7 +841,7 @@ export function MerchantScannerPage() {
             )} />
             <div className="text-right">
               <h1 className="text-sm font-black text-white tracking-wide">
-                ماسح كودات الخصم
+                ماسح كودات QR
               </h1>
               <span className={cn(
                 "text-[10px] font-bold block transition-colors leading-tight",
@@ -1090,7 +1223,7 @@ export function MerchantScannerPage() {
         )}
 
         {/* Lookup Error Message */}
-        {lookupError && !verifiedReward && (
+        {lookupError && !verifiedReward && !scannedOrder && (
           <div className="my-4 p-4 rounded-2xl bg-rose-950/80 border-2 border-rose-500 text-rose-200 text-xs font-bold flex items-center gap-3 text-right shadow-xl animate-in fade-in">
             <XCircle className="h-6 w-6 text-rose-400 shrink-0" />
             <div className="flex-1">
@@ -1442,6 +1575,194 @@ export function MerchantScannerPage() {
       <footer className="p-3 text-center text-[10px] text-white/50 border-t border-white/10 z-10 relative">
         منصة شو في إربد • قارئ وماسح الكوبونات المعتمد للمحلات
       </footer>
+
+      {/* 3b. SCANNED FOOD ORDER RESULT MODAL/BOTTOM SHEET POPUP */}
+      {scannedOrder && (
+        <div className="fixed inset-0 bg-stone-950/85 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 z-[500000] overflow-y-auto animate-in fade-in">
+          <div className={cn(
+            "p-5 sm:p-6 rounded-t-[32px] sm:rounded-[32px] rounded-b-none sm:rounded-b-[32px] border-t-2 border-x-2 sm:border-2 text-right space-y-4 shadow-2xl backdrop-blur-xl w-full max-w-lg relative overflow-hidden my-0 sm:my-auto animate-in slide-in-from-bottom duration-300 sm:zoom-in-95 pb-10 sm:pb-6 text-white",
+            scannedOrder.status === 'pending' && "bg-emerald-950/95 border-emerald-400/60 shadow-emerald-950/80",
+            scannedOrder.status === 'processing' && "bg-blue-950/95 border-blue-400/60 shadow-blue-950/80",
+            scannedOrder.status === 'completed' && "bg-amber-950/95 border-amber-400/60 shadow-amber-950/80",
+            scannedOrder.status === 'cancelled' && "bg-rose-950/95 border-rose-500/60 shadow-rose-950/80"
+          )}>
+            {/* Mobile Bottom-sheet Grab/Drag Handle */}
+            <div className="flex justify-center sm:hidden pb-2 -mt-1">
+              <div className="w-12 h-1.5 rounded-full bg-white/20" />
+            </div>
+
+            {/* Header with Close Button */}
+            <div className="flex items-center justify-between pb-3 border-b border-white/15">
+              <div className="flex items-center gap-2.5">
+                <div className="w-11 h-11 rounded-2xl bg-white/10 text-white flex items-center justify-center shrink-0 shadow-lg border border-white/15">
+                  <Utensils className="h-5 w-5" />
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-white/70 block">
+                    تفاصيل طلب الطعام المكتشف من المنيو
+                  </span>
+                  <h3 className="text-sm font-black text-white font-mono">
+                    {scannedOrder.id}
+                  </h3>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className={cn(
+                  "text-[10px] font-black px-3 py-1 rounded-full border shadow-sm",
+                  scannedOrder.status === 'pending' && "bg-emerald-400 text-emerald-950 border-emerald-300 animate-pulse",
+                  scannedOrder.status === 'processing' && "bg-blue-400 text-blue-950 border-blue-300",
+                  scannedOrder.status === 'completed' && "bg-amber-400 text-amber-950 border-amber-300",
+                  scannedOrder.status === 'cancelled' && "bg-rose-500 text-white border-rose-400"
+                )}>
+                  {scannedOrder.status === 'pending' && '⏳ بانتظار التأكيد'}
+                  {scannedOrder.status === 'processing' && '👨‍🍳 قيد التحضير'}
+                  {scannedOrder.status === 'completed' && '🎉 مكتمل وجاهز'}
+                  {scannedOrder.status === 'cancelled' && '❌ ملغي'}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={handleResetForNextScan}
+                  className="p-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+                  title="إغلاق النافذة"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Order Info & Customer details */}
+            <div className="space-y-2 bg-black/40 p-4 rounded-2xl border border-white/10 text-xs">
+              <div className="flex justify-between items-center">
+                <span className="text-white/60">اسم الزبون:</span>
+                <span className="font-black text-white text-sm">{scannedOrder.customerName}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-white/60">رقم الهاتف:</span>
+                <span className="font-mono text-white font-bold">{scannedOrder.customerPhone}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-white/60">كود التتبع 4 أرقام:</span>
+                <span className="font-mono font-black text-emerald-300 text-base bg-white/10 px-2.5 py-0.5 rounded-lg border border-white/20">{scannedOrder.shortCode || '----'}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-white/60">نوع الطلب:</span>
+                <span className="font-bold text-white">
+                  {scannedOrder.orderType === 'dine_in' ? `🍽️ في الصالة (طاولة ${scannedOrder.tableNumber})` :
+                   scannedOrder.orderType === 'takeaway' ? '🥡 سفري / استلام' : '🚗 توصيل خارجي'}
+                </span>
+              </div>
+              {scannedOrder.notes && (
+                <div className="pt-2 border-t border-white/10 text-right">
+                  <span className="text-white/60 block mb-1">📝 الملاحظات:</span>
+                  <span className="text-white font-bold bg-white/10 px-3 py-2 rounded-xl block text-right">{scannedOrder.notes}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Items List */}
+            <div className="space-y-2 bg-black/30 p-4 rounded-2xl border border-white/10 text-xs max-h-52 overflow-y-auto">
+              <span className="text-white/60 block border-b border-white/10 pb-1.5 mb-2 text-right font-black">قائمة المأكولات والمشروبات:</span>
+              {scannedOrder.items?.map((item: any, idx: number) => (
+                <div key={idx} className="flex justify-between items-center text-white font-bold py-1 border-b border-white/5 last:border-b-0">
+                  <span>{item.quantity} ✕ {item.name}</span>
+                  <span className="font-mono text-emerald-300">{(item.price * item.quantity).toFixed(2)} د.أ</span>
+                </div>
+              ))}
+              <div className="flex justify-between items-center pt-2.5 border-t-2 border-dashed border-white/20 font-black text-base text-white">
+                <span>الحساب الإجمالي:</span>
+                <span className="text-emerald-400 text-lg font-mono">{scannedOrder.totalPrice?.toFixed(2)} د.أ</span>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="space-y-2 pt-2">
+              {scannedOrder.status === 'pending' && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setIsUpdatingOrder(true);
+                    const updated = { ...scannedOrder, status: 'processing' };
+                    setScannedOrder(updated);
+                    saveLocalOrder(updated);
+                    broadcastOrderUpdate(updated);
+                    playBeep(true);
+
+                    try {
+                      if (db) {
+                        const orderRef = doc(db, 'orders', scannedOrder.id);
+                        await updateDoc(orderRef, { status: 'processing' });
+                      }
+                    } catch (err) {
+                      console.warn("Notice updating order status in db:", err);
+                    } finally {
+                      setIsUpdatingOrder(false);
+                    }
+                  }}
+                  disabled={isUpdatingOrder}
+                  className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white font-black rounded-2xl transition-all shadow-xl shadow-emerald-950/40 flex items-center justify-center gap-2 cursor-pointer active:scale-95 disabled:opacity-50 text-sm"
+                >
+                  {isUpdatingOrder ? (
+                    <span className="inline-block w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <Check className="h-5 w-5 stroke-[3]" />
+                      <span>تأكيد الطلب وإرساله للمطبخ 👨‍🍳</span>
+                    </>
+                  )}
+                </button>
+              )}
+
+              {scannedOrder.status === 'processing' && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setIsUpdatingOrder(true);
+                    const completedTime = Date.now();
+                    const updated = { ...scannedOrder, status: 'completed', completedAt: completedTime };
+                    setScannedOrder(updated);
+                    saveLocalOrder(updated);
+                    broadcastOrderUpdate(updated);
+                    playBeep(true);
+
+                    try {
+                      if (db) {
+                        const orderRef = doc(db, 'orders', scannedOrder.id);
+                        await updateDoc(orderRef, { status: 'completed', completedAt: completedTime });
+                      }
+                    } catch (err) {
+                      console.warn("Notice updating order completion in db:", err);
+                    } finally {
+                      setIsUpdatingOrder(false);
+                    }
+                  }}
+                  disabled={isUpdatingOrder}
+                  className="w-full py-4 bg-blue-500 hover:bg-blue-600 text-white font-black rounded-2xl transition-all shadow-xl shadow-blue-950/40 flex items-center justify-center gap-2 cursor-pointer active:scale-95 disabled:opacity-50 text-sm"
+                >
+                  {isUpdatingOrder ? (
+                    <span className="inline-block w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <Check className="h-5 w-5 stroke-[3]" />
+                      <span>تجهيز واكتمال الطلب بالكامل 🎉</span>
+                    </>
+                  )}
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={handleResetForNextScan}
+                className="w-full py-3 bg-white/10 hover:bg-white/20 text-white rounded-2xl text-xs font-bold transition-all cursor-pointer border border-white/15"
+              >
+                إغلاق والعودة للمسح
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
 
     </div>
   );

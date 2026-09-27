@@ -16,6 +16,7 @@ import { SEO } from '../components/common/SEO';
 import { CategoriesModal } from '../components/CategoriesModal';
 import { Pagination } from '../components/common/Pagination';
 import { CategoryButtonLabel } from '../components/CategoryButtonLabel';
+import { BlurredVerticalTextScroller } from '../components/common/BlurredVerticalTextScroller';
 import { getCachedBusinesses, setCachedBusinesses, getCachedBanners, setCachedBanners } from '../lib/dataCache';
 import { BOOK_YOUR_AD_BANNER } from '../lib/pageBanners';
 import { compareBusinessesByTier, isBusinessCurrentlyFeatured } from '../lib/vipHelper';
@@ -321,7 +322,8 @@ export function Home() {
     fetchBusinesses();
   }, []);
 
-  const { categories } = useSystemSettings();
+  const { categories, globalSettings } = useSystemSettings();
+  const heroStyle = globalSettings?.heroSectionStyle || 'green_box';
   const mainCategories = categories.map(c => c.name);
   
   const getSubCats = (catName: string) => categories.find(c => c.name === catName)?.subcategories || [];
@@ -506,103 +508,115 @@ export function Home() {
       
       
 
-      {/* Hero Section - Premium Level */}
-      <div className="w-full max-w-full bg-[#0f3820] rounded-2xl md:rounded-[32px] py-10 md:py-20 px-4 sm:p-6 md:p-16 text-white flex flex-col items-center text-center relative overflow-hidden shadow-2xl shadow-[#1a4d2e]/20 min-h-[350px] md:min-h-[500px] justify-center box-border">
-        
-        {/* Animated Mesh Gradient Background */}
-        <div className="absolute inset-0 bg-gradient-to-br from-[#1a4d2e] via-[#0f3820] to-[#0a2414] z-0"></div>
-        
-        {/* Modern Fading Grid (SVG Mask) */}
-        <div 
-          className="absolute inset-0 z-0 opacity-20 pointer-events-none"
-          style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0h40v40H0V0zm1 1h38v38H1V1z' fill='%23ffffff' fill-opacity='0.4' fill-rule='evenodd'/%3E%3C/svg%3E")`,
-            maskImage: 'radial-gradient(ellipse at center, black 0%, transparent 70%)',
-            WebkitMaskImage: 'radial-gradient(ellipse at center, black 0%, transparent 70%)'
-          }}
-        ></div>
+      {/* Dynamic Hero Section according to Admin Control Panel Settings */}
+      {heroStyle === 'wheel_box' ? (
+        /* 1. Wheel Box Hero Section */
+        <BlurredVerticalTextScroller
+          config={globalSettings?.wheelBoxConfig}
+          className="rounded-2xl md:rounded-[32px] -mt-25 sm:-mt-4 lg:-mt-6 -mb-16 sm:-mb-3 lg:mb-2"
+          dir="rtl"
+        />
+      ) : (
+        /* 2. Traditional Green Box Hero Section */
+        <>
+          <div className="w-full max-w-full bg-[#0f3820] rounded-2xl md:rounded-[32px] py-10 md:py-20 px-4 sm:p-6 md:p-16 text-white flex flex-col items-center text-center relative overflow-hidden shadow-2xl shadow-[#1a4d2e]/20 min-h-[350px] md:min-h-[500px] justify-center box-border">
+            
+            {/* Animated Mesh Gradient Background */}
+            <div className="absolute inset-0 bg-gradient-to-br from-[#1a4d2e] via-[#0f3820] to-[#0a2414] z-0"></div>
+            
+            {/* Modern Fading Grid (SVG Mask) */}
+            <div 
+              className="absolute inset-0 z-0 opacity-20 pointer-events-none"
+              style={{
+                backgroundImage: `url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0h40v40H0V0zm1 1h38v38H1V1z' fill='%23ffffff' fill-opacity='0.4' fill-rule='evenodd'/%3E%3C/svg%3E")`,
+                maskImage: 'radial-gradient(ellipse at center, black 0%, transparent 70%)',
+                WebkitMaskImage: 'radial-gradient(ellipse at center, black 0%, transparent 70%)'
+              }}
+            ></div>
 
-        {/* Ambient Glow Orbs */}
-        <div className="absolute top-0 right-1/4 w-64 h-64 md:w-96 md:h-96 bg-[#ff9f1c] rounded-full blur-[80px] md:blur-[120px] opacity-20 animate-pulse mix-blend-screen pointer-events-none"></div>
-        <div className="absolute bottom-0 left-1/4 w-64 h-64 md:w-96 md:h-96 bg-emerald-400 rounded-full blur-[80px] md:blur-[120px] opacity-10 mix-blend-screen pointer-events-none"></div>
+            {/* Ambient Glow Orbs */}
+            <div className="absolute top-0 right-1/4 w-64 h-64 md:w-96 md:h-96 bg-[#ff9f1c] rounded-full blur-[80px] md:blur-[120px] opacity-20 animate-pulse mix-blend-screen pointer-events-none"></div>
+            <div className="absolute bottom-0 left-1/4 w-64 h-64 md:w-96 md:h-96 bg-emerald-400 rounded-full blur-[80px] md:blur-[120px] opacity-10 mix-blend-screen pointer-events-none"></div>
 
-        {/* Floating Micro-elements (Hidden on very small screens to avoid clutter) */}
-        <div className="absolute top-10 right-10 md:top-20 md:right-32 opacity-20 animate-[bounce_5s_infinite] hidden sm:block pointer-events-none">
-          <MapPin className="h-8 w-8 text-white rotate-12" />
-        </div>
-        <div className="absolute bottom-20 left-10 md:bottom-32 md:left-24 opacity-20 animate-[bounce_6s_infinite_reverse] hidden sm:block pointer-events-none">
-          <UtensilsCrossed className="h-10 w-10 text-white -rotate-12" />
-        </div>
-        <div className="absolute top-32 left-12 md:top-40 md:left-40 opacity-20 animate-[pulse_4s_infinite] hidden lg:block pointer-events-none">
-          <Coffee className="h-12 w-12 text-[#ff9f1c] rotate-45" />
-        </div>
-        <div className="absolute bottom-16 right-12 md:bottom-24 md:right-48 opacity-20 animate-[pulse_5s_infinite] hidden lg:block pointer-events-none">
-          <ShoppingCart className="h-10 w-10 text-emerald-300 -rotate-12" />
-        </div>
-        
-        <div className="relative z-10 w-full max-w-3xl mx-auto min-w-0 space-y-4 md:space-y-6">
-          {/* Gradient Typography Heading */}
-          <h1 className="text-3xl sm:text-5xl md:text-7xl font-black text-white tracking-tight leading-tight drop-shadow-lg">
-            شو في ب{"\u200D"}<span className="text-[#ff9f1c] inline-block pb-1">{"\u200D"}إربد؟</span>
-          </h1>
-          
-          <p className="text-sm sm:text-base md:text-xl text-emerald-50/80 max-w-2xl mx-auto leading-relaxed px-4 font-medium">
-            ابحث عن المطاعم، المقاهي، المحلات التجارية، والخدمات المميزة في مدينتك بكل سهولة وبحث ذكي.
-          </p>
+            {/* Floating Micro-elements */}
+            <div className="absolute top-10 right-10 md:top-20 md:right-32 opacity-20 animate-[bounce_5s_infinite] hidden sm:block pointer-events-none">
+              <MapPin className="h-8 w-8 text-white rotate-12" />
+            </div>
+            <div className="absolute bottom-20 left-10 md:bottom-32 md:left-24 opacity-20 animate-[bounce_6s_infinite_reverse] hidden sm:block pointer-events-none">
+              <UtensilsCrossed className="h-10 w-10 text-white -rotate-12" />
+            </div>
+            <div className="absolute top-32 left-12 md:top-40 md:left-40 opacity-20 animate-[pulse_4s_infinite] hidden lg:block pointer-events-none">
+              <Coffee className="h-12 w-12 text-[#ff9f1c] rotate-45" />
+            </div>
+            <div className="absolute bottom-16 right-12 md:bottom-24 md:right-48 opacity-20 animate-[pulse_5s_infinite] hidden lg:block pointer-events-none">
+              <ShoppingCart className="h-10 w-10 text-emerald-300 -rotate-12" />
+            </div>
+            
+            <div className="relative z-10 w-full max-w-3xl mx-auto min-w-0 space-y-4 md:space-y-6">
+              {/* Gradient Typography Heading */}
+              <h1 className="text-3xl sm:text-5xl md:text-7xl font-black text-white tracking-tight leading-tight drop-shadow-lg">
+                شو في ب{"\u200D"}<span className="text-[#ff9f1c] inline-block pb-1">{"\u200D"}إربد؟</span>
+              </h1>
+              
+              <p className="text-sm sm:text-base md:text-xl text-emerald-50/80 max-w-2xl mx-auto leading-relaxed px-4 font-medium">
+                ابحث عن المطاعم، المقاهي، المحلات التجارية، والخدمات المميزة في مدينتك بكل سهولة وبحث ذكي.
+              </p>
 
-          {/* Glassmorphism Search Bar */}
-          <form 
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (searchTerm.trim()) {
-                navigate(`/search?q=${encodeURIComponent(searchTerm.trim())}`);
-              }
-            }}
-            className="mt-6 md:mt-10 w-full max-w-2xl mx-auto min-w-0 relative group"
-          >
-            <input
-              type="text"
-              className="block w-full pr-6 pl-24 py-3.5 md:pr-8 md:pl-28 md:py-5 border border-white/20 rounded-2xl md:rounded-[28px] leading-5 bg-white/10 backdrop-blur-xl text-white placeholder-white/70 focus:outline-none focus:ring-4 focus:ring-amber-500/30 focus:border-amber-400/50 focus:bg-white/15 shadow-[0_8px_32px_rgba(0,0,0,0.2)] font-bold text-sm md:text-lg transition-all duration-300"
-              placeholder="عن ماذا تبحث؟ (مثال: شاورما، ملابس)..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-            <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1 z-20">
-              {searchTerm && (
-                <button 
-                  type="button"
-                  onClick={() => setSearchTerm('')}
-                  className="hover:bg-white/10 text-white/80 hover:text-white rounded-full p-2 transition-colors cursor-pointer"
-                  title="مسح"
-                >
-                  <X className="h-4 w-4 md:h-5 md:w-5" />
-                </button>
-              )}
-              <button
-                type="submit"
-                className="hover:bg-white/10 text-white/90 hover:text-white p-2 md:p-2.5 rounded-full transition-all active:scale-95 cursor-pointer flex items-center justify-center"
-                title="بحث"
+              {/* Glassmorphism Search Bar */}
+              <form 
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (searchTerm.trim()) {
+                    navigate(`/search?q=${encodeURIComponent(searchTerm.trim())}`);
+                  }
+                }}
+                className="mt-6 md:mt-10 w-full max-w-2xl mx-auto min-w-0 relative group"
               >
-                <Search className="h-5 w-5 md:h-6 md:w-6 drop-shadow-sm" />
-              </button>
-            </div>
-          </form>
+                <input
+                  type="text"
+                  className="block w-full pr-6 pl-24 py-3.5 md:pr-8 md:pl-28 md:py-5 border border-white/20 rounded-2xl md:rounded-[28px] leading-5 bg-white/10 backdrop-blur-xl text-white placeholder-white/70 focus:outline-none focus:ring-4 focus:ring-amber-500/30 focus:border-amber-400/50 focus:bg-white/15 shadow-[0_8px_32px_rgba(0,0,0,0.2)] font-bold text-sm md:text-lg transition-all duration-300"
+                  placeholder="عن ماذا تبحث؟ (مثال: شاورما، ملابس)..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1 z-20">
+                  {searchTerm && (
+                    <button 
+                      type="button"
+                      onClick={() => setSearchTerm('')}
+                      className="hover:bg-white/10 text-white/80 hover:text-white rounded-full p-2 transition-colors cursor-pointer"
+                      title="مسح"
+                    >
+                      <X className="h-4 w-4 md:h-5 md:w-5" />
+                    </button>
+                  )}
+                  <button
+                    type="submit"
+                    className="hover:bg-white/10 text-white/90 hover:text-white p-2 md:p-2.5 rounded-full transition-all active:scale-95 cursor-pointer flex items-center justify-center"
+                    title="بحث"
+                  >
+                    <Search className="h-5 w-5 md:h-6 md:w-6 drop-shadow-sm" />
+                  </button>
+                </div>
+              </form>
 
-          {/* Dynamic Smart Suggestions Deck with continuous auto-rotation & animation */}
-          <DynamicSmartSuggestions onSelectSuggestion={(queryText) => {
-            setSearchTerm(queryText);
-            navigate(`/search?q=${encodeURIComponent(queryText)}`);
-          }} />
+              {/* Dynamic Smart Suggestions Deck */}
+              <DynamicSmartSuggestions onSelectSuggestion={(queryText) => {
+                setSearchTerm(queryText);
+                navigate(`/search?q=${encodeURIComponent(queryText)}`);
+              }} />
 
-          {/* Intelligent Search Feedback Badge */}
-          {searchTerm && (
-            <div className="mt-3 inline-flex items-center gap-1.5 text-amber-50 text-[10px] md:text-xs font-black bg-black/30 backdrop-blur-md py-1.5 px-3 md:py-2 md:px-4 rounded-xl border border-amber-500/30 text-right shadow-xl">
-              <Sparkles className="h-3 w-3 md:h-4 md:w-4 text-amber-400 animate-pulse shrink-0" />
-              <span>محركنا الذكي يبحث الآن في المرادفات والتصنيفات بدقة ✨</span>
+              {/* Intelligent Search Feedback Badge */}
+              {searchTerm && (
+                <div className="mt-3 inline-flex items-center gap-1.5 text-amber-50 text-[10px] md:text-xs font-black bg-black/30 backdrop-blur-md py-1.5 px-3 md:py-2 md:px-4 rounded-xl border border-amber-500/30 text-right shadow-xl">
+                  <Sparkles className="h-3 w-3 md:h-4 md:w-4 text-amber-400 animate-pulse shrink-0" />
+                  <span>محركنا الذكي يبحث الآن في المرادفات والتصنيفات بدقة ✨</span>
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      </div>
+          </div>
+        </>
+      )}
 
       {error && (
         <div className="bg-red-50 text-red-700 p-4 rounded-2xl border border-red-100 text-center text-sm md:text-base font-medium mb-4">
@@ -667,7 +681,7 @@ export function Home() {
             {/* Left Edge Gradient Affordance for Mobile Scroll */}
             <div className="pointer-events-none absolute left-0 top-0 bottom-4 w-8 bg-gradient-to-r from-[#fdfcfb] to-transparent z-10 sm:hidden" />
 
-            <div className="flex overflow-x-auto pb-4 pt-1 gap-3.5 sm:gap-4 snap-x scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+            <div className="flex overflow-x-auto pb-4 pt-1 gap-3.5 sm:gap-4 snap-x touch-pan-y overscroll-x-contain scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
             {/* All Button */}
             {(() => {
               const isSelected = categoryFilter === '';
@@ -757,7 +771,7 @@ export function Home() {
                   ) : (
                     <div className="relative">
                       <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-[#fdfcfb] to-transparent z-10 sm:hidden" />
-                      <div className="flex overflow-x-auto gap-2 sm:gap-2.5 pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-hide snap-x items-center" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                      <div className="flex overflow-x-auto gap-2 sm:gap-2.5 pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-hide snap-x touch-pan-y overscroll-x-contain items-center" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                         <button
                           onClick={() => setSubCategoryFilter('')}
                           className={`snap-start shrink-0 whitespace-nowrap px-4 sm:px-5 py-2 sm:py-2.5 rounded-full text-xs sm:text-sm font-bold transition-all duration-200 border cursor-pointer ${
@@ -825,7 +839,7 @@ export function Home() {
             </div>
 
             {/* View Switching Tabs - edge-to-edge scroll on mobile */}
-            <div className="flex items-center bg-transparent sm:bg-stone-100 sm:p-1 sm:rounded-2xl gap-2 sm:gap-1 overflow-x-auto scrollbar-hide select-none w-full sm:w-auto -mx-4 px-4 sm:mx-0 sm:px-0 snap-x">
+            <div className="flex items-center bg-transparent sm:bg-stone-100 sm:p-1 sm:rounded-2xl gap-2 sm:gap-1 overflow-x-auto scrollbar-hide select-none w-full sm:w-auto -mx-4 px-4 sm:mx-0 sm:px-0 snap-x touch-pan-y overscroll-x-contain">
               <button
                 type="button"
                 onClick={() => setActiveTab('all')}

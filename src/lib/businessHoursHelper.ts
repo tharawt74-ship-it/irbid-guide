@@ -95,6 +95,20 @@ export function getLiveWorkingStatus(workingHours?: WorkingHours): LiveStatus {
     };
   }
 
+  // If manually forced open override by owner
+  if (workingHours.isCustomOpen) {
+    return {
+      isOpen: true,
+      isClosingSoon: false,
+      statusText: 'مفتوح حالياً بطلب المالك',
+      badgeBg: 'bg-emerald-50 border-emerald-200 text-emerald-800',
+      badgeText: 'text-emerald-700',
+      dotColor: 'bg-emerald-500 animate-pulse',
+      hoursDisplay: 'مفتوح استثنائياً حالياً (تجاوز ساعات العمل)',
+      nextChangeText: 'مفتوح بطلب المالك'
+    };
+  }
+
   // If open 24 hours
   if (workingHours.isOpen24Hours) {
     return {

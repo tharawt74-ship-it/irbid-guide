@@ -16,6 +16,10 @@ interface MedicalOverviewTabProps {
   onOpenMultiBranchModal: () => void;
   onOpenBannerModal: () => void;
   onOpenUpgradeModal: () => void;
+  onOpenImagesModal?: () => void;
+  onOpenWorkingHoursModal?: () => void;
+  onOpenAddOfferModal?: () => void;
+  onOpenContactModal?: () => void;
 }
 
 export function MedicalOverviewTab({
@@ -347,96 +351,6 @@ export function MedicalOverviewTab({
               ? '🚨 استقبال طوارئ 24 ساعة مفعّل'
               : 'دوام عيادي منتظم'}
           </span>
-        </div>
-      </div>
-
-      {/* Quick Medical Tools Row: Clean QR Poster Print */}
-      <div className="p-4 sm:p-5 bg-gradient-to-r from-teal-950 via-teal-900 to-[#0f331e] rounded-xl sm:rounded-2xl text-white shadow-none sm:shadow-sm border-0 sm:border border-teal-800/40">
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-teal-400/20 text-teal-300 flex items-center justify-center font-bold shrink-0">
-              <Sparkles className="h-5 w-5" />
-            </div>
-            <div>
-              <span className="text-xs sm:text-sm font-black text-white block">ملصقات الاستقبال وطاولات QR الذكية للعيادة</span>
-              <span className="text-[10px] sm:text-xs font-medium text-teal-200">طباعة ملصق الباركود QR للمراجعين لحجز المواعيد وتقييم الخدمة مجاناً</span>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={onOpenQrModal}
-            className="inline-flex items-center justify-center gap-2 bg-white hover:bg-teal-50 text-teal-950 px-4 py-2.5 rounded-xl text-xs font-black transition-all shadow-sm cursor-pointer min-h-[40px] w-full sm:w-auto"
-          >
-            <Printer className="h-4 w-4 text-teal-800" />
-            <span>🖨️ طباعة ملصق وطاولات QR المخصصة</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Welcome Banner Card */}
-      <div className="bg-teal-50/50 border-0 sm:border border-teal-200 p-3.5 sm:p-5 rounded-xl sm:rounded-2xl flex items-center justify-between flex-wrap gap-3 shadow-none sm:shadow-2xs">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-teal-100 text-teal-700 flex items-center justify-center shrink-0">
-            <Sparkles className="h-5 w-5 text-teal-700 fill-teal-500" />
-          </div>
-          <div>
-            <h4 className="text-xs sm:text-sm font-black text-teal-950">النافذة الترحيبية والإعلانات الطبية 🎬</h4>
-            <p className="text-[11px] sm:text-xs text-stone-500 mt-0.5">إشهار أوقات الدوام، مواعيد الأطباء، أو تنويه خاص للمرضى عند زيارة الصفحة</p>
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={onOpenBannerModal}
-          className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-teal-700 to-teal-800 hover:from-teal-800 hover:to-teal-900 text-white rounded-xl text-xs font-bold transition-colors shadow-xs cursor-pointer w-full sm:w-auto"
-        >
-          <Sparkles className="h-3.5 w-3.5 text-teal-200" />
-          <span>إعداد النافذة الترحيبية</span>
-        </button>
-      </div>
-
-      {/* 4. Quick Action Hub */}
-      <div className="bg-white border-0 sm:border border-stone-200 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 space-y-3 shadow-none sm:shadow-2xs">
-        <h4 className="text-xs font-black text-stone-900">
-          إجراءات سريعة واختصارات لوحة التحكم:
-        </h4>
-
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-          <Link
-            to={`/business/${business.id}`}
-            target="_blank"
-            className="p-3 bg-stone-50 hover:bg-teal-50 hover:text-teal-900 hover:border-teal-300 border border-stone-200 rounded-xl text-center text-xs font-bold transition-all flex flex-col items-center justify-center gap-1.5 text-stone-700 group cursor-pointer"
-          >
-            <ExternalLink className="h-4 w-4 text-stone-400 group-hover:text-teal-600" />
-            <span>معاينة صفحة العيادة</span>
-          </Link>
-
-          <button
-            type="button"
-            onClick={onOpenQrModal}
-            className="p-3 bg-stone-50 hover:bg-teal-50 hover:text-teal-900 hover:border-teal-300 border border-stone-200 rounded-xl text-center text-xs font-bold transition-all flex flex-col items-center justify-center gap-1.5 text-stone-700 group cursor-pointer"
-          >
-            <QrCode className="h-4 w-4 text-stone-400 group-hover:text-teal-600" />
-            <span>ملصق الاستقبال QR</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={onOpenMultiBranchModal}
-            className="p-3 bg-stone-50 hover:bg-teal-50 hover:text-teal-900 hover:border-teal-300 border border-stone-200 rounded-xl text-center text-xs font-bold transition-all flex flex-col items-center justify-center gap-1.5 text-stone-700 group cursor-pointer"
-          >
-            <Building2 className="h-4 w-4 text-stone-400 group-hover:text-teal-600" />
-            <span>إضافة فرع ملحق</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={onOpenBannerModal}
-            className="p-3 bg-stone-50 hover:bg-amber-50 hover:text-amber-900 hover:border-amber-300 border border-stone-200 rounded-xl text-center text-xs font-bold transition-all flex flex-col items-center justify-center gap-1.5 text-stone-700 group cursor-pointer"
-          >
-            <Crown className="h-4 w-4 text-amber-500" />
-            <span>إعلان وبانر طبي</span>
-          </button>
         </div>
       </div>
     </div>

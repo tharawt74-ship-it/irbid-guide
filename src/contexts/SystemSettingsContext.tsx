@@ -7,8 +7,11 @@ import {
   GlobalSiteSettings,
   StaticPagesConfig,
   SeasonalCampaign,
-  StoryConfig
+  StoryConfig,
+  DEFAULT_WHEEL_BOX_CONFIG
 } from '../types';
+import { PosterTemplate } from '../types/posterDesigner';
+import { PRESET_TEMPLATES, PRESET_REVIEWS_TEMPLATES } from '../components/admin/qr-designer/designerTemplates';
 import { BUSINESS_CATEGORIES, IRBID_REGIONS_CATEGORIZED, IrbidAreaGroup } from '../lib/categories';
 import { MEDICAL_SPECIALTIES } from '../lib/medicalCategories';
 
@@ -35,7 +38,9 @@ const DEFAULT_GLOBAL_SETTINGS: GlobalSiteSettings = {
   tiktokUrl: 'https://tiktok.com/@shoof.irbid',
   xUrl: 'https://x.com/shoof_irbid',
   footerDescription: 'المنصة والمحرك الإعلاني التفاعلي الأول في إربد للبحث واكتشاف أفضل المطاعم، الكافيهات، الخدمات، والفعاليات.',
-  enableAiAssistant: true
+  enableAiAssistant: true,
+  heroSectionStyle: 'green_box',
+  wheelBoxConfig: DEFAULT_WHEEL_BOX_CONFIG
 };
 
 
@@ -191,6 +196,10 @@ interface SystemSettingsContextType {
   staticPages: StaticPagesConfig;
   seasonalCampaigns: SeasonalCampaign[];
   stories: StoryConfig[];
+  defaultQrPosterTemplate: PosterTemplate | null;
+  updateDefaultQrPosterTemplate: (template: PosterTemplate) => Promise<void>;
+  defaultReviewsQrPosterTemplate: PosterTemplate | null;
+  updateDefaultReviewsQrPosterTemplate: (template: PosterTemplate) => Promise<void>;
   updateStories: (newStories: StoryConfig[]) => Promise<void>;
   addCategory: (cat: CategoryConfig) => Promise<void>;
   updateCategory: (id: string, updated: Partial<CategoryConfig>) => Promise<void>;
@@ -264,6 +273,25 @@ export function SystemSettingsProvider({ children }: { children: React.ReactNode
   const [staticPages, setStaticPages] = useState<StaticPagesConfig>(DEFAULT_STATIC_PAGES);
   const [seasonalCampaigns, setSeasonalCampaigns] = useState<SeasonalCampaign[]>(DEFAULT_SEASONAL_CAMPAIGNS);
   const [stories, setStories] = useState<StoryConfig[]>(DEFAULT_STORIES);
+  const [defaultQrPosterTemplate, setDefaultQrPosterTemplate] = useState<PosterTemplate | null>(() => {
+    try {
+      const cached = localStorage.getItem('shoof_default_qr_poster_template') || localStorage.getItem('shoof_qr_default_template');
+      if (cached) {
+        return JSON.parse(cached);
+      }
+    } catch {}
+    return PRESET_TEMPLATES[0] || null;
+  });
+
+  const [defaultReviewsQrPosterTemplate, setDefaultReviewsQrPosterTemplate] = useState<PosterTemplate | null>(() => {
+    try {
+      const cached = localStorage.getItem('shoof_default_reviews_qr_poster_template');
+      if (cached) {
+        return JSON.parse(cached);
+      }
+    } catch {}
+    return PRESET_REVIEWS_TEMPLATES[0] || null;
+  });
 
   // Load settings from Firestore on mount & subscribe to real-time changes
   useEffect(() => {
@@ -274,21 +302,27 @@ export function SystemSettingsProvider({ children }: { children: React.ReactNode
 
       if (data.categories) {
         const sanitizedCats = (data.categories as CategoryConfig[]).map(c => {
-          if (c.name.includes('تعليم وتدريب') || c.name === '🎓 تعليم وتدريب') {
+          const cleanName = c.name.replace(/^[^\p{L}\p{N}]+/u, '').trim();
+          if (cleanName.includes('تعليم وتدريب')) {
             return {
               ...c,
+              name: cleanName,
               subcategories: c.subcategories.filter(sc => sc !== 'معلمون ومعلمات ودروس خصوصية')
             };
           }
-          if (c.name.includes('صحة وطب') || c.name === '🏥 صحة وطب') {
+          if (cleanName.includes('صحة وطب')) {
             return {
               ...c,
-              subcategories: BUSINESS_CATEGORIES["🏥 صحة وطب"]
+              name: cleanName,
+              subcategories: BUSINESS_CATEGORIES["صحة وطب"]
             };
           }
-          return c;
+          return {
+            ...c,
+            name: cleanName
+          };
         }).filter(
-          c => !c.name.includes('عقارات وسكنات') && c.name !== '🏠 عقارات وسكنات'
+          c => !c.name.includes('عقارات وسكنات')
         );
         
         // Ensure newly added default categories (like teachers and home projects) exist
@@ -348,6 +382,19 @@ export function SystemSettingsProvider({ children }: { children: React.ReactNode
       if (data.seasonalCampaigns) setSeasonalCampaigns(data.seasonalCampaigns);
       if (data.stories) setStories(data.stories);
       if (data.medicalCategories) setMedicalCategories(data.medicalCategories);
+      if (data.defaultQrPosterTemplate) {
+        setDefaultQrPosterTemplate(data.defaultQrPosterTemplate);
+        try {
+          localStorage.setItem('shoof_default_qr_poster_template', JSON.stringify(data.defaultQrPosterTemplate));
+          localStorage.setItem('shoof_qr_default_template', JSON.stringify(data.defaultQrPosterTemplate));
+        } catch {}
+      }
+      if (data.defaultReviewsQrPosterTemplate) {
+        setDefaultReviewsQrPosterTemplate(data.defaultReviewsQrPosterTemplate);
+        try {
+          localStorage.setItem('shoof_default_reviews_qr_poster_template', JSON.stringify(data.defaultReviewsQrPosterTemplate));
+        } catch {}
+      }
     };
 
     async function loadSettings() {
@@ -378,6 +425,36 @@ export function SystemSettingsProvider({ children }: { children: React.ReactNode
             }
           } catch (e) {
             console.warn('Could not read systemConfig/settings:', e);
+          }
+
+          // Read direct QR poster template document
+          try {
+            const qrDocRef = doc(db, 'system_settings', 'qr_poster_template');
+            const qrSnap = await getDoc(qrDocRef);
+            if (qrSnap.exists()) {
+              const qrData = qrSnap.data();
+              if (qrData?.template) {
+                if (!data) data = {};
+                data.defaultQrPosterTemplate = qrData.template;
+              }
+            }
+          } catch (e) {
+            console.warn('Could not read system_settings/qr_poster_template:', e);
+          }
+
+          // Read direct Reviews QR poster template document
+          try {
+            const qrRevDocRef = doc(db, 'system_settings', 'reviews_qr_poster_template');
+            const qrRevSnap = await getDoc(qrRevDocRef);
+            if (qrRevSnap.exists()) {
+              const qrRevData = qrRevSnap.data();
+              if (qrRevData?.template) {
+                if (!data) data = {};
+                data.defaultReviewsQrPosterTemplate = qrRevData.template;
+              }
+            }
+          } catch (e) {
+            console.warn('Could not read system_settings/reviews_qr_poster_template:', e);
           }
 
           // 3. Cross-check settings/appConfig for enableAiAssistant
@@ -697,6 +774,53 @@ export function SystemSettingsProvider({ children }: { children: React.ReactNode
     await saveAllToFirestore({ seasonalCampaigns: updated });
   };
 
+  const updateDefaultQrPosterTemplate = async (template: PosterTemplate) => {
+    setDefaultQrPosterTemplate(template);
+    try {
+      localStorage.setItem('shoof_default_qr_poster_template', JSON.stringify(template));
+      localStorage.setItem('shoof_qr_default_template', JSON.stringify(template));
+    } catch {
+      // ignore
+    }
+
+    if (db) {
+      try {
+        await setDoc(doc(db, 'system_settings', 'qr_poster_template'), {
+          template,
+          updatedAt: Date.now()
+        }, { merge: true });
+        console.log('Saved default template to system_settings/qr_poster_template');
+      } catch (e) {
+        console.warn('Failed to save to system_settings/qr_poster_template:', e);
+      }
+    }
+
+    await saveAllToFirestore({ defaultQrPosterTemplate: template });
+  };
+
+  const updateDefaultReviewsQrPosterTemplate = async (template: PosterTemplate) => {
+    setDefaultReviewsQrPosterTemplate(template);
+    try {
+      localStorage.setItem('shoof_default_reviews_qr_poster_template', JSON.stringify(template));
+    } catch {
+      // ignore
+    }
+
+    if (db) {
+      try {
+        await setDoc(doc(db, 'system_settings', 'reviews_qr_poster_template'), {
+          template,
+          updatedAt: Date.now()
+        }, { merge: true });
+        console.log('Saved default reviews template to system_settings/reviews_qr_poster_template');
+      } catch (e) {
+        console.warn('Failed to save to system_settings/reviews_qr_poster_template:', e);
+      }
+    }
+
+    await saveAllToFirestore({ defaultReviewsQrPosterTemplate: template });
+  };
+
   return (
     <SystemSettingsContext.Provider
       value={{
@@ -708,6 +832,10 @@ export function SystemSettingsProvider({ children }: { children: React.ReactNode
         staticPages,
         seasonalCampaigns,
         stories,
+        defaultQrPosterTemplate,
+        updateDefaultQrPosterTemplate,
+        defaultReviewsQrPosterTemplate,
+        updateDefaultReviewsQrPosterTemplate,
         updateStories,
         addCategory,
         updateCategory,

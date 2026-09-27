@@ -5,7 +5,8 @@ import {
   MessageSquareText, Users, Tag, BarChart3, QrCode, Sparkles, 
   Printer, Check, Eye, HeartPulse, Pill, Microscope, Activity, 
   Accessibility, Car, Baby, ArrowRight, DollarSign, Calendar,
-  Shield, Send, Megaphone, FileText, CheckCircle, Settings, Cpu, Rocket
+  Shield, Send, Megaphone, FileText, CheckCircle, Settings, Cpu, Rocket,
+  ChevronDown
 } from 'lucide-react';
 import { Business } from '../../types';
 import { db } from '../../lib/firebase';
@@ -19,6 +20,10 @@ import { VipUpgradeRequestModal } from '../vip/VipUpgradeRequestModal';
 import { PrintableQrPosterModal } from './PrintableQrPosterModal';
 import { MultiBranchModal } from './MultiBranchModal';
 import { AddMedicalFacilityModal } from '../medical/AddMedicalFacilityModal';
+import { EditStoreImagesModal } from './EditStoreImagesModal';
+import { EditWorkingHoursModal } from './EditWorkingHoursModal';
+import { QuickAddOfferModal } from './QuickAddOfferModal';
+import { QuickContactModal } from './QuickContactModal';
 
 // Sub-components
 import { MedicalOverviewTab } from './medical/MedicalOverviewTab';
@@ -78,6 +83,10 @@ export function MedicalFacilitiesTab({
   const [isPopupModalOpen, setIsPopupModalOpen] = useState(false);
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
   const [isMultiBranchOpen, setIsMultiBranchOpen] = useState(false);
+  const [isEditImagesModalOpen, setIsEditImagesModalOpen] = useState(false);
+  const [isEditWorkingHoursModalOpen, setIsEditWorkingHoursModalOpen] = useState(false);
+  const [isQuickAddOfferModalOpen, setIsQuickAddOfferModalOpen] = useState(false);
+  const [isQuickContactModalOpen, setIsQuickContactModalOpen] = useState(false);
 
   // Status feedback toast
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -191,66 +200,124 @@ export function MedicalFacilitiesTab({
           </div>
         </div>
 
-        {/* Hierarchical Business & Branch Selector */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-white border border-stone-200/80 p-3 sm:p-4 rounded-2xl shadow-2xs gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-teal-800/10 text-teal-800 flex items-center justify-center shrink-0">
-              <Stethoscope className="h-6 w-6" />
-            </div>
-            <div className="flex-1 w-full max-w-full min-w-0">
-              <span className="text-[11px] font-bold text-stone-500 block mb-0.5 truncate">المنشأة المحددة للإدارة</span>
-              {hasMultiple ? (
-                <div className="relative w-full">
-                  <select
-                    value={selectedFacility.id}
-                    onChange={(e) => {
-                      const biz = medicalBusinesses.find(b => b.id === e.target.value);
-                      if (biz) {
-                        setSelectedFacility(biz);
-                        setActiveTab('overview');
-                      }
-                    }}
-                    className="appearance-none bg-stone-50 border border-stone-200 text-[#2d2a26] text-sm font-black rounded-lg pl-8 pr-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-teal-700/30 cursor-pointer outline-none w-full truncate"
-                    dir="rtl"
-                  >
-                    {primaryBusinesses.map(pBiz => {
-                      const branches = medicalBusinesses.filter(b => b.id === pBiz.id || b.parentBusinessId === pBiz.id);
-                      return (
-                        <optgroup key={pBiz.id} label={pBiz.name.split(' - ')[0].trim()}>
-                          {branches.map((branch, idx) => {
-                            const branchLocationName = branch.name.includes(' - ') 
-                              ? branch.name.split(' - ')[1] 
-                              : (branch.district || (idx === 0 ? 'المركز الرئيسي' : `فرع ${idx + 1}`));
+        {/* Dual Facility & Branch Selector */}
+        {(() => {
+          const activePrimaryFacility = primaryBusinesses.find(
+            p => p.id === selectedFacility.id || p.id === selectedFacility.parentBusinessId
+          ) || primaryBusinesses[0] || selectedFacility;
+
+          const activeBranches = medicalBusinesses.filter(
+            b => b.id === activePrimaryFacility.id || b.parentBusinessId === activePrimaryFacility.id
+          );
+
+          return (
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between bg-white border border-stone-200/80 p-3 sm:p-4 rounded-2xl shadow-2xs gap-3.5">
+              <div className="flex items-start sm:items-center gap-3 flex-1 min-w-0">
+                <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-teal-800/10 text-teal-800 flex items-center justify-center shrink-0">
+                  <Stethoscope className="h-6 w-6" />
+                </div>
+                <div className="flex-1 w-full max-w-full min-w-0 space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-bold text-stone-500 block truncate">المنشأة المحددة للإدارة</span>
+                    {activeBranches.length > 1 && (
+                      <span className="text-[10px] font-black bg-teal-800/10 text-teal-800 px-2 py-0.5 rounded-full shrink-0">
+                        {activeBranches.length} أفرع / مراكز مسجلة
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Dual Selectors: One for Facility, One for Branch */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 w-full">
+                    {/* 1. Facility Dropdown */}
+                    <div className="relative">
+                      <label className="text-[10px] font-bold text-stone-500 block mb-1">
+                        المنشأة الطبية:
+                      </label>
+                      <div className="relative">
+                        <select
+                          value={activePrimaryFacility.id}
+                          onChange={(e) => {
+                            const target = primaryBusinesses.find(p => p.id === e.target.value);
+                            if (target) {
+                              setSelectedFacility(target);
+                              setActiveTab('overview');
+                            }
+                          }}
+                          className="appearance-none bg-stone-50 hover:bg-stone-100/80 border border-stone-200 text-[#2d2a26] text-xs sm:text-sm font-black rounded-xl pl-8 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-700/30 cursor-pointer outline-none w-full truncate shadow-2xs transition-colors"
+                          dir="rtl"
+                        >
+                          {primaryBusinesses.map(pBiz => {
+                            const pName = pBiz.name.split(' - ')[0].trim();
+                            const branchCount = medicalBusinesses.filter(b => b.id === pBiz.id || b.parentBusinessId === pBiz.id).length;
                             return (
-                              <option key={branch.id} value={branch.id}>
-                                {branchLocationName} {getBusinessVipStatus(branch).isVip ? '⭐ VIP طبي' : ''}
+                              <option key={pBiz.id} value={pBiz.id}>
+                                {pName} {branchCount > 1 ? `(${branchCount} أفرع / مراكز)` : ''}
                               </option>
                             );
                           })}
-                        </optgroup>
-                      );
-                    })}
-                  </select>
-                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center px-2 text-stone-500">
-                    <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+                        </select>
+                        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center px-2.5 text-stone-500">
+                          <ChevronDown className="h-4 w-4" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 2. Branch Dropdown */}
+                    <div className="relative">
+                      <label className="text-[10px] font-bold text-stone-500 block mb-1">
+                        الفرع / المركز:
+                      </label>
+                      <div className="relative">
+                        <select
+                          value={selectedFacility.id}
+                          onChange={(e) => {
+                            const biz = activeBranches.find(b => b.id === e.target.value);
+                            if (biz) {
+                              setSelectedFacility(biz);
+                              setActiveTab('overview');
+                            }
+                          }}
+                          className="appearance-none bg-stone-50 hover:bg-stone-100/80 border border-stone-200 text-[#2d2a26] text-xs sm:text-sm font-black rounded-xl pl-8 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-700/30 cursor-pointer outline-none w-full truncate shadow-2xs transition-colors"
+                          dir="rtl"
+                        >
+                          {activeBranches.map((branch, idx) => {
+                            const isRoot = branch.id === activePrimaryFacility.id;
+                            let branchLocationName = '';
+                            if (branch.name.includes(' - ')) {
+                              branchLocationName = branch.name.split(' - ').slice(1).join(' - ').trim();
+                            } else if (branch.district) {
+                              branchLocationName = branch.district;
+                            } else {
+                              branchLocationName = isRoot ? 'المركز الرئيسي' : `فرع ${idx + 1}`;
+                            }
+                            const label = isRoot ? `المركز الرئيسي (${branchLocationName})` : `فرع ${branchLocationName}`;
+                            const vipBadge = getBusinessVipStatus(branch).isVip ? ' ⭐ VIP طبي' : '';
+                            return (
+                              <option key={branch.id} value={branch.id}>
+                                {label}{vipBadge}
+                              </option>
+                            );
+                          })}
+                        </select>
+                        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center px-2.5 text-stone-500">
+                          <ChevronDown className="h-4 w-4" />
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              ) : (
-                <h3 className="font-black text-sm text-[#2d2a26] bg-stone-50 px-3 py-1.5 rounded-lg border border-stone-200 inline-block w-full truncate">
-                  {selectedFacility.name}
-                </h3>
-              )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsMultiBranchOpen(true)}
+                className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-black bg-[#fbf9f6] text-teal-800 border border-teal-800/20 hover:bg-teal-800/10 transition-colors cursor-pointer w-full lg:w-auto shrink-0 self-stretch lg:self-center"
+              >
+                <Plus className="h-4 w-4" />
+                <span>إضافة فرع جديد</span>
+              </button>
             </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => setIsMultiBranchOpen(true)}
-            className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-black bg-[#fbf9f6] text-teal-800 border border-teal-800/20 hover:bg-teal-800/10 transition-colors cursor-pointer w-full sm:w-auto mt-1 sm:mt-0"
-          >
-            <Plus className="h-4 w-4" />
-            <span>إضافة فرع جديد</span>
-          </button>
-        </div>
+          );
+        })()}
 
         {/* Currently Selected Facility WorkSpace - Unified Container */}
         <div className="border-0 sm:border border-stone-200/80 rounded-xl sm:rounded-2xl bg-white overflow-hidden shadow-none sm:shadow-2xs">
@@ -510,6 +577,10 @@ export function MedicalFacilitiesTab({
                   setIsPopupModalOpen(true);
                 }}
                 onOpenUpgradeModal={() => setIsUpgradeModalOpen(true)}
+                onOpenImagesModal={() => setIsEditImagesModalOpen(true)}
+                onOpenWorkingHoursModal={() => setIsEditWorkingHoursModalOpen(true)}
+                onOpenAddOfferModal={() => setIsQuickAddOfferModalOpen(true)}
+                onOpenContactModal={() => setIsQuickContactModalOpen(true)}
               />
             )}
 
@@ -649,6 +720,61 @@ export function MedicalFacilitiesTab({
             onRefresh();
             showToast('تم تحديث الأفرع الملحقة بالمنشأة بنجاح! 🏢');
           }}
+        />
+      )}
+
+      {/* Quick Actions: Edit Store Images Modal */}
+      {selectedFacility && (
+        <EditStoreImagesModal
+          business={selectedFacility}
+          isOpen={isEditImagesModalOpen}
+          onClose={() => setIsEditImagesModalOpen(false)}
+          onSave={async (updates) => {
+            const updated = { ...selectedFacility, ...updates };
+            handleFacilityUpdate(updated);
+            showToast('تم حفظ وتحديث صور المنشأة الطبية بنجاح! 📸');
+          }}
+          isMedical={true}
+        />
+      )}
+
+      {/* Quick Actions: Edit Working Hours Modal */}
+      {selectedFacility && (
+        <EditWorkingHoursModal
+          business={selectedFacility}
+          isOpen={isEditWorkingHoursModalOpen}
+          onClose={() => setIsEditWorkingHoursModalOpen(false)}
+          onSave={async (newHours) => {
+            const updated = { ...selectedFacility, workingHours: newHours };
+            handleFacilityUpdate(updated);
+            showToast('تم تحديث أوقات وساعات العمل الحية بنجاح! ⏱️');
+          }}
+        />
+      )}
+
+      {/* Quick Actions: Add Offer / Discount Today Modal */}
+      {selectedFacility && (
+        <QuickAddOfferModal
+          business={selectedFacility}
+          isOpen={isQuickAddOfferModalOpen}
+          onClose={() => setIsQuickAddOfferModalOpen(false)}
+          onSuccess={(msg) => showToast(msg)}
+          isMedical={true}
+        />
+      )}
+
+      {/* Quick Actions: Quick Contact & WhatsApp Modal */}
+      {selectedFacility && (
+        <QuickContactModal
+          business={selectedFacility}
+          isOpen={isQuickContactModalOpen}
+          onClose={() => setIsQuickContactModalOpen(false)}
+          onSave={async (updates) => {
+            const updated = { ...selectedFacility, ...updates };
+            handleFacilityUpdate(updated);
+            showToast('تم تحديث أرقام التواصل والواتساب السريع بنجاح! 📞');
+          }}
+          isMedical={true}
         />
       )}
     </div>

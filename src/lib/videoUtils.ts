@@ -27,6 +27,42 @@ export function parseVideoUrl(url: string | undefined | null): ParsedVideoInfo |
     cleaned = 'https://' + cleaned;
   }
 
+  // Archive.org (both download and S3 URLs)
+  if (cleaned.includes('archive.org')) {
+    return {
+      platform: 'direct',
+      embedUrl: cleaned,
+      originalUrl: cleaned
+    };
+  }
+
+  // Catbox.moe (Direct files cdn)
+  if (cleaned.includes('catbox.moe')) {
+    return {
+      platform: 'direct',
+      embedUrl: cleaned,
+      originalUrl: cleaned
+    };
+  }
+
+  // Pixeldrain (Direct files cdn)
+  if (cleaned.includes('pixeldrain.com')) {
+    return {
+      platform: 'direct',
+      embedUrl: cleaned,
+      originalUrl: cleaned
+    };
+  }
+
+  // Imgur (Direct files cdn)
+  if (cleaned.includes('imgur.com')) {
+    return {
+      platform: 'direct',
+      embedUrl: cleaned,
+      originalUrl: cleaned
+    };
+  }
+
   // Direct video files (.mp4, .webm, .ogg, .mov, firebase storage videos, etc.)
   if (
     /\.(mp4|webm|ogg|mov|m4v|m3u8)(\?.*)?$/i.test(cleaned) || 
@@ -144,10 +180,21 @@ export function parseVideoUrl(url: string | undefined | null): ParsedVideoInfo |
 
   // Facebook
   if (cleaned.includes('facebook.com') || cleaned.includes('fb.watch')) {
+    let fbTargetUrl = cleaned;
+    if (cleaned.includes('plugins/video.php')) {
+      try {
+        const match = cleaned.match(/href=([^&]+)/);
+        if (match && match[1]) {
+          fbTargetUrl = decodeURIComponent(match[1]);
+        }
+      } catch (e) {}
+    }
+
+    const encodedHref = encodeURIComponent(fbTargetUrl);
     return {
       platform: 'facebook',
-      embedUrl: `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(cleaned)}&show_text=0&width=500`,
-      originalUrl: cleaned
+      embedUrl: `https://www.facebook.com/plugins/video.php?href=${encodedHref}&show_text=false&autoplay=true&mute=1`,
+      originalUrl: fbTargetUrl
     };
   }
 

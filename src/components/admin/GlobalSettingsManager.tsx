@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useSystemSettings } from '../../contexts/SystemSettingsContext';
-import { Globe, Save, Phone, Mail, Facebook, Instagram, Share2, Image as ImageIcon, LayoutGrid, CheckCircle2, Bot, Sparkles, Power, Zap, AlertCircle } from 'lucide-react';
+import { Globe, Save, Phone, Mail, Facebook, Instagram, Share2, Image as ImageIcon, LayoutGrid, CheckCircle2, Bot, Sparkles, Power, Zap, AlertCircle, Layout } from 'lucide-react';
 import { WhatsAppIcon } from '../common/WhatsAppIcon';
 import { ImageUploader } from '../ui/ImageUploader';
+import { WheelBoxStudio } from './WheelBoxStudio';
 
 interface GlobalSettingsManagerProps {
   showToast: (msg: string, type?: 'success' | 'info' | 'error') => void;
@@ -67,6 +68,96 @@ export function GlobalSettingsManager({ showToast }: GlobalSettingsManagerProps)
           <Save className="h-4 w-4 text-[#ff9f1c]" />
           <span>{isSaving ? 'جارٍ الحفظ...' : 'حفظ التغييرات'}</span>
         </button>
+      </div>
+
+      {/* Hero Section Selector Box */}
+      <div className="p-5 rounded-2xl border border-stone-200 bg-stone-50/70 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2.5 rounded-xl bg-[#1a4d2e] text-white">
+              <Layout className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="font-black text-stone-900 text-base">نمط واجهة قسم البداية (Hero Section) في الرئيسية</h3>
+              <p className="text-stone-600 text-xs mt-0.5">اختر المظهر الافتراضي لقسم البداية الرئيسي المعروض لجميع زوار المنصة</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+          {/* Option 1: Green Box */}
+          <button
+            type="button"
+            onClick={async () => {
+              const updated = { ...formData, heroSectionStyle: 'green_box' as const };
+              setFormData(updated);
+              try {
+                await updateGlobalSettings(updated);
+                showToast('تم تغيير واجهة البداية إلى "البوكس الأخضر التقليدي" بنجاح 🟩', 'success');
+              } catch {
+                showToast('حدث خطأ أثناء حفظ النمط', 'error');
+              }
+            }}
+            className={`flex flex-col items-start text-right p-4 rounded-2xl border transition-all cursor-pointer ${
+              (formData.heroSectionStyle || 'green_box') === 'green_box'
+                ? 'border-[#1a4d2e] bg-[#1a4d2e]/10 text-[#1a4d2e] font-black shadow-xs ring-2 ring-[#1a4d2e]/20'
+                : 'border-stone-200 bg-white text-stone-700 hover:border-stone-300'
+            }`}
+          >
+            <div className="flex items-center justify-between w-full mb-1.5">
+              <span className="font-extrabold text-sm flex items-center gap-2">
+                <span className="w-3 h-3 rounded-full bg-[#1a4d2e] inline-block" />
+                <span>البوكس الأخضر التقليدي</span>
+              </span>
+              {(formData.heroSectionStyle || 'green_box') === 'green_box' && (
+                <CheckCircle2 className="h-5 w-5 text-[#1a4d2e]" />
+              )}
+            </div>
+            <p className="text-xs text-stone-500 font-normal leading-relaxed">
+              واجهة الهيرو باللون الأخضر مع مربع البحث التفاعلي واقتراحات البحث المباشرة والعناصر التفاعلية.
+            </p>
+          </button>
+
+          {/* Option 2: Wheel Box */}
+          <button
+            type="button"
+            onClick={async () => {
+              const updated = { ...formData, heroSectionStyle: 'wheel_box' as const };
+              setFormData(updated);
+              try {
+                await updateGlobalSettings(updated);
+                showToast('تم تغيير واجهة البداية إلى "بوكس العجلة التفاعلي 3D" بنجاح 🎡', 'success');
+              } catch {
+                showToast('حدث خطأ أثناء حفظ النمط', 'error');
+              }
+            }}
+            className={`flex flex-col items-start text-right p-4 rounded-2xl border transition-all cursor-pointer ${
+              formData.heroSectionStyle === 'wheel_box'
+                ? 'border-[#1a4d2e] bg-[#1a4d2e]/10 text-[#1a4d2e] font-black shadow-xs ring-2 ring-[#1a4d2e]/20'
+                : 'border-stone-200 bg-white text-stone-700 hover:border-stone-300'
+            }`}
+          >
+            <div className="flex items-center justify-between w-full mb-1.5">
+              <span className="font-extrabold text-sm flex items-center gap-2">
+                <span className="w-3 h-3 rounded-full bg-[#ff9f1c] inline-block" />
+                <span>بوكس العجلة التفاعلي 3D</span>
+              </span>
+              {formData.heroSectionStyle === 'wheel_box' && (
+                <CheckCircle2 className="h-5 w-5 text-[#1a4d2e]" />
+              )}
+            </div>
+            <p className="text-xs text-stone-500 font-normal leading-relaxed">
+              عجلة ثلاثية الأبعاد متحركة وسلسة مع السهم الجانبي وشريط البحث الشفاف ذو الحدود السوداء.
+            </p>
+          </button>
+        </div>
+
+        {/* Wheel Box Studio Embedded Editor */}
+        {formData.heroSectionStyle === 'wheel_box' && (
+          <div className="pt-4 border-t border-stone-200">
+            <WheelBoxStudio showToast={showToast} />
+          </div>
+        )}
       </div>
 
       {/* AI Assistant Site-Wide Toggle Box */}

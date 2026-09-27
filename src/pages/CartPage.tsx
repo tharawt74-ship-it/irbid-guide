@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShoppingBag, Trash2, Phone, ArrowRight, Store, Plus, Minus, Check, ChevronLeft } from 'lucide-react';
+import { ShoppingBag, Trash2, Phone, ArrowRight, Store, Plus, Minus, Check, ChevronLeft, Clock } from 'lucide-react';
 import { WhatsAppIcon } from '../components/common/WhatsAppIcon';
 import { useCart } from '../contexts/CartContext';
 import { Link, useNavigate } from 'react-router';
@@ -147,6 +147,14 @@ export function CartPage() {
                               </span>
                             </div>
                           )}
+                          {cartItem.prepTimeMinutes && cartItem.prepTimeMinutes > 0 && (
+                            <div className="pt-0.5">
+                              <span className="inline-flex items-center gap-1 text-[10px] bg-amber-50/90 text-amber-900 border border-amber-200 px-2 py-0.5 rounded-md font-bold">
+                                <Clock className="h-3 w-3 text-amber-600 shrink-0" />
+                                <span>وقت التحضير: {cartItem.prepTimeMinutes} دقيقة</span>
+                              </span>
+                            </div>
+                          )}
                           {cartItem.options && cartItem.options.length > 0 && (
                             <p className="text-[10px] text-stone-500 font-medium">
                               خيارات: {cartItem.options.join(', ')}
@@ -212,6 +220,21 @@ export function CartPage() {
                     <span>طريقة الاستلام:</span>
                     <span className="font-bold text-emerald-700">مباشر / حسب الاتفاق</span>
                   </div>
+                  {(() => {
+                    const maxPrepTime = items.reduce((max, item) => Math.max(max, item.prepTimeMinutes || 0), 0);
+                    if (maxPrepTime === 0) return null;
+                    return (
+                      <div className="flex items-center justify-between p-2.5 bg-amber-50 border border-amber-200/90 rounded-xl text-xs font-bold text-amber-950 mt-1">
+                        <span className="flex items-center gap-1.5 text-amber-900">
+                          <Clock className="h-4 w-4 text-amber-600 shrink-0" />
+                          <span>وقت التحضير المتوقع:</span>
+                        </span>
+                        <span className="bg-amber-200/80 text-amber-950 px-2 py-0.5 rounded-lg font-black">
+                          ~{maxPrepTime} دقيقة
+                        </span>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 <div className="pt-3 border-t border-stone-200 flex justify-between items-center font-black text-stone-900 text-base">

@@ -23,6 +23,7 @@ export interface MenuItem {
   createdAt?: number; // Creation timestamp in milliseconds
   trackStock?: boolean; // Whether stock tracking is enabled for this product/service
   stockCount?: number; // Quantity available in stock
+  prepTimeMinutes?: number; // Estimated preparation time in minutes (e.g. 15)
 }
 
 export interface SocialLinks {
@@ -44,6 +45,7 @@ export interface WorkingHours {
   days?: string; // e.g. "طوال أيام الأسبوع"
   selectedDays?: string[]; // e.g. ['السبت', 'الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة']
   isCustomClosed?: boolean;
+  isCustomOpen?: boolean;
   vacationReason?: string; // e.g. "إجازة عيد الأضحى المبارك" أو "أعمال صيانة وتجديد"
   isRamadanMode?: boolean;
   ramadanOpenTime?: string;
@@ -167,6 +169,7 @@ export interface Business {
   featuredExpiryDate?: number | null;
   views?: number;
   deliveryAvailable?: boolean;
+  deliveryRegions?: string; // Comma-separated or custom list of delivery regions
   
   // Map and VIP details
   isVip?: boolean;
@@ -174,6 +177,7 @@ export interface Business {
   latitude?: string;
   longitude?: string;
   coverImage?: string;
+  coverVideoUrl?: string;
   image?: string;
   region?: string;
   
@@ -251,11 +255,40 @@ export interface Business {
   menuQrEnabled?: boolean;
   menuQrThemeColor?: string;
   menuQrSecondaryColor?: string;
-  menuQrLayout?: 'grid' | 'list' | 'compact';
+  menuQrLayout?: 'grid' | 'list';
   menuQrWelcomeText?: string;
   menuQrCoverImage?: string;
   menuQrShowPrices?: boolean;
   menuQrPosterStyle?: 'classic_red' | 'gold_luxury' | 'wood_cafe' | 'modern_dark' | 'clean_emerald';
+  menuQrPosterTitle?: string;
+  menuQrPosterSubtitle?: string;
+  menuQrPosterEnglishText?: string;
+  menuQrPosterPrimaryColor?: string;
+  menuQrPosterQrColor?: string;
+  menuQrPosterCardBgColor?: string;
+  menuQrPosterTableBadgeBg?: string;
+  menuQrPosterTableBadgeColor?: string;
+  menuQrPosterTitleColor?: string;
+  menuQrPosterTextColor?: string;
+  menuQrPosterTableBadgeMode?: 'table' | 'welcome';
+  menuQrPosterTableNumber?: string;
+  menuQrPosterWelcomeBadge?: string;
+  menuQrPosterDigitalBadge?: string;
+  menuQrPosterInstructions?: string;
+  menuQrPosterWaveTitle?: string;
+  menuQrPosterWaveSubtitle?: string;
+
+  // Ordering, Taxes, Fees & Local Jordan Payment details
+  disableDirectOrder?: boolean;
+  taxRate?: number;
+  serviceRate?: number;
+  serviceFixedFee?: number;
+  tippingEnabled?: boolean;
+  cliqAlias?: string;
+  cliqPhone?: string;
+  walletName?: string;
+  walletPhone?: string;
+  receiptFooterMessage?: string;
 }
 
 export interface MedicalInsurance {
@@ -520,6 +553,35 @@ export interface JobOpening {
   isUrgent?: boolean;
 }
 
+export interface AttachedPostItem {
+  type: 'menu' | 'offer' | 'job';
+  id: string;
+  title: string;
+  subtitle?: string;
+  price?: string;
+  originalPrice?: string;
+  discountPercent?: number;
+  imageUrl?: string;
+  badge?: string;
+  category?: string;
+  actionText?: string;
+}
+
+export interface BusinessPost {
+  id: string;
+  businessId: string;
+  businessName?: string;
+  businessLogoUrl?: string;
+  title: string;
+  content: string;
+  imageUrl?: string;
+  createdAt: number;
+  updatedAt?: number;
+  likesCount?: number;
+  isPinned?: boolean;
+  attachedItem?: AttachedPostItem | null;
+}
+
 export interface MarketingRequest {
   id?: string;
   businessId: string;
@@ -734,6 +796,141 @@ export interface VipPlanConfig {
   internalNote?: string;
 }
 
+export type WheelBoxElementId = 'promo' | 'wheel' | 'search' | 'suggestions';
+
+export interface WheelBoxSuggestionItem {
+  label: string;
+  query: string;
+}
+
+export interface WheelBoxSuggestionSet {
+  id: string;
+  items: WheelBoxSuggestionItem[];
+}
+
+export interface WheelBoxElementTransform {
+  x: number;
+  y: number;
+  scale: number;
+  scaleX?: number;
+  scaleY?: number;
+  width?: number;
+  height?: number;
+  lockAspectRatio: boolean;
+  opacity?: number;
+  zIndex?: number;
+}
+
+export type WheelBoxElementTransformsMap = Partial<Record<WheelBoxElementId, WheelBoxElementTransform>>;
+
+export interface WheelBoxConfig {
+  elementsOrder: WheelBoxElementId[];
+  elementTransforms?: WheelBoxElementTransformsMap;
+  
+  // Canvas & Box Frame Sizing
+  containerWidth?: number;
+  containerHeight?: number;
+  boxScale?: number;
+  boxPadding?: number;
+  borderRadius?: number;
+  lockBoxAspectRatio?: boolean;
+  boxBorderWidth?: number;
+  boxBorderColor?: string;
+  boxShadowStyle?: 'none' | 'soft' | 'medium' | 'glow' | 'strong';
+
+  showPromo: boolean;
+  promoBadge: string;
+  promoHeading: string;
+  showWheel: boolean;
+  wheelItems: string[];
+  wheelSpeed: number;
+  wheelRadius: number;
+  showSearch: boolean;
+  searchPlaceholder: string;
+  showSuggestions: boolean;
+  suggestionSets: WheelBoxSuggestionSet[];
+  backgroundMode?: 'transparent' | 'dark' | 'glass' | 'emerald_glow';
+  textColorMode?: 'black' | 'white' | 'emerald';
+}
+
+export const DEFAULT_ELEMENT_TRANSFORMS: Record<WheelBoxElementId, WheelBoxElementTransform> = {
+  promo: { x: 0, y: 0, scale: 1, scaleX: 1, scaleY: 1, lockAspectRatio: true, opacity: 1 },
+  wheel: { x: 0, y: 0, scale: 1, scaleX: 1, scaleY: 1, lockAspectRatio: true, opacity: 1 },
+  search: { x: 0, y: 0, scale: 1, scaleX: 1, scaleY: 1, lockAspectRatio: true, opacity: 1 },
+  suggestions: { x: 0, y: 0, scale: 1, scaleX: 1, scaleY: 1, lockAspectRatio: true, opacity: 1 }
+};
+
+export const DEFAULT_WHEEL_BOX_CONFIG: WheelBoxConfig = {
+  elementsOrder: ['promo', 'wheel', 'search', 'suggestions'],
+  elementTransforms: DEFAULT_ELEMENT_TRANSFORMS,
+  containerWidth: 780,
+  containerHeight: 520,
+  boxScale: 1,
+  boxPadding: 24,
+  borderRadius: 32,
+  lockBoxAspectRatio: false,
+  boxBorderWidth: 0,
+  boxBorderColor: '#e5e1da',
+  boxShadowStyle: 'none',
+  showPromo: true,
+  promoBadge: 'دليل إربد الذكي التفاعلي',
+  promoHeading: 'دليلك الأسرع لاستكشاف أفضل الأماكن والخدمات في إربد ✨',
+  showWheel: true,
+  wheelItems: [
+    'دليل إربد التفاعلي',
+    'ماسح الخصومات الذكي',
+    'دليل المنشآت الشامل',
+    'مطاعم وكافيهات إربد',
+    'سكنات جامعة اليرموك',
+    'خدمات وعيادات طبية',
+    'أقوى العروض والخصومات',
+    'وظائف وشواغر فورية',
+    'جامعة العلوم والتكنولوجيا',
+    'كافيهات ومساحات عمل هادئة'
+  ],
+  wheelSpeed: 14,
+  wheelRadius: 340,
+  showSearch: true,
+  searchPlaceholder: 'عن ماذا تبحث؟ (مثال: مطاعم، كافيهات، خدمات)...',
+  showSuggestions: true,
+  suggestionSets: [
+    {
+      id: 'set-1',
+      items: [
+        { label: 'أقوى العروض', query: 'عروض' },
+        { label: 'كافيهات هادئة', query: 'كافيه' },
+        { label: 'شاورما وبرجر', query: 'شاورما' }
+      ]
+    },
+    {
+      id: 'set-2',
+      items: [
+        { label: 'عيادات وأطباء', query: 'طبيب' },
+        { label: 'سكنات طلاب', query: 'سكن' },
+        { label: 'وظائف شاغرة', query: 'وظائف' }
+      ]
+    },
+    {
+      id: 'set-3',
+      items: [
+        { label: 'كنافة وحلويات', query: 'حلويات' },
+        { label: 'أسواق ومتاجر', query: 'تسوق' },
+        { label: 'خدمات سيارات', query: 'سيارات' }
+      ]
+    },
+    {
+      id: 'set-4',
+      items: [
+        { label: 'طب أسنان', query: 'اسنان' },
+        { label: 'مكاتب وقرطاسية', query: 'مكتبه' },
+        { label: 'خصومات اليوم', query: 'خصومات' }
+      ]
+    }
+  ],
+  backgroundMode: 'transparent',
+  textColorMode: 'black'
+};
+
 export interface GlobalSiteSettings {
   siteName: string;
   siteSubtitle: string;
@@ -751,6 +948,8 @@ export interface GlobalSiteSettings {
   xUrl: string;
   footerDescription: string;
   enableAiAssistant?: boolean;
+  heroSectionStyle?: 'green_box' | 'wheel_box';
+  wheelBoxConfig?: WheelBoxConfig;
 }
 
 export interface EmergencyNumber {

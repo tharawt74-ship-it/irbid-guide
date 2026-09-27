@@ -1,336 +1,400 @@
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { Business } from '../types';
 import { Star, MapPin, Store, Clock, Heart, Crown, Tag, Stethoscope } from 'lucide-react';
 import { VerifiedBadge } from './vip/VerifiedBadge';
 import { ShareButton } from './ShareButton';
+import { CoverVideoPlayer } from './common/CoverVideoPlayer';
 import { getLiveWorkingStatus } from '../lib/businessHoursHelper';
 import { getBusinessVipStatus } from '../lib/vipHelper';
 import { useAuth } from '../contexts/AuthContext';
 import { getBusinessLink, cn, stripHtml } from '../lib/utils';
 import { getMedicalSubspecialtyOnly } from '../lib/medicalHelper';
 import { WhatsApp3DIcon, Phone3DIcon } from './common/PremiumContactButtons';
+import { useSystemSettings } from '../contexts/SystemSettingsContext';
 
 interface BusinessCardProps {
-  business: Business;
-  featured?: boolean;
-  searchReasons?: string[];
+ business: Business;
+ featured?: boolean;
+ searchReasons?: string[];
 }
 
 export function BusinessCard({ business, featured = false, searchReasons }: BusinessCardProps) {
-  const navigate = useNavigate();
-  const isVip = getBusinessVipStatus(business).isVip;
-  const liveStatus = getLiveWorkingStatus(business.workingHours);
-  const { isFavorite, toggleFavorite } = useAuth();
-  const isFavorited = isFavorite(business.id);
-  const isCurrentlyFeatured = business.isFeatured && (!business.featuredStartDate || business.featuredStartDate <= Date.now()) && (!business.featuredExpiryDate || business.featuredExpiryDate > Date.now());
-  const isLuxuryFeatured = isCurrentlyFeatured;
-  const businessLink = getBusinessLink(business);
-  const medicalSubSpecialty = getMedicalSubspecialtyOnly(business);
-  const subCategoryName = (business as any).subCategory || (business as any).subcategory;
+ const navigate = useNavigate();
+ const { globalSettings } = useSystemSettings();
+ const [isCardHovered, setIsCardHovered] = useState(false);
+ const isVip = getBusinessVipStatus(business).isVip;
+ const liveStatus = getLiveWorkingStatus(business.workingHours);
+ const { isFavorite, toggleFavorite } = useAuth();
+ const isFavorited = isFavorite(business.id);
+ const isCurrentlyFeatured = business.isFeatured && (!business.featuredStartDate || business.featuredStartDate <= Date.now()) && (!business.featuredExpiryDate || business.featuredExpiryDate > Date.now());
+ const isLuxuryFeatured = isCurrentlyFeatured;
+ const businessLink = getBusinessLink(business);
+ const medicalSubSpecialty = getMedicalSubspecialtyOnly(business);
+ const subCategoryName = (business as any).subCategory || (business as any).subcategory;
 
-  const handleToggleFavorite = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    toggleFavorite(business.id);
-  };
+ const handleToggleFavorite = (e: React.MouseEvent) => {
+ e.preventDefault();
+ e.stopPropagation();
+ toggleFavorite(business.id);
+ };
 
-  if (featured) {
-    return (
-      <div
-        onClick={() => navigate(businessLink)}
-        className={cn(
-          "bg-white rounded-[24px] md:rounded-[32px] overflow-hidden hover:shadow-2xl transition-all duration-300 flex flex-col group relative min-h-[260px] md:min-h-[290px] cursor-pointer",
-          isLuxuryFeatured
-            ? "border-2 border-amber-400/90 ring-2 ring-amber-400/50 shadow-[0_0_25px_rgba(245,158,11,0.45)] hover:shadow-[0_0_35px_rgba(245,158,11,0.7)] hover:ring-amber-300"
-            : "border border-[#e5e1da] hover:border-[#1a4d2e]/30"
-        )}
-      >
-        <div className='absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent z-10'></div>
-        { (business.imageUrl || '') ? (
-          <img
-            src={business.imageUrl || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=800&q=80'}
-            alt={business.name || 'مطعم البراق'}
-            className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-          />
-        ) : (
-          <img
-            src="https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=800&q=80"
-            alt={business.name || 'مطعم البراق'}
-            className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-          />
-        )}
-        <div className='absolute inset-0 flex flex-col justify-end p-5 sm:p-6 z-20'>
-          <div className="mb-auto flex flex-wrap items-center justify-between gap-2 w-full">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {isCurrentlyFeatured && (
-                <span className='bg-gradient-to-r from-amber-400 to-yellow-500 text-yellow-950 text-[10px] sm:text-xs font-black px-3 py-1 rounded-full uppercase tracking-widest shadow-md flex items-center gap-1 w-fit border border-amber-300/60'>
-                   <Crown className="h-3 w-3 sm:h-3.5 sm:w-3.5 fill-current shrink-0 text-amber-950" />
-                  <span>ممول</span>
-                </span>
-              )}
-            </div>
+ const isDemoDefaultImage = (url?: string) => {
+ if (!url) return false;
+ return url.includes('photo-1517248135467') || url.includes('photo-1555396273') || url.includes('photo-1629909613654');
+ };
 
-            <div className="flex items-center gap-1.5 ml-auto">
-              <button
-                onClick={handleToggleFavorite}
-                className="w-8 h-8 rounded-full bg-black/40 backdrop-blur-md hover:bg-black/60 flex items-center justify-center transition-all border border-white/10 text-white cursor-pointer"
-                title={isFavorited ? "إزالة من المفضلة" : "إضافة للمفضلة"}
-              >
-                <Heart className={`h-4.5 w-4.5 transition-transform duration-300 active:scale-125 ${isFavorited ? 'fill-red-500 text-red-500' : 'text-white'}`} />
-              </button>
-              <ShareButton 
-                title={business.name} 
-                url={businessLink} 
-                size="sm" 
-                variant="circle" 
-                className="w-8 h-8 rounded-full bg-black/40 backdrop-blur-md hover:bg-black/60 flex items-center justify-center transition-all border border-white/10 text-white" 
-              />
-            </div>
-          </div>
+ const hasValidCover = Boolean(
+ (business.coverImage && business.coverImage.trim()) ||
+ (business.imageUrl && business.imageUrl.trim() && (!isDemoDefaultImage(business.imageUrl) ))
+ );
 
-          <div>
-            {/* Live Open / Closed Status Pill */}
-            <div className="inline-flex items-center gap-1.5 bg-black/50 backdrop-blur-md text-white text-[11px] font-bold px-2.5 py-0.5 rounded-full mb-1.5 border border-white/15">
-              <span className={`w-2 h-2 rounded-full ${liveStatus.dotColor}`}></span>
-              <span>{liveStatus.statusText}</span>
-            </div>
+ const posterImage = business.coverImage || business.imageUrl || '';
 
-            <div className="flex items-center gap-2 flex-wrap mt-1 mb-1.5">
-              <h2 className={`text-xl sm:text-2xl font-black leading-snug break-words ${
-                isLuxuryFeatured 
-                  ? 'text-amber-300 drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-400 bg-clip-text text-transparent' 
-                  : 'text-white'
-              }`}>
-                {business.name || 'مطعم البراق'}
-              </h2>
-              {isVip && (
-                <VerifiedBadge size="sm" businessName={business.name || 'مطعم البراق'} />
-              )}
-            </div>
+ const cardActionsTopLeft = (
+ <>
+ <button
+ onClick={handleToggleFavorite}
+ className="w-8 h-8 rounded-full bg-white/80 backdrop-blur-md hover:bg-white flex items-center justify-center transition-all border border-white/40 shadow-xs text-stone-700 cursor-pointer"
+ title={isFavorited ? "إزالة من المفضلة" : "إضافة للمفضلة"}
+ >
+ <Heart className={`h-4 w-4 transition-transform duration-300 active:scale-125 ${isFavorited ? 'fill-red-500 text-red-500' : 'text-stone-700'}`} />
+ </button>
+ <ShareButton 
+ title={business.name} 
+ url={businessLink} 
+ size="sm" 
+ variant="circle" 
+ className="w-8 h-8 rounded-full bg-white/80 backdrop-blur-md hover:bg-white flex items-center justify-center transition-all border border-white/40 shadow-xs text-stone-700" 
+ />
+ </>
+ );
 
-            {/* Category & Department Tag */}
-            {(business.category || subCategoryName || medicalSubSpecialty) && (
-              <div className="flex items-center gap-1.5 mb-2.5 flex-wrap">
-                {business.category && (
-                  <span className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-white/20 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-white/20 shadow-xs">
-                    <Tag className="w-3 h-3 text-[#ff9f1c]" />
-                    <span>{business.category}</span>
-                  </span>
-                )}
-                {subCategoryName && subCategoryName !== business.category && subCategoryName !== medicalSubSpecialty && (
-                  <span className="inline-flex items-center gap-1.5 text-xs font-bold text-white/90 bg-white/15 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-white/15 shadow-xs">
-                    <span>{subCategoryName}</span>
-                  </span>
-                )}
-                {medicalSubSpecialty && (
-                  <span className="inline-flex items-center gap-1.5 text-xs font-bold text-teal-200 bg-teal-900/60 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-teal-400/35 shadow-xs">
-                    <Stethoscope className="w-3.5 h-3.5 text-teal-300 shrink-0" />
-                    <span>{medicalSubSpecialty}</span>
-                  </span>
-                )}
-              </div>
-            )}
+ if (featured) {
+ return (
+ <div
+ onClick={() => navigate(businessLink)}
+ onMouseEnter={() => setIsCardHovered(true)}
+ onMouseLeave={() => setIsCardHovered(false)}
+ className={cn(
+ "bg-white rounded-[24px] md:rounded-[32px] overflow-hidden hover:shadow-2xl transition-all duration-300 flex flex-col group relative min-h-[260px] md:min-h-[290px] cursor-pointer",
+ isLuxuryFeatured
+ ? "border-2 border-amber-400/90 ring-2 ring-amber-400/50 shadow-[0_0_25px_rgba(245,158,11,0.45)] hover:shadow-[0_0_35px_rgba(245,158,11,0.7)] hover:ring-amber-300"
+ : "border border-[#e5e1da] hover:border-[#1a4d2e]/30"
+ )}
+ >
+ <div className='absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent z-10 pointer-events-none'></div>
+ 
+ {business.coverVideoUrl ? (
+ <div className="absolute inset-0 w-full h-full">
+ <CoverVideoPlayer
+ videoUrl={business.coverVideoUrl}
+ posterImage={posterImage}
+ isHovered={isCardHovered}
+ controlsPosition="top-left"
+ extraControls={cardActionsTopLeft}
+ showOnlyMuteControl={true}
+ className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+ />
+ </div>
+ ) : (!hasValidCover) ? (
+ <>
+ <div className="absolute inset-0 bg-gradient-to-br from-[#e5e5e5] via-[#dcdcdc] to-[#bebebe] flex items-center justify-center select-none overflow-hidden group-hover:scale-105 transition-transform duration-700">
+ <div className="absolute inset-0 bg-linear-to-tr from-transparent via-white/15 to-transparent pointer-events-none rotate-12 scale-150" />
+ {globalSettings.logoUrl || '/logo.png' ? (
+ <img 
+ src={globalSettings.logoUrl || '/logo.png'} 
+ alt="Site Logo" 
+ className="h-14 w-auto object-contain grayscale opacity-45 contrast-150 brightness-50 select-none pointer-events-none"
+ />
+ ) : (
+ <Store className="h-12 w-12 text-stone-500/40" />
+ )}
+ </div>
+ <div className="absolute top-3.5 left-3.5 z-30 flex items-center gap-1.5">
+ {cardActionsTopLeft}
+ </div>
+ </>
+ ) : (
+ <>
+ <img
+ src={business.coverImage || business.imageUrl}
+ alt={business.name || 'محل تجاري'}
+ className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+ />
+ <div className="absolute top-3.5 left-3.5 z-30 flex items-center gap-1.5">
+ {cardActionsTopLeft}
+ </div>
+ </>
+ )}
+ <div className='absolute inset-0 flex flex-col justify-end p-5 sm:p-6 z-20'>
+ <div className="mb-auto flex flex-wrap items-center justify-between gap-2 w-full">
+ <div className="flex items-center gap-1.5 flex-wrap">
+ {isCurrentlyFeatured && (
+ <span className='bg-gradient-to-r from-amber-400 to-yellow-500 text-yellow-950 text-[10px] sm:text-xs font-black px-3 py-1 rounded-full uppercase tracking-widest shadow-md flex items-center gap-1 w-fit border border-amber-300/60'>
+ <Crown className="h-3 w-3 sm:h-3.5 sm:w-3.5 fill-current shrink-0 text-amber-950" />
+ <span>ممول</span>
+ </span>
+ )}
+ </div>
+ </div>
 
-            <p className='text-white/80 max-w-md text-xs sm:text-sm leading-relaxed mb-4 line-clamp-2'>{stripHtml(business.description)}</p>
-            
-            {searchReasons && searchReasons.length > 0 && (
-              <div className="mb-4 flex flex-wrap gap-1 items-center select-none">
-                <span className="text-[10px] text-emerald-300 bg-emerald-950/45 px-2.5 py-1 rounded-md font-black border border-emerald-500/25">
-                  🔍 مطابق لـ: {searchReasons.join('، ')}
-                </span>
-              </div>
-            )}
+ <div>
+ {/* Live Open / Closed Status Pill */}
+ <div className="inline-flex items-center gap-1.5 bg-black/50 backdrop-blur-md text-white text-[11px] font-bold px-2.5 py-0.5 rounded-full mb-1.5 border border-white/15">
+ <span className={`w-2 h-2 rounded-full ${liveStatus.dotColor}`}></span>
+ <span>{liveStatus.statusText}</span>
+ </div>
 
-            <div className='flex items-center justify-between'>
-              <div className='flex items-center gap-1 sm:gap-2 text-white'>
-                {typeof business.rating === 'number' && !isNaN(business.rating) && business.rating > 0 && typeof business.reviewCount === 'number' && business.reviewCount > 0 ? (
-                  <>
-                    <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                    <span className='font-bold text-sm'>{business.rating.toFixed(1)}</span>
-                  </>
-                ) : (
-                  <span className='font-black text-[11px] bg-white/20 backdrop-blur-xs px-2.5 py-0.5 rounded-md'>جديد</span>
-                )}
-              </div>
-              <div className='flex items-center gap-1 sm:gap-2 text-white/80 text-xs sm:text-sm'>
-                <MapPin className="h-3 w-3 sm:h-4 sm:w-4 shrink-0" />
-                <span className="truncate max-w-[150px] sm:max-w-[200px]">{business.district ? `${business.district} - ${business.address}` : business.address}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+ <div className="flex items-center gap-2 flex-wrap mt-1 mb-1.5">
+ <h2 className={`text-xl sm:text-2xl font-black leading-snug break-words ${
+ isLuxuryFeatured 
+ ? 'text-amber-300 drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-400 bg-clip-text text-transparent' 
+ : 'text-white'
+ }`}>
+ {business.name || 'محل تجاري'}
+ </h2>
+ {isVip && (
+ <VerifiedBadge size="sm" businessName={business.name || 'محل تجاري'} />
+ )}
+ </div>
 
-  return (
-    <div
-      onClick={() => navigate(businessLink)}
-      className={cn(
-        "bg-white rounded-[24px] md:rounded-[32px] overflow-hidden hover:-translate-y-1 transition-all duration-500 flex flex-col group relative cursor-pointer",
-        isLuxuryFeatured
-          ? "border-2 border-amber-400/90 ring-2 ring-amber-400/40 shadow-[0_0_22px_rgba(245,158,11,0.3)] hover:shadow-[0_0_35px_rgba(245,158,11,0.55)] hover:border-amber-400"
-          : "border border-[#e5e1da] shadow-[0_4px_20px_rgba(0,0,0,0.03)] hover:shadow-[0_20px_40px_rgba(26,77,46,0.12)]"
-      )}
-    >
-      <div className="h-48 md:h-52 bg-stone-100 relative overflow-hidden">
-        { (business.imageUrl || '') ? (
-          <img
-            src={business.imageUrl || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=800&q=80'}
-            alt={business.name || 'مطعم البراق'}
-            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 ease-out"
-          />
-        ) : (
-          <img
-            src="https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=800&q=80"
-            alt={business.name || 'مطعم البراق'}
-            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 ease-out"
-          />
-        )}
+ {/* Category & Department Tag */}
+ {(business.category || subCategoryName || medicalSubSpecialty) && (
+ <div className="flex items-center gap-1.5 mb-2.5 flex-wrap">
+ {business.category && (
+ <span className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-white/20 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-white/20 shadow-xs">
+ <Tag className="w-3 h-3 text-[#ff9f1c]" />
+ <span>{business.category}</span>
+ </span>
+ )}
+ {subCategoryName && subCategoryName !== business.category && subCategoryName !== medicalSubSpecialty && (
+ <span className="inline-flex items-center gap-1.5 text-xs font-bold text-white/90 bg-white/15 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-white/15 shadow-xs">
+ <span>{subCategoryName}</span>
+ </span>
+ )}
+ {medicalSubSpecialty && (
+ <span className="inline-flex items-center gap-1.5 text-xs font-bold text-teal-200 bg-teal-900/60 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-teal-400/35 shadow-xs">
+ <Stethoscope className="w-3.5 h-3.5 text-teal-300 shrink-0" />
+ <span>{medicalSubSpecialty}</span>
+ </span>
+ )}
+ </div>
+ )}
 
-        {/* Top Badges & Actions */}
-        <div className="absolute top-3.5 right-3.5 flex items-center gap-1.5 z-20">
-          {isCurrentlyFeatured && (
-            <div className="bg-gradient-to-r from-amber-400 to-yellow-500 backdrop-blur-xl border border-amber-300/60 px-2.5 py-0.5 rounded-full text-[10px] font-black text-yellow-950 shadow-md flex items-center gap-1 w-fit">
-              <Crown className="h-3 w-3 fill-current shrink-0 text-amber-950" />
-              <span>ممول</span>
-            </div>
-          )}
-        </div>
+ <p className='text-white/80 max-w-md text-xs sm:text-sm leading-relaxed mb-4 line-clamp-2'>{stripHtml(business.description)}</p>
+ 
+ {searchReasons && searchReasons.length > 0 && (
+ <div className="mb-4 flex flex-wrap gap-1 items-center select-none">
+ <span className="text-[10px] text-emerald-300 bg-emerald-950/45 px-2.5 py-1 rounded-md font-black border border-emerald-500/25">
+ مطابق لـ: {searchReasons.join('، ')}
+ </span>
+ </div>
+ )}
 
-        {/* Share & Favorite Top Left */}
-        <div className="absolute top-3.5 left-3.5 flex items-center gap-1.5 z-20">
-          <button
-            onClick={handleToggleFavorite}
-            className="w-8 h-8 rounded-full bg-white/70 backdrop-blur-xl hover:bg-white flex items-center justify-center transition-all shadow-[0_4px_12px_rgba(0,0,0,0.08)] border border-white/40 cursor-pointer"
-            title={isFavorited ? "إزالة من المفضلة" : "إضافة للمفضلة"}
-          >
-            <Heart className={`h-4 w-4 transition-transform duration-300 active:scale-125 ${isFavorited ? 'fill-red-500 text-red-500' : 'text-stone-600'}`} />
-          </button>
-          <ShareButton 
-            title={business.name} 
-            url={businessLink} 
-            size="sm" 
-            variant="circle" 
-            className="w-8 h-8 rounded-full bg-white/70 backdrop-blur-xl hover:bg-white flex items-center justify-center transition-all shadow-[0_4px_12px_rgba(0,0,0,0.08)] border border-white/40 text-stone-600" 
-          />
-        </div>
+ <div className='flex items-center justify-between'>
+ <div className='flex items-center gap-1 sm:gap-2 text-white'>
+ {typeof business.rating === 'number' && !isNaN(business.rating) && business.rating > 0 && typeof business.reviewCount === 'number' && business.reviewCount > 0 ? (
+ <>
+ <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+ <span className='font-bold text-sm'>{business.rating.toFixed(1)}</span>
+ </>
+ ) : (
+ <span className='font-black text-[11px] bg-white/20 backdrop-blur-xs px-2.5 py-0.5 rounded-md'>جديد</span>
+ )}
+ </div>
+ <div className='flex items-center gap-1 sm:gap-2 text-white/80 text-xs sm:text-sm'>
+ <MapPin className="h-3 w-3 sm:h-4 sm:w-4 shrink-0" />
+ <span className="truncate max-w-[150px] sm:max-w-[200px]">{business.district ? `${business.district} - ${business.address}` : business.address}</span>
+ </div>
+ </div>
+ </div>
+ </div>
+ </div>
+ );
+ }
 
-        {/* Live Working Status Bottom Right of Image */}
-        <div className="absolute bottom-3 right-3 flex items-center gap-1.5 z-10">
-          <div className={`px-2.5 py-1 rounded-full text-[10px] font-black backdrop-blur-xl flex items-center gap-1.5 shadow-[0_4px_12px_rgba(0,0,0,0.1)] border border-white/20 ${liveStatus.badgeBg.replace("bg-", "bg-opacity-80 bg-")}`}>
-            <span className={`w-2 h-2 rounded-full ${liveStatus.dotColor}`}></span>
-            <span>{liveStatus.statusText}</span>
-          </div>
-        </div>
+ return (
+ <div
+ onClick={() => navigate(businessLink)}
+ onMouseEnter={() => setIsCardHovered(true)}
+ onMouseLeave={() => setIsCardHovered(false)}
+ className={cn(
+ "bg-white rounded-[24px] md:rounded-[32px] overflow-hidden hover:-translate-y-1 transition-all duration-500 flex flex-col group relative cursor-pointer",
+ isLuxuryFeatured
+ ? "border-2 border-amber-400/90 ring-2 ring-amber-400/40 shadow-[0_0_22px_rgba(245,158,11,0.3)] hover:shadow-[0_0_35px_rgba(245,158,11,0.55)] hover:border-amber-400"
+ : "border border-[#e5e1da] shadow-[0_4px_20px_rgba(0,0,0,0.03)] hover:shadow-[0_20px_40px_rgba(26,77,46,0.12)]"
+ )}
+ >
+ <div className="h-48 md:h-52 bg-stone-100 relative overflow-hidden">
+ {business.coverVideoUrl ? (
+ <CoverVideoPlayer
+ videoUrl={business.coverVideoUrl}
+ posterImage={posterImage}
+ isHovered={isCardHovered}
+ controlsPosition="top-left"
+ extraControls={cardActionsTopLeft}
+ showOnlyMuteControl={true}
+ className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 ease-out"
+ />
+ ) : (!hasValidCover) ? (
+ <>
+ <div className="w-full h-full bg-gradient-to-br from-[#e5e5e5] via-[#dcdcdc] to-[#bebebe] flex items-center justify-center select-none overflow-hidden relative">
+ <div className="absolute inset-0 bg-linear-to-tr from-transparent via-white/15 to-transparent pointer-events-none rotate-12 scale-150" />
+ {globalSettings.logoUrl || '/logo.png' ? (
+ <img 
+ src={globalSettings.logoUrl || '/logo.png'} 
+ alt="Site Logo" 
+ className="h-14 w-auto object-contain grayscale opacity-45 contrast-150 brightness-50 select-none pointer-events-none group-hover:scale-110 transition-transform duration-700 ease-out"
+ />
+ ) : (
+ <Store className="h-12 w-12 text-stone-500/40 group-hover:scale-110 transition-transform duration-700 ease-out" />
+ )}
+ </div>
+ {/* Share & Favorite Top Left */}
+ <div className="absolute top-3.5 left-3.5 flex items-center gap-1.5 z-20">
+ {cardActionsTopLeft}
+ </div>
+ </>
+ ) : (
+ <>
+ <img
+ src={business.coverImage || business.imageUrl}
+ alt={business.name || 'محل تجاري'}
+ className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 ease-out"
+ />
+ {/* Share & Favorite Top Left */}
+ <div className="absolute top-3.5 left-3.5 flex items-center gap-1.5 z-20">
+ {cardActionsTopLeft}
+ </div>
+ </>
+ )}
 
-        {/* Rating Badge Bottom Left of Image */}
-        <div className="absolute bottom-3 left-3 flex items-center gap-1.5 z-10">
-          {typeof business.rating === 'number' && !isNaN(business.rating) && business.rating > 0 && typeof business.reviewCount === 'number' && business.reviewCount > 0 ? (
-            <div className="flex items-center gap-1.5 bg-white/95 backdrop-blur-md border border-white/40 px-2.5 py-1 rounded-full text-xs font-black text-stone-900 shadow-[0_4px_12px_rgba(0,0,0,0.15)]">
-              <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400 shrink-0" />
-              <span>{business.rating.toFixed(1)}</span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-1 bg-emerald-600/90 text-white backdrop-blur-md border border-emerald-400/30 px-2.5 py-1 rounded-full text-[10px] font-black shadow-[0_4px_12px_rgba(0,0,0,0.15)]">
-              <span>جديد</span>
-            </div>
-          )}
-        </div>
-      </div>
+ {/* Top Badges & Actions */}
+ <div className="absolute top-3.5 right-3.5 flex items-center gap-1.5 z-20">
+ {isCurrentlyFeatured && (
+ <div className="bg-gradient-to-r from-amber-400 to-yellow-500 backdrop-blur-xl border border-amber-300/60 px-2.5 py-0.5 rounded-full text-[10px] font-black text-yellow-950 shadow-md flex items-center gap-1 w-fit">
+ <Crown className="h-3 w-3 fill-current shrink-0 text-amber-950" />
+ <span>ممول</span>
+ </div>
+ )}
+ </div>
 
-      <div className="p-6 flex flex-col flex-1">
-        <div className="flex items-center gap-2 flex-wrap mb-2">
-          <h3 className={`text-lg sm:text-xl font-bold leading-snug break-words ${
-            isLuxuryFeatured
-              ? 'text-amber-700 bg-gradient-to-r from-amber-600 via-amber-500 to-yellow-600 bg-clip-text text-transparent font-black drop-shadow-2xs'
-              : 'text-[#2d2a26]'
-          }`}>
-            {business.name || 'مطعم البراق'}
-          </h3>
-          {isVip && (
-            <VerifiedBadge size="sm" businessName={business.name || 'مطعم البراق'} />
-          )}
-        </div>
+ {/* Live Working Status Bottom Right of Image */}
+ <div className="absolute bottom-3 right-3 flex items-center gap-1.5 z-10">
+ <div className={`px-2.5 py-1 rounded-full text-[10px] font-black backdrop-blur-xl flex items-center gap-1.5 shadow-[0_4px_12px_rgba(0,0,0,0.1)] border border-white/20 ${liveStatus.badgeBg.replace("bg-", "bg-opacity-80 bg-")}`}>
+ <span className={`w-2 h-2 rounded-full ${liveStatus.dotColor}`}></span>
+ <span>{liveStatus.statusText}</span>
+ </div>
+ </div>
 
-        {/* Category & Department Tag */}
-        {(business.category || subCategoryName || medicalSubSpecialty) && (
-          <div className="flex items-center gap-1.5 mb-2.5 flex-wrap">
-            {business.category && (
-              <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#1a4d2e] bg-[#1a4d2e]/7 hover:bg-[#1a4d2e]/12 px-2.5 py-0.5 rounded-full border border-[#1a4d2e]/15 transition-colors">
-                <Tag className="w-3 h-3 text-[#1a4d2e]" />
-                <span>{business.category}</span>
-              </span>
-            )}
-            {subCategoryName && subCategoryName !== business.category && subCategoryName !== medicalSubSpecialty && (
-              <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200/60 transition-colors">
-                <span>{subCategoryName}</span>
-              </span>
-            )}
-            {medicalSubSpecialty && (
-              <span className="inline-flex items-center gap-1.5 text-xs font-bold text-teal-800 bg-teal-50/95 hover:bg-teal-100 px-2.5 py-0.5 rounded-full border border-teal-200 transition-colors shadow-2xs">
-                <Stethoscope className="w-3.5 h-3.5 text-teal-600 shrink-0" />
-                <span>{medicalSubSpecialty}</span>
-              </span>
-            )}
-          </div>
-        )}
+ {/* Rating Badge Bottom Left of Image */}
+ <div className="absolute bottom-3 left-3 flex items-center gap-1.5 z-10">
+ {typeof business.rating === 'number' && !isNaN(business.rating) && business.rating > 0 && typeof business.reviewCount === 'number' && business.reviewCount > 0 ? (
+ <div className="flex items-center gap-1.5 bg-white/95 backdrop-blur-md border border-white/40 px-2.5 py-1 rounded-full text-xs font-black text-stone-900 shadow-[0_4px_12px_rgba(0,0,0,0.15)]">
+ <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400 shrink-0" />
+ <span>{business.rating.toFixed(1)}</span>
+ </div>
+ ) : (
+ <div className="flex items-center gap-1 bg-emerald-600/90 text-white backdrop-blur-md border border-emerald-400/30 px-2.5 py-1 rounded-full text-[10px] font-black shadow-[0_4px_12px_rgba(0,0,0,0.15)]">
+ <span>جديد</span>
+ </div>
+ )}
+ </div>
+ </div>
 
-        <p className="text-stone-500 text-sm line-clamp-2 mb-4 flex-1 leading-relaxed">
-          {stripHtml(business.description)}
-        </p>
+ <div className="p-6 flex flex-col flex-1">
+ <div className="flex items-center gap-2 flex-wrap mb-2">
+ <h3 className={`text-lg sm:text-xl font-bold leading-snug break-words ${
+ isLuxuryFeatured
+ ? 'text-amber-700 bg-gradient-to-r from-amber-600 via-amber-500 to-yellow-600 bg-clip-text text-transparent font-black drop-shadow-2xs'
+ : 'text-[#2d2a26]'
+ }`}>
+ {business.name || 'محل تجاري'}
+ </h3>
+ {isVip && (
+ <VerifiedBadge size="sm" businessName={business.name || 'محل تجاري'} />
+ )}
+ </div>
 
-        {searchReasons && searchReasons.length > 0 && (
-          <div className="mb-4 flex flex-wrap gap-1 items-center select-none">
-            <span className="text-[10px] text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-md font-black border border-emerald-100/40">
-              🔍 مطابق لـ: {searchReasons.join('، ')}
-            </span>
-          </div>
-        )}
+ {/* Category & Department Tag */}
+ {(business.category || subCategoryName || medicalSubSpecialty) && (
+ <div className="flex items-center gap-1.5 mb-2.5 flex-wrap">
+ {business.category && (
+ <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#1a4d2e] bg-[#1a4d2e]/7 hover:bg-[#1a4d2e]/12 px-2.5 py-0.5 rounded-full border border-[#1a4d2e]/15 transition-colors">
+ <Tag className="w-3 h-3 text-[#1a4d2e]" />
+ <span>{business.category}</span>
+ </span>
+ )}
+ {subCategoryName && subCategoryName !== business.category && subCategoryName !== medicalSubSpecialty && (
+ <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200/60 transition-colors">
+ <span>{subCategoryName}</span>
+ </span>
+ )}
+ {medicalSubSpecialty && (
+ <span className="inline-flex items-center gap-1.5 text-xs font-bold text-teal-800 bg-teal-50/95 hover:bg-teal-100 px-2.5 py-0.5 rounded-full border border-teal-200 transition-colors shadow-2xs">
+ <Stethoscope className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+ <span>{medicalSubSpecialty}</span>
+ </span>
+ )}
+ </div>
+ )}
 
-        <div className="flex items-center justify-between text-stone-500 text-xs mt-auto pt-3 border-t border-[#e5e1da] gap-2">
-          <div className="flex items-center gap-1.5 min-w-0 flex-1">
-            <MapPin className="h-3.5 w-3.5 shrink-0 text-[#1a4d2e]" />
-            <span className="truncate font-bold text-stone-700">{business.district ? `${business.district}` : business.address}</span>
-          </div>
+ <p className="text-stone-500 text-sm line-clamp-2 mb-4 flex-1 leading-relaxed">
+ {stripHtml(business.description)}
+ </p>
 
-          <div className="flex items-center gap-1.5 shrink-0">
-            {business.phone && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  window.location.href = `tel:${business.phone}`;
-                }}
-                className="min-h-[40px] px-3 py-1.5 bg-[#1a4d2e] hover:bg-[#133c23] text-white rounded-xl flex items-center justify-center gap-1.5 font-bold transition-all active:scale-95 cursor-pointer shadow-xs"
-                title="اتصال تلفوني مباشر"
-              >
-                <Phone3DIcon className="w-3.5 h-3.5 text-white" />
-                <span className="text-[11px] font-mono font-bold tracking-tight" dir="ltr">{business.phone.replace(/\s+/g, '')}</span>
-              </button>
-            )}
-            {(business.socialLinks?.whatsapp || business.phone) && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  const cleanPhone = (business.socialLinks?.whatsapp || business.phone)?.replace(/[^0-9]/g, '');
-                  if (cleanPhone) {
-                    window.open(`https://wa.me/${cleanPhone}`, '_blank', 'noopener,noreferrer');
-                  }
-                }}
-                className="min-h-[40px] min-w-[40px] px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl flex items-center justify-center transition-all active:scale-95 cursor-pointer shadow-xs"
-                title="مراسلة عبر الواتساب"
-              >
-                <WhatsApp3DIcon className="w-4 h-4 text-white" />
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+ {searchReasons && searchReasons.length > 0 && (
+ <div className="mb-4 flex flex-wrap gap-1 items-center select-none">
+ <span className="text-[10px] text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-md font-black border border-emerald-100/40">
+ مطابق لـ: {searchReasons.join('، ')}
+ </span>
+ </div>
+ )}
+
+ <div className="flex items-center justify-between text-stone-500 text-xs mt-auto pt-3 border-t border-[#e5e1da] gap-2">
+ <div className="flex items-center gap-1.5 min-w-0 flex-1">
+ <MapPin className="h-3.5 w-3.5 shrink-0 text-[#1a4d2e]" />
+ <span className="truncate font-bold text-stone-700">{business.district ? `${business.district}` : business.address}</span>
+ </div>
+
+ <div className="flex items-center gap-1.5 shrink-0">
+ {business.phone && (
+ <button
+ type="button"
+ onClick={(e) => {
+ e.preventDefault();
+ e.stopPropagation();
+ window.location.href = `tel:${business.phone}`;
+ }}
+ className="min-h-[40px] px-3 py-1.5 bg-[#1a4d2e] hover:bg-[#133c23] text-white rounded-xl flex items-center justify-center gap-1.5 font-bold transition-all active:scale-95 cursor-pointer shadow-xs"
+ title="اتصال تلفوني مباشر"
+ >
+ <Phone3DIcon className="w-3.5 h-3.5 text-white" />
+ <span className="text-[11px] font-mono font-bold tracking-tight" dir="ltr">{business.phone.replace(/\s+/g, '')}</span>
+ </button>
+ )}
+ {(business.socialLinks?.whatsapp || business.phone) && (
+ <button
+ type="button"
+ onClick={(e) => {
+ e.preventDefault();
+ e.stopPropagation();
+ const cleanPhone = (business.socialLinks?.whatsapp || business.phone)?.replace(/[^0-9]/g, '');
+ if (cleanPhone) {
+ window.open(`https://wa.me/${cleanPhone}`, '_blank', 'noopener,noreferrer');
+ }
+ }}
+ className="min-h-[40px] min-w-[40px] px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl flex items-center justify-center transition-all active:scale-95 cursor-pointer shadow-xs"
+ title="مراسلة عبر الواتساب"
+ >
+ <WhatsApp3DIcon className="w-4 h-4 text-white" />
+ </button>
+ )}
+ </div>
+ </div>
+ </div>
+ </div>
+ );
 }
 

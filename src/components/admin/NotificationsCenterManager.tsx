@@ -301,11 +301,11 @@ export function NotificationsCenterManager({
         message: message.trim(),
         type,
         link: link.trim() || '/',
-        badge: badge.trim() || undefined,
+        badge: badge.trim() || '',
         userId: targetRole === 'all' ? 'all' : targetRole,
-        targetArea: targetArea !== 'all' ? targetArea : undefined,
-        targetCategory: targetCategory !== 'all' ? targetCategory : undefined,
-        targetSubCategory: targetSubCategory !== 'all' ? targetSubCategory : undefined
+        targetArea: targetArea !== 'all' ? targetArea : '',
+        targetCategory: targetCategory !== 'all' ? targetCategory : '',
+        targetSubCategory: targetSubCategory !== 'all' ? targetSubCategory : ''
       });
 
       if (showToast) {

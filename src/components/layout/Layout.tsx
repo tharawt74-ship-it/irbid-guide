@@ -35,7 +35,8 @@ import {
   Stethoscope,
   QrCode,
   Crown,
-  Zap
+  Zap,
+  Utensils
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -74,6 +75,24 @@ export function Layout() {
     b.giftCodeEnabled === true || (b as any).giftCodeEnabled === 'true'
   );
 
+  // Check if owner of a Food and Beverage business
+  const hasFoodAndDrinkBusiness = (ownedBusinesses || []).some(b => {
+    if (!b.category) return false;
+    const catLower = b.category.toLowerCase();
+    return (
+      catLower.includes('مأكولات') || 
+      catLower.includes('مشروبات') || 
+      catLower.includes('مطاعم') || 
+      catLower.includes('كافيه') || 
+      catLower.includes('حلويات') ||
+      catLower.includes('شاورما') ||
+      catLower.includes('برجر') ||
+      catLower.includes('بيتزا') ||
+      catLower.includes('فلافل') ||
+      catLower.includes('قهوة')
+    );
+  });
+
   useEffect(() => {
     function handleClickOutside(event: MouseEvent | TouchEvent) {
       if (moreMenuRef.current && !moreMenuRef.current.contains(event.target as Node)) {
@@ -105,16 +124,15 @@ export function Layout() {
     const handleScroll = () => {
       if (mobileMenuOpen) return;
 
+      // Header is fixed/always visible on Homepage and Search page, skip scroll calculations
+      const isAlwaysVisible = location.pathname === '/' || location.pathname.startsWith('/search');
+      if (isAlwaysVisible) return;
+
       if (!ticking) {
         window.requestAnimationFrame(() => {
           const currentScrollY = window.scrollY;
           
-          // Keep header always visible on Homepage and Search page
-          const isAlwaysVisible = location.pathname === '/' || location.pathname.startsWith('/search');
-          if (isAlwaysVisible) {
-            setShowHeader(true);
-            window.dispatchEvent(new CustomEvent('app-header-visibility', { detail: { visible: true } }));
-          } else if (window.innerWidth < 1024) {
+          if (window.innerWidth < 1024) {
             if (currentScrollY > lastScrollY && currentScrollY > 80) {
               setShowHeader(false);
               window.dispatchEvent(new CustomEvent('app-header-visibility', { detail: { visible: false } }));
@@ -972,7 +990,29 @@ export function Layout() {
                       <QrCode className="h-5 w-5" />
                     </div>
                     <div className="text-right">
-                      <span className="text-xs font-black text-white block">ماسح كودات الخصم</span>
+                      <span className="text-xs font-black text-white block">ماسح كودات QR</span>
+                    </div>
+                  </div>
+                  <ChevronLeft className="h-4 w-4 text-emerald-400 group-hover:-translate-x-0.5 transition-transform shrink-0" />
+                </button>
+              )}
+
+              {/* Food and Beverage Live Orders Button */}
+              {currentUser && hasFoodAndDrinkBusiness && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeMenu();
+                    navigate('/profile/live-orders');
+                  }}
+                  className="w-full p-3.5 rounded-2xl bg-gradient-to-r from-emerald-900 to-emerald-950 text-white flex items-center justify-between border border-emerald-500/35 shadow-md hover:border-emerald-400 transition-all cursor-pointer active:scale-98 group text-right"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-amber-500 text-stone-950 flex items-center justify-center shrink-0 shadow-md group-hover:scale-105 transition-transform">
+                      <Utensils className="h-5 w-5" />
+                    </div>
+                    <div className="text-right">
+                      <span className="text-xs font-black text-white block">طلبات المنيو والزبائن الحية</span>
                     </div>
                   </div>
                   <ChevronLeft className="h-4 w-4 text-emerald-400 group-hover:-translate-x-0.5 transition-transform shrink-0" />

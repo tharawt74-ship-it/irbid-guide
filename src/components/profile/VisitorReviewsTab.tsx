@@ -5,9 +5,10 @@ import { useAuth } from '../../contexts/AuthContext';
 import { db } from '../../lib/firebase';
 import { collection, query, where, getDocs, doc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { Review } from '../../types';
-import { Star, MessageSquare, Trash2, Edit3, Check, X, ExternalLink, Calendar } from 'lucide-react';
+import { Star, MessageSquare, Trash2, Edit3, Check, X, ExternalLink, Calendar, AlertTriangle } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ar } from 'date-fns/locale';
+import { containsUrlOrLink, stripUrlsAndLinks, sanitizeInput } from '../../lib/security';
 
 export function VisitorReviewsTab() {
   const { confirm } = useConfirm();
@@ -72,19 +73,31 @@ export function VisitorReviewsTab() {
 
   const handleSaveEdit = async (reviewId: string) => {
     if (!db || !editComment.trim()) return;
+
+    if (containsUrlOrLink(editComment)) {
+      alert('عذراً، يمنع إدراج الروابط أو عناوين المواقع الإلكترونية في التقييم نهائياً. التقييم مخصص للنصوص والآراء فقط.');
+      return;
+    }
+
     setIsSaving(true);
     try {
+      const cleanComment = stripUrlsAndLinks(sanitizeInput(editComment.trim()));
+      if (!cleanComment) {
+        alert('عذراً، يمنع إدراج الروابط في التقييم. التقييم مخصص للنصوص والآراء فقط.');
+        setIsSaving(false);
+        return;
+      }
       const ref = doc(db, 'reviews', reviewId);
       await updateDoc(ref, {
         rating: editRating,
-        comment: editComment.trim(),
+        comment: cleanComment,
         updatedAt: Date.now()
       });
 
       setReviews(prev => prev.map(r => r.id === reviewId ? {
         ...r,
         rating: editRating,
-        comment: editComment.trim()
+        comment: cleanComment
       } : r));
 
       setEditingReviewId(null);
@@ -224,9 +237,17 @@ export function VisitorReviewsTab() {
                     value={editComment}
                     onChange={(e) => setEditComment(e.target.value)}
                     rows={3}
-                    className="w-full p-3 rounded-xl border border-stone-300 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
-                    placeholder="اكتب تفاصيل تجربتك هنا..."
+                    className={`w-full p-3 rounded-xl border text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#1a4d2e] ${
+                      containsUrlOrLink(editComment) ? 'border-rose-400 bg-rose-50/20' : 'border-stone-300'
+                    }`}
+                    placeholder="اكتب تفاصيل تجربتك هنا (نصوص فقط دون روابط)..."
                   />
+                  {containsUrlOrLink(editComment) && (
+                    <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold rounded-xl flex items-center gap-2 animate-in fade-in">
+                      <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
+                      <span>عذراً، يمنع إدراج الروابط في التقييم نهائياً (مسموح بالنصوص فقط).</span>
+                    </div>
+                  )}
 
                   <div className="flex justify-end gap-2">
                     <button
@@ -238,9 +259,9 @@ export function VisitorReviewsTab() {
                     </button>
                     <button
                       type="button"
-                      disabled={isSaving}
+                      disabled={isSaving || containsUrlOrLink(editComment)}
                       onClick={() => handleSaveEdit(rev.id)}
-                      className="px-4 py-1.5 text-xs font-bold text-white bg-[#1a4d2e] hover:bg-[#133b22] rounded-lg shadow-2xs disabled:opacity-50 flex items-center gap-1"
+                      className="px-4 py-1.5 text-xs font-bold text-white bg-[#1a4d2e] hover:bg-[#133b22] rounded-lg shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
                     >
                       <Check className="h-3.5 w-3.5" />
                       <span>{isSaving ? 'جاري الحفظ...' : 'حفظ التعديل'}</span>
@@ -248,8 +269,8 @@ export function VisitorReviewsTab() {
                   </div>
                 </div>
               ) : (
-                <p className="text-xs sm:text-sm text-stone-700 leading-relaxed font-medium bg-stone-50/50 p-3 rounded-xl border border-stone-100">
-                  {rev.comment}
+                <p className="text-xs sm:text-sm text-stone-700 leading-relaxed font-medium bg-stone-50/50 p-3 rounded-xl border border-stone-100 break-words">
+                  {stripUrlsAndLinks(rev.comment)}
                 </p>
               )}
 
@@ -257,14 +278,14 @@ export function VisitorReviewsTab() {
               {rev.reply && (
                 <div className="bg-emerald-50/80 border border-emerald-200/80 p-3 rounded-xl text-xs space-y-1">
                   <div className="flex items-center justify-between text-[#1a4d2e] font-black">
-                    <span>رد إدارة المنشأة ({rev.reply.authorName || 'صاحب المحل'}):</span>
+                    <span>رد إدارة المنشأة ({stripUrlsAndLinks(rev.reply.authorName) || 'صاحب المحل'}):</span>
                     {rev.reply.createdAt && (
                       <span className="text-[10px] text-stone-500 font-normal">
                         {formatDistanceToNow(rev.reply.createdAt, { addSuffix: true, locale: ar })}
                       </span>
                     )}
                   </div>
-                  <p className="text-stone-700 font-medium leading-relaxed">{rev.reply.text}</p>
+                  <p className="text-stone-700 font-medium leading-relaxed">{stripUrlsAndLinks(rev.reply.text)}</p>
                 </div>
               )}
 

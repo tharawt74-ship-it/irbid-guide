@@ -99,12 +99,24 @@ export function VisitorFavoritesTab() {
             className="bg-white border border-stone-200/90 rounded-2xl p-4 shadow-2xs hover:shadow-sm transition-all flex flex-col justify-between space-y-3 group"
           >
             <div className="flex items-start gap-3">
-              <div className="w-14 h-14 rounded-xl overflow-hidden bg-stone-100 shrink-0 border border-stone-100">
-                <img 
-                  src={biz.imageUrl || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&q=80&w=400"} 
-                  alt={biz.name}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                />
+              <div className="w-14 h-14 rounded-xl overflow-hidden bg-stone-100 shrink-0 border border-stone-100 flex items-center justify-center">
+                {biz.logoUrl && !biz.logoUrl.includes('photo-1594212699903') ? (
+                  <img 
+                    src={biz.logoUrl} 
+                    alt={biz.name}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  />
+                ) : (biz.imageUrl && !biz.imageUrl.includes('photo-1517248135467') && !biz.imageUrl.includes('photo-1555396273') && !biz.imageUrl.includes('photo-1629909613654')) ? (
+                  <img 
+                    src={biz.imageUrl} 
+                    alt={biz.name}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  />
+                ) : (
+                  <div className="w-full h-full bg-gradient-to-br from-[#1a4d2e] to-emerald-600 flex items-center justify-center text-white font-black text-xl select-none">
+                    {(biz.name || 'م').trim().charAt(0)}
+                  </div>
+                )}
               </div>
 
               <div className="flex-1 min-w-0">

@@ -43,3 +43,19 @@ export async function sendCustomVerificationEmail(user: { uid: string; email: st
 
   return { success: true, token };
 }
+
+/**
+ * Non-blocking background queue function for sending verification email
+ * to prevent blocking frontend UI render loops or registration workflows.
+ */
+export function enqueueVerificationEmail(user: { uid: string; email: string | null; displayName?: string | null }) {
+  setTimeout(async () => {
+    try {
+      await sendCustomVerificationEmail(user);
+      console.log(`[Email Queue] Verification email dispatched successfully to ${user.email}`);
+    } catch (error) {
+      console.error(`[Email Queue Error] Failed to dispatch verification email:`, error);
+    }
+  }, 0);
+}
+

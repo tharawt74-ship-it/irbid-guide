@@ -18,7 +18,7 @@ export async function compressImage(
   maxHeight: number = 1000,
   quality: number = 0.60
 ): Promise<CompressionResult> {
-  return new Promise((resolve, reject) => {
+  return new Promise(async (resolve, reject) => {
     // If already extremely small (< 30KB), resolve directly
     if (file.size < 30 * 1024) {
       const previewUrl = URL.createObjectURL(file);
@@ -31,6 +31,62 @@ export async function compressImage(
       });
     }
 
+    try {
+      const isPng = file.type === 'image/png' || file.name.toLowerCase().endsWith('.png');
+      const outputType = isPng ? 'image/png' : 'image/jpeg';
+
+      // 1. Modern non-blocking off-thread ImageBitmap decoding if supported
+      if (typeof window !== 'undefined' && 'createImageBitmap' in window) {
+        const imageBitmap = await createImageBitmap(file);
+        let width = imageBitmap.width;
+        let height = imageBitmap.height;
+
+        if (width > maxWidth || height > maxHeight) {
+          if (width / height > maxWidth / maxHeight) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          } else {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+
+        // OffscreenCanvas if available for background thread processing
+        if ('OffscreenCanvas' in window) {
+          const offscreen = new OffscreenCanvas(width, height);
+          const ctx = offscreen.getContext('2d');
+          if (ctx) {
+            ctx.clearRect(0, 0, width, height);
+            ctx.drawImage(imageBitmap, 0, 0, width, height);
+            const blob = await offscreen.convertToBlob({ type: outputType, quality: isPng ? undefined : quality });
+            imageBitmap.close();
+
+            const compressedFile = new File(
+              [blob],
+              file.name.replace(/\.[^/.]+$/, "") + (isPng ? '.png' : '.jpg'),
+              { type: outputType, lastModified: Date.now() }
+            );
+
+            const previewUrl = URL.createObjectURL(blob);
+            const savedBytes = Math.max(0, file.size - compressedFile.size);
+            const ratio = Math.round((savedBytes / file.size) * 100);
+
+            return resolve({
+              file: compressedFile,
+              previewUrl,
+              originalSize: file.size,
+              compressedSize: compressedFile.size,
+              ratio,
+            });
+          }
+        }
+        imageBitmap.close();
+      }
+    } catch {
+      // Fallback to standard requestAnimationFrame canvas if createImageBitmap fails
+    }
+
+    // Standard Fallback FileReader with micro-task frame yield
     const reader = new FileReader();
     reader.onerror = () => reject(new Error("فشل قراءة ملف الصورة"));
     reader.onload = (e) => {
@@ -40,7 +96,6 @@ export async function compressImage(
         let width = img.width;
         let height = img.height;
 
-        // Calculate scaled dimensions
         if (width > maxWidth || height > maxHeight) {
           if (width / height > maxWidth / maxHeight) {
             height = Math.round((height * maxWidth) / width);
@@ -60,42 +115,41 @@ export async function compressImage(
           return reject(new Error("فشل تجهيز مساحة الرسام لتصغير الصورة"));
         }
 
-        // Check if file is PNG or WebP to preserve alpha transparency
         const isPng = file.type === 'image/png' || file.name.toLowerCase().endsWith('.png');
         const outputType = isPng ? 'image/png' : 'image/jpeg';
-        
-        // Draw image onto canvas (clear canvas first to guarantee true transparency)
-        ctx.clearRect(0, 0, width, height);
-        ctx.drawImage(img, 0, 0, width, height);
 
-        // Convert to PNG or JPEG blob
-        canvas.toBlob(
-          (blob) => {
-            if (!blob) {
-              return reject(new Error("فشل تحويل الصورة للملف المضغوط"));
-            }
+        requestAnimationFrame(() => {
+          ctx.clearRect(0, 0, width, height);
+          ctx.drawImage(img, 0, 0, width, height);
 
-            const compressedFile = new File(
-              [blob],
-              file.name.replace(/\.[^/.]+$/, "") + (isPng ? '.png' : '.jpg'),
-              { type: outputType, lastModified: Date.now() }
-            );
+          canvas.toBlob(
+            (blob) => {
+              if (!blob) {
+                return reject(new Error("فشل تحويل الصورة للملف المضغوط"));
+              }
 
-            const previewUrl = URL.createObjectURL(blob);
-            const savedBytes = Math.max(0, file.size - compressedFile.size);
-            const ratio = Math.round((savedBytes / file.size) * 100);
+              const compressedFile = new File(
+                [blob],
+                file.name.replace(/\.[^/.]+$/, "") + (isPng ? '.png' : '.jpg'),
+                { type: outputType, lastModified: Date.now() }
+              );
 
-            resolve({
-              file: compressedFile,
-              previewUrl,
-              originalSize: file.size,
-              compressedSize: compressedFile.size,
-              ratio,
-            });
-          },
-          outputType,
-          isPng ? undefined : quality
-        );
+              const previewUrl = URL.createObjectURL(blob);
+              const savedBytes = Math.max(0, file.size - compressedFile.size);
+              const ratio = Math.round((savedBytes / file.size) * 100);
+
+              resolve({
+                file: compressedFile,
+                previewUrl,
+                originalSize: file.size,
+                compressedSize: compressedFile.size,
+                ratio,
+              });
+            },
+            outputType,
+            isPng ? undefined : quality
+          );
+        });
       };
 
       if (e.target?.result) {

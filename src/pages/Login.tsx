@@ -105,7 +105,7 @@ export function Login() {
         console.warn("User reload warning:", rErr);
       }
 
-      const isBootstrapAdmin = ['princessofx2344@gmail.com', 'admin@shoofiirbid.com', 'irbid.admin@gmail.com', 'tharawt74@gmail.com'].includes(cleanEmail);
+      const isBootstrapAdmin = ['princessofx2344@gmail.com', 'd42902672@gmail.com', 'admin@shoofiirbid.com', 'irbid.admin@gmail.com', 'tharawt74@gmail.com'].includes(cleanEmail);
       let isEmailVerified = user.emailVerified || isBootstrapAdmin || isPhoneOwner;
 
       if (!isEmailVerified && db) {
@@ -229,7 +229,7 @@ export function Login() {
       
       if (db) {
         const cleanEmail = user.email ? user.email.toLowerCase() : '';
-        const isBootstrapAdmin = ['princessofx2344@gmail.com', 'admin@shoofiirbid.com', 'irbid.admin@gmail.com'].includes(cleanEmail);
+        const isBootstrapAdmin = ['princessofx2344@gmail.com', 'd42902672@gmail.com', 'admin@shoofiirbid.com', 'irbid.admin@gmail.com'].includes(cleanEmail);
         const userRole = isBootstrapAdmin ? 'super_admin' : 'user';
         
         await setDoc(doc(db, 'users', user.uid), {

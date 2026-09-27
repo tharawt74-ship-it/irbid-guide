@@ -4,6 +4,7 @@ import { doc, getDoc, collection, addDoc, query, where, getDocs, limit, updateDo
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { sanitizeFirestorePayload } from '../lib/firestoreHelper';
+import { submitReviewAtomically } from '../utils/firestoreTransactions';
 import { Business, Review } from '../types';
 import { 
   Star, 
@@ -198,45 +199,35 @@ export function ReviewLandingPage() {
 
       let createdId = 'rev-' + Date.now();
 
-      // 4. Save review document to Firestore
+      // 4. Save review document & recalculate rating atomically in Firestore
       if (db) {
         try {
-          const docRef = await addDoc(collection(db, 'reviews'), sanitizedReview);
-          createdId = docRef.id;
+          const atomicRes = await submitReviewAtomically(db, targetBizId, {
+            userId: currentUser?.uid || ('guest-' + Date.now()),
+            userName: cleanName,
+            userPhone: cleanPhone || '',
+            rating: Number(rating),
+            comment: cleanComment || '',
+            deviceFingerprint: deviceFingerprint || 'fp_gen',
+            recaptchaToken: recaptchaToken || 'token_generated',
+            createdAt: Date.now()
+          });
+
+          createdId = atomicRes.reviewId;
+          setBusiness(prev => prev ? {
+            ...prev,
+            rating: atomicRes.newAverageRating,
+            reviewCount: atomicRes.newReviewCount
+          } : null);
         } catch (dbErr) {
-          console.error('Error saving review to Firestore:', dbErr);
-        }
-
-        // 5. Recalculate and update business rating & reviewCount
-        try {
-          if (business?.id && !(business as any).isDemo) {
-            const allReviewsSnap = await getDocs(
-              query(collection(db, 'reviews'), where('businessId', '==', business.id))
-            );
-            const validRatings: number[] = [];
-            allReviewsSnap.forEach(d => {
-              const rData = d.data();
-              if (typeof rData.rating === 'number' && rData.rating >= 1 && rData.rating <= 5) {
-                validRatings.push(rData.rating);
-              }
-            });
-
-            if (validRatings.length > 0) {
-              const sum = validRatings.reduce((a, b) => a + b, 0);
-              const realAvg = Number((sum / validRatings.length).toFixed(1));
-              const totalCount = validRatings.length;
-
-              setBusiness(prev => prev ? { ...prev, rating: realAvg, reviewCount: totalCount } : null);
-
-              // Update business document in Firestore
-              await updateDoc(doc(db, 'businesses', business.id), {
-                rating: realAvg,
-                reviewCount: totalCount
-              });
-            }
+          console.error('Error in atomic review transaction:', dbErr);
+          // Fallback if demo or transaction error
+          try {
+            const docRef = await addDoc(collection(db, 'reviews'), sanitizedReview);
+            createdId = docRef.id;
+          } catch (fallbackErr) {
+            console.error('Fallback review addDoc error:', fallbackErr);
           }
-        } catch (updateErr) {
-          console.warn('Rating sync notice:', updateErr);
         }
       }
 

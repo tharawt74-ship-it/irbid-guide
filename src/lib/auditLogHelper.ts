@@ -47,16 +47,26 @@ export function saveLocalAuditLog(log: Omit<AuditLog, 'id'>) {
 
 export async function recordAuditLog(log: Omit<AuditLog, 'id'>) {
   const localSaved = saveLocalAuditLog(log);
-  if (db) {
-    try {
-      await addDoc(collection(db, 'auditLogs'), {
+  
+  // Non-blocking asynchronous dispatch to server queue endpoint
+  fetch('/api/queue/audit-log', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: log.action || log.actionAr,
+      performedBy: log.performedBy,
+      details: log.details
+    })
+  }).catch(() => {
+    // Fallback to client Firestore write if server offline
+    if (db) {
+      addDoc(collection(db, 'auditLogs'), {
         ...log,
         timestamp: log.timestamp || Date.now()
-      });
-    } catch (e) {
-      console.warn('Could not save audit log to firestore, saved locally:', e);
+      }).catch(e => console.warn('Could not save audit log to firestore, saved locally:', e));
     }
-  }
+  });
+
   return localSaved;
 }
 

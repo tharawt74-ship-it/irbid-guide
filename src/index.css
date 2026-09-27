@@ -8,11 +8,9 @@
 @layer base {
   html {
     -webkit-tap-highlight-color: transparent;
-    overflow-x: clip;
   }
   body {
     @apply font-sans antialiased text-[#2d2a26] bg-[#fdfcfb];
-    overflow-x: clip;
     font-variant-numeric: lining-nums tabular-nums;
   }
   
@@ -29,7 +27,7 @@
   }
 
   /* Custom Scrollbar */
-  * {
+  html, body {
     scrollbar-width: thin;
     scrollbar-color: #d6d3d1 transparent;
   }

@@ -137,27 +137,68 @@ export async function fetchUserRewards(userId: string): Promise<UserReward[]> {
     }
   }
 
-  // 4. Cross-reference all loaded rewards against the central redeemed_codes registry
-  // This guarantees that when a merchant consumes a code on their device/scanner, the customer's
-  // "My Rewards" page immediately reflects that the code is used/redeemed!
-  const allCodes = Array.from(map.keys());
-  if (allCodes.length > 0) {
-    await Promise.all(allCodes.map(async (code) => {
+  // 4. Cross-reference unredeemed rewards against redeemed_codes in batched chunks (No N+1 queries!)
+  const unredeemedCodes = Array.from(map.values())
+    .filter(r => !r.used && r.code)
+    .map(r => r.code.trim().toUpperCase());
+
+  if (unredeemedCodes.length > 0) {
+    // 4a. Check local redemption cache first
+    let localRedeemedSet = new Set<string>();
+    try {
+      const localUsedKey = 'shoofi_redeemed_codes_cache';
+      const existingRaw = localStorage.getItem(localUsedKey);
+      if (existingRaw) {
+        const parsed = JSON.parse(existingRaw);
+        if (Array.isArray(parsed)) {
+          localRedeemedSet = new Set(parsed);
+        }
+      }
+    } catch (_) {}
+
+    // 4b. Query Firestore in batched chunks of 30 (Firestore limit for 'in' operator)
+    const codesToFetchFromDb = unredeemedCodes.filter(c => !localRedeemedSet.has(c));
+    const dbRedeemedMap = new Map<string, { redeemedAt?: number; redeemedStore?: string }>();
+
+    if (db && codesToFetchFromDb.length > 0) {
+      const CHUNK_SIZE = 30;
+      for (let i = 0; i < codesToFetchFromDb.length; i += CHUNK_SIZE) {
+        const chunk = codesToFetchFromDb.slice(i, i + CHUNK_SIZE);
+        try {
+          const q = query(collection(db, 'redeemed_codes'), where('code', 'in', chunk));
+          const snap = await getDocs(q);
+          snap.forEach(d => {
+            const data = d.data();
+            if (data && data.used) {
+              dbRedeemedMap.set(d.id.trim().toUpperCase(), {
+                redeemedAt: data.redeemedAt ? Number(data.redeemedAt) : undefined,
+                redeemedStore: data.businessName || undefined
+              });
+            }
+          });
+        } catch (e) {
+          console.info('Batched redeemed_codes lookup fallback:', e);
+        }
+      }
+    }
+
+    // Apply redeemed status to map
+    for (const code of unredeemedCodes) {
       const reward = map.get(code);
-      if (!reward || reward.used) return;
-      try {
-        const check = await checkCodeRedeemedStatus(code);
-        if (check.isRedeemed) {
+      if (reward && !reward.used) {
+        if (localRedeemedSet.has(code)) {
+          map.set(code, { ...reward, used: true, usedAt: reward.usedAt || Date.now() });
+        } else if (dbRedeemedMap.has(code)) {
+          const dbInfo = dbRedeemedMap.get(code)!;
           map.set(code, {
             ...reward,
             used: true,
-            usedAt: check.redeemedAt || reward.usedAt || Date.now()
+            usedAt: dbInfo.redeemedAt || reward.usedAt || Date.now(),
+            businessName: dbInfo.redeemedStore || reward.businessName
           });
         }
-      } catch (e) {
-        // continue
       }
-    }));
+    }
   }
 
   const combined = Array.from(map.values());
@@ -188,7 +229,7 @@ export async function recordCodeRedemption(
   discountPercent: number,
   merchantId?: string,
   customerUserId?: string
-): Promise<void> {
+): Promise<{ success: boolean; error?: string }> {
   const normalizedCode = code.trim().toUpperCase();
   const timestamp = Date.now();
 
@@ -205,24 +246,38 @@ export async function recordCodeRedemption(
     console.warn('Could not record redemption in localStorage cache:', e);
   }
 
-  // 2. Persist to Firestore dedicated 'redeemed_codes' document by code ID
+  // 2. Persist to Firestore dedicated 'redeemed_codes' document atomically via transaction
   if (db) {
     try {
+      const { runTransaction } = await import('firebase/firestore');
       const redeemedRef = doc(db, 'redeemed_codes', normalizedCode);
-      await setDoc(redeemedRef, {
-        code: normalizedCode,
-        businessId: businessId || '',
-        businessName: businessName || '',
-        discountPercent: discountPercent || 0,
-        merchantId: merchantId || '',
-        customerUserId: customerUserId || '',
-        redeemedAt: timestamp,
-        used: true
-      }, { merge: true });
-    } catch (err) {
+      
+      return await runTransaction(db, async (transaction) => {
+        const docSnap = await transaction.get(redeemedRef);
+        if (docSnap.exists() && docSnap.data().used) {
+          return { success: false, error: 'تم استخدام هذا الكوبون مسبقاً' };
+        }
+        
+        transaction.set(redeemedRef, {
+          code: normalizedCode,
+          businessId: businessId || '',
+          businessName: businessName || '',
+          discountPercent: discountPercent || 0,
+          merchantId: merchantId || '',
+          customerUserId: customerUserId || '',
+          redeemedAt: timestamp,
+          used: true
+        }, { merge: true });
+
+        return { success: true };
+      });
+    } catch (err: any) {
       console.info('Firestore redeemed_codes recording note:', err);
+      // Fallback for offline/guest mode
+      return { success: true };
     }
   }
+  return { success: true };
 }
 
 /**

@@ -93,7 +93,7 @@ export function Housing() {
     if (!db) return;
     setLoadingRoommates(true);
     try {
-      const ref = collection(db, 'roommates');
+      const ref = query(collection(db, 'roommates'), orderBy('createdAt', 'desc'), limit(50));
       const snap = await getDocs(ref);
       const items: any[] = [];
       snap.forEach(d => {

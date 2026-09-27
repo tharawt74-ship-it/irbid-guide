@@ -57,45 +57,22 @@ export function RegionDropdownFilter({
  };
 
  return (
- <div className={`bg-white rounded-2xl p-4 sm:p-5 border border-[#e5e1da] shadow-xs space-y-3 relative ${isOpen ? 'z-50' : 'z-20'}`}>
+ <div className={`bg-white rounded-2xl p-3.5 sm:p-4 border border-[#e5e1da] shadow-xs relative ${isOpen ? 'z-50' : 'z-20'}`}>
  
- {/* Title Header */}
- <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-100 pb-3">
- <div className="flex items-center gap-2">
- <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center font-bold">
- <MapPin className="h-5 w-5 text-[#ff9f1c]" />
- </div>
- <div>
- <h3 className="font-extrabold text-sm sm:text-base text-[#2d2a26] flex items-center gap-1.5">
- <span>تحديد الشارع أو الحي أو القرية في إربد</span>
- <span className="text-[10px] font-black bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
- شامل ({totalAreasCount}+ منطقة)
- </span>
- </h3>
- <p className="text-[11px] text-stone-500">اختر المنطقه أو ابحث عن القريـة/الشارع لتصفية المحلات والخدمات فوراً</p>
- </div>
- </div>
-
- {selectedRegion && selectedRegion !== 'الكل' && (
- <button
- onClick={() => onSelectRegion('')}
- className="inline-flex items-center gap-1 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-xl transition-all cursor-pointer border border-red-200"
- >
- <X className="h-3.5 w-3.5" />
- <span>عرض كل المحافظة</span>
- </button>
- )}
- </div>
-
  {/* Main Dropdown Control Section */}
  <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
  
- {/* Custom Rich Dropdown Selector (Desktop & Interactive Mobile) */}
- <div className="md:col-span-8 relative z-50" ref={dropdownRef}>
+ {/* Custom Rich Dropdown Selector with "فلاتر:" label */}
+ <div className="md:col-span-8 flex items-center gap-2.5 relative z-50">
+ <span className="font-black text-[#2d2a26] text-sm md:text-base shrink-0 select-none">
+ فلاتر:
+ </span>
+
+ <div className="relative flex-1 min-w-0" ref={dropdownRef}>
  <button
  type="button"
  onClick={() => setIsOpen(!isOpen)}
- className={`w-full px-4 py-3 rounded-2xl border text-right transition-all flex items-center justify-between gap-3 cursor-pointer select-none ${
+ className={`w-full h-11 sm:h-12 px-4 rounded-2xl border text-right transition-all flex items-center justify-between gap-3 cursor-pointer select-none ${
  selectedRegion && selectedRegion !== 'الكل'
  ? 'bg-[#1a4d2e]/5 border-[#1a4d2e] text-[#1a4d2e] font-black ring-2 ring-[#1a4d2e]/10'
  : 'bg-stone-50 border-stone-200 text-stone-800 hover:bg-stone-100 font-bold'
@@ -103,18 +80,26 @@ export function RegionDropdownFilter({
  >
  <div className="flex items-center gap-2.5 truncate">
  <MapPin className={`h-5 w-5 shrink-0 ${selectedRegion ? 'text-[#1a4d2e]' : 'text-amber-500'}`} />
- <span className="text-sm truncate">
+ <span className="text-sm truncate font-bold">
  {selectedRegion && selectedRegion !== 'الكل' 
- ? `المنطقة المختارة: ${selectedRegion}`
- : ' اضغط هنا لاختيار المنطقة / القرية / الشارع من القائمة المنسدلة...'}
+ ? selectedRegion
+ : 'اختر الموقع'}
  </span>
  </div>
  
  <div className="flex items-center gap-2 shrink-0">
  {selectedRegion && selectedRegion !== 'الكل' && (
- <span className="text-[10px] bg-[#1a4d2e] text-white px-2 py-0.5 rounded-full font-bold">
- نشط
- </span>
+ <button
+ type="button"
+ onClick={(e) => {
+ e.stopPropagation();
+ onSelectRegion('');
+ }}
+ className="p-1 bg-red-100 hover:bg-red-200 text-red-600 rounded-full transition-colors cursor-pointer"
+ title="مسح الفلتر"
+ >
+ <X className="h-3.5 w-3.5" />
+ </button>
  )}
  <ChevronDown className={`h-5 w-5 text-stone-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
  </div>
@@ -354,13 +339,14 @@ export function RegionDropdownFilter({
  </>
  )}
  </div>
+ </div>
 
  {/* Quick Filter Buttons: Open Now & Favorites */}
- <div className="col-span-1 md:col-span-4 flex gap-2 w-full">
+ <div className="col-span-1 md:col-span-4 flex gap-2 w-full items-center">
  <button
  type="button"
  onClick={onToggleOpenNow}
- className={`flex-1 flex items-center justify-center gap-1.5 px-4 py-3 rounded-2xl text-xs font-black transition-all border cursor-pointer select-none ${
+ className={`flex-1 h-11 sm:h-12 flex items-center justify-center gap-1.5 px-3 sm:px-4 rounded-2xl text-xs sm:text-sm font-black transition-all border cursor-pointer select-none ${
  openNowFilter 
  ? 'bg-[#1a4d2e] border-[#1a4d2e] text-white shadow-xs' 
  : 'bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100 hover:text-stone-800'
@@ -376,7 +362,7 @@ export function RegionDropdownFilter({
  <button
  type="button"
  onClick={onToggleFavorites}
- className={`flex-1 flex items-center justify-center gap-1.5 px-4 py-3 rounded-2xl text-xs font-black transition-all border cursor-pointer select-none ${
+ className={`flex-1 h-11 sm:h-12 flex items-center justify-center gap-1.5 px-3 sm:px-4 rounded-2xl text-xs sm:text-sm font-black transition-all border cursor-pointer select-none ${
  favoritesOnly 
  ? 'bg-red-600 border-red-600 text-white shadow-xs' 
  : 'bg-stone-50 border-stone-200 text-stone-600 hover:bg-red-50 hover:text-red-600 hover:border-red-200'

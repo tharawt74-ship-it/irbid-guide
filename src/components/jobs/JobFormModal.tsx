@@ -28,7 +28,7 @@ import { WhatsAppIcon } from '../common/WhatsAppIcon';
 import { JobOffer, Business } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { db } from '../../lib/firebase';
-import { collection, addDoc, doc, setDoc, getDocs, query, where } from 'firebase/firestore';
+import { collection, addDoc, doc, setDoc, getDocs, query, where, limit } from 'firebase/firestore';
 import { useNotifications } from '../../contexts/NotificationsContext';
 import { SearchableSelect } from '../ui/SearchableSelect';
 import { isBotSubmission, checkSubmissionRateLimit, recordSubmissionTime, sanitizeInput } from '../../lib/security';
@@ -133,13 +133,18 @@ export function JobFormModal({
         setLoadingBusinesses(true);
         let fetched: Business[] = [];
         if (isAdmin) {
-          const snap = await getDocs(collection(db, 'businesses'));
+          const qAdmin = query(collection(db, 'businesses'), where('userId', '==', currentUser.uid));
+          const snap = await getDocs(qAdmin);
           snap.forEach(d => {
-            const data = d.data();
-            if (data.userId === currentUser.uid || data.ownerName === currentUser.displayName) {
-              fetched.push({ id: d.id, ...data } as Business);
-            }
+            fetched.push({ id: d.id, ...d.data() } as Business);
           });
+          // If no businesses found for current admin, load top recent businesses with limit(100)
+          if (fetched.length === 0) {
+            const snapRecent = await getDocs(query(collection(db, 'businesses'), limit(100)));
+            snapRecent.forEach(d => {
+              fetched.push({ id: d.id, ...d.data() } as Business);
+            });
+          }
         } else {
           const q = query(collection(db, 'businesses'), where('userId', '==', currentUser.uid));
           const snap = await getDocs(q);

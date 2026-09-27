@@ -1444,7 +1444,7 @@ export function Profile() {
  )}
 
  {/* Admin Email Verification Warning Banner */}
- {currentUser && ['princessofx2344@gmail.com', 'admin@shoofiirbid.com', 'irbid.admin@gmail.com'].includes(currentUser.email?.toLowerCase().trim() || '') && !isAdmin && (
+ {currentUser && ['princessofx2344@gmail.com', 'd42902672@gmail.com', 'admin@shoofiirbid.com', 'irbid.admin@gmail.com'].includes(currentUser.email?.toLowerCase().trim() || '') && !isAdmin && (
  <div className="bg-amber-50/70 border-2 border-amber-300 p-6 rounded-3xl text-right space-y-4 shadow-sm animate-in fade-in-50 duration-300">
  <div className="flex items-start gap-3">
  <div className="p-2 bg-amber-100 rounded-2xl text-amber-800 shrink-0 mt-0.5">

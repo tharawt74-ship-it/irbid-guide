@@ -58,7 +58,16 @@ export function RadialWheelTextScroller({
   const [isHovered, setIsHovered] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeSetIndex, setActiveSetIndex] = useState(0);
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? window.innerWidth < 640 : false);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 640);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // مراقبة رؤية العنصر لإيقاف الأنيميشن فوراً عند السكرول لأسفل الصفحة (0% CPU/GPU حينئذٍ)
   const sectionRef = useRef<HTMLElement>(null);
@@ -181,26 +190,6 @@ export function RadialWheelTextScroller({
     }
   }, [angleStep, effectiveRadius, totalAngleSpan]);
 
-  // إيقاف تحريك العجلة مؤقتاً أثناء سكرول الشاشة لمنح المتصفح 100% من عتاد المعالج والـ GPU لسلاسة السكرول الفائقة
-  const isScrollingRef = useRef(false);
-  const scrollTimeoutRef = useRef<any>(null);
-
-  useEffect(() => {
-    const handleScrollState = () => {
-      isScrollingRef.current = true;
-      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
-      scrollTimeoutRef.current = setTimeout(() => {
-        isScrollingRef.current = false;
-      }, 100);
-    };
-
-    window.addEventListener('scroll', handleScrollState, { passive: true });
-    return () => {
-      window.removeEventListener('scroll', handleScrollState);
-      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
-    };
-  }, []);
-
   // تهيئة الإحداثيات الأولى فور التحميل دون وميض
   useEffect(() => {
     updateWheelFrame(0);
@@ -209,9 +198,9 @@ export function RadialWheelTextScroller({
   // حلقة تحريك مركزية واحدة خفيفة جداً بدلاً من 31 حلقة منفصلة
   useAnimationFrame((_, delta) => {
     if (!isVisibleRef.current) return;
-    if (isScrollingRef.current) return;
     if (pauseOnHover && isHovered) return;
-    const moveBy = (effectiveSpeed * delta) / 1000;
+    const safeDelta = Math.min(delta, 50);
+    const moveBy = (effectiveSpeed * safeDelta) / 1000;
     const nextRaw = rawAngleAcc.current + moveBy;
     rawAngleAcc.current = nextRaw;
 
@@ -325,13 +314,13 @@ export function RadialWheelTextScroller({
       <div 
         key="wheel-section" 
         style={getTransformStyle('wheel')}
-        className="relative w-full max-w-6xl sm:max-w-none sm:w-[1150px] md:w-[1250px] lg:w-[1350px] sm:shrink-0 flex items-center justify-center px-4 sm:px-0 my-2 transition-transform duration-75 sm:scale-75 sm:origin-center sm:-my-7 sm:right-[130px] md:right-[170px] lg:right-[210px]"
+        className="relative w-full max-w-6xl sm:max-w-none sm:w-[1150px] md:w-[1250px] lg:w-[1350px] sm:shrink-0 flex items-center justify-center px-2 sm:px-0 my-2 transition-transform duration-75 -right-[28px] sm:right-[95px] md:right-[130px] lg:right-[165px] sm:scale-75 sm:origin-center sm:-my-7"
       >
         {/* مؤشر السهم التفاعلي الصادم مع الكلمات */}
         <div 
           ref={arrowIndicatorRef}
           style={{ 
-            right: 'calc(2% + 140px)',
+            right: isMobile ? 'calc(2% + 148px)' : 'calc(2% + 140px)',
             transform: 'translate3d(0px, -50%, 0)'
           }}
           className="absolute top-1/2 z-30 pointer-events-none flex items-center justify-center will-change-transform"
@@ -368,9 +357,16 @@ export function RadialWheelTextScroller({
                 className="flex items-center justify-start pointer-events-none -mt-5"
                 dir={dir}
               >
-                <span className={`text-2xl sm:text-3xl md:text-4xl font-black tracking-tight whitespace-nowrap text-right ${getTextColorStyle()}`} dir={dir}>
-                  {item}
-                </span>
+                {item.includes('كافيهات ومساحات عمل هادئة') ? (
+                  <span className={`text-[31.2px] leading-tight sm:text-3xl md:text-4xl font-black tracking-tight text-right ${getTextColorStyle()}`} dir={dir}>
+                    <span className="block sm:inline whitespace-nowrap">كافيهات ومساحات عمل</span>
+                    <span className="block sm:inline whitespace-nowrap sm:before:content-['\00a0']">هادئة</span>
+                  </span>
+                ) : (
+                  <span className={`text-[31.2px] leading-tight sm:text-3xl md:text-4xl font-black tracking-tight whitespace-nowrap text-right ${getTextColorStyle()}`} dir={dir}>
+                    {item}
+                  </span>
+                )}
               </div>
             ))}
           </div>
@@ -386,22 +382,22 @@ export function RadialWheelTextScroller({
         key="search-section"
         onSubmit={handleSearchSubmit}
         style={getTransformStyle('search')}
-        className="my-3.5 sm:my-3 w-full max-w-[77%] sm:max-w-xl mx-auto relative flex items-center bg-white/85 border-[3.5px] sm:border-2 border-stone-900 rounded-full p-4 sm:p-2 shadow-xl backdrop-blur-md transition-all focus-within:ring-4 focus-within:ring-stone-900/20 z-20 min-h-[116px] sm:min-h-0"
+        className="my-3.5 sm:my-3 w-[88.4%] sm:w-full max-w-[88.4%] sm:max-w-xl mx-auto relative flex items-center bg-white/85 border-[3.5px] sm:border-2 border-stone-900 rounded-full p-3 sm:p-2 shadow-xl backdrop-blur-md transition-all focus-within:ring-4 focus-within:ring-stone-900/20 z-20 min-h-[96px] sm:min-h-0"
       >
         <input
           type="text"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder={effectiveSearchPlaceholder}
-          className="flex-1 bg-transparent border-none text-stone-900 placeholder-stone-500 px-4 sm:px-6 text-2xl sm:text-base font-bold focus:outline-none text-right placeholder:text-lg sm:placeholder:text-base"
+          placeholder={isMobile ? 'عن ماذا تبحث؟' : effectiveSearchPlaceholder}
+          className="flex-1 min-w-0 bg-transparent border-none text-stone-900 placeholder-stone-500 px-3 sm:px-6 text-2xl sm:text-base font-black focus:outline-none text-right placeholder:text-xl sm:placeholder:text-base tracking-tight"
           dir="rtl"
         />
         <button
           type="submit"
-          className="flex items-center justify-center w-20 h-20 sm:w-12 sm:h-12 rounded-full bg-stone-900 text-white hover:bg-stone-800 transition-all active:scale-95 shrink-0 shadow-md cursor-pointer"
+          className="flex items-center justify-center w-16 h-16 sm:w-12 sm:h-12 rounded-full bg-stone-900 text-white hover:bg-stone-800 transition-all active:scale-95 shrink-0 shadow-md cursor-pointer ml-0.5"
           title="بحث"
         >
-          <ArrowLeft className="w-10 h-10 sm:w-6 sm:h-6 text-white stroke-[2.5]" />
+          <ArrowLeft className="w-8 h-8 sm:w-6 sm:h-6 text-white stroke-[2.5]" />
         </button>
       </form>
     );
@@ -429,7 +425,7 @@ export function RadialWheelTextScroller({
               key={`${activeSetIndex}-${idx}-${sug.query}`}
               type="button"
               onClick={() => handleSuggestionClick(sug.query)}
-              className={`${mobileWidthClass} min-w-0 inline-flex items-center justify-center gap-1.5 px-4 py-3 sm:px-3 sm:py-1.5 rounded-full text-2xl sm:text-xs font-black bg-white/90 hover:bg-[#1a4d2e] hover:text-white border-2 sm:border border-stone-300 hover:border-[#1a4d2e] text-stone-800 shadow-sm sm:shadow-xs transition-all duration-200 active:scale-95 cursor-pointer truncate`}
+              className={`${mobileWidthClass} min-w-0 inline-flex items-center justify-center gap-1.5 px-4 py-3 sm:px-4 sm:py-2.5 rounded-full text-2xl sm:text-base md:text-lg font-black bg-white/90 hover:bg-[#1a4d2e] hover:text-white border-2 sm:border border-stone-300 hover:border-[#1a4d2e] text-stone-800 shadow-sm sm:shadow-xs transition-all duration-200 active:scale-95 cursor-pointer truncate`}
               title={sug.label}
             >
               <span className="truncate">{sug.label}</span>
@@ -485,7 +481,7 @@ export function RadialWheelTextScroller({
         boxShadow: getBoxShadowStyle(),
         border: boxBorder
       }}
-      className={`relative w-full py-0.5 sm:py-1 md:py-2 lg:py-4 overflow-hidden sm:overflow-visible select-none transition-all ${getContainerBgClass()} ${className}`} 
+      className={`relative w-full py-0.5 sm:py-1 md:py-2 lg:py-4 overflow-visible select-none transition-all ${getContainerBgClass()} ${className}`} 
       dir={dir}
     >
       {/* خلفية تجميلية شفافة */}
@@ -494,7 +490,7 @@ export function RadialWheelTextScroller({
       </div>
 
       {/* حاوية خارجية مخصصة لاستيعاب العرض المصغر كقطعة واحدة على الهواتف والتابلت */}
-      <div className="relative max-w-5xl sm:max-w-none sm:w-full mx-auto px-1 sm:px-4 lg:px-8 flex flex-col items-center text-center overflow-visible">
+      <div className="relative w-full max-w-none sm:max-w-none sm:w-full mx-auto px-1 sm:px-4 lg:px-8 flex flex-col items-center text-center overflow-visible">
         
         {/* وحدة العرض المصغرة كقطعة واحدة بنسبة وتناسب 100% مع أبعاد الصندوق المحددة */}
         <div 

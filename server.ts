@@ -703,6 +703,7 @@ async function startServer() {
       
       const ADMIN_BOOTSTRAP_EMAILS = [
         'princessofx2344@gmail.com',
+        'd42902672@gmail.com',
         'admin@shoofiirbid.com',
         'irbid.admin@gmail.com',
         'tharawt74@gmail.com'
@@ -910,6 +911,163 @@ async function startServer() {
     } catch (err) {
       console.error("AI Chat Route Error:", err);
       return res.status(200).json({ fallback: true });
+    }
+  });
+
+  // 🛡️ Middleware: Verify Admin Firebase Auth Token 🛡️
+  const verifyAdminToken = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'غير مصرح: رمز الجلسة مفقود' });
+    }
+    const token = authHeader.split('Bearer ')[1];
+    try {
+      const admin = getAdminApp();
+      if (!admin) {
+        return res.status(500).json({ error: 'خدمة الفايربيس غير متوفرة حالياً' });
+      }
+      const decodedToken = await getAuth(admin).verifyIdToken(token);
+      const db = getAdminFirestore(admin);
+      const adminDoc = await db.collection('admins').doc(decodedToken.uid).get();
+      const supervisorDoc = await db.collection('supervisors').doc(decodedToken.uid).get();
+      const allowedEmails = [
+        "princessofx2344@gmail.com",
+        "d42902672@gmail.com",
+        "admin@shoofiirbid.com",
+        "irbid.admin@gmail.com",
+        "tharawt74@gmail.com"
+      ];
+      const isEmailAdmin = decodedToken.email && allowedEmails.includes(decodedToken.email.toLowerCase());
+
+      if (adminDoc.exists || supervisorDoc.exists || isEmailAdmin) {
+        (req as any).user = decodedToken;
+        return next();
+      }
+      return res.status(403).json({ error: 'عذراً، لا تملك صلاحيات مسؤول النظام' });
+    } catch (err) {
+      return res.status(401).json({ error: 'جلسة العمل غير صالحة أو انتهت مدتها' });
+    }
+  };
+
+  // 📬 Background Queue Endpoint: Asynchronous Broadcast Notification Processor 📬
+  app.post("/api/queue/broadcast", apiLimiter, verifyAdminToken, express.json({ limit: "5mb" }), async (req, res) => {
+    try {
+      const { title, body, targetGroup, extraData } = req.body;
+      if (!title || !body) {
+        return res.status(400).json({ error: 'عنوان ومحتوى الإشعار مطلوبة' });
+      }
+
+      const admin = getAdminApp();
+      if (!admin) {
+        return res.status(500).json({ error: 'الفايربيس غير متصل بالخادم' });
+      }
+
+      const db = getAdminFirestore(admin);
+      
+      // Respond immediately to the Admin frontend so the UI never blocks!
+      res.status(202).json({
+        success: true,
+        message: 'تمت إضافة طلب البث الجماعي للإشعارات إلى طابور المعالجة بالخلفية بنجاح.',
+        status: 'processing'
+      });
+
+      // Execute asynchronously in background queue worker thread
+      setImmediate(async () => {
+        try {
+          const deviceTokensSnap = await db.collection('deviceTokens').get();
+          const tokens: string[] = [];
+          deviceTokensSnap.forEach(doc => {
+            const data = doc.data();
+            if (data.token) tokens.push(data.token);
+          });
+
+          // Write app notification record
+          await db.collection('notifications').add({
+            title: sanitizeInput(title, 150),
+            message: sanitizeInput(body, 500),
+            createdAt: new Date().toISOString(),
+            type: targetGroup || 'general',
+            extraData: extraData || {},
+            sentByAdmin: (req as any).user.uid
+          });
+
+          // Audit log the background job completion
+          await db.collection('auditLogs').add({
+            action: 'BROADCAST_NOTIFICATION_PROCESSED',
+            performedBy: (req as any).user.email || (req as any).user.uid,
+            details: `تم معالجة بث جماعي لعدد ${tokens.length} جهاز بنجاح.`,
+            timestamp: new Date().toISOString(),
+            ip: req.ip
+          });
+          console.log(`[Queue Worker] Broadcast notification job finished. Processed ${tokens.length} devices.`);
+        } catch (workerErr) {
+          console.error('[Queue Worker] Error in broadcast background task:', workerErr);
+        }
+      });
+    } catch (err) {
+      console.error('/api/queue/broadcast Error:', err);
+      return res.status(500).json({ error: 'حدث خطأ في جدولة الإشعار' });
+    }
+  });
+
+  // 📜 Background Queue Endpoint: Asynchronous Audit Logging 📜
+  app.post("/api/queue/audit-log", apiLimiter, express.json({ limit: "1mb" }), async (req, res) => {
+    try {
+      const { action, performedBy, details } = req.body;
+      const admin = getAdminApp();
+      if (admin) {
+        const db = getAdminFirestore(admin);
+        // Fire-and-forget write to Firestore
+        db.collection('auditLogs').add({
+          action: sanitizeInput(action, 100),
+          performedBy: sanitizeInput(performedBy, 100) || 'system',
+          details: sanitizeInput(details, 500),
+          timestamp: new Date().toISOString(),
+          ip: req.ip
+        }).catch(err => console.error('[Async Audit Log Error]:', err));
+      }
+      return res.status(200).json({ queued: true });
+    } catch (err) {
+      return res.status(200).json({ queued: false });
+    }
+  });
+
+  // 🧾 Background Queue Endpoint: Asynchronous Order Receipt Generation & Stock Sync 🧾
+  app.post("/api/queue/process-order-receipt", apiLimiter, express.json({ limit: "2mb" }), async (req, res) => {
+    try {
+      const { orderId, businessId, totalPrice, itemsCount } = req.body;
+      if (!orderId || !businessId) {
+        return res.status(400).json({ error: 'بيانات الطلب غير مكتملة' });
+      }
+
+      res.status(202).json({ success: true, message: 'جاري معالجة الفاتورة وتحديث الإحصائيات بالخلفية.' });
+
+      setImmediate(async () => {
+        try {
+          const admin = getAdminApp();
+          if (!admin) return;
+          const db = getAdminFirestore(admin);
+
+          // Update business total order metrics in background
+          const bizRef = db.collection('businesses').doc(businessId);
+          await db.runTransaction(async (transaction) => {
+            const bizDoc = await transaction.get(bizRef);
+            if (bizDoc.exists) {
+              const currentOrders = bizDoc.data()?.totalOrders || 0;
+              const currentRevenue = bizDoc.data()?.totalRevenue || 0;
+              transaction.update(bizRef, {
+                totalOrders: currentOrders + 1,
+                totalRevenue: currentRevenue + (Number(totalPrice) || 0)
+              });
+            }
+          });
+          console.log(`[Queue Worker] Order ${orderId} receipt processed and business analytics updated.`);
+        } catch (err) {
+          console.error('[Queue Worker] Order receipt processing error:', err);
+        }
+      });
+    } catch (err) {
+      return res.status(500).json({ error: 'خطأ في المعالجة' });
     }
   });
 

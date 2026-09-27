@@ -165,7 +165,7 @@ export function Layout() {
 
   const [showMenuTooltip, setShowMenuTooltip] = useState(false);
   const [showDesktopMoreTooltip, setShowDesktopMoreTooltip] = useState(false);
-  const isBootstrapAdmin = currentUser && ['princessofx2344@gmail.com', 'admin@shoofiirbid.com', 'irbid.admin@gmail.com', 'tharawt74@gmail.com'].includes(currentUser.email?.toLowerCase().trim() || '');
+  const isBootstrapAdmin = currentUser && ['princessofx2344@gmail.com', 'd42902672@gmail.com', 'admin@shoofiirbid.com', 'irbid.admin@gmail.com', 'tharawt74@gmail.com'].includes(currentUser.email?.toLowerCase().trim() || '');
   const isEmailVerified = Boolean(
     currentUser?.emailVerified || 
     userProfile?.customEmailVerified || 
@@ -416,7 +416,7 @@ export function Layout() {
 
   return (
     <div className={cn(
-      "bg-[#fdfcfb] flex flex-col font-sans text-[#2d2a26]",
+      "bg-[#fdfcfb] flex flex-col font-sans text-[#2d2a26] overflow-x-clip",
       location.pathname === '/messages' ? "h-screen overflow-hidden" : "min-h-screen"
     )} dir="rtl">
       {/* Top Navigation Bar - Sticky at all scroll depths */}

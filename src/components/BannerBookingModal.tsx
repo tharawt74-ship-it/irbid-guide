@@ -7,7 +7,7 @@ import {
  Tag, ArrowLeft, Info
 } from 'lucide-react';
 import { db } from '../lib/firebase';
-import { collection, addDoc, getDocs, query, where } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, where, limit } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
 import { isBotSubmission, checkSubmissionRateLimit, recordSubmissionTime, sanitizeInput } from '../lib/security';
 import { ImageUploader } from './ui/ImageUploader';
@@ -86,7 +86,7 @@ export function BannerBookingModal({ isOpen, onClose, defaultBusiness }: BannerB
  }
 
  // Fetch all businesses for search linking
- const allBizSnap = await getDocs(collection(db, 'businesses'));
+ const allBizSnap = await getDocs(query(collection(db, 'businesses'), limit(100)));
  const allBizList: Business[] = [];
  allBizSnap.forEach(d => allBizList.push({ id: d.id, ...d.data() } as Business));
  setAllBusinesses(allBizList);

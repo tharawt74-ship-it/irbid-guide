@@ -15,9 +15,10 @@ import {
   limit,
   onSnapshot
 } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { db, auth } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotifications } from '../contexts/NotificationsContext';
+import { deleteDocumentsInBatch, updateDocumentsInBatch } from '../utils/firestoreTransactions';
 import { Link, useNavigate } from 'react-router';
 import { 
   Store, 
@@ -285,19 +286,13 @@ export function AdminDashboard() {
     
     try {
       setIsRefreshing(true);
-      for (const id of selectedBusinessIds) {
-        await deleteDoc(doc(db, 'businesses', id));
+      if (db) {
+        await deleteDocumentsInBatch(db, 'businesses', selectedBusinessIds);
       }
       invalidateCache();
       showToast(`تم حذف ${selectedBusinessIds.length} محلات بنجاح`, 'info');
+      setBusinesses(prev => prev.filter(b => !selectedBusinessIds.includes(b.id)));
       setSelectedBusinessIds([]);
-      // Reload businesses
-      const querySnapshot = await getDocs(collection(db, 'businesses'));
-      const list: Business[] = [];
-      querySnapshot.forEach(docSnap => {
-        list.push({ id: docSnap.id, ...docSnap.data() } as Business);
-      });
-      setBusinesses(list);
     } catch (err) {
       console.error(err);
       showToast('حدث خطأ أثناء الحذف الجماعي للمحلات', 'error');
@@ -310,19 +305,17 @@ export function AdminDashboard() {
     if (selectedBusinessIds.length === 0) return;
     try {
       setIsRefreshing(true);
-      for (const id of selectedBusinessIds) {
-        await updateDoc(doc(db, 'businesses', id), { isFeatured: featured });
+      if (db) {
+        await updateDocumentsInBatch(
+          db, 
+          'businesses', 
+          selectedBusinessIds.map(id => ({ id, data: { isFeatured: featured } }))
+        );
       }
       invalidateCache();
       showToast(featured ? `تم تمييز ${selectedBusinessIds.length} محلات بنجاح` : `تم إلغاء تمييز ${selectedBusinessIds.length} محلات بنجاح`, 'success');
+      setBusinesses(prev => prev.map(b => selectedBusinessIds.includes(b.id) ? { ...b, isFeatured: featured } : b));
       setSelectedBusinessIds([]);
-      // Reload
-      const querySnapshot = await getDocs(collection(db, 'businesses'));
-      const list: Business[] = [];
-      querySnapshot.forEach(docSnap => {
-        list.push({ id: docSnap.id, ...docSnap.data() } as Business);
-      });
-      setBusinesses(list);
     } catch (err) {
       console.error(err);
       showToast('حدث خطأ أثناء التحديث الجماعي للمحلات', 'error');
@@ -335,20 +328,17 @@ export function AdminDashboard() {
     if (selectedBusinessIds.length === 0) return;
     try {
       setIsRefreshing(true);
-      const updateData = { hideSiteReviews: hide };
-      for (const id of selectedBusinessIds) {
-        await updateDoc(doc(db, 'businesses', id), updateData);
+      if (db) {
+        await updateDocumentsInBatch(
+          db, 
+          'businesses', 
+          selectedBusinessIds.map(id => ({ id, data: { hideSiteReviews: hide } }))
+        );
       }
       invalidateCache();
       showToast(`تم تحديث إعدادات التقييمات لـ ${selectedBusinessIds.length} محلات بنجاح`, 'success');
+      setBusinesses(prev => prev.map(b => selectedBusinessIds.includes(b.id) ? { ...b, hideSiteReviews: hide } : b));
       setSelectedBusinessIds([]);
-      // Reload
-      const querySnapshot = await getDocs(collection(db, 'businesses'));
-      const list: Business[] = [];
-      querySnapshot.forEach(docSnap => {
-        list.push({ id: docSnap.id, ...docSnap.data() } as Business);
-      });
-      setBusinesses(list);
     } catch (err) {
       console.error(err);
       showToast('حدث خطأ أثناء تحديث الإعدادات جماعياً', 'error');
@@ -1545,10 +1535,10 @@ export function AdminDashboard() {
         return;
       }
 
-      const deletePromises = snap.docs.map(docSnap => deleteDoc(doc(db, 'notifications', docSnap.id)));
-      await Promise.all(deletePromises);
+      const docIds = snap.docs.map(docSnap => docSnap.id);
+      await deleteDocumentsInBatch(db, 'notifications', docIds);
 
-      showToast(`تم مسح وحذف ${snap.docs.length} إشعار بنجاح لجميع المستخدمين!`, 'success');
+      showToast(`تم مسح وحذف ${docIds.length} إشعار بنجاح لجميع المستخدمين!`, 'success');
     } catch (err: any) {
       console.error("Error deleting all notifications:", err);
       showToast('حدث خطأ أثناء حذف الإشعارات: ' + (err?.message || ''), 'error');
@@ -1584,8 +1574,40 @@ export function AdminDashboard() {
     }
   };
 
-  // Handler: Broadcast Notification Send
+  // Handler: Broadcast Notification Send (Offloaded to Server Queue Endpoint)
   const handleSendBroadcast = async (notification: Omit<AppNotification, 'id' | 'createdAt'>) => {
+    try {
+      const currentUser = auth?.currentUser;
+      const idToken = currentUser ? await currentUser.getIdToken() : '';
+      
+      const res = await fetch('/api/queue/broadcast', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify({
+          title: notification.title,
+          body: notification.message,
+          targetGroup: notification.userId || 'all',
+          extraData: {
+            link: notification.link,
+            badge: notification.badge,
+            targetArea: notification.targetArea,
+            targetCategory: notification.targetCategory
+          }
+        })
+      });
+
+      if (res.ok) {
+        showToast(`تمت جدولة وتمرير البث الجماعي للإشعارات إلى طابور المعالجة السريعة بالخلفية بنجاح 🚀`, 'success');
+        return;
+      }
+    } catch (e) {
+      console.warn('Queue endpoint unavailable, falling back to client write:', e);
+    }
+
+    // Fallback if server queue API fails
     await addNotification(notification);
     showToast(`تم بث الإشعار الجماعي: "${notification.title}" بنجاح!`);
   };

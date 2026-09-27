@@ -39,7 +39,7 @@ const DEFAULT_GLOBAL_SETTINGS: GlobalSiteSettings = {
   xUrl: 'https://x.com/shoof_irbid',
   footerDescription: 'المنصة والمحرك الإعلاني التفاعلي الأول في إربد للبحث واكتشاف أفضل المطاعم، الكافيهات، الخدمات، والفعاليات.',
   enableAiAssistant: true,
-  heroSectionStyle: 'green_box',
+  heroSectionStyle: 'wheel_box',
   wheelBoxConfig: DEFAULT_WHEEL_BOX_CONFIG
 };
 
@@ -254,7 +254,20 @@ export function SystemSettingsProvider({ children }: { children: React.ReactNode
     try {
       const cached = localStorage.getItem('shoof_global_settings');
       if (cached) {
-        return { ...DEFAULT_GLOBAL_SETTINGS, ...JSON.parse(cached) };
+        const parsed = JSON.parse(cached);
+        const loadedItems = parsed?.wheelBoxConfig?.wheelItems;
+        const needsUpgrade = !loadedItems || loadedItems.some((item: string) => item.length > 21);
+        const cleanItems = needsUpgrade ? DEFAULT_WHEEL_BOX_CONFIG.wheelItems : loadedItems;
+
+        return { 
+          ...DEFAULT_GLOBAL_SETTINGS, 
+          ...parsed,
+          wheelBoxConfig: {
+            ...DEFAULT_WHEEL_BOX_CONFIG,
+            ...(parsed.wheelBoxConfig || {}),
+            wheelItems: cleanItems
+          }
+        };
       }
     } catch {
       // ignore
@@ -364,9 +377,19 @@ export function SystemSettingsProvider({ children }: { children: React.ReactNode
         setVipPlans(sanitizedPlans);
       }
       if (data.globalSettings) {
+        const loadedWheelConfig = data.globalSettings.wheelBoxConfig || {};
+        const loadedItems = loadedWheelConfig.wheelItems;
+        const needsUpgrade = !loadedItems || (Array.isArray(loadedItems) && loadedItems.some((item: string) => item.length > 21));
+        const cleanItems = needsUpgrade ? DEFAULT_WHEEL_BOX_CONFIG.wheelItems : loadedItems;
+
         const mergedSettings = {
           ...DEFAULT_GLOBAL_SETTINGS,
           ...data.globalSettings,
+          wheelBoxConfig: {
+            ...DEFAULT_WHEEL_BOX_CONFIG,
+            ...loadedWheelConfig,
+            wheelItems: cleanItems
+          },
           logoUrl: data.globalSettings.logoUrl || DEFAULT_GLOBAL_SETTINGS.logoUrl || '/logo.png'
         };
         setGlobalSettings(mergedSettings);

@@ -7,6 +7,7 @@ import { linkUserToMatchedBusinesses } from '../lib/authPhoneHelper';
 
 const ADMIN_BOOTSTRAP_EMAILS = [
   'princessofx2344@gmail.com',
+  'd42902672@gmail.com',
   'admin@shoofiirbid.com',
   'irbid.admin@gmail.com',
   'tharawt74@gmail.com'

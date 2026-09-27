@@ -43,6 +43,7 @@ import { getWhatsAppUrl, formatBusinessWhatsAppMessage } from '../lib/contactHel
 import { ShareButton } from '../components/ShareButton';
 import { getCachedBusinessDetail, setCachedBusinessDetail, invalidateCache } from '../lib/dataCache';
 import { BusinessCard } from '../components/BusinessCard';
+import { submitReviewAtomically } from '../utils/firestoreTransactions';
 import { DEMO_SEED_DATA } from '../lib/demoDataHelper';
 import { trackBusinessInteraction } from '../lib/analyticsTracker';
 import { SEO } from '../components/common/SEO';
@@ -1314,34 +1315,37 @@ export function BusinessDetail() {
         createdAt: Date.now()
       };
       
-      const docRef = await addDoc(collection(db, 'reviews'), reviewData);
-      recordReviewSubmission(targetBizId);
-      
-      const updatedReviews = [{ id: docRef.id, ...reviewData } as Review, ...reviews];
-      setReviews(updatedReviews);
-      
-      // Update business average rating in local state
-      const totalRatings = updatedReviews.reduce((sum, r) => sum + r.rating, 0);
-      const avgRating = totalRatings / updatedReviews.length;
-      
-      if (business) {
-        setBusiness(prev => prev ? {
-          ...prev,
-          rating: Number(avgRating.toFixed(1)),
-          reviewCount: updatedReviews.length
-        } : null);
-        
-        // Update in firestore safely
+      let newReviewId = 'rev-' + Date.now();
+      if (db) {
         try {
-          const bRef = doc(db, 'businesses', business.id);
-          await updateDoc(bRef, {
-            rating: Number(avgRating.toFixed(1)),
-            reviewCount: updatedReviews.length
+          const atomicRes = await submitReviewAtomically(db, targetBizId, {
+            userId: currentUser.uid,
+            userName: cleanUserName,
+            rating: newRating,
+            comment: cleanComment,
+            deviceFingerprint,
+            recaptchaToken: recaptchaToken || 'token_generated',
+            createdAt: Date.now()
           });
-        } catch (bizRatingErr) {
-          console.warn("Non-fatal: could not update business rating in doc:", bizRatingErr);
+
+          newReviewId = atomicRes.reviewId;
+          if (business) {
+            setBusiness(prev => prev ? {
+              ...prev,
+              rating: atomicRes.newAverageRating,
+              reviewCount: atomicRes.newReviewCount
+            } : null);
+          }
+        } catch (atomicErr) {
+          console.error("Atomic review error, falling back:", atomicErr);
+          const docRef = await addDoc(collection(db, 'reviews'), reviewData);
+          newReviewId = docRef.id;
         }
       }
+
+      recordReviewSubmission(targetBizId);
+      const updatedReviews = [{ id: newReviewId, ...reviewData } as Review, ...reviews];
+      setReviews(updatedReviews);
 
       // 4. Record successful submission timestamp for rate limiting
       recordSubmissionTime('review_submit');

@@ -139,7 +139,7 @@ export function Home() {
       try {
         const appConfig = await getAppConfig();
         const q = query(collection(db, 'businesses'), orderBy('createdAt', 'desc'), limit(150));
-        const bannersQuery = query(collection(db, 'banners'));
+        const bannersQuery = query(collection(db, 'banners'), limit(50));
 
         const [querySnapshot, bannersSnap] = await Promise.all([
           getDocs(q),
@@ -323,7 +323,7 @@ export function Home() {
   }, []);
 
   const { categories, globalSettings } = useSystemSettings();
-  const heroStyle = globalSettings?.heroSectionStyle || 'green_box';
+  const heroStyle = globalSettings?.heroSectionStyle || 'wheel_box';
   const mainCategories = categories.map(c => c.name);
   
   const getSubCats = (catName: string) => categories.find(c => c.name === catName)?.subcategories || [];
@@ -624,6 +624,18 @@ export function Home() {
         </div>
       )}
 
+      {banners.length > 0 && (
+        <BannerSlideshow 
+          banners={
+            categoryFilter
+              ? (banners.filter(b => b.category && (b.category.toLowerCase().includes(categoryFilter.toLowerCase()) || categoryFilter.toLowerCase().includes(b.category.toLowerCase()))).length > 0
+                  ? banners.filter(b => b.category && (b.category.toLowerCase().includes(categoryFilter.toLowerCase()) || categoryFilter.toLowerCase().includes(b.category.toLowerCase())))
+                  : banners)
+              : banners
+          } 
+        />
+      )}
+
       {/* Unified Intelligent Search & Filters Deck */}
       <div className="space-y-3 md:space-y-4">
         <RegionDropdownFilter 
@@ -636,18 +648,6 @@ export function Home() {
           userFavoritesCount={userFavorites.length}
         />
       </div>
-
-      {banners.length > 0 && (
-        <BannerSlideshow 
-          banners={
-            categoryFilter
-              ? (banners.filter(b => b.category && (b.category.toLowerCase().includes(categoryFilter.toLowerCase()) || categoryFilter.toLowerCase().includes(b.category.toLowerCase()))).length > 0
-                  ? banners.filter(b => b.category && (b.category.toLowerCase().includes(categoryFilter.toLowerCase()) || categoryFilter.toLowerCase().includes(b.category.toLowerCase())))
-                  : banners)
-              : banners
-          } 
-        />
-      )}
 
       {mainCategories.length > 0 && (
         <div className="flex flex-col space-y-4">

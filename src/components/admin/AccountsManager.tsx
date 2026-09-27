@@ -150,6 +150,7 @@ export function AccountsManager({ businesses: initialBusinesses = [] }: Accounts
 
  const ADMIN_BOOTSTRAP_EMAILS = [
  'princessofx2344@gmail.com',
+ 'd42902672@gmail.com',
  'admin@shoofiirbid.com',
  'irbid.admin@gmail.com',
  'tharawt74@gmail.com'

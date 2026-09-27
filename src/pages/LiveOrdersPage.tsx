@@ -360,8 +360,8 @@ export default function LiveOrdersPage() {
       }
 
       try {
-        const { getDocs, collection } = await import('firebase/firestore');
-        const snap = await getDocs(collection(db, 'businesses'));
+        const { getDocs, collection, query, limit } = await import('firebase/firestore');
+        const snap = await getDocs(query(collection(db, 'businesses'), limit(50)));
         const fetched = snap.docs.map(d => ({ id: d.id, ...d.data() } as Business));
         if (fetched.length > 0) {
           setAvailableBusinesses(fetched);

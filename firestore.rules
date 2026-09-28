@@ -501,10 +501,15 @@ service cloud.firestore {
       allow get: if true;
       allow list: if isAdmin() || (
         isSignedIn() && (
+          resource.data.merchantId == request.auth.uid ||
           resource.data.userId == request.auth.uid ||
           get(/databases/$(database)/documents/businesses/$(resource.data.businessId)).data.userId == request.auth.uid ||
           get(/databases/$(database)/documents/businesses/$(resource.data.businessId)).data.ownerId == request.auth.uid
         )
+      ) || (
+        // Guest list search query constraints
+        resource.data.shortCode != null &&
+        resource.data.businessId != null
       );
       allow create: if (
         incoming().businessId is string && incoming().businessId.size() <= 128 &&
@@ -520,6 +525,7 @@ service cloud.firestore {
         isAdmin() ||
         (
           isSignedIn() && (
+            existing().merchantId == request.auth.uid ||
             get(/databases/$(database)/documents/businesses/$(existing().businessId)).data.userId == request.auth.uid ||
             get(/databases/$(database)/documents/businesses/$(existing().businessId)).data.ownerId == request.auth.uid
           )
@@ -533,6 +539,7 @@ service cloud.firestore {
       );
       allow delete: if isAdmin() || (
         isSignedIn() && (
+          existing().merchantId == request.auth.uid ||
           get(/databases/$(database)/documents/businesses/$(existing().businessId)).data.userId == request.auth.uid ||
           get(/databases/$(database)/documents/businesses/$(existing().businessId)).data.ownerId == request.auth.uid
         )

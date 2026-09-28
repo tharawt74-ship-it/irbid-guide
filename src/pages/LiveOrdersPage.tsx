@@ -42,7 +42,7 @@ import {
 } from 'lucide-react';
 
 export default function LiveOrdersPage() {
-  const { currentUser, ownedBusinesses } = useAuth();
+  const { currentUser, ownedBusinesses, isAdmin } = useAuth();
   const navigate = useNavigate();
 
   // Sub-view Toggles (Live Orders vs Quick Out-of-Stock Toggle)
@@ -443,10 +443,16 @@ export default function LiveOrdersPage() {
 
     const setupOrdersListener = () => {
       try {
-        const q = query(
-          collection(db, 'orders'),
-          where('businessId', '==', selectedBiz.id)
-        );
+        const q = isAdmin
+          ? query(
+              collection(db, 'orders'),
+              where('businessId', '==', selectedBiz.id)
+            )
+          : query(
+              collection(db, 'orders'),
+              where('businessId', '==', selectedBiz.id),
+              where('merchantId', '==', currentUser?.uid || '')
+            );
 
         unsubscribeFirestore = onSnapshot(q, (snapshot) => {
           const fetchedOrders: any[] = [];
@@ -469,7 +475,7 @@ export default function LiveOrdersPage() {
       unsubscribeFirestore();
       unsubscribeLocal();
     };
-  }, [selectedBiz?.id, soundEnabled, currentUser?.uid]);
+  }, [selectedBiz?.id, soundEnabled, currentUser?.uid, isAdmin]);
 
   const handleUpdateOrderStatus = async (orderId: string, newStatus: 'pending' | 'processing' | 'completed' | 'cancelled') => {
     // 1. Update local state immediately & broadcast locally

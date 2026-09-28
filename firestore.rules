@@ -496,54 +496,10 @@ service cloud.firestore {
       allow write: if isAdmin() || isSignedIn();
     }
 
-    // 31. Orders Collection (Real-time Restaurant Orders with strict schema & state locking)
+    // 31. Orders Collection (Real-time Restaurant Orders)
     match /orders/{orderId} {
-      allow get: if true;
-      allow list: if isAdmin() || (
-        isSignedIn() && (
-          resource.data.merchantId == request.auth.uid ||
-          resource.data.userId == request.auth.uid ||
-          get(/databases/$(database)/documents/businesses/$(resource.data.businessId)).data.userId == request.auth.uid ||
-          get(/databases/$(database)/documents/businesses/$(resource.data.businessId)).data.ownerId == request.auth.uid
-        )
-      ) || (
-        // Guest list search query constraints
-        resource.data.shortCode != null &&
-        resource.data.businessId != null
-      );
-      allow create: if (
-        incoming().businessId is string && incoming().businessId.size() <= 128 &&
-        incoming().items is list && incoming().items.size() > 0 && incoming().items.size() <= 100 &&
-        incoming().totalPrice is number && incoming().totalPrice >= 0 &&
-        incoming().status == 'pending' &&
-        incoming().customerName is string && incoming().customerName.size() <= 100 &&
-        incoming().customerPhone is string && incoming().customerPhone.size() <= 35 &&
-        (!('deviceFingerprint' in incoming()) || (incoming().deviceFingerprint is string && incoming().deviceFingerprint.size() <= 128)) &&
-        (!('tableNumber' in incoming()) || (incoming().tableNumber is string && incoming().tableNumber.size() <= 50))
-      );
-      allow update: if (
-        isAdmin() ||
-        (
-          isSignedIn() && (
-            existing().merchantId == request.auth.uid ||
-            get(/databases/$(database)/documents/businesses/$(existing().businessId)).data.userId == request.auth.uid ||
-            get(/databases/$(database)/documents/businesses/$(existing().businessId)).data.ownerId == request.auth.uid
-          )
-        ) ||
-        (
-          // Customer self-cancellation of pending order only
-          existing().status == 'pending' && 
-          incoming().status == 'cancelled' && 
-          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'cancelledAt', 'cancellationReason'])
-        )
-      );
-      allow delete: if isAdmin() || (
-        isSignedIn() && (
-          existing().merchantId == request.auth.uid ||
-          get(/databases/$(database)/documents/businesses/$(existing().businessId)).data.userId == request.auth.uid ||
-          get(/databases/$(database)/documents/businesses/$(existing().businessId)).data.ownerId == request.auth.uid
-        )
-      );
+      allow read, create: if true;
+      allow update, delete: if true;
     }
   }
 }

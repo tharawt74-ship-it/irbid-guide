@@ -687,7 +687,7 @@ export default function BusinessMenuOffers() {
 
 	const cleanOrderPayload: Record<string, any> = {
 		id: orderId,
-		businessId: String(business.id || ''),
+		businessId: String(business.id || id || ''),
 		businessName: String(business.name || ''),
 		items: cart.map(item => ({
 			id: String(item.id || ''),
@@ -729,12 +729,37 @@ export default function BusinessMenuOffers() {
 	setActiveOrder(cleanOrderPayload);
 	saveLocalOrder(cleanOrderPayload);
 
- // 2. Persist to Firestore database
+ // 2. Persist to Firestore database directly and via backend API proxy
  try {
- await setDoc(doc(db, 'orders', orderId), cleanOrderPayload);
+   if (auth && !auth.currentUser) {
+     try {
+       const { signInAnonymously } = await import('firebase/auth');
+       await signInAnonymously(auth);
+     } catch (_) {}
+   }
+
+   if (db) {
+     await setDoc(doc(db, 'orders', orderId), cleanOrderPayload);
+   }
  } catch (firestoreErr) {
- console.warn("Firestore save warning (Order active locally):", firestoreErr);
+   console.warn("Direct Firestore save notice (trying API proxy):", firestoreErr);
+   try {
+     await fetch('/api/orders', {
+       method: 'POST',
+       headers: { 'Content-Type': 'application/json' },
+       body: JSON.stringify(cleanOrderPayload)
+     });
+   } catch (apiErr) {
+     console.warn("Order API proxy notice:", apiErr);
+   }
  }
+
+ // Also dispatch to /api/orders in background to ensure sync
+ fetch('/api/orders', {
+   method: 'POST',
+   headers: { 'Content-Type': 'application/json' },
+   body: JSON.stringify(cleanOrderPayload)
+ }).catch(() => {});
 
  triggerRadialTransition('track');
 

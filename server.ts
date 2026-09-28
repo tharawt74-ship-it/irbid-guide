@@ -2,6 +2,7 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
+import ordersHandler from "./api/orders";
 import { initializeApp, getApps, getApp, cert } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore as getAdminFirestore } from "firebase-admin/firestore";
@@ -156,6 +157,9 @@ async function startServer() {
 
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+  // API Route for live restaurant orders handling
+  app.all("/api/orders", (req, res) => ordersHandler(req, res));
 
   // API Route for custom Resend verification email
   app.post("/api/auth/send-verification", async (req, res) => {

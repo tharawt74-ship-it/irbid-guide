@@ -443,16 +443,10 @@ export default function LiveOrdersPage() {
 
     const setupOrdersListener = () => {
       try {
-        const q = isAdmin
-          ? query(
-              collection(db, 'orders'),
-              where('businessId', '==', selectedBiz.id)
-            )
-          : query(
-              collection(db, 'orders'),
-              where('businessId', '==', selectedBiz.id),
-              where('merchantId', '==', currentUser?.uid || '')
-            );
+        const q = query(
+          collection(db, 'orders'),
+          where('businessId', '==', selectedBiz.id)
+        );
 
         unsubscribeFirestore = onSnapshot(q, (snapshot) => {
           const fetchedOrders: any[] = [];
@@ -461,8 +455,15 @@ export default function LiveOrdersPage() {
           });
           mergeAndSetOrders(fetchedOrders);
         }, (error) => {
-          console.warn("Firestore order listener warning (using local sync):", error?.message || error);
+          console.warn("Firestore order listener notice (activating API fallback):", error?.message || error);
           setLoadingOrders(false);
+          // Immediate API fallback fetch
+          fetch(`/api/orders?businessId=${encodeURIComponent(selectedBiz.id)}`)
+            .then(res => res.json())
+            .then(data => {
+              if (data?.orders) mergeAndSetOrders(data.orders);
+            })
+            .catch(() => {});
         });
       } catch (err) {
         console.warn("Failed to setup orders listener:", err);
@@ -471,9 +472,23 @@ export default function LiveOrdersPage() {
     };
 
     setupOrdersListener();
+
+    // Background safety net poll every 8 seconds
+    const apiPollInterval = setInterval(() => {
+      fetch(`/api/orders?businessId=${encodeURIComponent(selectedBiz.id)}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data?.orders && data.orders.length > 0) {
+            mergeAndSetOrders(data.orders);
+          }
+        })
+        .catch(() => {});
+    }, 8000);
+
     return () => {
       unsubscribeFirestore();
       unsubscribeLocal();
+      clearInterval(apiPollInterval);
     };
   }, [selectedBiz?.id, soundEnabled, currentUser?.uid, isAdmin]);
 

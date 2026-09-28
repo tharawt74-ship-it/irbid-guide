@@ -1,0 +1,356 @@
+import { initializeApp, getApps, getApp, cert } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
+
+let adminApp: any = null;
+
+function getAdminApp() {
+  if (adminApp) return adminApp;
+
+  try {
+    const existingApps = getApps();
+    if (existingApps.length > 0) {
+      adminApp = getApp();
+      return adminApp;
+    }
+
+    const projectId = process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID || 'irbid-7f4dd';
+    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+    let privateKey = process.env.FIREBASE_PRIVATE_KEY;
+
+    if (clientEmail && privateKey) {
+      privateKey = privateKey.trim();
+      if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
+        privateKey = privateKey.slice(1, -1);
+      }
+      privateKey = privateKey.replace(/\\n/g, '\n');
+
+      adminApp = initializeApp({
+        credential: cert({
+          projectId,
+          clientEmail,
+          privateKey,
+        })
+      });
+      return adminApp;
+    }
+
+    adminApp = initializeApp({
+      projectId
+    });
+    return adminApp;
+  } catch (err) {
+    console.warn("Firebase Admin initialization error in send-password-reset:", err);
+    return null;
+  }
+}
+
+const emailRateLimit = new Map<string, { count: number; resetAt: number }>();
+
+function isRateLimited(key: string, maxRequests: number, windowMs: number): boolean {
+  const now = Date.now();
+  const record = emailRateLimit.get(key);
+
+  if (!record || now > record.resetAt) {
+    emailRateLimit.set(key, { count: 1, resetAt: now + windowMs });
+    return false;
+  }
+
+  if (record.count >= maxRequests) {
+    return true;
+  }
+
+  record.count += 1;
+  return false;
+}
+
+const isValidEmail = (email: unknown): boolean => {
+  if (typeof email !== 'string') return false;
+  const trimmed = email.trim();
+  return trimmed.length <= 100 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed);
+};
+
+export default async function handler(req: any, res: any) {
+  if (req.method === 'OPTIONS') {
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+    res.setHeader(
+      'Access-Control-Allow-Headers',
+      'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization'
+    );
+    return res.status(200).end();
+  }
+
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    let body = req.body;
+    if (typeof body === 'string') {
+      try {
+        body = JSON.parse(body);
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    const rawEmail = body?.email;
+    if (!isValidEmail(rawEmail)) {
+      return res.status(400).json({ error: "عنوان بريد إلكتروني غير صالح" });
+    }
+
+    const email = rawEmail.trim().toLowerCase();
+
+    // Rate limiting: Max 3 requests per 15 minutes per email
+    if (isRateLimited(email, 3, 15 * 60 * 1000)) {
+      return res.status(429).json({
+        error: "تم تجاوز الحد المسموح به لإعادة تعيين كلمة المرور. يرجى الانتظار قليلاً."
+      });
+    }
+
+    const resendApiKey = process.env.RESEND_API_KEY;
+    if (!resendApiKey) {
+      return res.status(500).json({ error: "Email service not configured on server (missing RESEND_API_KEY)" });
+    }
+
+    let oobCode: string | null = null;
+    let authErrorDetails = "";
+
+    // 1. Try using Firebase Admin SDK
+    const app = getAdminApp();
+    if (app) {
+      try {
+        const authAdmin = getAuth(app);
+        const oobLink = await authAdmin.generatePasswordResetLink(email);
+        const urlParams = new URL(oobLink).searchParams;
+        oobCode = urlParams.get('oobCode');
+      } catch (err: any) {
+        console.warn("Admin SDK failed to generate reset link in serverless function, trying REST API:", err);
+        authErrorDetails = err.message || "";
+      }
+    }
+
+    // 2. Fall back to REST API
+    if (!oobCode) {
+      const firebaseApiKey = process.env.VITE_FIREBASE_API_KEY || "AIzaSyDDswaCceyey9mjAC7ERlkPQ0dIkNsbquw";
+      const oobResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${firebaseApiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requestType: 'PASSWORD_RESET',
+          email: email,
+          returnOobLink: true
+        })
+      });
+
+      const oobData: any = await oobResponse.json();
+      if (!oobResponse.ok) {
+        console.error("Firebase sendOobCode error in serverless function:", oobData);
+        const errMessage = oobData.error?.message || "Failed to generate password reset code";
+        return res.status(oobResponse.status).json({ error: errMessage });
+      }
+
+      const oobLink = oobData.oobLink;
+      const urlParams = new URL(oobLink).searchParams;
+      oobCode = urlParams.get('oobCode');
+    }
+
+    if (!oobCode) {
+      return res.status(500).json({ error: "Failed to generate password reset code. " + authErrorDetails });
+    }
+
+    // Build custom reset URL pointing to our app
+    const host = req.headers['x-forwarded-host'] || req.headers.host;
+    const protocol = req.headers['x-forwarded-proto'] || 'https';
+    const resetUrl = `${protocol}://${host}/reset-password?oobCode=${oobCode}`;
+
+    const htmlContent = `
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>إعادة تعيين كلمة المرور - منصة شو في بإربد؟</title>
+  <style>
+    body {
+      font-family: 'Cairo', 'Segoe UI', Tahoma, Arial, sans-serif;
+      background-color: #faf9f6;
+      margin: 0;
+      padding: 0;
+      -webkit-font-smoothing: antialiased;
+    }
+    .wrapper {
+      width: 100%;
+      background-color: #faf9f6;
+      padding: 40px 15px;
+    }
+    .container {
+      max-width: 580px;
+      margin: 0 auto;
+      background-color: #ffffff;
+      border-radius: 32px;
+      border: 1px solid #e8e4db;
+      box-shadow: 0 10px 30px rgba(26,77,46,0.045);
+      overflow: hidden;
+    }
+    .header {
+      background-color: #1a4d2e;
+      background-image: linear-gradient(135deg, #1a4d2e 0%, #11351e 100%);
+      padding: 45px 30px;
+      text-align: center;
+    }
+    .header h1 {
+      color: #ffffff;
+      margin: 0;
+      font-size: 28px;
+      font-weight: 900;
+      letter-spacing: -0.5px;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .header p {
+      color: #ff9f1c;
+      margin: 8px 0 0 0;
+      font-size: 14px;
+      font-weight: 700;
+    }
+    .security-badge {
+      display: inline-block;
+      background-color: rgba(255, 159, 28, 0.1);
+      color: #ff9f1c;
+      padding: 6px 16px;
+      border-radius: 30px;
+      font-size: 12px;
+      font-weight: 800;
+      margin-top: 15px;
+      border: 1px solid rgba(255, 159, 28, 0.2);
+    }
+    .content {
+      padding: 45px 40px;
+      text-align: right;
+    }
+    .content h2 {
+      color: #242220;
+      font-size: 22px;
+      font-weight: 800;
+      margin-top: 0;
+      margin-bottom: 15px;
+    }
+    .content p {
+      color: #5d5a55;
+      font-size: 15px;
+      line-height: 1.8;
+      margin-bottom: 25px;
+    }
+    .btn-container {
+      text-align: center;
+      margin: 40px 0;
+    }
+    .btn {
+      display: inline-block;
+      background: #1a4d2e;
+      background: linear-gradient(135deg, #1a4d2e 0%, #133b22 100%);
+      color: #ffffff !important;
+      text-decoration: none !important;
+      padding: 16px 48px;
+      font-size: 15px;
+      font-weight: 800;
+      border-radius: 20px;
+      box-shadow: 0 6px 20px rgba(26,77,46,0.25);
+      transition: all 0.3s ease;
+    }
+    .warning-box {
+      background-color: #fffbeb;
+      border: 1px solid #fef3c7;
+      border-radius: 20px;
+      padding: 20px 25px;
+      margin-top: 30px;
+    }
+    .warning-box p {
+      color: #b45309;
+      font-size: 13px;
+      margin: 0;
+      line-height: 1.7;
+    }
+    .footer {
+      background-color: #fbfbfa;
+      padding: 30px 20px;
+      text-align: center;
+      border-top: 1px solid #e8e4db;
+    }
+    .footer p {
+      color: #a5a29e;
+      font-size: 12px;
+      margin: 6px 0;
+      font-weight: 500;
+    }
+    .footer a {
+      color: #1a4d2e;
+      text-decoration: none;
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="container">
+      <div class="header">
+        <h1 style="margin-bottom: 8px;">🔒 إعادة تعيين كلمة المرور</h1>
+        <p>منصة شو في بإربد؟</p>
+        <div class="security-badge">طلب أمان موثق</div>
+      </div>
+
+      <div class="content">
+        <h2>أهلاً بك، 👋</h2>
+        <p>
+          لقد تلقينا طلباً لإعادة تعيين كلمة المرور الخاصة بحسابك في <strong>منصة شو في بإربد؟</strong> والمرتبط بالبريد الإلكتروني (<strong>${email}</strong>). لتغيير كلمة المرور الخاصة بك واختيار كلمة مرور جديدة، يرجى الضغط على الزر المباشر والآمن أدناه:
+        </p>
+
+        <div class="btn-container">
+          <a href="${resetUrl}" class="btn" target="_blank">إعادة تعيين كلمة المرور الآن 🔑</a>
+        </div>
+
+        <div class="warning-box">
+          <p>
+            <strong>⚠️ ملاحظة أمنية هامة:</strong> إذا لم تكن أنت من طلب إعادة تعيين كلمة المرور هذه، يمكنك تجاهل هذا البريد الإلكتروني بأمان تام. لن يطرأ أي تغيير على كلمة مرورك الحالية دون النقر على الرابط وتأكيده.
+          </p>
+        </div>
+      </div>
+
+      <div class="footer">
+        <p>صلاحية هذا الرابط هي ساعة واحدة فقط لدواعي الأمان المتقدمة.</p>
+        <p>© 2026 جميع الحقوق محفوظة لـ <strong>منصة شو في بإربد؟</strong></p>
+        <p><a href="https://shofibirbid.site" target="_blank">shofibirbid.site</a></p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+    `;
+
+    const sendResponse = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${resendApiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        from: "منصة شو في بإربد؟ <no-reply@shofibirbid.site>",
+        to: [email],
+        subject: "إعادة تعيين كلمة المرور - منصة شو في بإربد؟ 🔑",
+        html: htmlContent
+      })
+    });
+
+    const sendData: any = await sendResponse.json();
+    if (!sendResponse.ok) {
+      console.error("Resend API send error in serverless function:", sendData);
+      return res.status(sendResponse.status).json({ error: sendData.message || "Failed to send reset email" });
+    }
+
+    return res.status(200).json({ success: true, messageId: sendData.id });
+  } catch (err: any) {
+    console.error("Error in reset password serverless function:", err);
+    return res.status(500).json({ error: err.message || "Internal server error" });
+  }
+}

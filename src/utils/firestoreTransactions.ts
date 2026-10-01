@@ -43,9 +43,30 @@ export async function submitReviewAtomically(
 ): Promise<AtomicReviewResult> {
   const reviewRef = doc(collection(db, 'reviews'));
   const businessRef = doc(db, 'businesses', businessId);
+  
+  // Determine unique lock ID to prevent same-account multi-device or guest multi-device reviews within 24h
+  let lockId = `${reviewData.userId}_${businessId}`;
+  if (reviewData.userPhone) {
+    const cleanPhone = reviewData.userPhone.trim();
+    if (cleanPhone) {
+      lockId = `phone_${cleanPhone}_${businessId}`;
+    }
+  }
+  const lockRef = doc(db, 'reviews_locks', lockId);
   const ratingValue = Math.min(5, Math.max(1, Number(reviewData.rating) || 5));
 
   const result = await runTransaction(db, async (transaction) => {
+    // 0. Rate limiting check inside transaction to block multi-device concurrent bypasses
+    const lockSnap = await transaction.get(lockRef);
+    if (lockSnap.exists()) {
+      const lockData = lockSnap.data();
+      const lastCreated = Number(lockData?.createdAt) || 0;
+      const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+      if (Date.now() - lastCreated < TWENTY_FOUR_HOURS) {
+        throw new Error('LIMIT_EXCEEDED');
+      }
+    }
+
     const businessDoc = await transaction.get(businessRef);
     if (!businessDoc.exists()) {
       throw new Error(`Business with ID ${businessId} not found.`);
@@ -70,6 +91,14 @@ export async function submitReviewAtomically(
       businessId,
       rating: ratingValue,
       createdAt: reviewData.createdAt || Date.now()
+    });
+
+    // 1b. Create or update the rate-limit lock document
+    transaction.set(lockRef, {
+      createdAt: Date.now(),
+      userId: reviewData.userId,
+      userPhone: reviewData.userPhone || '',
+      businessId
     });
 
     // 2. Update business rating, reviewCount, and ratingSum atomically

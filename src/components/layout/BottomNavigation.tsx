@@ -69,6 +69,7 @@ export function BottomNavigation({
   }
 
   const isMedicalPage = location.pathname.startsWith('/medical');
+  const isHousingPage = location.pathname.startsWith('/housing');
 
   const mainNavItems: NavItem[] = [
     {
@@ -90,6 +91,15 @@ export function BottomNavigation({
       icon: Stethoscope,
       type: 'link',
       specialIconClass: "text-emerald-600"
+    } : isHousingPage ? {
+      label: 'أضف عقارك',
+      path: '/housing',
+      icon: PlusCircle,
+      type: 'link',
+      specialIconClass: "text-[#1a4d2e]",
+      onClick: () => {
+        window.dispatchEvent(new CustomEvent('open-add-housing-modal'));
+      }
     } : {
       label: 'أضف محلك',
       path: '/contact',
@@ -222,7 +232,10 @@ export function BottomNavigation({
                 <Link
                   key={index}
                   to={item.path!}
-                  onClick={onCloseMenu}
+                  onClick={(e) => {
+                    if (item.onClick) item.onClick();
+                    if (onCloseMenu) onCloseMenu();
+                  }}
                   className="flex-1 flex flex-col items-center justify-center py-1 px-0.5 rounded-2xl transition-all relative cursor-pointer active:scale-95 group focus:outline-none min-w-0"
                 >
                   {innerContent}

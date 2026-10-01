@@ -37,6 +37,7 @@ import { Business } from '../../types';
 import { isMedicalBusiness } from '../../lib/medicalHelper';
 import { getLiveWorkingStatus } from '../../lib/businessHoursHelper';
 import { Link } from 'react-router';
+import { isFoodAndDrinkBusiness } from '../../lib/categories';
 
 export interface QuickActionsSectionProps {
  // Navigation State & Handlers
@@ -96,22 +97,7 @@ export function QuickActionsSection({
 }: QuickActionsSectionProps) {
  const currentBiz = selectedBusiness || (businesses.length > 0 ? businesses[0] : null);
  const isMed = currentBiz ? isMedicalBusiness(currentBiz) : false;
- const isFoodAndDrink = (() => {
- if (!currentBiz || !currentBiz.category) return false;
- const catLower = currentBiz.category.toLowerCase();
- return (
- catLower.includes('مأكولات') || 
- catLower.includes('مشروبات') || 
- catLower.includes('مطاعم') || 
- catLower.includes('كافيه') || 
- catLower.includes('حلويات') ||
- catLower.includes('شاورما') ||
- catLower.includes('برجر') ||
- catLower.includes('بيتزا') ||
- catLower.includes('فلافل') ||
- catLower.includes('قهوة')
- );
- })();
+ const isFoodAndDrink = isFoodAndDrinkBusiness(currentBiz);
  const liveStatus = getLiveWorkingStatus(currentBiz?.workingHours);
  const isCurrentlyOpen = liveStatus.isOpen;
  const isCustomClosed = !!currentBiz?.workingHours?.isCustomClosed;

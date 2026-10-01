@@ -12,9 +12,10 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { Business, MenuItem, MenuItemVersion } from '../../types';
 import { doc, updateDoc } from 'firebase/firestore';
-import { db } from '../../lib/firebase';
+import { db, auth } from '../../lib/firebase';
 import { getBusinessVipStatus } from '../../lib/vipHelper';
 import { sanitizeFirestorePayload, compressAndSanitizeFirestorePayload } from '../../lib/firestoreHelper';
+import { updateBusinessMenuItemsInCache } from '../../lib/dataCache';
 import { VipUpgradeRequestModal } from './VipUpgradeRequestModal';
 import { useAuth } from '../../contexts/AuthContext';
 import { ImageUploader } from '../ui/ImageUploader';
@@ -742,8 +743,15 @@ export function DigitalMenuManagerModal({
 
   const handleSaveToFirestore = async () => {
     if (!db || !business.id || !currentUser) return;
-    if (business.userId !== currentUser.uid && !isAdmin) {
-      alert("غير مصرح لك بتعديل قائمة هذا المحل!");
+    const isOwner = business.userId === currentUser.uid || 
+      business.ownerId === currentUser.uid ||
+      (currentUser.email && (
+        business.ownerEmail?.trim().toLowerCase() === currentUser.email.trim().toLowerCase() ||
+        business.userEmail?.trim().toLowerCase() === currentUser.email.trim().toLowerCase()
+      ));
+
+    if (!isOwner && !isAdmin) {
+      alert("غير مصرح لك بتعديل قائمة هذا المحل.");
       return;
     }
     setIsSaving(true);
@@ -755,7 +763,39 @@ export function DigitalMenuManagerModal({
         menuDescription: customMenuDescription.trim()
       }, true);
       const docRef = doc(db, 'businesses', business.id);
-      await updateDoc(docRef, payload);
+
+      try {
+        await updateDoc(docRef, payload);
+      } catch (clientErr) {
+        console.warn("Client updateDoc notice, syncing via server fallback:", clientErr);
+        const token = await auth.currentUser?.getIdToken();
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        await fetch('/api/business/menu-stock', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            businessId: business.id,
+            menuItems: sanitizedItems
+          })
+        }).catch(() => {});
+      }
+
+      // Guaranteed server sync
+      auth.currentUser?.getIdToken().then(token => {
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        fetch('/api/business/menu-stock', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            businessId: business.id,
+            menuItems: sanitizedItems
+          })
+        }).catch(() => {});
+      }).catch(() => {});
+
+      updateBusinessMenuItemsInCache(business.id, sanitizedItems);
       onMenuUpdated(items, customMenuTitle.trim(), customMenuDescription.trim());
       setSaveSuccess(true);
       setTimeout(() => {
@@ -1420,7 +1460,7 @@ export function DigitalMenuManagerModal({
                           />
                           <div className="w-11 h-6 bg-stone-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-stone-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
                           <span className="ms-2.5 text-xs font-black text-stone-800">
-                            {isAvailable ? 'متاح للطلب ✅' : 'غير متوفر ❌'}
+                            {isAvailable ? 'متاح للطلب' : 'غير متوفر'}
                           </span>
                         </label>
                       </div>

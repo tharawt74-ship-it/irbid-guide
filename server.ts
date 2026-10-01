@@ -161,6 +161,81 @@ async function startServer() {
   // API Route for live restaurant orders handling
   app.all("/api/orders", (req, res) => ordersHandler(req, res));
 
+  // API Route for updating business menu items stock availability (Protected with Auth & Ownership Verification)
+  app.post("/api/business/menu-stock", async (req, res) => {
+    try {
+      const { businessId, menuItems } = req.body;
+      if (!businessId || typeof businessId !== 'string' || !Array.isArray(menuItems)) {
+        return res.status(400).json({ error: "Missing or invalid businessId or menuItems" });
+      }
+
+      if (menuItems.length > 500) {
+        return res.status(400).json({ error: "Menu items payload too large" });
+      }
+
+      const admin = getAdminApp();
+      if (!admin) {
+        return res.status(500).json({ error: "Firebase Admin not initialized" });
+      }
+
+      // Verify Caller Authorization
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return res.status(401).json({ error: "Unauthorized: Missing authentication token" });
+      }
+
+      const token = authHeader.split(" ")[1];
+      const authAdmin = getAuth(admin);
+      const decodedToken = await authAdmin.verifyIdToken(token);
+      const callerUid = decodedToken.uid;
+      const callerEmail = (decodedToken.email || "").toLowerCase().trim();
+
+      const adminDb = getAdminFirestore(admin);
+
+      const ADMIN_BOOTSTRAP_EMAILS = [
+        'princessofx2344@gmail.com',
+        'tharawt74@gmail.com'
+      ];
+
+      let isAuthorized = ADMIN_BOOTSTRAP_EMAILS.includes(callerEmail);
+      if (!isAuthorized) {
+        const adminDoc = await adminDb.collection("admins").doc(callerUid).get();
+        if (adminDoc.exists) {
+          isAuthorized = true;
+        }
+      }
+
+      // If not platform admin, verify that caller is the owner/manager of this business
+      if (!isAuthorized) {
+        const bizDoc = await adminDb.collection("businesses").doc(businessId).get();
+        if (bizDoc.exists) {
+          const bizData = bizDoc.data();
+          if (
+            bizData?.userId === callerUid ||
+            bizData?.ownerId === callerUid ||
+            (bizData?.userEmail && bizData.userEmail.toLowerCase().trim() === callerEmail) ||
+            (bizData?.ownerEmail && bizData.ownerEmail.toLowerCase().trim() === callerEmail)
+          ) {
+            isAuthorized = true;
+          }
+        }
+      }
+
+      if (!isAuthorized) {
+        return res.status(403).json({ error: "Forbidden: You are not authorized to update this business's menu stock" });
+      }
+
+      const docRef = adminDb.collection("businesses").doc(businessId);
+      await docRef.set({
+        menuItems: menuItems
+      }, { merge: true });
+      return res.status(200).json({ success: true, updated: true });
+    } catch (err: any) {
+      console.warn("API menu-stock update warning:", err?.message || err);
+      return res.status(500).json({ error: err?.message || "Failed to update menu stock" });
+    }
+  });
+
   // API Route for custom Resend verification email
   app.post("/api/auth/send-verification", async (req, res) => {
     try {
@@ -400,18 +475,58 @@ async function startServer() {
       let oobCode: string | null = null;
       let authErrorDetails = "";
 
-      // 1. Try using Firebase Admin SDK
       const app = getAdminApp();
-      if (app) {
-        try {
-          const authAdmin = getAuth(app);
-          const oobLink = await authAdmin.generatePasswordResetLink(email);
-          const urlParams = new URL(oobLink).searchParams;
-          oobCode = urlParams.get('oobCode');
-        } catch (err: any) {
-          console.warn("Admin SDK failed to generate reset link locally, trying REST API:", err);
-          authErrorDetails = err.message || "";
+      if (!app) {
+        return res.status(500).json({ error: "Firebase Admin not initialized" });
+      }
+
+      const authAdmin = getAuth(app);
+      const adminDb = getAdminFirestore(app);
+
+      // 1. Verify that user actually exists in the platform
+      let userExists = false;
+      try {
+        const userRec = await authAdmin.getUserByEmail(email);
+        if (userRec && userRec.uid) {
+          userExists = true;
         }
+      } catch (userErr: any) {
+        if (userErr?.code === 'auth/user-not-found') {
+          userExists = false;
+        }
+      }
+
+      if (!userExists) {
+        try {
+          const userSnap = await adminDb.collection('users').where('email', '==', email).limit(1).get();
+          if (!userSnap.empty) {
+            userExists = true;
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      // Also check if account was deleted by admin
+      try {
+        const delSnap = await adminDb.collection('deleted_emails').doc(email).get();
+        if (delSnap.exists) {
+          userExists = false;
+        }
+      } catch {}
+
+      if (!userExists) {
+        return res.status(404).json({ error: "هذا الحساب غير مسجل في الموقع" });
+      }
+
+      // 2. Generate password reset link
+      try {
+        const oobLink = await authAdmin.generatePasswordResetLink(email);
+        const urlParams = new URL(oobLink).searchParams;
+        oobCode = urlParams.get('oobCode');
+      } catch (err: any) {
+        console.warn("Admin SDK failed to generate reset link locally, trying REST API:", err);
+        authErrorDetails = err.message || "";
       }
 
       // 2. Fall back to REST API
@@ -644,7 +759,207 @@ async function startServer() {
     }
   });
 
+  // Route to delete a user completely from Firebase Authentication and Firestore
+  app.post("/api/auth/delete-user", async (req, res) => {
+    try {
+      const appInstance = getAdminApp();
+      if (!appInstance) {
+        return res.status(500).json({ error: "Firebase Admin not initialized" });
+      }
+
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return res.status(401).json({ error: "Unauthorized: Missing token" });
+      }
+
+      const token = authHeader.split(" ")[1];
+      const authAdmin = getAuth(appInstance);
+      const decodedToken = await authAdmin.verifyIdToken(token);
+      const callerEmail = (decodedToken.email || "").toLowerCase().trim();
+      const callerUid = decodedToken.uid;
+
+      const adminDb = getAdminFirestore(appInstance);
+
+      const ADMIN_BOOTSTRAP_EMAILS = [
+        'princessofx2344@gmail.com',
+        'tharawt74@gmail.com'
+      ];
+
+      let isAuthorized = ADMIN_BOOTSTRAP_EMAILS.includes(callerEmail);
+      if (!isAuthorized) {
+        const adminDoc = await adminDb.collection("admins").doc(callerUid).get();
+        if (adminDoc.exists) {
+          isAuthorized = true;
+        }
+      }
+
+      if (!isAuthorized) {
+        return res.status(403).json({ error: "Forbidden: You are not authorized as an administrator" });
+      }
+
+      const { targetUid, targetEmail } = req.body;
+      const cleanTargetEmail = (targetEmail || "").toLowerCase().trim();
+      const cleanTargetUid = (targetUid || "").trim();
+
+      if (!cleanTargetUid && !cleanTargetEmail) {
+        return res.status(400).json({ error: "Missing targetUid or targetEmail" });
+      }
+
+      if (cleanTargetEmail === 'princessofx2344@gmail.com') {
+        return res.status(400).json({ error: "Cannot delete the primary super admin account" });
+      }
+
+      // 1. Delete user from Firebase Authentication
+      let authDeleted = false;
+      if (cleanTargetUid) {
+        try {
+          await authAdmin.deleteUser(cleanTargetUid);
+          authDeleted = true;
+        } catch (authErr: any) {
+          if (authErr?.code !== 'auth/user-not-found') {
+            console.warn("Could not delete user from auth by UID:", authErr?.message);
+          }
+        }
+      }
+
+      if (!authDeleted && cleanTargetEmail) {
+        try {
+          const userRec = await authAdmin.getUserByEmail(cleanTargetEmail);
+          if (userRec && userRec.uid) {
+            await authAdmin.deleteUser(userRec.uid);
+            authDeleted = true;
+          }
+        } catch (emailErr: any) {
+          if (emailErr?.code !== 'auth/user-not-found') {
+            console.warn("Could not delete user from auth by email:", emailErr?.message);
+          }
+        }
+      }
+
+      // 2. Delete from Firestore users, supervisors, admins
+      if (cleanTargetUid) {
+        await Promise.all([
+          adminDb.collection("users").doc(cleanTargetUid).delete().catch(() => {}),
+          adminDb.collection("supervisors").doc(cleanTargetUid).delete().catch(() => {}),
+          adminDb.collection("admins").doc(cleanTargetUid).delete().catch(() => {})
+        ]);
+      }
+
+      // 3. Mark in deleted_emails so that any existing login sessions or cached tokens are blocked
+      if (cleanTargetEmail) {
+        await adminDb.collection("deleted_emails").doc(cleanTargetEmail).set({
+          email: cleanTargetEmail,
+          uid: cleanTargetUid || "",
+          deletedAt: Date.now(),
+          deletedBy: callerEmail
+        }, { merge: true }).catch(() => {});
+      }
+
+      return res.json({
+        success: true,
+        message: "User deleted permanently from authentication and database",
+        authDeleted
+      });
+    } catch (err: any) {
+      console.error("Error deleting user in /api/auth/delete-user:", err);
+      return res.status(500).json({ error: err.message || "Failed to delete user" });
+    }
+  });
+
   // Video uploads are handled directly from the client browser to Imgur Video API for maximum speed and stability without datacenter IP blocks
+
+  // API Route to resolve Google Maps short links (e.g. maps.app.goo.gl) to exact destination coordinates/place
+  app.get("/api/resolve-map-url", async (req, res) => {
+    try {
+      const targetUrl = req.query.url as string;
+      if (!targetUrl || typeof targetUrl !== 'string') {
+        return res.status(400).json({ error: 'Valid URL is required' });
+      }
+
+      let parsed: URL;
+      try {
+        parsed = new URL(targetUrl);
+      } catch {
+        return res.status(400).json({ error: 'Invalid URL format' });
+      }
+
+      // Restrict protocol strictly to HTTP/HTTPS
+      if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+        return res.status(400).json({ error: 'Only HTTP/HTTPS URLs allowed' });
+      }
+
+      const hostname = parsed.hostname.toLowerCase();
+
+      // Whitelist of legitimate Google Maps domains
+      const ALLOWED_MAP_DOMAINS = [
+        'maps.app.goo.gl',
+        'goo.gl',
+        'maps.google.com',
+        'www.google.com',
+        'google.com',
+        'maps.google.jo'
+      ];
+
+      const isAllowedDomain = ALLOWED_MAP_DOMAINS.some(d => hostname === d || hostname.endsWith('.' + d));
+
+      // Prevent private IP ranges, localhost, and cloud metadata endpoints
+      const isPrivateOrInternal = 
+        hostname === 'localhost' ||
+        hostname.endsWith('.localhost') ||
+        hostname.endsWith('.internal') ||
+        hostname === '127.0.0.1' ||
+        hostname === '::1' ||
+        hostname === '169.254.169.254' ||
+        hostname.startsWith('10.') ||
+        hostname.startsWith('192.168.') ||
+        /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname);
+
+      if (!isAllowedDomain || isPrivateOrInternal) {
+        return res.status(403).json({ error: 'Untrusted domain or private address is not permitted' });
+      }
+
+      // Safe fetch following redirects to unwrap short links
+      const response = await fetch(parsed.toString(), {
+        method: 'GET',
+        redirect: 'follow',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+        }
+      });
+
+      const finalUrl = response.url || targetUrl;
+
+      // 1. Check for pin data: !3d(lat)!4d(lng)
+      const pinMatch = finalUrl.match(/!3d(-?\d+(?:\.\d+)?)[^!]*!4d(-?\d+(?:\.\d+)?)/);
+      if (pinMatch) {
+        return res.json({ lat: pinMatch[1], lng: pinMatch[2], finalUrl });
+      }
+
+      // 2. Check for @lat,lng
+      const atMatch = finalUrl.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+      if (atMatch) {
+        return res.json({ lat: atMatch[1], lng: atMatch[2], finalUrl });
+      }
+
+      // 3. Check for q=lat,lng or query=lat,lng
+      const qMatch = finalUrl.match(/[?&](?:q|query|ll)=(-?\d+\.\d+)[,+](-?\d+\.\d+)/);
+      if (qMatch) {
+        return res.json({ lat: qMatch[1], lng: qMatch[2], finalUrl });
+      }
+
+      // 4. Check for place name from /place/Name
+      const placeMatch = finalUrl.match(/\/place\/([^/@?]+)/);
+      if (placeMatch) {
+        const placeName = decodeURIComponent(placeMatch[1].replace(/\+/g, ' '));
+        return res.json({ query: placeName, finalUrl });
+      }
+
+      return res.json({ finalUrl });
+    } catch (err: any) {
+      console.warn('Failed to resolve map URL:', err?.message || err);
+      return res.status(500).json({ error: 'Resolution failed' });
+    }
+  });
 
   // Server-side in-memory cache for lightning-fast system settings delivery
   let cachedSystemSettings: any = null;
@@ -707,9 +1022,6 @@ async function startServer() {
       
       const ADMIN_BOOTSTRAP_EMAILS = [
         'princessofx2344@gmail.com',
-        'd42902672@gmail.com',
-        'admin@shoofiirbid.com',
-        'irbid.admin@gmail.com',
         'tharawt74@gmail.com'
       ];
       
@@ -936,9 +1248,6 @@ async function startServer() {
       const supervisorDoc = await db.collection('supervisors').doc(decodedToken.uid).get();
       const allowedEmails = [
         "princessofx2344@gmail.com",
-        "d42902672@gmail.com",
-        "admin@shoofiirbid.com",
-        "irbid.admin@gmail.com",
         "tharawt74@gmail.com"
       ];
       const isEmailAdmin = decodedToken.email && allowedEmails.includes(decodedToken.email.toLowerCase());

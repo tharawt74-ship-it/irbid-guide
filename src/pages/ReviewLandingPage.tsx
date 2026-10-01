@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { sanitizeFirestorePayload } from '../lib/firestoreHelper';
 import { submitReviewAtomically } from '../utils/firestoreTransactions';
 import { Business, Review } from '../types';
+import { getCachedBusinesses } from '../lib/dataCache';
 import { 
   Star, 
   MessageSquare, 
@@ -61,7 +62,17 @@ export function ReviewLandingPage() {
       let bData: Business | null = null;
       let actualBusinessId = id;
 
-      if (db) {
+      // 0. Check cache first for instant load with zero reads
+      const cachedList = getCachedBusinesses();
+      if (cachedList && cachedList.length > 0) {
+        const found = cachedList.find(b => b.id === id || b.username?.toLowerCase() === id.toLowerCase());
+        if (found) {
+          bData = found;
+          actualBusinessId = found.id;
+        }
+      }
+
+      if (!bData && db) {
         // 1. Try fetching directly by doc ID
         try {
           const docRef = doc(db, 'businesses', id);
@@ -143,7 +154,7 @@ export function ReviewLandingPage() {
 
     const targetBizId = business?.id || id || 'demo-business';
 
-    // 1. Rate Limit Enforcement
+    // 1. Rate Limit Enforcement (Local)
     const rateCheck = checkReviewRateLimit(targetBizId);
     if (!rateCheck.allowed) {
       alert(rateCheck.reason || 'يرجى الانتظار قليلاً قبل إضافة تقييم جديد.');
@@ -157,6 +168,75 @@ export function ReviewLandingPage() {
 
     setSubmitting(true);
     try {
+      // 1.5 Database-level 24-hour review check (Strict protection against multi-device/multi-browser same-account rating)
+      if (currentUser && db) {
+        const qUserReview = query(
+          collection(db, 'reviews'),
+          where('businessId', '==', targetBizId),
+          where('userId', '==', currentUser.uid)
+        );
+        const userReviewSnap = await getDocs(qUserReview);
+        const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+        const now = Date.now();
+        let hasRecentReview = false;
+        let newestReviewTime = 0;
+        
+        userReviewSnap.forEach(docSnap => {
+          const rev = docSnap.data();
+          if (rev.createdAt) {
+            const diff = now - rev.createdAt;
+            if (diff < TWENTY_FOUR_HOURS) {
+              hasRecentReview = true;
+              if (rev.createdAt > newestReviewTime) {
+                newestReviewTime = rev.createdAt;
+              }
+            }
+          }
+        });
+        
+        if (hasRecentReview) {
+          const remainingHours = Math.ceil((TWENTY_FOUR_HOURS - (now - newestReviewTime)) / (60 * 60 * 1000));
+          alert(`لقد قمت بإضافة تقييم لهذا المحل مؤخراً باستخدام هذا الحساب. حفاظاً على مصداقية التقييمات، يمكنك إضافة تقييم جديد بعد ${remainingHours} ساعة.`);
+          setSubmitting(false);
+          return;
+        }
+      }
+
+      // 1.6 Database-level 24-hour check for Guest users by phone number
+      if (!currentUser && userPhone.trim() && db) {
+        const cleanPhone = stripUrlsAndLinks(sanitizeInput(userPhone.trim()));
+        const qPhoneReview = query(
+          collection(db, 'reviews'),
+          where('businessId', '==', targetBizId),
+          where('userPhone', '==', cleanPhone)
+        );
+        const phoneReviewSnap = await getDocs(qPhoneReview);
+        const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+        const now = Date.now();
+        let hasRecentReview = false;
+        let newestReviewTime = 0;
+        
+        phoneReviewSnap.forEach(docSnap => {
+          const rev = docSnap.data();
+          if (rev.createdAt) {
+            const diff = now - rev.createdAt;
+            if (diff < TWENTY_FOUR_HOURS) {
+              hasRecentReview = true;
+              if (rev.createdAt > newestReviewTime) {
+                newestReviewTime = rev.createdAt;
+              }
+            }
+          }
+        });
+        
+        if (hasRecentReview) {
+          const remainingHours = Math.ceil((TWENTY_FOUR_HOURS - (now - newestReviewTime)) / (60 * 60 * 1000));
+          alert(`لقد تم تسجيل تقييم لهذا المحل مؤخراً باستخدام رقم الهاتف هذا. حفاظاً على مصداقية التقييمات، يمكنك إضافة تقييم جديد بعد ${remainingHours} ساعة.`);
+          setSubmitting(false);
+          return;
+        }
+      }
+
       // 2. reCAPTCHA Enterprise Verification
       let recaptchaToken = '';
       try {
@@ -404,12 +484,12 @@ export function ReviewLandingPage() {
                   </button>
                 ))}
               </div>
-              <p className="text-xs font-bold text-amber-900 font-mono">
-                {activeRating === 5 && 'ممتاز جداً 🌟🌟🌟🌟🌟'}
-                {activeRating === 4 && 'جيد جداً ⭐⭐⭐⭐'}
-                {activeRating === 3 && 'جيد ⭐⭐⭐'}
-                {activeRating === 2 && 'مقبول ⭐⭐'}
-                {activeRating === 1 && 'يحتاج تحسين ⭐'}
+              <p className="text-sm font-black text-[#1a4d2e] font-sans tracking-wide">
+                {activeRating === 5 && 'ممتاز جداً'}
+                {activeRating === 4 && 'جيد جداً'}
+                {activeRating === 3 && 'جيد'}
+                {activeRating === 2 && 'مقبول'}
+                {activeRating === 1 && 'يحتاج تحسين'}
               </p>
             </div>
 

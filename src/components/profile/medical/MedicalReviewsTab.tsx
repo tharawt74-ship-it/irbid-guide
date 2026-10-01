@@ -30,6 +30,25 @@ export function MedicalReviewsTab({ business, showToast }: MedicalReviewsTabProp
 
   const vipStatus = getBusinessVipStatus(business);
 
+  // Auto-scroll to medical reviews header on subtab change
+  const isInitialMount = React.useRef(true);
+  const prevSubTab = React.useRef(reviewsSubTab);
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    if (prevSubTab.current === reviewsSubTab) return;
+    prevSubTab.current = reviewsSubTab;
+
+    const headerEl = document.getElementById('medical-reviews-header');
+    if (headerEl) {
+      const navOffset = 85;
+      const targetPos = headerEl.getBoundingClientRect().top + window.scrollY - navOffset;
+      window.scrollTo({ top: Math.max(0, targetPos), behavior: 'smooth' });
+    }
+  }, [reviewsSubTab]);
+
   useEffect(() => {
     fetchReviews();
   }, [business.id]);
@@ -131,7 +150,7 @@ export function MedicalReviewsTab({ business, showToast }: MedicalReviewsTabProp
     : (business.rating || 5.0).toFixed(1);
 
   return (
-    <div className="p-2 sm:p-6 space-y-4 sm:space-y-6 text-right" dir="rtl">
+    <div id="medical-reviews-header" className="p-2 sm:p-6 space-y-4 sm:space-y-6 text-right scroll-mt-24" dir="rtl">
       <div className="space-y-4 pb-4 border-b border-stone-200/80">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
           <div>

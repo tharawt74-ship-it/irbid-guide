@@ -30,6 +30,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { db } from '../../lib/firebase';
 import { collection, addDoc, doc, setDoc, getDocs, query, where, limit } from 'firebase/firestore';
 import { useNotifications } from '../../contexts/NotificationsContext';
+import { useSystemSettings } from '../../contexts/SystemSettingsContext';
 import { SearchableSelect } from '../ui/SearchableSelect';
 import { isBotSubmission, checkSubmissionRateLimit, recordSubmissionTime, sanitizeInput } from '../../lib/security';
 
@@ -92,6 +93,7 @@ export function JobFormModal({
 }: JobFormModalProps) {
   const { currentUser, isAdmin } = useAuth();
   const { addNotification } = useNotifications();
+  const { categories: systemCategories } = useSystemSettings();
 
   const [businesses, setBusinesses] = useState<Business[]>(propBusinesses || []);
   const [loadingBusinesses, setLoadingBusinesses] = useState(false);
@@ -102,7 +104,8 @@ export function JobFormModal({
   // Form fields
   const [title, setTitle] = useState('');
   const [company, setCompany] = useState('');
-  const [category, setCategory] = useState('مطاعم ومقاهي');
+  const [category, setCategory] = useState(systemCategories[0]?.name || 'مطاعم ومقاهي');
+  const [subCategory, setSubCategory] = useState('');
   const [jobType, setJobType] = useState('دوام كامل');
   const [location, setLocation] = useState('إربد');
   const [salary, setSalary] = useState('');
@@ -166,14 +169,16 @@ export function JobFormModal({
           }
           // Set fields based on business
           setCompany(defaultBiz.name);
-          if (defaultBiz.address) setLocation(defaultBiz.address);
+          if (defaultBiz.district || defaultBiz.address) setLocation(defaultBiz.district || defaultBiz.address);
           if (defaultBiz.phone) {
             setContactPhone(defaultBiz.phone);
             setContactWhatsapp(defaultBiz.phone);
           }
           if (defaultBiz.category) {
-            const matchingCat = JOB_CATEGORIES.find(c => defaultBiz.category.includes(c) || c.includes(defaultBiz.category)) || defaultBiz.category;
-            setCategory(matchingCat);
+            setCategory(defaultBiz.category);
+          }
+          if (defaultBiz.subCategory) {
+            setSubCategory(defaultBiz.subCategory);
           }
         }
       } catch (e) {
@@ -294,16 +299,13 @@ export function JobFormModal({
     const found = currentBusinesses.find(b => b.id === branchId);
     if (found) {
       setCompany(found.name);
-      if (found.address) setLocation(found.address);
+      if (found.district || found.address) setLocation(found.district || found.address);
       if (found.phone) {
         setContactPhone(found.phone);
         setContactWhatsapp(found.phone);
       }
-      // Match category if appropriate
-      if (found.category) {
-        const matchingCat = JOB_CATEGORIES.find(c => found.category.includes(c) || c.includes(found.category)) || found.category;
-        if (matchingCat) setCategory(matchingCat);
-      }
+      if (found.category) setCategory(found.category);
+      if (found.subCategory) setSubCategory(found.subCategory);
     }
   };
 
@@ -327,15 +329,13 @@ export function JobFormModal({
       const found = currentBusinesses.find(b => b.id === parentId);
       if (found) {
         setCompany(found.name);
-        if (found.address) setLocation(found.address);
+        if (found.district || found.address) setLocation(found.district || found.address);
         if (found.phone) {
           setContactPhone(found.phone);
           setContactWhatsapp(found.phone);
         }
-        if (found.category) {
-          const matchingCat = JOB_CATEGORIES.find(c => found.category.includes(c) || c.includes(found.category)) || found.category;
-          if (matchingCat) setCategory(matchingCat);
-        }
+        if (found.category) setCategory(found.category);
+        if (found.subCategory) setSubCategory(found.subCategory);
       }
     }
   };
@@ -394,14 +394,21 @@ export function JobFormModal({
       .map(r => sanitizeInput(r))
       .filter(r => r.length > 0);
 
+    const selectedBiz = businesses.find(b => b.id === selectedBusinessId);
+
     // 3. Sanitize inputs to prevent script injection & HTML spam
     const jobData: Omit<JobOffer, 'id'> = {
       title: sanitizeInput(title),
       company: sanitizeInput(company),
       businessId: selectedBusinessId && selectedBusinessId !== 'manual' ? selectedBusinessId : undefined,
       category,
+      subCategory: subCategory || selectedBiz?.subCategory || undefined,
+      businessCategory: selectedBiz?.category || category,
+      businessSubCategory: selectedBiz?.subCategory || subCategory || undefined,
+      businessDistrict: selectedBiz?.district || undefined,
+      businessAddress: selectedBiz?.address || undefined,
       jobType,
-      location: sanitizeInput(location) || 'محافظة إربد',
+      location: sanitizeInput(location) || selectedBiz?.district || selectedBiz?.address || 'محافظة إربد',
       salary: salary.trim() ? sanitizeInput(salary) : undefined,
       workHours: workHours.trim() ? sanitizeInput(workHours) : undefined,
       experienceLevel,
@@ -693,15 +700,33 @@ export function JobFormModal({
             {/* Category */}
             <div>
               <label className="block text-xs font-bold text-stone-700 mb-1.5">
-                مجال وتصنيف الوظيفة
+                مجال وتصنيف الوظيفة (القسم الرئيسي)
               </label>
               <SearchableSelect
-                options={JOB_CATEGORIES}
+                options={systemCategories.map(c => c.name)}
                 value={category}
-                onChange={(val) => setCategory(val)}
+                onChange={(val) => {
+                  setCategory(val);
+                  setSubCategory('');
+                }}
                 className="bg-stone-50 border-stone-200"
               />
             </div>
+
+            {/* SubCategory */}
+            {systemCategories.find(c => c.name === category)?.subcategories && (systemCategories.find(c => c.name === category)?.subcategories.length ?? 0) > 0 && (
+              <div>
+                <label className="block text-xs font-bold text-stone-700 mb-1.5">
+                  التخصص الفرعي
+                </label>
+                <SearchableSelect
+                  options={systemCategories.find(c => c.name === category)?.subcategories || []}
+                  value={subCategory}
+                  onChange={(val) => setSubCategory(val)}
+                  className="bg-stone-50 border-stone-200"
+                />
+              </div>
+            )}
 
             {/* Job Type */}
             <div>

@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   X, Building2, Sparkles, Send, DollarSign, Clock, Calendar, 
-  Crown, Shield, Check, Phone, Plus, AlertCircle
+  Crown, Shield, Check, Phone, Plus, AlertCircle, Star, MessageSquare,
+  Gift, Zap, Flame, ThumbsUp, CheckCircle2
 } from 'lucide-react';
 import { WhatsAppIcon } from '../common/WhatsAppIcon';
 import { collection, addDoc, updateDoc, doc } from 'firebase/firestore';
@@ -345,10 +346,10 @@ export function HousingFormModal({
                   }}
                   className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2 text-stone-800 font-bold focus:outline-none focus:ring-1 focus:ring-[#1a4d2e]"
                 >
-                  <option value="شقق للإيجار">🏠 شقق للإيجار</option>
-                  <option value="شقق للبيع">🔑 شقق للبيع</option>
-                  <option value="سكنات الطلاب">🎓 سكن طلاب (جامعي / طالبات / شباب)</option>
-                  <option value="رفيق سكن">🤝 رفيق سكن / سكن مشترك</option>
+                  <option value="شقق للإيجار">شقق للإيجار</option>
+                  <option value="شقق للبيع">شقق للبيع</option>
+                  <option value="سكنات الطلاب">سكن طلاب (جامعي / طالبات / شباب)</option>
+                  <option value="رفيق سكن">رفيق سكن / سكن مشترك</option>
                 </select>
               </div>
  
@@ -373,9 +374,9 @@ export function HousingFormModal({
                 <label className="block text-stone-600 font-bold">الفئة المستهدفة *</label>
                 <div className="grid grid-cols-3 gap-2">
                   {[
-                    { value: 'طالب', label: '👨‍🎓 طلاب (ذكور)' },
-                    { value: 'طالبة', label: '👩‍🎓 طالبات (إناث)' },
-                    { value: 'الكل', label: '👥 كلاهما / للجميع' }
+                    { value: 'طالب', label: 'طلاب (ذكور)' },
+                    { value: 'طالبة', label: 'طالبات (إناث)' },
+                    { value: 'الكل', label: 'كلاهما / للجميع' }
                   ].map((g) => (
                     <button
                       key={g.value}
@@ -485,9 +486,9 @@ export function HousingFormModal({
                 <label className="block text-stone-600 font-bold text-xs">حالة التأثيث (الفرش) *</label>
                 <div className="grid grid-cols-3 gap-1.5">
                   {[
-                    { value: 'مفروش بالكامل', label: '🛋️ مفروش بالكامل' },
-                    { value: 'شبه مفروش', label: '🪑 شبه مفروش' },
-                    { value: 'غير مفروش (فارغ)', label: '📦 غير مفروش' }
+                    { value: 'مفروش بالكامل', label: 'مفروش بالكامل' },
+                    { value: 'شبه مفروش', label: 'شبه مفروش' },
+                    { value: 'غير مفروش (فارغ)', label: 'غير مفروش' }
                   ].map((furnish) => (
                     <button
                       key={furnish.value}
@@ -586,9 +587,9 @@ export function HousingFormModal({
               <label className="block text-stone-600 font-bold text-xs">طريقة التواصل المفضلة مع المهتمين بالعقار *</label>
               <div className="grid grid-cols-3 gap-2">
                 {[
-                  { value: 'both', label: '📞 + 💬 كلاهما (اتصال وواتساب)' },
-                  { value: 'phone_only', label: '📞 اتصال هاتفي فقط' },
-                  { value: 'whatsapp_only', label: '💬 واتساب فقط' }
+                  { value: 'both', label: 'كلاهما (اتصال وواتساب)' },
+                  { value: 'phone_only', label: 'اتصال هاتفي فقط' },
+                  { value: 'whatsapp_only', label: 'واتساب فقط' }
                 ].map((mode) => (
                   <button
                     key={mode.value}
@@ -678,7 +679,7 @@ export function HousingFormModal({
                 </div>
               </div>
               <span className="bg-emerald-100 text-emerald-800 text-[11px] font-black px-2.5 py-1 rounded-full border border-emerald-200/60 shrink-0">
-                🎁 أول يومين مجاناً
+                أول يومين مجاناً
               </span>
             </div>
 
@@ -695,7 +696,7 @@ export function HousingFormModal({
                     daysText: '2 يوم',
                     subText: 'أول يومين',
                     priceText: 'مجاناً 0 د.أ',
-                    badge: 'تجربة مجانية 🎁',
+                    badge: 'تجربة مجانية',
                     isFree: true,
                     isPopular: false
                   },
@@ -704,7 +705,7 @@ export function HousingFormModal({
                     daysText: '9 أيام',
                     subText: 'أسبوع + يومين',
                     priceText: `${priceHousingExtraWeek} دينار`,
-                    badge: 'اقتصادي ⚡',
+                    badge: 'اقتصادي',
                     isFree: false,
                     isPopular: false
                   },
@@ -713,7 +714,7 @@ export function HousingFormModal({
                     daysText: '16 يوم',
                     subText: 'أسبوعين + يومين',
                     priceText: `${priceHousingExtraWeek * 2} دينار`,
-                    badge: 'تغطية مناسبة 👍',
+                    badge: 'تغطية مناسبة',
                     isFree: false,
                     isPopular: false
                   },
@@ -722,7 +723,7 @@ export function HousingFormModal({
                     daysText: '30 يوم',
                     subText: 'شهر كامل',
                     priceText: `${priceHousingExtraWeek * 4} دينار`,
-                    badge: 'الأكثر طلباً 🔥',
+                    badge: 'الأكثر طلباً',
                     isFree: false,
                     isPopular: true
                   }
@@ -796,9 +797,9 @@ export function HousingFormModal({
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {[
                   { days: 0, label: 'بدون تمييز', price: '0 د.أ', icon: null },
-                  { days: 3, label: '3 أيام تمييز', price: `+${priceHousingFeatured3Days} د.أ`, icon: '⭐' },
-                  { days: 6, label: '6 أيام تمييز', price: `+${priceHousingFeatured3Days * 2} د.أ`, icon: '⭐⭐' },
-                  { days: 15, label: '15 يوم تمييز', price: `+${priceHousingFeatured3Days * 5} د.أ`, icon: '👑' },
+                  { days: 3, label: '3 أيام تمييز', price: `+${priceHousingFeatured3Days} د.أ`, icon: <Star className="h-3.5 w-3.5 text-amber-500 fill-amber-400" /> },
+                  { days: 6, label: '6 أيام تمييز', price: `+${priceHousingFeatured3Days * 2} د.أ`, icon: <Star className="h-3.5 w-3.5 text-amber-500 fill-amber-400" /> },
+                  { days: 15, label: '15 يوم تمييز', price: `+${priceHousingFeatured3Days * 5} د.أ`, icon: <Crown className="h-3.5 w-3.5 text-amber-500 fill-amber-400" /> },
                 ].map((feat) => {
                   const isSelected = formData.featuredDays === feat.days;
                   return (
@@ -813,7 +814,7 @@ export function HousingFormModal({
                       }`}
                     >
                       <div className="flex items-center gap-1.5 text-right">
-                        {feat.icon && <span className="text-xs">{feat.icon}</span>}
+                        {feat.icon}
                         <span className="text-xs">{feat.label}</span>
                       </div>
                       <span className={`text-[11px] px-1.5 py-0.5 rounded-md ${
@@ -833,7 +834,7 @@ export function HousingFormModal({
                 <div className="space-y-1">
                   <div className="text-xs text-stone-500 font-bold">
                     إجمالي فترة النشر: <b className="text-stone-800">{totalDays} يوم</b>
-                    {durationFee > 0 ? ` (${durationFee} د.أ)` : ' (أول يومين مجاناً 🎁)'}
+                    {durationFee > 0 ? ` (${durationFee} د.أ)` : ' (أول يومين مجاناً)'}
                   </div>
                   <div className="text-xs text-stone-500 font-bold">
                     حالة التمييز في الصدارة: {formData.featuredDays > 0 ? (
@@ -847,21 +848,21 @@ export function HousingFormModal({
                 <div className="text-left sm:text-right bg-stone-50 sm:bg-transparent p-2.5 sm:p-0 rounded-xl">
                   <div className="text-[11px] text-stone-500 font-bold">المبلغ المطلوب للدفع:</div>
                   <div className="text-xl font-black text-[#1a4d2e]">
-                    {totalFee > 0 ? `${totalFee} دينار أردني` : '0 دينار (مجاناً 🎁)'}
+                    {totalFee > 0 ? `${totalFee} دينار أردني` : '0 دينار (مجاناً)'}
                   </div>
                 </div>
               </div>
 
               {totalFee > 0 ? (
                 <div className="flex items-start gap-2.5 bg-amber-50/90 text-amber-950 p-3 rounded-xl border border-amber-200/80 text-[11px] font-bold leading-relaxed">
-                  <span className="text-base shrink-0">🤝</span>
+                  <CheckCircle2 className="h-4 w-4 text-amber-700 shrink-0 mt-0.5" />
                   <span>
                     <b>خطوات الاعتماد والتفعيل:</b> عند إرسال الطلب، ستتم مراجعته من قبل إدارة المنصة، وسيقوم فريق الإدارة بالتواصل معك مباشرة عبر الهاتف أو الواتساب لتأكيد تفاصيل الإعلان وتأكيد استلام الرسوم ({totalFee} د.أ) ثم اعتماد ونشر الإعلان فوراً.
                   </span>
                 </div>
               ) : (
                 <div className="flex items-start gap-2.5 bg-emerald-50 text-emerald-900 p-3 rounded-xl border border-emerald-200/70 text-[11px] font-bold leading-relaxed">
-                  <span className="text-base shrink-0">✨</span>
+                  <Sparkles className="h-4 w-4 text-emerald-700 shrink-0 mt-0.5" />
                   <span>
                     <b>طلب نشر مجاني (يومان):</b> سيتم إرسال الإعلان لإدارة المنصة للتدقيق والموافقة وسيتواصل معك الفريق عبر الواتساب/الهاتف عند الحاجة.
                   </span>

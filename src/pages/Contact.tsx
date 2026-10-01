@@ -324,7 +324,7 @@ export function Contact() {
         console.warn("sendCustomVerificationEmail failed:", verr);
       }
 
-      const isBootstrapAdmin = ['princessofx2344@gmail.com', 'd42902672@gmail.com', 'admin@shoofiirbid.com', 'irbid.admin@gmail.com'].includes(cleanEmail);
+      const isBootstrapAdmin = ['princessofx2344@gmail.com'].includes(cleanEmail);
       const userRole = isBootstrapAdmin ? 'super_admin' : 'user';
 
       if (db) {
@@ -392,7 +392,7 @@ export function Contact() {
         console.warn("Reloading user account error:", reErr);
       }
 
-      const isBootstrapAdmin = ['princessofx2344@gmail.com', 'd42902672@gmail.com', 'admin@shoofiirbid.com', 'irbid.admin@gmail.com', 'tharawt74@gmail.com'].includes(cleanEmail);
+      const isBootstrapAdmin = ['princessofx2344@gmail.com'].includes(cleanEmail);
       let isVerified = user.emailVerified || isBootstrapAdmin;
 
       if (!isVerified) {

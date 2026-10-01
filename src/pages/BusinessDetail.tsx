@@ -3,7 +3,7 @@ import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, Link, useLocation, useNavigate } from 'react-router';
 import DOMPurify from 'dompurify';
-import { doc, getDoc, collection, query, where, getDocs, addDoc, updateDoc, limit } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs, addDoc, updateDoc, limit, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Business, Review, WorkingHours, JobOffer } from '../types';
 import { useAuth } from '../contexts/AuthContext';
@@ -26,7 +26,7 @@ import { cn } from '../lib/utils';
 import { handleFirestoreError, OperationType } from '../lib/firestoreHelper';
 import { formatDistanceToNow } from 'date-fns';
 import { ar } from 'date-fns/locale';
-import { getGoogleMapsEmbedUrl, getGoogleMapsActionUrls } from '../lib/googleReviewsHelper';
+import { getGoogleMapsEmbedUrl, getGoogleMapsActionUrls, extractCoordsOrEmbedFromUrl } from '../lib/googleReviewsHelper';
 import { DigitalMenuView } from '../components/vip/DigitalMenuView';
 import { DigitalMenuManagerModal } from '../components/vip/DigitalMenuManagerModal';
 import { VipAnalyticsDashboard } from '../components/vip/VipAnalyticsDashboard';
@@ -41,7 +41,7 @@ import { getBusinessVipStatus } from '../lib/vipHelper';
 import { compressAndSanitizeFirestorePayload } from '../lib/firestoreHelper';
 import { getWhatsAppUrl, formatBusinessWhatsAppMessage } from '../lib/contactHelper';
 import { ShareButton } from '../components/ShareButton';
-import { getCachedBusinessDetail, setCachedBusinessDetail, invalidateCache } from '../lib/dataCache';
+import { getCachedBusinessDetail, setCachedBusinessDetail, invalidateCache, updateBusinessMenuItemsInCache } from '../lib/dataCache';
 import { BusinessCard } from '../components/BusinessCard';
 import { submitReviewAtomically } from '../utils/firestoreTransactions';
 import { DEMO_SEED_DATA } from '../lib/demoDataHelper';
@@ -199,6 +199,7 @@ export function BusinessDetail() {
   const navigate = useNavigate();
   
   const [business, setBusiness] = useState<Business | null>(null);
+  const vipInfo = getBusinessVipStatus(business);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
   const [similarBusinesses, setSimilarBusinesses] = useState<Business[]>([]);
@@ -207,13 +208,49 @@ export function BusinessDetail() {
   const [newRating, setNewRating] = useState(5);
   const [newComment, setNewComment] = useState('');
   const [submittingReview, setSubmittingReview] = useState(false);
-  const [activeTab, setActiveTab] = useState('about');
+  const queryTab = useMemo(() => {
+    try {
+      const sp = new URLSearchParams(location.search);
+      const t = sp.get('tab');
+      return (t === 'products' || t === 'menu') ? 'menu' : (t || null);
+    } catch {
+      return null;
+    }
+  }, [location.search]);
+  const [activeTab, setActiveTab] = useState(queryTab || 'about');
   const [newsCount, setNewsCount] = useState<number>(0);
   const [isCoverExpanded, setIsCoverExpanded] = useState(false);
   const [coverImageFailed, setCoverImageFailed] = useState(false);
   const tabsAnchorRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    if (queryTab) {
+      const vipTabs = ['menu', 'products', 'offers', 'news', 'reels', 'gallery', 'analytics'];
+      if (business && !vipInfo.isVip && vipTabs.includes(queryTab)) {
+        setActiveTab('about');
+        return;
+      }
+      setActiveTab(queryTab);
+      requestAnimationFrame(() => {
+        if (tabsAnchorRef.current) {
+          const anchorTop = tabsAnchorRef.current.getBoundingClientRect().top + window.scrollY;
+          const headerOffset = window.innerWidth < 640 ? 72 : window.innerWidth < 1024 ? 76 : 85;
+          const targetY = Math.max(0, anchorTop - headerOffset);
+          window.scrollTo({
+            top: targetY,
+            behavior: 'smooth'
+          });
+        }
+      });
+    }
+  }, [queryTab, business, vipInfo.isVip]);
+
   const handleTabChange = (tab: string) => {
+    const vipTabs = ['menu', 'products', 'offers', 'news', 'reels', 'gallery', 'analytics'];
+    if (business && !vipInfo.isVip && vipTabs.includes(tab)) {
+      setActiveTab('about');
+      return;
+    }
     setActiveTab(tab);
     
     // Smooth scroll user to the top of the selected tab / content area
@@ -235,6 +272,7 @@ export function BusinessDetail() {
   const [error, setError] = useState('');
   const [copiedPhone, setCopiedPhone] = useState(false);
   const [shareSuccess, setShareSuccess] = useState(false);
+  const [asyncEmbedMapUrl, setAsyncEmbedMapUrl] = useState<string>('');
   
   const [showHeader, setShowHeader] = useState(true);
 
@@ -289,6 +327,60 @@ export function BusinessDetail() {
     
     return () => clearInterval(interval);
   }, [business?.workingHours, business?.id]);
+
+  useEffect(() => {
+    if (!business?.googlePlaceUrl || !business.googlePlaceUrl.trim()) {
+      setAsyncEmbedMapUrl('');
+      return;
+    }
+
+    const immediate = getGoogleMapsEmbedUrl(business);
+    if (immediate) {
+      setAsyncEmbedMapUrl(immediate);
+      return;
+    }
+
+    const rawUrl = business.googlePlaceUrl.trim();
+    if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) {
+      const cacheKey = `resolved_map_embed_${rawUrl}`;
+      try {
+        const cached = sessionStorage.getItem(cacheKey);
+        if (cached) {
+          setAsyncEmbedMapUrl(cached);
+          return;
+        }
+      } catch (e) {}
+
+      let isMounted = true;
+      fetch(`/api/resolve-map-url?url=${encodeURIComponent(rawUrl)}`)
+        .then(res => res.json())
+        .then(data => {
+          if (!isMounted) return;
+          if (data.lat && data.lng) {
+            const embed = `https://maps.google.com/maps?q=${data.lat},${data.lng}&hl=ar&z=16&output=embed`;
+            setAsyncEmbedMapUrl(embed);
+            try { sessionStorage.setItem(cacheKey, embed); } catch (e) {}
+          } else if (data.query) {
+            const embed = `https://maps.google.com/maps?q=${encodeURIComponent(data.query + ' إربد')}&hl=ar&z=16&output=embed`;
+            setAsyncEmbedMapUrl(embed);
+            try { sessionStorage.setItem(cacheKey, embed); } catch (e) {}
+          } else if (data.finalUrl) {
+            const parsed = extractCoordsOrEmbedFromUrl(data.finalUrl);
+            if (parsed) {
+              setAsyncEmbedMapUrl(parsed);
+              try { sessionStorage.setItem(cacheKey, parsed); } catch (e) {}
+            }
+          }
+        })
+        .catch(err => {
+          console.warn('Error resolving short map url:', err);
+        });
+
+      return () => {
+        isMounted = false;
+      };
+    }
+  }, [business?.googlePlaceUrl]);
 
   // Custom Feature Modals & Form States
   const isMedical = useMemo(() => isMedicalBusiness(business), [business]);
@@ -487,6 +579,7 @@ export function BusinessDetail() {
   const [isBranchDropdownOpen, setIsBranchDropdownOpen] = useState(false);
 
   useEffect(() => {
+    let unsubLiveBiz = () => {};
     async function fetchData() {
       setCoverImageFailed(false);
       if (!db || !id) {
@@ -555,6 +648,29 @@ export function BusinessDetail() {
           setBusiness(fullBiz);
           setCachedBusinessDetail(id, fullBiz);
           setLoading(false);
+
+          // Real-time synchronization of the business document (menu items availability, info, etc.)
+          try {
+            unsubLiveBiz = onSnapshot(doc(db, 'businesses', actualId), (liveSnap) => {
+              if (liveSnap.exists()) {
+                const liveData = liveSnap.data();
+                setBusiness(prev => {
+                  if (!prev) return null;
+                  const merged = { ...prev, ...liveData, id: liveSnap.id } as Business;
+                  setCachedBusinessDetail(actualId, merged);
+                  setCachedBusinessDetail(id, merged);
+                  if (Array.isArray(liveData.menuItems)) {
+                    updateBusinessMenuItemsInCache(actualId, liveData.menuItems);
+                  }
+                  return merged;
+                });
+              }
+            }, (snapErr) => {
+              console.warn("Real-time business sync warning:", snapErr);
+            });
+          } catch (e) {
+            console.warn("Could not attach live business listener:", e);
+          }
           
           // Track view interaction in database (deduplicated per device; excluded for owner and admins)
           trackBusinessInteraction(actualId, 'view', {
@@ -564,13 +680,12 @@ export function BusinessDetail() {
             isAdmin: Boolean(isAdmin)
           });
           
-          // Fetch reviews, offers, and jobs in parallel for maximum speed
-          const [reviewsSnap, offersSnap1, offersSnap2, jobsSnap1, jobsSnap2] = await Promise.all([
-            getDocs(query(collection(db, 'reviews'), where('businessId', 'in', Array.from(new Set([actualId, id, cleanParam].filter(Boolean)))))),
-            getDocs(query(collection(db, 'offers'), where('businessName', '==', bizData.name || ''))),
-            getDocs(query(collection(db, 'offers'), where('businessId', 'in', Array.from(new Set([actualId, id, cleanParam].filter(Boolean)))))),
-            getDocs(query(collection(db, 'jobs'), where('businessId', '==', actualId))).catch(() => ({ forEach: () => {} } as any)),
-            getDocs(query(collection(db, 'jobs'), where('company', '==', bizData.name || ''))).catch(() => ({ forEach: () => {} } as any))
+          // Fetch reviews, offers, and jobs in parallel (clean single queries without duplicates)
+          const targetIds = Array.from(new Set([actualId, id, cleanParam].filter(Boolean)));
+          const [reviewsSnap, offersSnap, jobsSnap] = await Promise.all([
+            getDocs(query(collection(db, 'reviews'), where('businessId', 'in', targetIds))),
+            getDocs(query(collection(db, 'offers'), where('businessId', 'in', targetIds))),
+            getDocs(query(collection(db, 'jobs'), where('businessId', '==', actualId))).catch(() => ({ forEach: () => {} } as any))
           ]);
 
           const fetchedReviews: Review[] = [];
@@ -600,24 +715,12 @@ export function BusinessDetail() {
           }
 
           const loadedOffers: any[] = [];
-          offersSnap1.forEach(oDoc => loadedOffers.push({ id: oDoc.id, ...oDoc.data() }));
-          const seenOfferIds = new Set(loadedOffers.map(o => o.id));
-          offersSnap2.forEach(oDoc => {
-            if (!seenOfferIds.has(oDoc.id)) {
-              loadedOffers.push({ id: oDoc.id, ...oDoc.data() });
-            }
-          });
+          offersSnap.forEach(oDoc => loadedOffers.push({ id: oDoc.id, ...oDoc.data() }));
           loadedOffers.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
           setActiveOffers(loadedOffers);
 
           const loadedJobs: JobOffer[] = [];
-          jobsSnap1.forEach((jDoc: any) => loadedJobs.push({ id: jDoc.id, ...jDoc.data() } as JobOffer));
-          const seenJobIds = new Set(loadedJobs.map(j => j.id));
-          jobsSnap2.forEach((jDoc: any) => {
-            if (!seenJobIds.has(jDoc.id)) {
-              loadedJobs.push({ id: jDoc.id, ...jDoc.data() } as JobOffer);
-            }
-          });
+          jobsSnap.forEach((jDoc: any) => loadedJobs.push({ id: jDoc.id, ...jDoc.data() } as JobOffer));
           loadedJobs.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
           setActiveJobs(loadedJobs);
 
@@ -695,6 +798,9 @@ export function BusinessDetail() {
     }
 
     fetchData();
+    return () => {
+      unsubLiveBiz();
+    };
   }, [id, currentUser, isAdmin]);
 
   // Fetch all branches connected to this business (root parent + child branches)
@@ -824,10 +930,9 @@ export function BusinessDetail() {
     fetchSimilar();
   }, [business?.id, business?.category, business?.name]);
 
-  const vipInfo = getBusinessVipStatus(business);
-
   useEffect(() => {
-    if (business && !vipInfo.isVip && ['menu', 'products', 'offers', 'news', 'reels', 'gallery', 'analytics'].includes(activeTab)) {
+    const vipTabs = ['menu', 'products', 'offers', 'news', 'reels', 'gallery', 'analytics'];
+    if (business && !vipInfo.isVip && vipTabs.includes(activeTab)) {
       setActiveTab('about');
     } else if (business && isMedical && activeTab === 'offers') {
       setActiveTab('about');
@@ -1283,6 +1388,40 @@ export function BusinessDetail() {
 
     setSubmittingReview(true);
     try {
+      // 2.1 Database-level 24-hour review check (Strict protection against multi-device/multi-browser same-account rating)
+      if (currentUser && db) {
+        const qUserReview = query(
+          collection(db, 'reviews'),
+          where('businessId', '==', targetBizId),
+          where('userId', '==', currentUser.uid)
+        );
+        const userReviewSnap = await getDocs(qUserReview);
+        const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+        const now = Date.now();
+        let hasRecentReview = false;
+        let newestReviewTime = 0;
+        
+        userReviewSnap.forEach(docSnap => {
+          const rev = docSnap.data();
+          if (rev.createdAt) {
+            const diff = now - rev.createdAt;
+            if (diff < TWENTY_FOUR_HOURS) {
+              hasRecentReview = true;
+              if (rev.createdAt > newestReviewTime) {
+                newestReviewTime = rev.createdAt;
+              }
+            }
+          }
+        });
+        
+        if (hasRecentReview) {
+          const remainingHours = Math.ceil((TWENTY_FOUR_HOURS - (now - newestReviewTime)) / (60 * 60 * 1000));
+          alert(`لقد قمت بإضافة تقييم لهذا المحل مؤخراً باستخدام هذا الحساب. حفاظاً على مصداقية التقييمات، يمكنك إضافة تقييم جديد بعد ${remainingHours} ساعة.`);
+          setSubmittingReview(false);
+          return;
+        }
+      }
+
       // 2.5 Google reCAPTCHA Enterprise check
       let recaptchaToken = '';
       try {
@@ -1779,7 +1918,8 @@ export function BusinessDetail() {
 
   const hideSite = Boolean(business?.hideSiteReviews);
   const { viewUrl: googleMapsUrl } = business ? getGoogleMapsActionUrls(business) : { viewUrl: '' };
-  const embedMapUrl = business ? getGoogleMapsEmbedUrl(business) : '';
+  const immediateEmbedMapUrl = business ? getGoogleMapsEmbedUrl(business) : '';
+  const embedMapUrl = asyncEmbedMapUrl || immediateEmbedMapUrl;
 
   // Calculate actual site rating average strictly from verified reviews in database
   const validReviews = reviews.filter(r => r && typeof r.rating === 'number' && !isNaN(r.rating) && r.rating > 0);
@@ -2273,6 +2413,108 @@ export function BusinessDetail() {
                   </div>
                 </div>
 
+                {/* Mobile Quick Action Buttons Bar (Mobile Only: sm:hidden) */}
+                <div className="block sm:hidden pt-3 border-t border-stone-100">
+                  <div className="grid grid-cols-3 gap-2">
+                    {/* 1. Quick Call Button */}
+                    <a
+                      href={`tel:${business.phone}`}
+                      onClick={() => { if (business?.id) trackBusinessInteraction(business.id, 'call', { isOwner, currentUserId: currentUser?.uid, ownerId: business.userId, isAdmin: Boolean(isAdmin) }); }}
+                      className="flex flex-col items-center justify-center gap-1 bg-[#1a4d2e] active:bg-[#133c23] text-white py-2.5 px-2 rounded-xl shadow-xs transition-transform active:scale-95 text-center min-h-[52px]"
+                    >
+                      <Phone className="h-4.5 w-4.5 text-emerald-300" />
+                      <span className="text-[11px] font-black">اتصال</span>
+                    </a>
+
+                    {/* 2. Quick WhatsApp Button */}
+                    <a
+                      href={getWhatsAppUrl(business.socialLinks?.whatsapp || business.whatsapp || business.phone, formatBusinessWhatsAppMessage(business.name))}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={() => { if (business?.id) trackBusinessInteraction(business.id, 'whatsapp', { isOwner, currentUserId: currentUser?.uid, ownerId: business.userId, isAdmin: Boolean(isAdmin) }); }}
+                      className="flex flex-col items-center justify-center gap-1 bg-[#25D366] active:bg-[#1EBE5D] text-white py-2.5 px-2 rounded-xl shadow-xs transition-transform active:scale-95 text-center min-h-[52px]"
+                    >
+                      <WhatsApp3DIcon className="h-4.5 w-4.5 text-white" />
+                      <span className="text-[11px] font-black">واتساب</span>
+                    </a>
+
+                    {/* 3. Quick Directions / Booking / Chat Button */}
+                    {isMedical ? (
+                      <button
+                        type="button"
+                        onClick={() => setIsMedicalBookingOpen(true)}
+                        className="flex flex-col items-center justify-center gap-1 bg-gradient-to-br from-blue-600 to-indigo-700 active:from-blue-700 active:to-indigo-800 text-white py-2.5 px-2 rounded-xl shadow-xs transition-transform active:scale-95 text-center min-h-[52px] cursor-pointer"
+                      >
+                        <Calendar className="h-4.5 w-4.5 text-blue-200" />
+                        <span className="text-[11px] font-black">حجز موعد</span>
+                      </button>
+                    ) : googleMapsUrl ? (
+                      <a
+                        href={googleMapsUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={() => { if (business?.id) trackBusinessInteraction(business.id, 'direction', { isOwner, currentUserId: currentUser?.uid, ownerId: business.userId, isAdmin: Boolean(isAdmin) }); }}
+                        className="flex flex-col items-center justify-center gap-1 bg-stone-900 active:bg-black text-white py-2.5 px-2 rounded-xl shadow-xs transition-transform active:scale-95 text-center min-h-[52px]"
+                      >
+                        <MapPin className="h-4.5 w-4.5 text-[#ff9f1c]" />
+                        <span className="text-[11px] font-black">الاتجاهات</span>
+                      </a>
+                    ) : (currentUser && currentUser.uid !== business.userId) ? (
+                      <Link
+                        to={`/chat?recipient=${business.userId}&businessId=${business.id}`}
+                        className="flex flex-col items-center justify-center gap-1 bg-stone-100 active:bg-stone-200 text-stone-800 py-2.5 px-2 rounded-xl shadow-xs transition-transform active:scale-95 text-center min-h-[52px] cursor-pointer border border-stone-200"
+                      >
+                        <MessageSquare className="h-4.5 w-4.5 text-[#1a4d2e]" />
+                        <span className="text-[11px] font-black">مراسلة</span>
+                      </Link>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleShare}
+                        className="flex flex-col items-center justify-center gap-1 bg-stone-100 active:bg-stone-200 text-stone-800 py-2.5 px-2 rounded-xl shadow-xs transition-transform active:scale-95 text-center min-h-[52px] cursor-pointer border border-stone-200"
+                      >
+                        <Share2 className="h-4.5 w-4.5 text-[#1a4d2e]" />
+                        <span className="text-[11px] font-black">{shareSuccess ? 'تم النسخ' : 'مشاركة'}</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Mobile Quick Key Info Cards (Mobile Only: sm:hidden) */}
+                <div className="block sm:hidden pt-2.5">
+                  <div className="grid grid-cols-2 gap-2 text-right">
+                    {/* Working Status Card */}
+                    <div className="p-2.5 bg-stone-50/90 rounded-xl border border-stone-200/80 space-y-1">
+                      <div className="flex items-center gap-1.5">
+                        <Clock className="h-3.5 w-3.5 text-[#1a4d2e] shrink-0" />
+                        <span className="text-[10px] font-bold text-stone-500">ساعات العمل:</span>
+                      </div>
+                      <p className="text-xs font-black text-stone-800 truncate">
+                        {liveStatus.status}
+                      </p>
+                      {liveStatus.countdownText && (
+                        <p className="text-[10px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200/60 truncate">
+                          {liveStatus.countdownText}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Address & Delivery Card */}
+                    <div className="p-2.5 bg-stone-50/90 rounded-xl border border-stone-200/80 space-y-1">
+                      <div className="flex items-center gap-1.5">
+                        <MapPin className="h-3.5 w-3.5 text-[#ff9f1c] shrink-0" />
+                        <span className="text-[10px] font-bold text-stone-500">الموقع والتوصيل:</span>
+                      </div>
+                      <p className="text-xs font-black text-stone-800 truncate">
+                        {business.district || business.address || "إربد"}
+                      </p>
+                      <p className="text-[10px] font-bold text-stone-600 truncate">
+                        {!isMedical && business.deliveryAvailable ? "خدمة التوصيل متوفرة" : (business.facilityType === 'hospital' || business.facilityType === 'emergency' ? "طوارئ متاحة" : "زيارة مباشرة")}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Multi-Branch Dropdown Selector for Visitors */}
                 {familyBranches.length > 1 && (
                   <div className="mt-4 pt-3 border-t border-stone-100">
@@ -2558,8 +2800,8 @@ export function BusinessDetail() {
                 )}
               </button>
 
-              {/* VIP & OWNER: LATEST NEWS / POSTS TAB */}
-              {(vipInfo.isVip || isOwner || isAdmin || newsCount > 0) && (
+              {/* VIP ONLY: LATEST NEWS / POSTS TAB */}
+              {vipInfo.isVip && (
                 <button 
                   onClick={() => handleTabChange('news')}
                   className={`whitespace-nowrap transition-all flex items-center gap-1.5 snap-start font-bold text-sm md:text-base px-4 py-2 md:px-0 md:py-4 rounded-full md:rounded-none border md:border-0 md:border-b-2 ${
@@ -2753,38 +2995,12 @@ export function BusinessDetail() {
                   />
                 )}
 
-                {(activeTab === 'menu' || activeTab === 'products') && (
-                  vipInfo.isVip || (business.menuItems && business.menuItems.length > 0) ? (
-                    <DigitalMenuView
-                      business={business}
-                      isOwner={isOwner && vipInfo.isVip}
-                      onOpenManageMenu={() => setIsMenuManagerOpen(true)}
-                    />
-                  ) : (
-                    <div className="py-12 text-center bg-gradient-to-b from-amber-50/50 to-stone-50 rounded-2xl border border-dashed border-amber-200 p-6">
-                      <div className="w-14 h-14 bg-amber-100 text-amber-700 rounded-2xl flex items-center justify-center mx-auto mb-3">
-                        <Crown className="h-7 w-7 fill-amber-500 text-amber-600" />
-                      </div>
-                      <h3 className="text-lg font-black text-stone-800 mb-1">
-                        {isMedical ? 'الخدمات والأسعار' : 'المنيو والكتالوج الرقمي'}
-                      </h3>
-                      <p className="text-stone-600 text-sm max-w-md mx-auto mb-4">
-                        {isMedical 
-                          ? 'عرض دليل الخدمات والأسعار متاح حصرياً للمنشآت الطبية المشتركة في الباقة الذهبية VIP.'
-                          : 'عرض المنيو والكتالوج الرقمي التفاعلي متاح حصرياً للأنشطة التجارية المشتركة في الباقة الذهبية VIP.'}
-                      </p>
-                      {isOwner && (
-                        <button
-                          type="button"
-                          onClick={() => setIsUpgradeModalOpen(true)}
-                          className="inline-flex items-center gap-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs font-black px-5 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
-                        >
-                          <Crown className="h-4 w-4 fill-white" />
-                          <span>{isMedical ? 'ترقية المنشأة إلى VIP الآن' : 'ترقية محلك إلى VIP الآن'}</span>
-                        </button>
-                      )}
-                    </div>
-                  )
+                {(activeTab === 'menu' || activeTab === 'products') && vipInfo.isVip && (
+                  <DigitalMenuView
+                    business={business}
+                    isOwner={isOwner && vipInfo.isVip}
+                    onOpenManageMenu={() => setIsMenuManagerOpen(true)}
+                  />
                 )}
 
                 {activeTab === 'specs' && (
@@ -2799,7 +3015,7 @@ export function BusinessDetail() {
                   </div>
                 )}
 
-                {activeTab === 'offers' && !isMedical && (
+                {activeTab === 'offers' && !isMedical && vipInfo.isVip && (
                   <div className="space-y-6">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-stone-100 pb-4">
                       <div>
@@ -2951,23 +3167,15 @@ export function BusinessDetail() {
                   </div>
                 )}
 
-                {activeTab === 'news' && (
-                  (vipInfo.isVip || isOwner || isAdmin || newsCount > 0) ? (
-                    <BusinessNewsTab 
-                      business={business} 
-                      isOwner={isOwner || isAdmin} 
-                      onNewsCountChange={(count) => setNewsCount(count)}
-                      offers={activeOffers}
-                      jobs={activeJobs}
-                      onSelectTab={(tab) => handleTabChange(tab as any)}
-                    />
-                  ) : (
-                    <div className="p-8 text-center bg-amber-50/50 rounded-2xl border border-amber-200 space-y-3 dir-rtl">
-                      <Crown className="h-10 w-10 text-amber-600 mx-auto" />
-                      <h3 className="text-base font-black text-amber-950">ميزة VIP حصرياً 👑</h3>
-                      <p className="text-xs text-amber-800">تبويب آخر الأخبار متاح للمشتركين بالباقة الذهبية / VIP وأصحاب المحل.</p>
-                    </div>
-                  )
+                {activeTab === 'news' && vipInfo.isVip && (
+                  <BusinessNewsTab 
+                    business={business} 
+                    isOwner={isOwner || isAdmin} 
+                    onNewsCountChange={(count) => setNewsCount(count)}
+                    offers={activeOffers}
+                    jobs={activeJobs}
+                    onSelectTab={(tab) => handleTabChange(tab as any)}
+                  />
                 )}
 
                 {activeTab === 'reels' && (
@@ -4122,7 +4330,7 @@ export function BusinessDetail() {
                     )}
 
                     {/* Live Chat Feature for Gold/VIP stores */}
-                    {vipInfo.isVip ? (
+                    {vipInfo.isVip && (
                       currentUser ? (
                         <Link
                           to={`/messages?businessId=${business.id}`}
@@ -4141,17 +4349,6 @@ export function BusinessDetail() {
                           <span>راسل المحل مباشرة (شات حي)</span>
                         </Link>
                       )
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          alert("⚠️ ميزة الرسائل والمحادثات الحية متوفرة حصرياً للمحلات والمطاعم ذات الباقة الذهبية VIP 👑. يمكنك التواصل مع هذا المحل عبر الواتساب أو الهاتف مباشرة.");
-                        }}
-                        className="w-full flex items-center justify-center gap-2 bg-stone-50 hover:bg-stone-100 text-stone-400 py-3 px-4 rounded-xl font-bold text-xs transition-colors border border-stone-200 cursor-pointer"
-                      >
-                        <LockIcon className="h-4 w-4 text-stone-300" />
-                        <span>المحادثات المباشرة (حصري للباقة الذهبية)</span>
-                      </button>
                     )}
 
                     {/* Contact Buttons Row (WhatsApp & Call side-by-side for elegant design) */}
@@ -4333,50 +4530,56 @@ export function BusinessDetail() {
                   </div>
 
                   {/* Interactive Map Embed Frame */}
-                  <div className="mt-4 rounded-2xl overflow-hidden border border-stone-200 shadow-sm bg-stone-100 relative group/map">
-                    <iframe
-                      title={`خريطة ${business.name}`}
-                      width="100%"
-                      height="180"
-                      className="w-full h-44 border-0 block group-hover/map:opacity-95 transition-opacity"
-                      loading="lazy"
-                      allowFullScreen
-                      referrerPolicy="no-referrer-when-downgrade"
-                      src={embedMapUrl}
-                    ></iframe>
-                    
-                    <div className="p-2.5 bg-white flex items-center justify-between border-t border-stone-200">
-                      <span className="text-[11px] font-bold text-stone-600 flex items-center gap-1">
-                        <MapPin className="h-3.5 w-3.5 text-red-500" />
-                        <span>موقع المحل على الخريطة</span>
-                      </span>
-                      <a
-                        href={googleMapsUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        onClick={() => { if (business?.id) trackBusinessInteraction(business.id, 'direction', { isOwner, currentUserId: currentUser?.uid, ownerId: business.userId, isAdmin: Boolean(isAdmin) }); }}
-                        className="text-[11px] font-black text-blue-600 hover:text-blue-700 flex items-center gap-0.5 transition-colors"
-                      >
-                        <span>تكبير الخريطة</span>
-                        <ExternalLink className="h-2.5 w-2.5" />
-                      </a>
+                  {Boolean(embedMapUrl) && (
+                    <div className="mt-4 rounded-2xl overflow-hidden border border-stone-200 shadow-sm bg-stone-100 relative group/map">
+                      <iframe
+                        title={`خريطة ${business.name}`}
+                        width="100%"
+                        height="180"
+                        className="w-full h-44 border-0 block group-hover/map:opacity-95 transition-opacity"
+                        loading="lazy"
+                        allowFullScreen
+                        referrerPolicy="no-referrer-when-downgrade"
+                        src={embedMapUrl}
+                      ></iframe>
+                      
+                      <div className="p-2.5 bg-white flex items-center justify-between border-t border-stone-200">
+                        <span className="text-[11px] font-bold text-stone-600 flex items-center gap-1">
+                          <MapPin className="h-3.5 w-3.5 text-red-500" />
+                          <span>موقع المحل على الخريطة</span>
+                        </span>
+                        {googleMapsUrl && (
+                          <a
+                            href={googleMapsUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={() => { if (business?.id) trackBusinessInteraction(business.id, 'direction', { isOwner, currentUserId: currentUser?.uid, ownerId: business.userId, isAdmin: Boolean(isAdmin) }); }}
+                            className="text-[11px] font-black text-blue-600 hover:text-blue-700 flex items-center gap-0.5 transition-colors"
+                          >
+                            <span>تكبير الخريطة</span>
+                            <ExternalLink className="h-2.5 w-2.5" />
+                          </a>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
 
                 {/* Direct Map Action Button */}
-                <div className="pt-1">
-                  <a
-                    href={googleMapsUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    onClick={() => { if (business?.id) trackBusinessInteraction(business.id, 'direction', { isOwner, currentUserId: currentUser?.uid, ownerId: business.userId, isAdmin: Boolean(isAdmin) }); }}
-                    className="w-full flex items-center justify-center gap-2 bg-stone-900 hover:bg-black text-white py-3.5 px-4 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-xs hover:shadow-md transform hover:-translate-y-0.5 active:translate-y-0"
-                  >
-                    <MapPin className="h-4.5 w-4.5 text-[#ff9f1c]" />
-                    <span>فتح الموقع والاتجاهات على الخريطة</span>
-                  </a>
-                </div>
+                {Boolean(googleMapsUrl) && (
+                  <div className="pt-1">
+                    <a
+                      href={googleMapsUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={() => { if (business?.id) trackBusinessInteraction(business.id, 'direction', { isOwner, currentUserId: currentUser?.uid, ownerId: business.userId, isAdmin: Boolean(isAdmin) }); }}
+                      className="w-full flex items-center justify-center gap-2 bg-stone-900 hover:bg-black text-white py-3.5 px-4 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-xs hover:shadow-md transform hover:-translate-y-0.5 active:translate-y-0"
+                    >
+                      <MapPin className="h-4.5 w-4.5 text-[#ff9f1c]" />
+                      <span>فتح الموقع والاتجاهات على الخريطة</span>
+                    </a>
+                  </div>
+                )}
 
                 {/* Public Suggest an Edit */}
                 <div className="pt-3 border-t border-dashed border-stone-200">

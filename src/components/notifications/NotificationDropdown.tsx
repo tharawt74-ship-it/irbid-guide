@@ -1,7 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link, useNavigate, useLocation } from 'react-router';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Bell, 
+  X,
   CheckCheck, 
   Flame, 
   Briefcase, 
@@ -179,6 +181,8 @@ export function NotificationDropdown() {
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+  const location = useLocation();
+  const isNotificationPage = location.pathname === '/notifications';
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -213,9 +217,17 @@ export function NotificationDropdown() {
   };
 
   const handleBellClick = () => {
-    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
       setIsOpen(false);
-      navigate('/notifications');
+      if (isNotificationPage) {
+        if (window.history.length > 1) {
+          navigate(-1);
+        } else {
+          navigate('/');
+        }
+      } else {
+        navigate('/notifications');
+      }
     } else {
       setIsOpen(!isOpen);
     }
@@ -229,17 +241,47 @@ export function NotificationDropdown() {
         onClick={handleBellClick}
         className={cn(
           "relative w-9 h-9 rounded-xl transition-all duration-200 cursor-pointer focus:outline-none flex items-center justify-center shrink-0 border",
-          isOpen 
-            ? "bg-[#1a4d2e] text-white border-[#1a4d2e] shadow-xs" 
+          (isOpen || (isNotificationPage && typeof window !== 'undefined' && window.innerWidth < 1024))
+            ? "bg-stone-900 text-white border-stone-900 shadow-xs" 
             : "bg-stone-50 hover:bg-stone-100 text-stone-600 border-stone-200"
         )}
-        title="الإشعارات"
-        aria-label="الإشعارات والتنبيهات"
+        title={isNotificationPage ? "إغلاق والتراجع" : "الإشعارات"}
+        aria-label={isNotificationPage ? "إغلاق التنبيهات والرجوع" : "الإشعارات والتنبيهات"}
       >
-        <Bell className={cn("h-4 w-4 transition-transform", isOpen ? "scale-110" : "")} />
+        {/* Mobile Icon (With smooth animation transition between Bell and X) */}
+        <span className="lg:hidden flex items-center justify-center">
+          <AnimatePresence mode="wait" initial={false}>
+            {isNotificationPage ? (
+              <motion.div
+                key="close-icon"
+                initial={{ rotate: -90, scale: 0.5, opacity: 0 }}
+                animate={{ rotate: 0, scale: 1, opacity: 1 }}
+                exit={{ rotate: 90, scale: 0.5, opacity: 0 }}
+                transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+              >
+                <X className="h-4 w-4 text-white" />
+              </motion.div>
+            ) : (
+              <motion.div
+                key="bell-icon"
+                initial={{ rotate: 90, scale: 0.5, opacity: 0 }}
+                animate={{ rotate: 0, scale: 1, opacity: 1 }}
+                exit={{ rotate: -90, scale: 0.5, opacity: 0 }}
+                transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+              >
+                <Bell className="h-4 w-4" />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </span>
+
+        {/* Desktop Icon (Untouched) */}
+        <span className="hidden lg:flex items-center justify-center">
+          <Bell className={cn("h-4 w-4 transition-transform", isOpen ? "scale-110" : "")} />
+        </span>
         
         {/* Unread Counter Badge */}
-        {unreadCount > 0 && (
+        {unreadCount > 0 && !isNotificationPage && (
           <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[11px] font-black min-w-[19px] h-[19px] px-1 rounded-full flex items-center justify-center shadow-xs animate-bounce border-2 border-white">
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>

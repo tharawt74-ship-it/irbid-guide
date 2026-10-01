@@ -8,11 +8,7 @@ let cachedSettingsTime = 0;
 const CACHE_TTL_MS = 15000; // 15 seconds
 
 const ADMIN_BOOTSTRAP_EMAILS = [
-  'princessofx2344@gmail.com',
-  'd42902672@gmail.com',
-  'admin@shoofiirbid.com',
-  'irbid.admin@gmail.com',
-  'tharawt74@gmail.com'
+  'princessofx2344@gmail.com'
 ];
 
 function getAdminApp() {

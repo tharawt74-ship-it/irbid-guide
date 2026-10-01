@@ -70,6 +70,9 @@ const AddMedicalFacility = lazyWithRetry(() => import('./pages/AddMedicalFacilit
 const MerchantScannerPage = lazyWithRetry(() => import('./pages/MerchantScannerPage').then(m => ({ default: m.MerchantScannerPage })));
 const BusinessMenuOffers = lazyWithRetry(() => import('./pages/BusinessMenuOffers'));
 const LiveOrdersPage = lazyWithRetry(() => import('./pages/LiveOrdersPage'));
+const Products = lazyWithRetry(() => import('./pages/Products').then(m => ({ default: m.default || m.Products })));
+const ProductDetail = lazyWithRetry(() => import('./pages/ProductDetail').then(m => ({ default: m.default || m.ProductDetail })));
+const MenuCatalogPage = lazyWithRetry(() => import('./pages/MenuCatalogPage'));
 const ReviewLandingPage = lazyWithRetry(() => import('./pages/ReviewLandingPage').then(m => ({ default: m.ReviewLandingPage })));
 
 export default function App() {
@@ -142,6 +145,12 @@ export default function App() {
  <Route path="news" element={<News />} />
  <Route path="news/:id" element={<News />} />
  <Route path="jobs" element={<Jobs />} />
+ <Route path="products" element={<Products />} />
+ <Route path="products/:id" element={<ProductDetail />} />
+ <Route path="product/:id" element={<ProductDetail />} />
+ <Route path="menu-catalog" element={<Products />} />
+ <Route path="catalog" element={<Products />} />
+ <Route path="menus" element={<Products />} />
  <Route path="offers" element={<Offers />} />
  <Route path="offers/:id" element={<OfferDetail />} />
  <Route path="housing" element={<Housing />} />

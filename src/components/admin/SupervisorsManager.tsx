@@ -1,7 +1,7 @@
 import { useConfirm } from '../../contexts/ConfirmContext';
 import React, { useEffect, useState } from 'react';
 import { db } from '../../lib/firebase';
-import { collection, getDocs, doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc, deleteDoc, updateDoc, onSnapshot } from 'firebase/firestore';
 import { SupervisorAccount, SupervisorPermissions } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { 
@@ -30,26 +30,27 @@ export function SupervisorsManager() {
   const [saving, setSaving] = useState(false);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
 
-  // Fetch supervisors from Firestore
-  const fetchSupervisors = async () => {
+  // Real-time synchronization for supervisors collection
+  useEffect(() => {
     if (!db) return;
     setLoading(true);
-    try {
-      const snap = await getDocs(collection(db, 'supervisors'));
-      const list: SupervisorAccount[] = [];
-      snap.forEach(d => {
-        list.push({ uid: d.id, ...d.data() } as SupervisorAccount);
-      });
-      setSupervisors(list);
-    } catch (e) {
-      console.error("Error fetching supervisors:", e);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchSupervisors();
+    const unsub = onSnapshot(
+      collection(db, 'supervisors'),
+      (snap) => {
+        const list: SupervisorAccount[] = [];
+        snap.forEach(d => {
+          const data = d.data();
+          list.push({ ...data, uid: d.id, id: d.id } as unknown as SupervisorAccount);
+        });
+        setSupervisors(list);
+        setLoading(false);
+      },
+      (err) => {
+        console.warn("Error in supervisors onSnapshot listener:", err);
+        setLoading(false);
+      }
+    );
+    return () => unsub();
   }, []);
 
   const handleAddSupervisor = async (e: React.FormEvent) => {
@@ -127,15 +128,50 @@ export function SupervisorsManager() {
   };
 
   const handleDeleteSupervisor = async (sup: SupervisorAccount) => {
-    if (!db || !isAdmin || !(await confirm({ message: `هل أنت متأكد من إلغاء رتبة المشرف عن: ${sup.displayName}؟` }))) return;
+    if (!db || !isAdmin) return;
+    const isConfirmed = await confirm({
+      title: 'إلغاء رتبة المشرف',
+      message: `هل أنت متأكد من إلغاء رتبة المشرف عن: ${sup.displayName}؟`,
+      confirmText: 'نعم، إلغاء الإشراف',
+      cancelText: 'تراجع',
+      variant: 'danger'
+    });
+    if (!isConfirmed) return;
+
+    const docId = (sup as any).id || sup.uid;
     try {
-      await deleteDoc(doc(db, 'supervisors', sup.uid));
-      await setDoc(doc(db, 'users', sup.uid), { role: 'user' }, { merge: true });
-      setSupervisors(prev => prev.filter(s => s.uid !== sup.uid));
+      // 1. Delete supervisor document from Firestore
+      await deleteDoc(doc(db, 'supervisors', docId));
+      if (sup.uid && sup.uid !== docId) {
+        await deleteDoc(doc(db, 'supervisors', sup.uid)).catch(() => {});
+      }
+
+      // 2. Also reset in /users collection so they are demoted from supervisor
+      if (sup.uid) {
+        try {
+          await updateDoc(doc(db, 'users', sup.uid), {
+            role: 'user',
+            supervisorPermissions: null
+          });
+        } catch {
+          try {
+            await setDoc(doc(db, 'users', sup.uid), {
+              role: 'user',
+              supervisorPermissions: null
+            }, { merge: true });
+          } catch (uErr) {
+            console.warn("User role demotion notice:", uErr);
+          }
+        }
+      }
+
+      // 3. Update local state
+      setSupervisors(prev => prev.filter(s => s.uid !== docId && (s as any).id !== docId));
       setStatusMsg(`تم إلغاء صلاحيات الإشراف عن ${sup.displayName}.`);
       setTimeout(() => setStatusMsg(null), 3000);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error deleting supervisor:", err);
+      alert(`تعذر حذف المشرف من قاعدة البيانات: ${err?.message || 'يرجى التحقق من الاتصال بالخادم'}`);
     }
   };
 

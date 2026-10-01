@@ -151,7 +151,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       setLoading(true);
       try {
         if (db) {
-          const notifQuery = query(collection(db, 'notifications'), limit(50));
+          const notifQuery = query(collection(db, 'notifications'), limit(20));
           
           // Use onSnapshot to receive real-time broadcast and personal notifications
           unsubscribe = onSnapshot(notifQuery, (snapshot) => {

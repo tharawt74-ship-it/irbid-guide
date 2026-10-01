@@ -160,6 +160,12 @@ export function DigitalMenuView({
     }
 
     return matchesCategory && matchesSearch && matchesSmartFilter;
+  }).sort((a, b) => {
+    const aUnavailable = a.isAvailable === false || (a.trackStock && a.stockCount === 0);
+    const bUnavailable = b.isAvailable === false || (b.trackStock && b.stockCount === 0);
+    if (aUnavailable && !bUnavailable) return 1;
+    if (!aUnavailable && bUnavailable) return -1;
+    return 0;
   });
 
   // Open version selection modal
@@ -542,7 +548,10 @@ export function DigitalMenuView({
                           referrerPolicy="no-referrer"
                           src={item.imageUrl}
                           alt={item.name}
-                          className="w-full h-full object-cover group-hover/img:scale-105 transition-transform duration-300"
+                          className={cn(
+                            "w-full h-full object-cover group-hover/img:scale-105 transition-transform duration-300",
+                            (item.isAvailable === false || (item.trackStock && item.stockCount === 0)) && "grayscale opacity-70 contrast-90 brightness-95"
+                          )}
                         />
                         <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
                           <Eye className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
@@ -695,7 +704,7 @@ export function DigitalMenuView({
                         </div>
                       ) : (
                         <span className="text-[9px] sm:text-xs font-bold text-stone-400 bg-stone-100 px-1.5 py-0.5 rounded-lg text-center w-full sm:w-auto whitespace-nowrap">
-                          {item.trackStock && item.stockCount === 0 ? 'نفدت الكمية 🚫' : 'غير متوفر'}
+                          {item.trackStock && item.stockCount === 0 ? 'نفدت الكمية' : 'غير متوفر'}
                         </span>
                       )}
                     </div>
@@ -726,7 +735,10 @@ export function DigitalMenuView({
                         referrerPolicy="no-referrer"
                         src={item.imageUrl}
                         alt={item.name}
-                        className="w-full h-full object-cover group-hover/img:scale-105 transition-transform duration-300"
+                        className={cn(
+                          "w-full h-full object-cover group-hover/img:scale-105 transition-transform duration-300",
+                          (item.isAvailable === false || (item.trackStock && item.stockCount === 0)) && "grayscale opacity-70 contrast-90 brightness-95"
+                        )}
                       />
                       <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
                         <Eye className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
@@ -923,7 +935,7 @@ export function DigitalMenuView({
                       </div>
                     ) : (
                       <span className="text-[9px] sm:text-xs font-bold text-stone-400 bg-stone-100 px-1.5 py-0.5 rounded-lg text-center w-full sm:w-auto whitespace-nowrap">
-                        {item.trackStock && item.stockCount === 0 ? 'نفدت الكمية 🚫' : 'غير متوفر'}
+                        {item.trackStock && item.stockCount === 0 ? 'نفدت الكمية' : 'غير متوفر'}
                       </span>
                     )}
                   </div>
@@ -1080,14 +1092,14 @@ export function DigitalMenuView({
                         }
                       }}
                       className={`px-4 py-3 text-white rounded-xl text-sm font-black flex items-center justify-center gap-2 shadow-md transition-colors whitespace-nowrap ${
-                        lightboxItem.trackStock && lightboxItem.stockCount === 0
+                        (lightboxItem.isAvailable === false || (lightboxItem.trackStock && lightboxItem.stockCount === 0))
                           ? 'bg-stone-200 text-stone-400 cursor-not-allowed shadow-none'
                           : 'bg-emerald-600 hover:bg-emerald-700 cursor-pointer'
                       }`}
-                      title="طلب حجز فوري عبر الواتساب"
+                      title={lightboxItem.isAvailable === false ? 'هذا الصنف غير متوفر حالياً' : 'طلب حجز فوري عبر الواتساب'}
                     >
                       <WhatsAppIcon className="h-4 w-4" />
-                      <span>{lightboxItem.trackStock && lightboxItem.stockCount === 0 ? 'غير متوفر' : 'حجز فوري'}</span>
+                      <span>{lightboxItem.isAvailable === false ? 'غير متوفر' : (lightboxItem.trackStock && lightboxItem.stockCount === 0 ? 'نفدت الكمية' : 'حجز فوري')}</span>
                     </button>
                   </div>
                 </div>
@@ -1124,7 +1136,10 @@ export function DigitalMenuView({
                       referrerPolicy="no-referrer"
                       src={selectedItemForVersions.imageUrl}
                       alt={selectedItemForVersions.name}
-                      className="w-full h-full object-cover"
+                      className={cn(
+                        "w-full h-full object-cover",
+                        (selectedItemForVersions.isAvailable === false || (selectedItemForVersions.trackStock && selectedItemForVersions.stockCount === 0)) && "grayscale opacity-70 contrast-90 brightness-95"
+                      )}
                     />
                   ) : (
                     <div className="w-full h-full bg-amber-50/80 text-amber-700 flex items-center justify-center relative">

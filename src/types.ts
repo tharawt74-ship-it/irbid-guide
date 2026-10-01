@@ -239,7 +239,8 @@ export interface Business {
   phoneClicks?: number;
   directionsClicks?: number;
 
-  // Gift/Discount Codes Promotion Feature for Reviews
+  // Review Reward Campaigns (Multi-Campaign Management)
+  rewardCampaigns?: RewardCampaign[];
   giftCodeEnabled?: boolean;
   giftCodeMinStars?: number;
   giftCodeLimitType?: 'unlimited' | 'limited';
@@ -494,6 +495,27 @@ export interface UserProfile {
   hiddenNotificationIds?: string[];
 }
 
+export interface NewsMenuAttachment {
+  type: 'item' | 'category' | 'full_menu';
+  businessId: string;
+  businessName: string;
+  businessLogoUrl?: string;
+  // For 'item'
+  itemId?: string;
+  itemName?: string;
+  itemPrice?: string;
+  itemImageUrl?: string;
+  itemDescription?: string;
+  itemCategory?: string;
+  // For 'category'
+  categoryName?: string;
+  itemsCount?: number;
+  sampleItems?: Array<{ name: string; price?: string; imageUrl?: string }>;
+  // For 'full_menu'
+  totalItemsCount?: number;
+  categoriesList?: string[];
+}
+
 export interface NewsArticle {
   id: string;
   title: string;
@@ -510,6 +532,8 @@ export interface NewsArticle {
   source: string;
   videoUrl?: string;
   createdAt?: number;
+  businessId?: string;
+  menuAttachment?: NewsMenuAttachment | null;
 }
 
 export interface JobOffer {
@@ -518,6 +542,11 @@ export interface JobOffer {
   company: string;
   businessId?: string;
   category: string;
+  subCategory?: string;
+  businessCategory?: string;
+  businessSubCategory?: string;
+  businessDistrict?: string;
+  businessAddress?: string;
   jobType: 'دوام كامل' | 'دوام جزئي' | 'مناسب للطلاب' | 'عن بعد' | string;
   location: string;
   salary?: string;
@@ -555,7 +584,7 @@ export interface JobOpening {
 }
 
 export interface AttachedPostItem {
-  type: 'menu' | 'offer' | 'job';
+  type: 'menu' | 'menu_category' | 'full_menu' | 'offer' | 'job';
   id: string;
   title: string;
   subtitle?: string;
@@ -1080,4 +1109,21 @@ export interface TaxiItem {
 }
 
 export type TransportationItem = TerminalItem | RouteItem | TaxiItem;
+
+export interface RewardCampaign {
+  id: string;
+  title: string;
+  status: 'active' | 'paused' | 'expired';
+  minStars: number;
+  limitType: 'unlimited' | 'limited';
+  totalLimit?: number;
+  discountPercent: number;
+  validityDays: number;
+  startDate?: string;
+  endDate?: string;
+  userLimit: 'once' | 'per_review' | 'custom';
+  maxPerUser?: number;
+  grantedCount: number;
+  createdAt: number;
+}
 

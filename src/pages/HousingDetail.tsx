@@ -53,20 +53,15 @@ export function HousingDetail() {
       try {
         let foundHousing: HousingItem | null = null;
 
-        // 1. Try Firestore first
+        // 1. Try Firestore
         if (db) {
           const docRef = doc(db, 'housings', id);
           const snap = await getDoc(docRef);
           if (snap.exists()) {
-            foundHousing = { id: snap.id, ...snap.data() } as HousingItem;
-          }
-        }
-
-        // 2. If not found in Firestore, search demo data
-        if (!foundHousing) {
-          const demoMatch = (DEMO_SEED_DATA?.housings || []).find((h: any) => h.id === id || String(h.id) === String(id));
-          if (demoMatch) {
-            foundHousing = demoMatch as unknown as HousingItem;
+            const data = snap.data();
+            if (!data.isDeleted && !data.isDemo) {
+              foundHousing = { id: snap.id, ...data } as HousingItem;
+            }
           }
         }
 
@@ -99,17 +94,10 @@ export function HousingDetail() {
         const snap = await getDocs(ref);
         snap.forEach(d => {
           if (d.id !== current.id) {
-            items.push({ id: d.id, ...d.data() } as HousingItem);
-          }
-        });
-      }
-
-      // Fallback with demo data if firestore items are few
-      if (items.length < 3) {
-        const demoItems = (DEMO_SEED_DATA?.housings || []) as unknown as HousingItem[];
-        demoItems.forEach(d => {
-          if (d.id !== current.id && !items.some(x => x.id === d.id)) {
-            items.push(d);
+            const data = d.data();
+            if (!data.isDeleted && !data.isDemo && (data.status === 'approved' || !data.status)) {
+              items.push({ id: d.id, ...data } as HousingItem);
+            }
           }
         });
       }
@@ -159,7 +147,7 @@ export function HousingDetail() {
       }
 
       setBookingStatus('success');
-      showToast('🎉 تم تسجيل طلب المعاينة والحجز بنجاح! سيتم التواصل معك لتأكيد الموعد.');
+      showToast('تم تسجيل طلب المعاينة والحجز بنجاح! سيتم التواصل معك لتأكيد الموعد.');
       setTimeout(() => {
         setIsBookingModalOpen(false);
         setBookingStatus('idle');
@@ -493,9 +481,10 @@ export function HousingDetail() {
                   <span className="font-bold">مشاركة سريعة:</span>
                   <button
                     onClick={handleCopyLink}
-                    className="text-[#1a4d2e] font-black hover:underline cursor-pointer"
+                    className="text-[#1a4d2e] font-black hover:underline cursor-pointer inline-flex items-center gap-1.5"
                   >
-                    {copiedLink ? 'تم نسخ الرابط!' : 'نسخ رابط العقار 🔗'}
+                    <Share2 className="h-3.5 w-3.5" />
+                    <span>{copiedLink ? 'تم نسخ الرابط!' : 'نسخ رابط العقار'}</span>
                   </button>
                 </div>
               </div>
@@ -595,7 +584,10 @@ export function HousingDetail() {
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-stone-200 relative my-auto space-y-5">
             <div className="flex items-center justify-between border-b border-stone-100 pb-3">
               <div>
-                <h3 className="text-base font-black text-stone-900">📅 حجز موعد معاينة مباشر</h3>
+                <h3 className="text-base font-black text-stone-900 flex items-center gap-1.5">
+                  <Calendar className="h-4.5 w-4.5 text-[#1a4d2e]" />
+                  <span>حجز موعد معاينة مباشر</span>
+                </h3>
                 <p className="text-[11px] text-stone-500">{housing.title}</p>
               </div>
               <button 

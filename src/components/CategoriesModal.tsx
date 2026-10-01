@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { X, Search, Sparkles, Tag, FolderOpen, ChevronLeft } from 'lucide-react';
 import { getCategoryMeta } from '../lib/categoryMeta';
 import { cleanCategoryName } from './CategoryButtonLabel';
+import { useSystemSettings } from '../contexts/SystemSettingsContext';
 
 interface CategoryItem {
  name: string;
@@ -12,7 +13,7 @@ interface CategoryItem {
 interface CategoriesModalProps {
  isOpen: boolean;
  onClose: () => void;
- categories: CategoryItem[];
+ categories?: CategoryItem[];
  selectedCategory: string;
  onSelectCategory: (name: string, subcategory?: string) => void;
 }
@@ -20,24 +21,27 @@ interface CategoriesModalProps {
 export function CategoriesModal({
  isOpen,
  onClose,
- categories,
+ categories: categoriesProp,
  selectedCategory,
  onSelectCategory,
 }: CategoriesModalProps) {
  const [searchTerm, setSearchTerm] = useState('');
+ const { categories: systemCategories } = useSystemSettings();
+ const rawCategories = categoriesProp || systemCategories || [];
+ const categories = Array.isArray(rawCategories) ? rawCategories : [];
 
  if (!isOpen) return null;
 
  // Filter categories by search term for standard display, but also prepare search-specific subsets
  const matchedMainCategories = categories.filter(cat => 
- cat.name.toLowerCase().includes(searchTerm.toLowerCase())
+ cat && cat.name && cat.name.toLowerCase().includes(searchTerm.toLowerCase())
  );
 
  const matchedSubcategories: { subName: string; parentName: string }[] = [];
  categories.forEach(cat => {
- if (cat.subcategories) {
+ if (cat && cat.subcategories) {
  cat.subcategories.forEach(sub => {
- if (sub.toLowerCase().includes(searchTerm.toLowerCase())) {
+ if (sub && sub.toLowerCase().includes(searchTerm.toLowerCase())) {
  matchedSubcategories.push({
  subName: sub,
  parentName: cat.name

@@ -86,7 +86,7 @@ export function Transportation() {
   }, [searchQuery]);
 
   const handleCopyGuide = () => {
-    const text = `🚌 دليل مواصلات ومجمعات مدينة إربد الشامل:\n- مجمع عمان الجديد: للتنقل إلى عمان والزرقاء وجرش والتكنولوجيا.\n- مجمع الشمال: للتنقل إلى الرمثا وقرى الشمال واليرموك.\n- مجمع الأغوار: للتنقل إلى الأغوار والكورة.\n\nتصفح التفاصيل كاملة عبر تطبيق "شو في بإربد؟"`;
+    const text = `دليل مواصلات ومجمعات مدينة إربد الشامل:\n- مجمع عمان الجديد: للتنقل إلى عمان والزرقاء وجرش والتكنولوجيا.\n- مجمع الشمال: للتنقل إلى الرمثا وقرى الشمال واليرموك.\n- مجمع الأغوار: للتنقل إلى الأغوار والكورة.\n\nتصفح التفاصيل كاملة عبر تطبيق "شو في بإربد؟"`;
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
@@ -108,41 +108,30 @@ export function Transportation() {
       {/* Main Container */}
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 space-y-6">
         
-        {/* Page Header & Search Bar (Compact & Sleek) */}
-        <div className="bg-white rounded-2xl md:rounded-3xl p-3.5 sm:p-5 border border-[#e5e1da] shadow-xs space-y-3 sm:space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="space-y-1">
-              <div className="inline-flex items-center gap-1 bg-emerald-50 text-[#1a4d2e] border border-emerald-200 px-2.5 py-0.5 rounded-full text-[11px] font-black">
-                <Bus className="h-3 w-3 text-[#1a4d2e]" />
-                <span>دليل التنقل • إربد</span>
+        {/* Page Header & Search Bar (2026 Mobile Optimized Design) */}
+        <div className="bg-gradient-to-br from-[#1a4d2e] via-[#153e25] to-[#0f2e1d] text-white rounded-3xl p-4 sm:p-6 shadow-xl border border-emerald-800/40 relative overflow-hidden space-y-3.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="w-9 h-9 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/10 text-emerald-300">
+                <Bus className="h-5 w-5 text-emerald-300" />
+              </span>
+              <div>
+                <h1 className="text-lg sm:text-2xl font-black tracking-tight text-white">
+                  دليل النقل والمواصلات
+                </h1>
+                <p className="text-[11px] sm:text-xs text-emerald-100/80 font-medium">
+                  مجمعات الحافلات، السرفيس، والتاكسي في إربد
+                </p>
               </div>
-              <h1 className="text-xl sm:text-2xl font-black text-stone-900 tracking-tight">
-                دليل النقل والمواصلات في إربد
-              </h1>
-              <p className="hidden sm:block text-stone-500 text-xs font-medium leading-relaxed">
-                دليلك الشامل لمجمعات إربد الرئيسية، خطوط الباصات والسرفيس للجامعات والأحياء.
-              </p>
             </div>
 
-            <div className="flex items-center gap-2 flex-wrap">
-              {isAdmin && (
-                <Link
-                  to="/admin?tab=transportation"
-                  className="inline-flex items-center justify-center gap-1.5 bg-[#1a4d2e] hover:bg-[#143e25] text-white px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-xl text-xs font-black shadow-xs transition-all shrink-0 cursor-pointer"
-                >
-                  <ShieldCheck className="h-3.5 w-3.5 text-[#ff9f1c]" />
-                  <span>إدارة المواصلات</span>
-                </Link>
-              )}
-
-              <button
-                onClick={handleCopyGuide}
-                className="inline-flex items-center justify-center gap-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-200 px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer"
-              >
-                {copied ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> : <Share2 className="h-3.5 w-3.5" />}
-                <span>{copied ? 'تم النسخ!' : 'مشاركة الدليل'}</span>
-              </button>
-            </div>
+            <button
+              onClick={handleCopyGuide}
+              className="inline-flex items-center gap-1.5 px-3 py-2 bg-white/10 hover:bg-white/20 text-white font-bold text-xs rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer border border-white/10 shrink-0"
+            >
+              {copied ? <CheckCircle2 className="h-4 w-4 text-emerald-300" /> : <Share2 className="h-4 w-4" />}
+              <span>{copied ? 'تم النسخ' : 'مشاركة'}</span>
+            </button>
           </div>
 
           {/* Search bar */}
@@ -151,26 +140,26 @@ export function Transportation() {
               type="text"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              placeholder="ابحث عن منطقتك أو وجهتك (مثال: عمان، الرمثا، التكنولوجيا، الحصن)..."
-              className="w-full bg-[#fdfcfb] text-stone-900 placeholder:text-stone-400 border border-[#e5e1da] rounded-xl px-3.5 py-2.5 pr-10 text-xs sm:text-sm focus:outline-none focus:border-[#1a4d2e] focus:bg-white transition-all shadow-inner"
+              placeholder="ابحث عن منطقتك أو وجهتك (عمان، الرمثا، التكنولوجيا، الحصن)..."
+              className="w-full bg-white/10 backdrop-blur-md text-white placeholder:text-stone-300 border border-white/20 rounded-2xl px-4 py-3 pr-10 text-xs sm:text-sm focus:outline-none focus:bg-white/20 transition-all shadow-inner"
             />
-            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400 pointer-events-none" />
+            <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-200 pointer-events-none" />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 p-1"
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-300 hover:text-white p-1.5"
               >
-                <X className="h-3.5 w-3.5" />
+                <X className="h-4 w-4" />
               </button>
             )}
           </div>
         </div>
         
         {/* Navigation Tabs */}
-        <div className="flex items-center gap-2 border-b border-stone-200 pb-2 overflow-x-auto bg-white/80 backdrop-blur-md p-2 rounded-2xl shadow-sm border border-stone-200/60">
+        <div className="flex items-center gap-2 overflow-x-auto bg-white/90 backdrop-blur-md p-1.5 sm:p-2 rounded-2xl shadow-xs border border-stone-200/80 scrollbar-none snap-x -mx-4 px-4 sm:mx-0 sm:px-2">
           <button
             onClick={() => setActiveTab('terminals')}
-            className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
+            className={`snap-start px-4 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 min-h-[44px] shrink-0 active:scale-95 ${
               activeTab === 'terminals' 
                 ? 'bg-[#1a4d2e] text-white shadow-md' 
                 : 'text-stone-600 hover:bg-stone-100'
@@ -182,7 +171,7 @@ export function Transportation() {
 
           <button
             onClick={() => setActiveTab('routes')}
-            className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
+            className={`snap-start px-4 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 min-h-[44px] shrink-0 active:scale-95 ${
               activeTab === 'routes' 
                 ? 'bg-[#1a4d2e] text-white shadow-md' 
                 : 'text-stone-600 hover:bg-stone-100'
@@ -194,7 +183,7 @@ export function Transportation() {
 
           <button
             onClick={() => setActiveTab('taxis')}
-            className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
+            className={`snap-start px-4 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 min-h-[44px] shrink-0 active:scale-95 ${
               activeTab === 'taxis' 
                 ? 'bg-[#1a4d2e] text-white shadow-md' 
                 : 'text-stone-600 hover:bg-stone-100'
@@ -206,7 +195,7 @@ export function Transportation() {
 
           <button
             onClick={() => setActiveTab('tips')}
-            className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
+            className={`snap-start px-4 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 min-h-[44px] shrink-0 active:scale-95 ${
               activeTab === 'tips' 
                 ? 'bg-[#1a4d2e] text-white shadow-md' 
                 : 'text-stone-600 hover:bg-stone-100'

@@ -1,15 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams, Link, useParams, useNavigate } from 'react-router';
 import { 
   Newspaper, Flame, Clock, MapPin, Search, Sparkles, 
   Plus, Pencil, Trash2, X, Check, AlertCircle, ImageIcon, 
   RefreshCw, Send, ShieldCheck, Share2, ArrowRight, Video,
-  BookOpen, Eye, ExternalLink
+  BookOpen, Eye, ExternalLink, Utensils, Layers, Store, ChevronDown
 } from 'lucide-react';
 import { collection, getDocs, doc, setDoc, deleteDoc, addDoc, query, orderBy } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { NewsArticle, HomepageBanner } from '../types';
+import { NewsArticle, HomepageBanner, Business, MenuItem, NewsMenuAttachment } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { getAppConfig } from '../lib/demoDataHelper';
 import { SEO } from '../components/common/SEO';
@@ -17,6 +17,7 @@ import { ImageUploader } from '../components/ui/ImageUploader';
 import { BannerSlideshow } from '../components/BannerSlideshow';
 import { fetchPageBanners, DEFAULT_NEWS_BANNERS } from '../lib/pageBanners';
 import { useConfirm } from '../contexts/ConfirmContext';
+import { getCachedBusinesses } from '../lib/dataCache';
 
 const CATEGORIES = ['الكل', 'أخبار المدينة', 'تعليم وجامعات', 'فعاليات وثقافة', 'سياحة وبيئة', 'تجارة ومحلات', 'طقس وخدمات'];
 
@@ -33,7 +34,9 @@ const SEED_NEWS: Omit<NewsArticle, 'id'>[] = [];
 
 export function News() {
   const { confirm } = useConfirm();
-  const { currentUser, isAdmin } = useAuth();
+  const { currentUser, isAdmin, isStaff, isMerchant, ownedBusinesses } = useAuth();
+  const canAddNews = Boolean(isAdmin || isStaff || isMerchant || (ownedBusinesses && ownedBusinesses.length > 0));
+
   const [searchParams, setSearchParams] = useSearchParams();
   const { id: routeId } = useParams();
   const navigate = useNavigate();
@@ -61,11 +64,173 @@ export function News() {
   const [formVideoUrl, setFormVideoUrl] = useState('');
   const [formIsHot, setFormIsHot] = useState(false);
 
+  // Store owner business selection & menu attachment
+  const [selectedBusinessId, setSelectedBusinessId] = useState<string>('');
+  const [menuAttachment, setMenuAttachment] = useState<NewsMenuAttachment | null>(null);
+  const [attachmentMode, setAttachmentMode] = useState<'none' | 'item' | 'category' | 'full_menu'>('none');
+  const [selectedItemId, setSelectedItemId] = useState<string>('');
+  const [selectedCategoryName, setSelectedCategoryName] = useState<string>('');
+  const [allBusinesses, setAllBusinesses] = useState<Business[]>(() => getCachedBusinesses() || []);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => {
       setToastMessage(null);
     }, 3000);
+  };
+
+  // Load businesses list for linking
+  useEffect(() => {
+    async function loadBusinesses() {
+      try {
+        if (!db) return;
+        const cached = getCachedBusinesses();
+        if (cached && cached.length > 0) {
+          setAllBusinesses(cached);
+          return;
+        }
+        const snap = await getDocs(collection(db, 'businesses'));
+        const list: Business[] = [];
+        snap.forEach(d => list.push({ id: d.id, ...d.data() } as Business));
+        setAllBusinesses(list);
+      } catch (err) {
+        console.warn('Could not load businesses in news:', err);
+      }
+    }
+    loadBusinesses();
+  }, []);
+
+  const availableBusinesses = useMemo(() => {
+    const list: Business[] = [];
+    if (ownedBusinesses && ownedBusinesses.length > 0) {
+      ownedBusinesses.forEach(b => list.push(b));
+    }
+    if (isAdmin && allBusinesses.length > 0) {
+      allBusinesses.forEach(b => {
+        if (!list.some(item => item.id === b.id)) {
+          list.push(b);
+        }
+      });
+    }
+    return list;
+  }, [ownedBusinesses, allBusinesses, isAdmin]);
+
+  const activeBusiness = useMemo(() => {
+    if (selectedBusinessId) {
+      return availableBusinesses.find(b => b.id === selectedBusinessId) || null;
+    }
+    if (availableBusinesses.length === 1) {
+      return availableBusinesses[0];
+    }
+    return null;
+  }, [selectedBusinessId, availableBusinesses]);
+
+  const menuItems = useMemo<MenuItem[]>(() => {
+    if (!activeBusiness?.menuItems || !Array.isArray(activeBusiness.menuItems)) return [];
+    return activeBusiness.menuItems.filter(item => Boolean(item && item.name));
+  }, [activeBusiness]);
+
+  const menuCategories = useMemo(() => {
+    const map = new Map<string, number>();
+    menuItems.forEach((item) => {
+      const cat = item.category?.trim() || 'عام';
+      map.set(cat, (map.get(cat) || 0) + 1);
+    });
+    return Array.from(map.entries()).map(([name, count]) => ({ name, count }));
+  }, [menuItems]);
+
+  const handleSelectAttachmentMode = (mode: 'none' | 'item' | 'category' | 'full_menu') => {
+    setAttachmentMode(mode);
+    if (mode === 'none') {
+      setMenuAttachment(null);
+      setSelectedItemId('');
+      setSelectedCategoryName('');
+    } else if (mode === 'full_menu') {
+      if (activeBusiness) {
+        setMenuAttachment({
+          type: 'full_menu',
+          businessId: activeBusiness.id,
+          businessName: activeBusiness.name,
+          businessLogoUrl: activeBusiness.logoUrl || activeBusiness.image,
+          totalItemsCount: menuItems.length
+        });
+      }
+    } else if (mode === 'item') {
+      if (menuItems.length > 0 && activeBusiness) {
+        const first = menuItems[0];
+        setSelectedItemId(first.id);
+        setMenuAttachment({
+          type: 'item',
+          businessId: activeBusiness.id,
+          businessName: activeBusiness.name,
+          businessLogoUrl: activeBusiness.logoUrl || activeBusiness.image,
+          itemId: first.id,
+          itemName: first.name,
+          itemPrice: String(first.price || ''),
+          itemImageUrl: first.imageUrl,
+          itemDescription: first.description,
+          itemCategory: first.category
+        });
+      }
+    } else if (mode === 'category') {
+      if (menuCategories.length > 0 && activeBusiness) {
+        const first = menuCategories[0];
+        setSelectedCategoryName(first.name);
+        setMenuAttachment({
+          type: 'category',
+          businessId: activeBusiness.id,
+          businessName: activeBusiness.name,
+          businessLogoUrl: activeBusiness.logoUrl || activeBusiness.image,
+          categoryName: first.name,
+          itemsCount: first.count
+        });
+      }
+    }
+  };
+
+  const handleSelectItem = (itemId: string) => {
+    setSelectedItemId(itemId);
+    const item = menuItems.find(i => i.id === itemId);
+    if (item && activeBusiness) {
+      setMenuAttachment({
+        type: 'item',
+        businessId: activeBusiness.id,
+        businessName: activeBusiness.name,
+        businessLogoUrl: activeBusiness.logoUrl || activeBusiness.image,
+        itemId: item.id,
+        itemName: item.name,
+        itemPrice: String(item.price || ''),
+        itemImageUrl: item.imageUrl,
+        itemDescription: item.description,
+        itemCategory: item.category
+      });
+    }
+  };
+
+  const handleSelectCategory = (catName: string) => {
+    setSelectedCategoryName(catName);
+    const cat = menuCategories.find(c => c.name === catName);
+    if (cat && activeBusiness) {
+      setMenuAttachment({
+        type: 'category',
+        businessId: activeBusiness.id,
+        businessName: activeBusiness.name,
+        businessLogoUrl: activeBusiness.logoUrl || activeBusiness.image,
+        categoryName: cat.name,
+        itemsCount: cat.count
+      });
+    }
+  };
+
+  const applyItemDataToArticle = () => {
+    if (menuAttachment && menuAttachment.type === 'item') {
+      if (menuAttachment.itemName) setFormTitle(`جديدنا: ${menuAttachment.itemName}`);
+      if (menuAttachment.itemImageUrl) setFormImageUrl(menuAttachment.itemImageUrl);
+      if (menuAttachment.itemDescription && !formExcerpt) {
+        setFormExcerpt(menuAttachment.itemDescription);
+      }
+      showToast('تم تطبيق بيانات الصنف على عنوان وصورة الخبر');
+    }
   };
 
   // Load news from Firestore
@@ -110,17 +275,31 @@ export function News() {
   }, []);
 
   const openAddModal = () => {
-    if (!isAdmin) {
-      showToast('عذراً، إضافة الأخبار مقتصرة على إدارة المنصة فقط');
+    if (!canAddNews) {
+      showToast('عذراً، إضافة الأخبار مقتصرة على أصحاب المحلات وإدارة المنصة');
       return;
     }
     setEditingArticle(null);
     setFormTitle('');
     setFormExcerpt('');
     setFormContent('');
-    setFormCategory('أخبار المدينة');
-    setFormLocation('وسط البلد، إربد');
-    setFormSource('دليل شو في بإربد');
+    setFormCategory('تجارة ومحلات');
+
+    const defaultBiz = (ownedBusinesses && ownedBusinesses.length > 0) ? ownedBusinesses[0] : (availableBusinesses[0] || null);
+    if (defaultBiz) {
+      setSelectedBusinessId(defaultBiz.id);
+      setFormLocation(defaultBiz.address || 'إربد');
+      setFormSource(defaultBiz.name || 'محل تجاري');
+    } else {
+      setSelectedBusinessId('');
+      setFormLocation('وسط البلد، إربد');
+      setFormSource('دليل شو في بإربد');
+    }
+
+    setAttachmentMode('none');
+    setSelectedItemId('');
+    setSelectedCategoryName('');
+    setMenuAttachment(null);
     setFormImageUrl(PRESET_IMAGES[0].url);
     setFormReadTime('3 دقائق');
     setFormVideoUrl('');
@@ -128,10 +307,16 @@ export function News() {
     setIsModalOpen(true);
   };
 
+  const canEditArticle = (article: NewsArticle) => {
+    if (isAdmin) return true;
+    if (article.businessId && ownedBusinesses?.some(b => b.id === article.businessId)) return true;
+    return false;
+  };
+
   const openEditModal = (e: React.MouseEvent, article: NewsArticle) => {
     e.stopPropagation(); // Prevent clicking card details
-    if (!isAdmin) {
-      showToast('عذراً، تعديل الأخبار مقتصر على إدارة المنصة فقط');
+    if (!canEditArticle(article)) {
+      showToast('عذراً، تعديل هذا الخبر مقتصر على صاحبه أو إدارة المنصة');
       return;
     }
     setEditingArticle(article);
@@ -145,13 +330,30 @@ export function News() {
     setFormReadTime(article.readTime || '3 دقائق');
     setFormVideoUrl(article.videoUrl || '');
     setFormIsHot(!!article.isHot);
+
+    setSelectedBusinessId(article.businessId || '');
+    if (article.menuAttachment) {
+      setMenuAttachment(article.menuAttachment);
+      setAttachmentMode(article.menuAttachment.type);
+      if (article.menuAttachment.type === 'item') {
+        setSelectedItemId(article.menuAttachment.itemId || '');
+      } else if (article.menuAttachment.type === 'category') {
+        setSelectedCategoryName(article.menuAttachment.categoryName || '');
+      }
+    } else {
+      setMenuAttachment(null);
+      setAttachmentMode('none');
+      setSelectedItemId('');
+      setSelectedCategoryName('');
+    }
+
     setIsModalOpen(true);
   };
 
   const handleSaveArticle = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isAdmin) {
-      showToast('عذراً، نشر وتعديل الأخبار مقتصر على مدير الموقع فقط');
+    if (!canAddNews) {
+      showToast('عذراً، نشر وتعديل الأخبار متاح لأصحاب المحلات وإدارة المنصة');
       return;
     }
     if (!formTitle.trim() || !formExcerpt.trim()) {
@@ -162,6 +364,8 @@ export function News() {
     setSaving(true);
     const now = Date.now();
 
+    const finalAttachment = attachmentMode !== 'none' ? menuAttachment : null;
+
     const articleData = {
       title: formTitle.trim(),
       excerpt: formExcerpt.trim(),
@@ -169,14 +373,16 @@ export function News() {
       content: formContent.trim() || formExcerpt.trim(),
       category: formCategory,
       location: formLocation.trim() || 'إربد',
-      source: formSource.trim() || 'دليل شو في بإربد',
+      source: formSource.trim() || (activeBusiness?.name || 'دليل شو في بإربد'),
       imageUrl: formImageUrl.trim() || PRESET_IMAGES[0].url,
       image: formImageUrl.trim() || PRESET_IMAGES[0].url, // for AdminDashboard compatibility
       readTime: formReadTime.trim() || '3 دقائق',
       date: 'الآن',
       videoUrl: formVideoUrl.trim() || '',
       isHot: formIsHot,
-      createdAt: editingArticle?.createdAt || now
+      createdAt: editingArticle?.createdAt || now,
+      businessId: activeBusiness?.id || editingArticle?.businessId || undefined,
+      menuAttachment: finalAttachment || null
     };
 
     try {
@@ -193,7 +399,7 @@ export function News() {
         }
 
         setNews(prev => prev.map(item => item.id === editingArticle.id ? updatedArticle : item));
-        showToast('تم تعديل الخبر بنجاح 🎉');
+        showToast('تم تعديل الخبر بنجاح');
       } else {
         // Add new mode
         let newId = `news-${Date.now()}`;
@@ -208,7 +414,7 @@ export function News() {
         };
 
         setNews(prev => [newArticle, ...prev]);
-        showToast('تم نشر الخبر الجديد بنجاح 🚀');
+        showToast('تم نشر الخبر الجديد بنجاح');
       }
 
       setIsModalOpen(false);
@@ -222,8 +428,9 @@ export function News() {
 
   const handleDeleteArticle = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation(); // Prevent detail click
-    if (!isAdmin) {
-      showToast('عذراً، حذف الأخبار مقتصر على مدير الموقع فقط');
+    const article = news.find(n => n.id === id);
+    if (!article || !canEditArticle(article)) {
+      showToast('عذراً، حذف هذا الخبر مقتصر على صاحبه أو إدارة المنصة');
       return;
     }
     if (!(await confirm({ message: 'هل أنت متأكد من حذف هذا الخبر نهائياً من نشرة أخبار إربد؟' }))) return;
@@ -275,11 +482,11 @@ export function News() {
         });
       } else {
         await navigator.clipboard.writeText(shareUrl);
-        showToast('تم نسخ رابط الخبر لمشاركته! 🔗');
+        showToast('تم نسخ رابط الخبر لمشاركته!');
       }
     } catch (err) {
       await navigator.clipboard.writeText(shareUrl);
-      showToast('تم نسخ رابط الخبر لمشاركته! 🔗');
+      showToast('تم نسخ رابط الخبر لمشاركته!');
     }
   };
 
@@ -321,7 +528,7 @@ export function News() {
               <Share2 className="h-4 w-4 text-[#ff9f1c]" />
               <span className="hidden sm:inline">مشاركة</span>
             </button>
-            {isAdmin && (
+            {canEditArticle(activeArticle) && (
               <>
                 <button
                   onClick={(e) => openEditModal(e, activeArticle)}
@@ -395,6 +602,114 @@ export function News() {
             <div className="text-stone-800 text-sm sm:text-base leading-relaxed whitespace-pre-line font-medium space-y-4">
               {activeArticle.content || activeArticle.excerpt || activeArticle.summary}
             </div>
+
+            {/* Attached Menu Item / Category / Full Menu in Dedicated View */}
+            {activeArticle.menuAttachment && (
+              <div className="mt-8 p-5 sm:p-6 bg-gradient-to-br from-amber-50/80 via-white to-amber-50/40 rounded-3xl border border-amber-200 shadow-sm space-y-4">
+                <div className="flex items-center justify-between border-b border-amber-200/70 pb-3">
+                  <div className="flex items-center gap-2 text-amber-900 font-black text-sm sm:text-base">
+                    <Utensils className="h-5 w-5 text-amber-600" />
+                    <span>مرفق من المنيو والكتالوج الرقمي</span>
+                  </div>
+                  <span className="text-xs font-bold text-stone-600 bg-amber-100/70 px-2.5 py-1 rounded-lg">
+                    {activeArticle.menuAttachment.businessName}
+                  </span>
+                </div>
+
+                {activeArticle.menuAttachment.type === 'item' && (
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3.5">
+                      {activeArticle.menuAttachment.itemImageUrl ? (
+                        <img 
+                          src={activeArticle.menuAttachment.itemImageUrl} 
+                          alt={activeArticle.menuAttachment.itemName}
+                          className="w-16 h-16 rounded-2xl object-cover border border-amber-200 shadow-xs shrink-0"
+                        />
+                      ) : (
+                        <div className="w-16 h-16 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0 border border-amber-200">
+                          <Utensils className="h-7 w-7" />
+                        </div>
+                      )}
+                      <div className="space-y-1">
+                        <h4 className="text-base font-black text-stone-900">
+                          {activeArticle.menuAttachment.itemName}
+                        </h4>
+                        {activeArticle.menuAttachment.itemDescription && (
+                          <p className="text-xs text-stone-500 line-clamp-1">
+                            {activeArticle.menuAttachment.itemDescription}
+                          </p>
+                        )}
+                        {activeArticle.menuAttachment.itemPrice && (
+                          <div className="text-sm font-black text-emerald-700 font-mono">
+                            السعر: {activeArticle.menuAttachment.itemPrice} دينار أردني
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <Link
+                      to={`/business/${activeArticle.menuAttachment.businessId}?tab=menu`}
+                      className="inline-flex items-center justify-center gap-2 bg-[#1a4d2e] hover:bg-[#133b22] text-white px-5 py-3 rounded-2xl text-xs font-black shadow-md transition-all shrink-0"
+                    >
+                      <Utensils className="h-4 w-4" />
+                      <span>تصفح هذا الصنف في منيو المحل</span>
+                    </Link>
+                  </div>
+                )}
+
+                {activeArticle.menuAttachment.type === 'category' && (
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3.5">
+                      <div className="w-14 h-14 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0 border border-amber-200 shadow-xs">
+                        <Layers className="h-7 w-7" />
+                      </div>
+                      <div className="space-y-1">
+                        <h4 className="text-base font-black text-stone-900">
+                          قسم: {activeArticle.menuAttachment.categoryName}
+                        </h4>
+                        <p className="text-xs text-stone-500">
+                          يحتوي على {activeArticle.menuAttachment.itemsCount || 0} صنف متاح لدى {activeArticle.menuAttachment.businessName}
+                        </p>
+                      </div>
+                    </div>
+
+                    <Link
+                      to={`/business/${activeArticle.menuAttachment.businessId}?tab=menu`}
+                      className="inline-flex items-center justify-center gap-2 bg-[#1a4d2e] hover:bg-[#133b22] text-white px-5 py-3 rounded-2xl text-xs font-black shadow-md transition-all shrink-0"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      <span>تصفح هذا القسم في منيو المحل</span>
+                    </Link>
+                  </div>
+                )}
+
+                {activeArticle.menuAttachment.type === 'full_menu' && (
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3.5">
+                      <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 text-white flex items-center justify-center shrink-0 shadow-md">
+                        <BookOpen className="h-7 w-7" />
+                      </div>
+                      <div className="space-y-1">
+                        <h4 className="text-base font-black text-stone-900">
+                          قائمة الطعام والمنيو والكتالوج الرقمي الكامل
+                        </h4>
+                        <p className="text-xs text-stone-500">
+                          استكشف كافة الأصناف والأسعار لدى {activeArticle.menuAttachment.businessName} ({activeArticle.menuAttachment.totalItemsCount || 0} صنف)
+                        </p>
+                      </div>
+                    </div>
+
+                    <Link
+                      to={`/business/${activeArticle.menuAttachment.businessId}?tab=menu`}
+                      className="inline-flex items-center justify-center gap-2 bg-[#1a4d2e] hover:bg-[#133b22] text-white px-5 py-3 rounded-2xl text-xs font-black shadow-md transition-all shrink-0"
+                    >
+                      <BookOpen className="h-4 w-4" />
+                      <span>استعراض المنيو الكامل للمحل</span>
+                    </Link>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Embedded Video component if videoUrl is provided */}
             {activeArticle.videoUrl && (
@@ -479,50 +794,31 @@ export function News() {
       {/* Banner Slideshow */}
       <BannerSlideshow banners={banners} />
 
-      {/* Page Header & Search Bar (Compact & Sleek) */}
-      <div className="bg-white rounded-2xl md:rounded-3xl p-3.5 sm:p-5 border border-[#e5e1da] shadow-xs space-y-3 sm:space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="space-y-1">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <div className="inline-flex items-center gap-1 bg-emerald-50 text-[#1a4d2e] border border-emerald-200 px-2.5 py-0.5 rounded-full text-[11px] font-bold">
-                <Newspaper className="h-3 w-3 text-[#1a4d2e]" />
-                <span>نشرة إربد اليومية</span>
-              </div>
-              {isAdmin ? (
-                <div className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full text-[11px] font-bold">
-                  <ShieldCheck className="h-3 w-3 text-emerald-700" />
-                  <span>لوحة إدارة الأخبار</span>
-                </div>
-              ) : (
-                <div className="hidden sm:inline-flex items-center gap-1 bg-stone-100 text-stone-700 border border-stone-200 px-2 py-0.5 rounded-full text-[11px] font-semibold">
-                  <Sparkles className="h-3 w-3 text-amber-500" />
-                  <span>أحدث المستجدات والفعاليات</span>
-                </div>
-              )}
+      {/* Page Header & Search Bar (2026 Mobile Optimized Design) */}
+      <div className="bg-gradient-to-br from-[#1a4d2e] via-[#153e25] to-[#0f2e1d] text-white rounded-3xl p-4 sm:p-6 shadow-xl border border-emerald-800/40 relative overflow-hidden space-y-3.5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="w-9 h-9 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/10 text-emerald-300">
+              <Newspaper className="h-5 w-5 text-emerald-300" />
+            </span>
+            <div>
+              <h1 className="text-lg sm:text-2xl font-black tracking-tight text-white">
+                أخبار ومستجدات إربد
+              </h1>
+              <p className="text-[11px] sm:text-xs text-emerald-100/80 font-medium">
+                تغطية شاملة لأخبار المدينة والجامعات والمشاريع
+              </p>
             </div>
-
-            <h1 className="text-xl sm:text-2xl font-black text-stone-900 tracking-tight">
-              آخر أخبار إربد والمستجدات
-            </h1>
-
-            <p className="hidden sm:block text-stone-500 text-xs font-medium leading-relaxed">
-              {isAdmin 
-                ? 'تابع وأضف وعدّل أهم الأخبار المحلية، فعاليات الجامعات، ومشاريع البلدية.'
-                : 'تابع أهم الأخبار المحلية، فعاليات الجامعات، مشاريع البلدية والافتتاحات في إربد.'}
-            </p>
           </div>
 
-          {/* Quick Actions in Banner - Only for Admin */}
-          {isAdmin && (
-            <div className="shrink-0">
-              <button
-                onClick={openAddModal}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 bg-[#1a4d2e] hover:bg-[#143e25] text-white px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-xs cursor-pointer"
-              >
-                <Plus className="h-4 w-4 text-[#ff9f1c]" />
-                <span>إضافة خبر جديد</span>
-              </button>
-            </div>
+          {canAddNews && (
+            <button
+              onClick={openAddModal}
+              className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#ff9f1c] hover:bg-[#f08f0c] text-stone-950 font-black text-xs rounded-xl shadow-md transition-all active:scale-95 cursor-pointer shrink-0"
+            >
+              <Plus className="h-4 w-4" />
+              <span>إضافة خبر</span>
+            </button>
           )}
         </div>
 
@@ -532,41 +828,39 @@ export function News() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="ابحث في عناوين الأخبار، المواقع، أو المصادر..."
-            className="w-full bg-[#fdfcfb] text-stone-900 placeholder:text-stone-400 border border-[#e5e1da] rounded-xl px-3.5 py-2.5 pr-10 text-xs sm:text-sm focus:outline-none focus:border-[#1a4d2e] focus:bg-white transition-all shadow-inner"
+            placeholder="ابحث في عناوين الأخبار، الأحداث، أو المواقع..."
+            className="w-full bg-white/10 backdrop-blur-md text-white placeholder:text-stone-300 border border-white/20 rounded-2xl px-4 py-3 pr-10 text-xs sm:text-sm focus:outline-none focus:bg-white/20 transition-all shadow-inner"
           />
-          <Search className="h-4 w-4 text-stone-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <Search className="h-4 w-4 text-emerald-200 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           {searchQuery && (
             <button 
               onClick={() => setSearchQuery('')}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 p-1"
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-300 hover:text-white p-1.5"
             >
-              <X className="h-3.5 w-3.5" />
+              <X className="h-4 w-4" />
             </button>
           )}
         </div>
       </div>
 
       {/* Category Filter Chips */}
-      <div className="flex items-center justify-between gap-4 border-b border-[#e5e1da] pb-4">
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide flex-1" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-          {CATEGORIES.map(cat => {
-            const isSelected = selectedCategory === cat;
-            return (
-              <button
-                key={cat}
-                onClick={() => setSelectedCategory(cat)}
-                className={`whitespace-nowrap px-4 sm:px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all cursor-pointer ${
-                  isSelected
-                    ? 'bg-[#1a4d2e] text-white shadow-sm font-black'
-                    : 'bg-white border border-[#e5e1da] text-stone-600 hover:border-[#1a4d2e]/40 hover:bg-stone-50'
-                }`}
-              >
-                {cat}
-              </button>
-            );
-          })}
-        </div>
+      <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none snap-x -mx-4 px-4 sm:mx-0 sm:px-0">
+        {CATEGORIES.map(cat => {
+          const isSelected = selectedCategory === cat;
+          return (
+            <button
+              key={cat}
+              onClick={() => setSelectedCategory(cat)}
+              className={`snap-start whitespace-nowrap px-4.5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all cursor-pointer min-h-[44px] flex items-center shrink-0 active:scale-95 ${
+                isSelected
+                  ? 'bg-[#1a4d2e] text-white shadow-xs font-black'
+                  : 'bg-white border border-[#e5e1da] text-stone-600 hover:border-[#1a4d2e]/40 hover:bg-stone-50'
+              }`}
+            >
+              {cat}
+            </button>
+          );
+        })}
       </div>
 
       {/* Main Content Area */}
@@ -582,7 +876,7 @@ export function News() {
           <p className="text-sm text-stone-500 max-w-md mx-auto">
             {searchQuery ? `لم نجد أي خبر يحتوي على "${searchQuery}".` : 'لم يتم إضافة أخبار في هذا القسم بعد.'}
           </p>
-          {isAdmin && (
+          {canAddNews && (
             <button
               onClick={openAddModal}
               className="inline-flex items-center gap-2 bg-[#1a4d2e] text-white px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-[#133b22] transition-colors cursor-pointer"
@@ -621,8 +915,8 @@ export function News() {
                     </span>
                   </div>
 
-                  {/* Management buttons overlay - Admin only */}
-                  {isAdmin && (
+                  {/* Management buttons overlay */}
+                  {canEditArticle(featuredNews) && (
                     <div className="absolute top-4 left-4 flex items-center gap-2">
                       <button
                         onClick={(e) => openEditModal(e, featuredNews)}
@@ -660,6 +954,25 @@ export function News() {
                     <p className="text-stone-600 text-xs sm:text-sm leading-relaxed line-clamp-4 break-words">
                       {featuredNews.excerpt || featuredNews.summary}
                     </p>
+
+                    {/* Featured news menu attachment chip */}
+                    {featuredNews.menuAttachment && (
+                      <div className="pt-2">
+                        <div className="p-2.5 bg-amber-50/80 rounded-xl border border-amber-200/90 flex items-center justify-between gap-2 text-xs font-bold text-amber-950">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Utensils className="h-4 w-4 text-amber-600 shrink-0" />
+                            <span className="truncate">
+                              {featuredNews.menuAttachment.type === 'item' && `صنف: ${featuredNews.menuAttachment.itemName}`}
+                              {featuredNews.menuAttachment.type === 'category' && `قسم: ${featuredNews.menuAttachment.categoryName}`}
+                              {featuredNews.menuAttachment.type === 'full_menu' && 'المنيو والكتالوج الرقمي الكامل'}
+                            </span>
+                          </div>
+                          <span className="text-[11px] text-stone-500 shrink-0">
+                            {featuredNews.menuAttachment.businessName}
+                          </span>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="pt-4 border-t border-[#e5e1da] flex items-center justify-between text-xs text-stone-500 font-medium">
@@ -700,7 +1013,7 @@ export function News() {
                     <div className="h-48 relative overflow-hidden bg-stone-100">
                       <img 
                         src={item.imageUrl || item.image} 
-                        alt={item.title}
+                        alt={item.title} 
                         className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-300"
                         referrerPolicy="no-referrer"
                       />
@@ -717,8 +1030,8 @@ export function News() {
                         </div>
                       )}
 
-                      {/* Edit & Delete Action Buttons - Admin only */}
-                      {isAdmin && (
+                      {/* Edit & Delete Action Buttons */}
+                      {canEditArticle(item) && (
                         <div className="absolute top-3 left-3 flex items-center gap-1.5 bg-black/40 backdrop-blur-md p-1 rounded-xl z-20">
                           <button
                             onClick={(e) => openEditModal(e, item)}
@@ -756,6 +1069,68 @@ export function News() {
                       <p className="text-stone-500 text-xs leading-relaxed line-clamp-3 break-words">
                         {item.excerpt || item.summary}
                       </p>
+
+                      {/* Attached Menu Item/Category/Full Menu on Card */}
+                      {item.menuAttachment && (
+                        <div className="pt-2">
+                          {item.menuAttachment.type === 'item' && (
+                            <div className="p-2 bg-amber-50/80 rounded-xl border border-amber-200/90 flex items-center justify-between gap-2 text-right">
+                              <div className="flex items-center gap-2 min-w-0">
+                                {item.menuAttachment.itemImageUrl ? (
+                                  <img src={item.menuAttachment.itemImageUrl} alt={item.menuAttachment.itemName} className="w-8 h-8 rounded-lg object-cover border border-amber-200 shrink-0" />
+                                ) : (
+                                  <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+                                    <Utensils className="h-3.5 w-3.5" />
+                                  </div>
+                                )}
+                                <div className="min-w-0">
+                                  <div className="text-[11px] font-black text-amber-950 truncate">{item.menuAttachment.itemName}</div>
+                                  <div className="text-[10px] text-stone-500 font-bold truncate">{item.menuAttachment.businessName}</div>
+                                </div>
+                              </div>
+                              {item.menuAttachment.itemPrice && (
+                                <span className="text-[11px] font-black text-emerald-800 bg-white px-2 py-0.5 rounded-lg border border-amber-200 shrink-0 font-mono">
+                                  {item.menuAttachment.itemPrice} د.أ
+                                </span>
+                              )}
+                            </div>
+                          )}
+
+                          {item.menuAttachment.type === 'category' && (
+                            <div className="p-2 bg-amber-50/80 rounded-xl border border-amber-200/90 flex items-center justify-between gap-2 text-right">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+                                  <Layers className="h-3.5 w-3.5" />
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="text-[11px] font-black text-amber-950 truncate">قسم: {item.menuAttachment.categoryName}</div>
+                                  <div className="text-[10px] text-stone-500 font-bold truncate">{item.menuAttachment.businessName} • {item.menuAttachment.itemsCount || 0} أصناف</div>
+                                </div>
+                              </div>
+                              <span className="text-[10px] font-bold text-amber-900 bg-amber-200/70 px-2 py-0.5 rounded-lg shrink-0">
+                                تصفح القسم
+                              </span>
+                            </div>
+                          )}
+
+                          {item.menuAttachment.type === 'full_menu' && (
+                            <div className="p-2 bg-amber-50/80 rounded-xl border border-amber-200/90 flex items-center justify-between gap-2 text-right">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-500 to-amber-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                                  <BookOpen className="h-3.5 w-3.5" />
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="text-[11px] font-black text-amber-950 truncate">المنيو والكتالوج الرقمي الكامل</div>
+                                  <div className="text-[10px] text-stone-500 font-bold truncate">{item.menuAttachment.businessName} • {item.menuAttachment.totalItemsCount || 0} صنف</div>
+                                </div>
+                              </div>
+                              <span className="text-[10px] font-bold text-amber-900 bg-amber-200/70 px-2 py-0.5 rounded-lg shrink-0">
+                                فتح المنيو
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -778,8 +1153,8 @@ export function News() {
         </div>
       )}
 
-      {/* Add / Edit News Modal - Admin Only */}
-      {isModalOpen && isAdmin && typeof document !== 'undefined' && createPortal(
+      {/* Add / Edit News Modal */}
+      {isModalOpen && canAddNews && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto" dir="rtl">
           <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[88vh] overflow-y-auto p-6 sm:p-8 shadow-2xl border border-stone-200 space-y-6 relative my-auto animate-scale-in">
             
@@ -820,7 +1195,7 @@ export function News() {
                   required
                   value={formTitle}
                   onChange={(e) => setFormTitle(e.target.value)}
-                  placeholder="مثال: بلدية إربد تبدأ مشروع تجميل الحدائق العامة..."
+                  placeholder="مثال: افتتاح الفرع الجديد أو إضافة أطباق جديدة..."
                   className="w-full p-3.5 bg-stone-50 border border-[#e5e1da] rounded-xl text-[#2d2a26] text-sm focus:bg-white focus:border-[#1a4d2e] focus:ring-2 focus:ring-[#1a4d2e]/20 outline-none transition-all"
                 />
               </div>
@@ -895,7 +1270,7 @@ export function News() {
                     type="text"
                     value={formSource}
                     onChange={(e) => setFormSource(e.target.value)}
-                    placeholder="مثال: إعلام بلدية إربد، جامعة اليرموك..."
+                    placeholder="مثال: مطعم أو متجر..."
                     className="w-full p-3 bg-stone-50 border border-[#e5e1da] rounded-xl text-[#2d2a26] text-sm focus:bg-white focus:border-[#1a4d2e] outline-none"
                   />
                 </div>
@@ -913,6 +1288,232 @@ export function News() {
                   />
                 </div>
               </div>
+
+              {/* ========================================================================= */}
+              {/* STORE OWNER MENU ATTACHMENT SECTION                                      */}
+              {/* ========================================================================= */}
+              {availableBusinesses.length > 0 && (
+                <div className="p-4 sm:p-5 bg-amber-50/60 rounded-2xl border border-amber-200/90 space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 text-amber-950 font-black text-sm">
+                      <Utensils className="h-4 w-4 text-amber-600" />
+                      <span>إرفاق من المنيو والكتالوج الرقمي للمحل</span>
+                    </div>
+                    <span className="text-[11px] font-bold text-amber-800 bg-amber-100/80 px-2.5 py-0.5 rounded-full">
+                      ميزة للمحلات
+                    </span>
+                  </div>
+
+                  {/* Business Selector (if user owns more than 1 or is admin) */}
+                  {availableBusinesses.length > 1 && (
+                    <div>
+                      <label className="block text-xs font-bold text-stone-700 mb-1">
+                        اختر المحل المرتبط بالخبر
+                      </label>
+                      <select
+                        value={selectedBusinessId}
+                        onChange={(e) => {
+                          const bId = e.target.value;
+                          setSelectedBusinessId(bId);
+                          setAttachmentMode('none');
+                          setMenuAttachment(null);
+                          setSelectedItemId('');
+                          setSelectedCategoryName('');
+                          const b = availableBusinesses.find(item => item.id === bId);
+                          if (b) {
+                            setFormSource(b.name || '');
+                            if (b.address) setFormLocation(b.address);
+                          }
+                        }}
+                        className="w-full p-2.5 bg-white border border-amber-200 rounded-xl text-xs font-bold text-stone-800 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                      >
+                        <option value="">-- بدون ربط بمحل محدد --</option>
+                        {availableBusinesses.map(biz => (
+                          <option key={biz.id} value={biz.id}>{biz.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Attachment Mode Segmented Controls */}
+                  {activeBusiness && (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleSelectAttachmentMode('none')}
+                          className={`p-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer flex flex-col items-center justify-center gap-1 ${
+                            attachmentMode === 'none'
+                              ? 'bg-stone-800 text-white border-stone-800 shadow-xs'
+                              : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'
+                          }`}
+                        >
+                          <span>بدون إرفاق</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleSelectAttachmentMode('item')}
+                          className={`p-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer flex flex-col items-center justify-center gap-1 ${
+                            attachmentMode === 'item'
+                              ? 'bg-amber-500 text-stone-950 font-black border-amber-500 shadow-xs'
+                              : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'
+                          }`}
+                        >
+                          <Utensils className="h-3.5 w-3.5" />
+                          <span>عنصر من المنيو</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleSelectAttachmentMode('category')}
+                          className={`p-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer flex flex-col items-center justify-center gap-1 ${
+                            attachmentMode === 'category'
+                              ? 'bg-amber-500 text-stone-950 font-black border-amber-500 shadow-xs'
+                              : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'
+                          }`}
+                        >
+                          <Layers className="h-3.5 w-3.5" />
+                          <span>قسم كامل</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleSelectAttachmentMode('full_menu')}
+                          className={`p-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer flex flex-col items-center justify-center gap-1 ${
+                            attachmentMode === 'full_menu'
+                              ? 'bg-amber-500 text-stone-950 font-black border-amber-500 shadow-xs'
+                              : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'
+                          }`}
+                        >
+                          <BookOpen className="h-3.5 w-3.5" />
+                          <span>المنيو بالكامل</span>
+                        </button>
+                      </div>
+
+                      {/* 1. Item Selection */}
+                      {attachmentMode === 'item' && (
+                        <div className="space-y-2 pt-1 animate-in fade-in duration-150">
+                          {menuItems.length === 0 ? (
+                            <p className="text-xs text-stone-500 bg-white p-3 rounded-xl border border-stone-200 text-center">
+                              لا توجد أصناف مضافة في منيو هذا المحل حالياً
+                            </p>
+                          ) : (
+                            <>
+                              <label className="block text-xs font-bold text-stone-700">
+                                اختر الصنف المطلوب إرفاقه:
+                              </label>
+                              <select
+                                value={selectedItemId}
+                                onChange={(e) => handleSelectItem(e.target.value)}
+                                className="w-full p-2.5 bg-white border border-amber-300 rounded-xl text-xs font-bold text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                              >
+                                {menuItems.map(item => (
+                                  <option key={item.id} value={item.id}>
+                                    {item.name} {item.price ? `(${item.price} د.أ)` : ''} {item.category ? `• ${item.category}` : ''}
+                                  </option>
+                                ))}
+                              </select>
+
+                              {menuAttachment && menuAttachment.type === 'item' && (
+                                <div className="p-3 bg-white rounded-xl border border-amber-300 flex items-center justify-between gap-3">
+                                  <div className="flex items-center gap-2.5 min-w-0">
+                                    {menuAttachment.itemImageUrl ? (
+                                      <img src={menuAttachment.itemImageUrl} alt={menuAttachment.itemName} className="w-10 h-10 rounded-lg object-cover border border-amber-200 shrink-0" />
+                                    ) : (
+                                      <div className="w-10 h-10 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center shrink-0 border border-amber-200">
+                                        <Utensils className="h-4 w-4" />
+                                      </div>
+                                    )}
+                                    <div className="min-w-0">
+                                      <div className="text-xs font-black text-stone-900 truncate">{menuAttachment.itemName}</div>
+                                      <div className="text-[11px] text-emerald-700 font-bold font-mono">{menuAttachment.itemPrice ? `${menuAttachment.itemPrice} د.أ` : ''}</div>
+                                    </div>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={applyItemDataToArticle}
+                                    className="text-[11px] font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 px-2.5 py-1.5 rounded-lg transition-all shrink-0 cursor-pointer"
+                                  >
+                                    استخدام كعنوان وصورة للخبر
+                                  </button>
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      )}
+
+                      {/* 2. Category Selection */}
+                      {attachmentMode === 'category' && (
+                        <div className="space-y-2 pt-1 animate-in fade-in duration-150">
+                          {menuCategories.length === 0 ? (
+                            <p className="text-xs text-stone-500 bg-white p-3 rounded-xl border border-stone-200 text-center">
+                              لا توجد أقسام في منيو هذا المحل حالياً
+                            </p>
+                          ) : (
+                            <>
+                              <label className="block text-xs font-bold text-stone-700">
+                                اختر التصنيف أو القسم المطلوب إرفاقه:
+                              </label>
+                              <select
+                                value={selectedCategoryName}
+                                onChange={(e) => handleSelectCategory(e.target.value)}
+                                className="w-full p-2.5 bg-white border border-amber-300 rounded-xl text-xs font-bold text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                              >
+                                {menuCategories.map(cat => (
+                                  <option key={cat.name} value={cat.name}>
+                                    قسم: {cat.name} ({cat.count} أصناف)
+                                  </option>
+                                ))}
+                              </select>
+
+                              {menuAttachment && menuAttachment.type === 'category' && (
+                                <div className="p-3 bg-white rounded-xl border border-amber-300 flex items-center justify-between gap-3">
+                                  <div className="flex items-center gap-2.5 min-w-0">
+                                    <div className="w-9 h-9 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+                                      <Layers className="h-4 w-4" />
+                                    </div>
+                                    <div className="min-w-0">
+                                      <div className="text-xs font-black text-stone-900 truncate">قسم {menuAttachment.categoryName}</div>
+                                      <div className="text-[11px] text-stone-500 font-bold">{menuAttachment.itemsCount || 0} صنف متاح</div>
+                                    </div>
+                                  </div>
+                                  <span className="text-[11px] font-black text-amber-900 bg-amber-100 px-2 py-0.5 rounded-lg shrink-0">
+                                    مرفق
+                                  </span>
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      )}
+
+                      {/* 3. Full Menu Selection */}
+                      {attachmentMode === 'full_menu' && (
+                        <div className="pt-1 animate-in fade-in duration-150">
+                          <div className="p-3.5 bg-white rounded-xl border border-amber-300 flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                                <BookOpen className="h-5 w-5" />
+                              </div>
+                              <div className="min-w-0">
+                                <div className="text-xs font-black text-stone-900 truncate">المنيو والكتالوج الرقمي الكامل للمحل</div>
+                                <div className="text-[11px] text-stone-500 font-bold">
+                                  سيتم إرفاق رابط مباشر لفتح المنيو الكامل ({menuItems.length} صنف متاح)
+                                </div>
+                              </div>
+                            </div>
+                            <span className="text-[11px] font-black text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg shrink-0">
+                              مفعّل
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Video URL */}
               <div>

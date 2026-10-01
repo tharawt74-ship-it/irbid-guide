@@ -368,3 +368,239 @@ export const ALL_IRBID_DISTRICTS = [
 ];
 
 export const IRBID_DISTRICTS = ALL_IRBID_DISTRICTS;
+
+export function isFoodAndDrinkBusiness(biz: { category?: string; subCategory?: string } | null | undefined): boolean {
+  if (!biz) return false;
+  
+  const rawCat = (biz.category || '').trim();
+  const rawSubCat = (biz.subCategory || '').trim();
+  // Strip any legacy emoji or symbols if present in legacy data
+  const cat = rawCat.replace(/^[^\p{L}\p{N}]+/u, '').trim();
+  const subCat = rawSubCat.replace(/^[^\p{L}\p{N}]+/u, '').trim();
+
+  const fbList = BUSINESS_CATEGORIES["مأكولات ومشروبات"] || [];
+  return (
+    rawCat === 'مأكولات ومشروبات' || 
+    cat === 'مأكولات ومشروبات' || 
+    rawCat === 'مطاعم ومقاهي' || 
+    cat === 'مطاعم ومقاهي' ||
+    fbList.includes(rawCat) || 
+    fbList.includes(cat) || 
+    fbList.includes(rawSubCat) || 
+    fbList.includes(subCat)
+  );
+}
+
+// Helper for Arabic text normalization
+export function normalizeArabic(text: string): string {
+  if (!text) return '';
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/[أإآءئؤ]/g, 'ا')
+    .replace(/ة/g, 'ه')
+    .replace(/ى/g, 'ي')
+    .replace(/[\u064B-\u0652]/g, '') // Remove tashkeel / diacritics
+    .replace(/[\(\)\/\,\-\_\.\:]/g, ' ') // Remove brackets and punctuation
+    .replace(/\s+/g, ' '); // Collapse spaces
+}
+
+// Canonical Business Category Resolver
+// Ensures every product inherits the EXACT main category and subcategory of the shop that owns it
+export function getCanonicalBusinessCategory(biz: { 
+  name?: string; 
+  description?: string; 
+  category?: string; 
+  subCategory?: string; 
+  subcategory?: string; 
+  mainCategory?: string; 
+  facilityType?: string; 
+} | null | undefined): { mainCategory: string; subCategory: string } {
+  if (!biz) {
+    return { mainCategory: 'مأكولات ومشروبات', subCategory: 'مطاعم وجبات سريعة (شاورما، برجر، سناكات)' };
+  }
+
+  const rawCat = (biz.category || '').trim();
+  const rawSub = (biz.subCategory || (biz as any).subcategory || '').trim();
+  const rawMain = (biz.mainCategory || '').trim();
+
+  // 1. If medical facility or category contains medical keywords, resolve under "صحة وطب"
+  const isMedical = Boolean(
+    biz.facilityType ||
+    rawCat.includes('طبي') ||
+    rawCat.includes('صحة') ||
+    rawCat.includes('عياد') ||
+    rawCat.includes('أسنان') ||
+    rawCat.includes('صيدل') ||
+    rawCat.includes('مختبر') ||
+    rawCat.includes('مستشف') ||
+    rawSub.includes('طبي') ||
+    rawSub.includes('عياد') ||
+    rawSub.includes('أسنان') ||
+    rawSub.includes('صيدل')
+  );
+
+  if (isMedical) {
+    const medSubs = BUSINESS_CATEGORIES["صحة وطب"];
+    let sub = medSubs[1]; // "عيادات أطباء واستشاريين"
+    const combined = `${rawSub} ${rawCat} ${biz.name || ''}`.toLowerCase();
+    if (combined.includes('أسنان') || combined.includes('اسنان')) {
+      sub = 'عيادات وجراحة الأسنان';
+    } else if (combined.includes('صيدل') || combined.includes('دواء')) {
+      sub = 'صيدليات ودواء';
+    } else if (combined.includes('مستشف')) {
+      sub = 'مستشفيات ومراكز طبية';
+    } else if (combined.includes('مختبر') || combined.includes('أشعة') || combined.includes('تحاليل')) {
+      sub = 'مختبرات وأشعة وبصريات';
+    } else if (combined.includes('علاج طبيعي') || combined.includes('تأهيل')) {
+      sub = 'علاج طبيعي وتأهيل';
+    } else if (combined.includes('بيطر')) {
+      sub = 'عيادات بيطرية';
+    } else {
+      const found = medSubs.find(s => s === rawSub || s === rawCat || rawSub.includes(s) || s.includes(rawSub));
+      if (found) sub = found;
+    }
+    return { mainCategory: 'صحة وطب', subCategory: sub };
+  }
+
+  // 2. Direct exact match in BUSINESS_CATEGORIES subcategories
+  for (const [mainCat, subCats] of Object.entries(BUSINESS_CATEGORIES)) {
+    if (subCats.includes(rawSub)) {
+      return { mainCategory: mainCat, subCategory: rawSub };
+    }
+    if (subCats.includes(rawCat)) {
+      return { mainCategory: mainCat, subCategory: rawCat };
+    }
+  }
+
+  // 3. Check if rawMain is a known Main Category
+  if (rawMain && (BUSINESS_CATEGORIES as any)[rawMain]) {
+    const mainKey = rawMain as MainCategory;
+    const subCats = BUSINESS_CATEGORIES[mainKey];
+    if (subCats.includes(rawSub)) {
+      return { mainCategory: mainKey, subCategory: rawSub };
+    }
+    if (subCats.includes(rawCat)) {
+      return { mainCategory: mainKey, subCategory: rawCat };
+    }
+    const normSub = normalizeArabic(rawSub);
+    const normCat = normalizeArabic(rawCat);
+    const matchedSub = subCats.find(s => {
+      const normS = normalizeArabic(s);
+      return (normSub && (normS.includes(normSub) || normSub.includes(normS))) ||
+             (normCat && (normS.includes(normCat) || normCat.includes(normS)));
+    });
+    if (matchedSub) {
+      return { mainCategory: mainKey, subCategory: matchedSub };
+    }
+    return { mainCategory: mainKey, subCategory: rawSub || subCats[0] };
+  }
+
+  // 4. Check if rawCat is a known Main Category (e.g. biz.category === 'مأكولات ومشروبات')
+  if (rawCat && (BUSINESS_CATEGORIES as any)[rawCat]) {
+    const mainKey = rawCat as MainCategory;
+    const subCats = BUSINESS_CATEGORIES[mainKey];
+    if (subCats.includes(rawSub)) {
+      return { mainCategory: mainKey, subCategory: rawSub };
+    }
+    const normSub = normalizeArabic(rawSub);
+    const matchedSub = subCats.find(s => {
+      const normS = normalizeArabic(s);
+      return normSub && (normS.includes(normSub) || normSub.includes(normS));
+    });
+    if (matchedSub) {
+      return { mainCategory: mainKey, subCategory: matchedSub };
+    }
+    return { mainCategory: mainKey, subCategory: rawSub || subCats[0] };
+  }
+
+  // 5. Normalized search across all subcategories in all main categories
+  const normSub = normalizeArabic(rawSub);
+  const normCat = normalizeArabic(rawCat);
+  for (const [mainCat, subCats] of Object.entries(BUSINESS_CATEGORIES)) {
+    for (const sub of subCats) {
+      const normS = normalizeArabic(sub);
+      if (
+        (normSub && (normS === normSub || normS.includes(normSub) || normSub.includes(normS))) ||
+        (normCat && (normS === normCat || normS.includes(normCat) || normCat.includes(normS)))
+      ) {
+        return { mainCategory: mainCat, subCategory: sub };
+      }
+    }
+  }
+
+  // 6. Food & Drink classification fallback
+  if (isFoodAndDrinkBusiness(biz as any)) {
+    const combined = normalizeArabic(`${rawSub} ${rawCat} ${biz.name || ''} ${biz.description || ''}`);
+    if (combined.includes('شاورما') || combined.includes('برجر') || combined.includes('سناك') || combined.includes('سريع')) {
+      return { mainCategory: 'مأكولات ومشروبات', subCategory: 'مطاعم وجبات سريعة (شاورما، برجر، سناكات)' };
+    }
+    if (combined.includes('مشاوي') || combined.includes('كباب') || combined.includes('لحم')) {
+      return { mainCategory: 'مأكولات ومشروبات', subCategory: 'مطاعم مشاوي ومأكولات شرقية' };
+    }
+    if (combined.includes('سمك') || combined.includes('بحري')) {
+      return { mainCategory: 'مأكولات ومشروبات', subCategory: 'مطاعم مأكولات بحرية وأسماك' };
+    }
+    if (combined.includes('بيتزا') || combined.includes('معجنات') || combined.includes('فطائر')) {
+      return { mainCategory: 'مأكولات ومشروبات', subCategory: 'مطاعم بيتزا ومعجنات' };
+    }
+    if (combined.includes('شعبية') || combined.includes('فول') || combined.includes('فلافل') || combined.includes('حمص')) {
+      return { mainCategory: 'مأكولات ومشروبات', subCategory: 'مطاعم مأكولات شعبية (حمص وفلافل)' };
+    }
+    if (combined.includes('كافيه') || combined.includes('قهوة') || combined.includes('مقهى') || combined.includes('كوفي')) {
+      return { mainCategory: 'مأكولات ومشروبات', subCategory: 'مقاهي وكافيهات' };
+    }
+    if (combined.includes('حلويات') || combined.includes('كنافة')) {
+      return { mainCategory: 'مأكولات ومشروبات', subCategory: 'حلويات شرقية وغربية' };
+    }
+    if (combined.includes('مخبز') || combined.includes('مخابز') || combined.includes('خبز')) {
+      return { mainCategory: 'مأكولات ومشروبات', subCategory: 'مخابز' };
+    }
+    if (combined.includes('عصير') || combined.includes('بوظة') || combined.includes('ايس كريم')) {
+      return { mainCategory: 'مأكولات ومشروبات', subCategory: 'محلات بوظة وآيس كريم وعصائر' };
+    }
+    if (combined.includes('ملحمة') || combined.includes('ملاحم')) {
+      return { mainCategory: 'مأكولات ومشروبات', subCategory: 'ملاحم ولحوم طازجة وبحريات' };
+    }
+    if (combined.includes('دواجن') || combined.includes('نتفات')) {
+      return { mainCategory: 'مأكولات ومشروبات', subCategory: 'محلات دواجن طازجة ونتفات' };
+    }
+    if (combined.includes('تواصي') || combined.includes('مناسبات')) {
+      return { mainCategory: 'مأكولات ومشروبات', subCategory: 'مطابخ تواصي ومناسبات' };
+    }
+    return { mainCategory: 'مأكولات ومشروبات', subCategory: 'مطاعم وجبات سريعة (شاورما، برجر، سناكات)' };
+  }
+
+  // 7. General fallback
+  const cat = (rawCat || rawSub || '').trim().toLowerCase();
+  let stdMain = 'تسوق وتجزئة';
+  if (cat.includes('مطاعم') || cat.includes('مقاهي') || cat.includes('كافيه') || cat.includes('مأكولات') || cat.includes('حلويات') || cat.includes('مخابز') || cat.includes('أكل') || cat.includes('طعام')) {
+    stdMain = 'مأكولات ومشروبات';
+  } else if (cat.includes('صحة') || cat.includes('طب') || cat.includes('عيادة') || cat.includes('أطباء') || cat.includes('صيدلية') || cat.includes('مستشفى') || cat.includes('مختبر')) {
+    stdMain = 'صحة وطب';
+  } else if (cat.includes('صناعة') || cat.includes('حرف') || cat.includes('إنشاءات') || cat.includes('مواد بناء')) {
+    stdMain = 'صناعة وحرف وإنشاءات';
+  } else if (cat.includes('عناية شخصية') || cat.includes('تجميل') || cat.includes('صالون') || cat.includes('حلاقة') || cat.includes('جيم') || cat.includes('رياضة')) {
+    stdMain = 'عناية شخصية وتجميل';
+  } else if (cat.includes('تعليم') || cat.includes('تدريب')) {
+    stdMain = 'تعليم وتدريب';
+  } else if (cat.includes('مركبات') || cat.includes('نقل') || cat.includes('سيارات')) {
+    stdMain = 'مركبات ونقل';
+  } else if (cat.includes('خدمات') || cat.includes('صيانة')) {
+    stdMain = 'خدمات وصيانة';
+  } else if (cat.includes('مال') || cat.includes('أعمال')) {
+    stdMain = 'مال وأعمال';
+  } else if (cat.includes('مناسبات') || cat.includes('أفراح')) {
+    stdMain = 'مناسبات وأفراح';
+  } else if (cat.includes('سياحة') || cat.includes('ترفيه')) {
+    stdMain = 'سياحة وترفيه';
+  } else if (cat.includes('زراعة') || cat.includes('مشاتل')) {
+    stdMain = 'زراعة وحدائق ومستلزمات';
+  } else if (cat.includes('مصانع') || cat.includes('إنتاج')) {
+    stdMain = 'مصانع وإنتاج وشركات صناعية';
+  } else if (cat.includes('تقنية') || cat.includes('برمجيات')) {
+    stdMain = 'تقنية وبرمجيات وابتكار';
+  }
+  const validSubs = BUSINESS_CATEGORIES[stdMain as MainCategory] || BUSINESS_CATEGORIES['تسوق وتجزئة'];
+  return { mainCategory: stdMain, subCategory: rawSub || validSubs[0] };
+}

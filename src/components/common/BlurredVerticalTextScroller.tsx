@@ -394,7 +394,7 @@ export function RadialWheelTextScroller({
                   willChange: 'transform, opacity',
                   display: 'none'
                 }}
-                className="flex items-center justify-start pointer-events-none -mt-5 lg:-mt-[42px]"
+                className="flex items-center justify-start pointer-events-none -mt-5 sm:-mt-[42px] lg:-mt-[42px]"
                 dir={dir}
               >
                 {item.includes('كافيهات ومساحات عمل هادئة') ? (
@@ -408,8 +408,8 @@ export function RadialWheelTextScroller({
                   </span>
                 )}
 
-                {/* Dynamic Icon shown only on desktop for selected item (rendered at the end of the RTL text) */}
-                <div className="hidden lg:flex items-center justify-center wheel-item-icon select-none opacity-0 scale-50 transition-all duration-300 pointer-events-none mr-2 lg:-mr-4 shrink-0">
+                {/* Dynamic Icon shown only on tablet and desktop for selected item (rendered at the end of the RTL text) */}
+                <div className="hidden sm:flex md:max-lg:flex items-center justify-center wheel-item-icon select-none opacity-0 scale-50 transition-all duration-300 pointer-events-none mr-2 sm:-mr-4 md:max-lg:-mr-4 lg:-mr-4 shrink-0">
                   {getIconForItem(item)}
                 </div>
               </div>

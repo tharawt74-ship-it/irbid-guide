@@ -12,12 +12,14 @@ import { getWhatsAppUrl, formatOfferWhatsAppMessage } from '../lib/contactHelper
 import { ShareButton } from '../components/ShareButton';
 import { SEO } from '../components/common/SEO';
 import { getBusinessLink } from '../lib/utils';
+import { getBusinessVipStatus } from '../lib/vipHelper';
+import { Business } from '../types';
 
 export function OfferDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [offer, setOffer] = useState<any | null>(null);
-  const [business, setBusiness] = useState<any | null>(null);
+  const [business, setBusiness] = useState<Business | null>(null);
   const [loading, setLoading] = useState(true);
   const [copiedCode, setCopiedCode] = useState(false);
 
@@ -31,16 +33,29 @@ export function OfferDetail() {
         
         if (offerSnap.exists()) {
           const offerData = { id: offerSnap.id, ...offerSnap.data() } as any;
-          setOffer(offerData);
 
           // Now fetch business details
+          let bizData: Business | null = null;
           if (offerData.businessId) {
             const bizRef = doc(db, 'businesses', offerData.businessId);
             const bizSnap = await getDoc(bizRef);
             if (bizSnap.exists()) {
-              setBusiness({ id: bizSnap.id, ...bizSnap.data() });
+              bizData = { id: bizSnap.id, ...bizSnap.data() } as Business;
             }
           }
+
+          // Strict security check: if business exists but is not Golden VIP, hide offer
+          if (bizData) {
+            const vipStatus = getBusinessVipStatus(bizData);
+            if (!vipStatus.isVip) {
+              setOffer(null);
+              setBusiness(null);
+              return;
+            }
+          }
+
+          setOffer(offerData);
+          setBusiness(bizData);
         }
       } catch (err) {
         console.error("Error fetching offer details:", err);

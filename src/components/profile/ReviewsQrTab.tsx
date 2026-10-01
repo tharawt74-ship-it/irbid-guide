@@ -22,7 +22,7 @@ import { Business } from '../../types';
 import { useSystemSettings } from '../../contexts/SystemSettingsContext';
 import { PosterCanvasPreview } from './PosterCanvasPreview';
 import { PRESET_REVIEWS_TEMPLATES } from '../admin/qr-designer/designerTemplates';
-import { printPosterTemplate, exportPosterAsPng, readAndCompressImageFile, PosterExtraVars } from '../admin/qr-designer/designerUtils';
+import { printPosterTemplate, exportPosterAsPng, downloadQrCodeAsPng, readAndCompressImageFile, PosterExtraVars } from '../admin/qr-designer/designerUtils';
 import { PosterTemplate } from '../../types/posterDesigner';
 
 interface ReviewsQrTabProps {
@@ -113,6 +113,7 @@ export function ReviewsQrTab({ business, isMedical = false }: ReviewsQrTabProps)
   const [isIdentityOpen, setIsIdentityOpen] = useState(false);
   const [savedNotice, setSavedNotice] = useState(false);
   const [copiedNotice, setCopiedNotice] = useState(false);
+  const [isDownloadingQr, setIsDownloadingQr] = useState(false);
 
   const logoInputRef = useRef<HTMLInputElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -192,6 +193,18 @@ export function ReviewsQrTab({ business, isMedical = false }: ReviewsQrTabProps)
     exportPosterAsPng('reviews-poster-preview-canvas', filename);
   };
 
+  const handleDownloadQrOnly = async () => {
+    setIsDownloadingQr(true);
+    try {
+      const filename = `QR_تقييمات_${(business.name || 'shofi_irbid').replace(/\s+/g, '_')}.png`;
+      await downloadQrCodeAsPng(targetReviewUrl, filename, activePalette.qr, '#ffffff');
+    } catch (err) {
+      console.error('Error downloading QR code:', err);
+    } finally {
+      setIsDownloadingQr(false);
+    }
+  };
+
   return (
     <div className="space-y-6 text-right" dir="rtl">
       
@@ -225,11 +238,22 @@ export function ReviewsQrTab({ business, isMedical = false }: ReviewsQrTabProps)
           
           <button
             type="button"
+            onClick={handleDownloadQrOnly}
+            disabled={isDownloadingQr}
+            className="h-9 px-3 sm:px-3.5 text-xs font-black text-emerald-950 bg-emerald-100/90 hover:bg-emerald-200 border border-emerald-300 rounded-xl transition-all cursor-pointer inline-flex items-center justify-center gap-1.5 shadow-2xs flex-1 sm:flex-initial disabled:opacity-50"
+            title="تحميل رمز الـ QR المخصص فقط كصورة PNG عالية الدقة"
+          >
+            <QrCode className="h-3.5 w-3.5 text-emerald-800 shrink-0" />
+            <span>{isDownloadingQr ? 'جاري التحميل...' : 'تحميل الـ QR كصورة'}</span>
+          </button>
+
+          <button
+            type="button"
             onClick={handleExportPng}
             className="h-9 px-3 sm:px-3.5 text-xs font-black text-amber-950 bg-amber-100/90 hover:bg-amber-200 border border-amber-200/90 rounded-xl transition-all cursor-pointer inline-flex items-center justify-center gap-1.5 shadow-2xs flex-1 sm:flex-initial"
           >
             <Download className="h-3.5 w-3.5 text-amber-800 shrink-0" />
-            <span>تحميل PNG</span>
+            <span>تحميل البوستر PNG</span>
           </button>
 
           <button
@@ -481,6 +505,39 @@ export function ReviewsQrTab({ business, isMedical = false }: ReviewsQrTabProps)
               <p className="text-[11px] text-stone-600 font-bold">
                 📱 عند مسح الرمز ينقل الزائر مباشرة إلى صفحة كتابة التقييم الخاصة بـ <span className="text-amber-800 font-black">{business.name}</span>
               </p>
+            </div>
+
+            {/* Direct Quick Action Buttons */}
+            <div className="pt-1 space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={handleExportPng}
+                  className="py-3 px-3 text-xs font-black text-amber-950 bg-amber-100/90 hover:bg-amber-200 border border-amber-200/90 rounded-2xl transition-all cursor-pointer inline-flex items-center justify-center gap-1.5 shadow-2xs active:scale-95"
+                >
+                  <Download className="h-4 w-4 text-amber-800 shrink-0" />
+                  <span>تحميل البوستر PNG</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleDownloadQrOnly}
+                  disabled={isDownloadingQr}
+                  className="py-3 px-3 text-xs font-black text-emerald-950 bg-emerald-100/90 hover:bg-emerald-200 border border-emerald-300 rounded-2xl transition-all cursor-pointer inline-flex items-center justify-center gap-1.5 shadow-2xs active:scale-95 disabled:opacity-50"
+                >
+                  <QrCode className="h-4 w-4 text-emerald-800 shrink-0" />
+                  <span>{isDownloadingQr ? 'جاري التحميل...' : 'تحميل الـ QR كصورة'}</span>
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={handlePrint}
+                className="w-full py-3 px-4 text-xs font-black text-white bg-[#1a4d2e] hover:bg-emerald-900 border border-[#1a4d2e] rounded-2xl transition-all cursor-pointer inline-flex items-center justify-center gap-2 shadow-sm active:scale-95"
+              >
+                <Printer className="h-4 w-4 shrink-0 text-emerald-300" />
+                <span>طباعة بوستر A4</span>
+              </button>
             </div>
           </div>
         </div>

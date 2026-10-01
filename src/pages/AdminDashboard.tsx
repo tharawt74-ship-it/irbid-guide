@@ -373,16 +373,16 @@ export function AdminDashboard() {
         rrRes
       ] = await Promise.allSettled([
         getAppConfig(),
-        getDocs(query(collection(db, 'businessRequests'), orderBy('createdAt', 'desc'), limit(150))).catch(() => getDocs(query(collection(db, 'businessRequests'), limit(150)))),
-        getDocs(query(collection(db, 'businesses'), orderBy('createdAt', 'desc'), limit(150))).catch(() => getDocs(query(collection(db, 'businesses'), limit(150)))),
-        getDocs(query(collection(db, 'marketingRequests'), orderBy('createdAt', 'desc'), limit(100))),
-        getDocs(query(collection(db, 'jobs'), orderBy('createdAt', 'desc'), limit(100))),
-        getDocs(query(collection(db, 'bannerBookingRequests'), orderBy('createdAt', 'desc'), limit(100))),
-        getDocs(query(collection(db, 'news'), orderBy('createdAt', 'desc'), limit(100))),
-        getDocs(query(collection(db, 'housings'), orderBy('createdAt', 'desc'), limit(100))),
-        getDocs(query(collection(db, 'tourism'), limit(100))),
-        getDocs(query(collection(db, 'edit_suggestions'), orderBy('createdAt', 'desc'), limit(100))),
-        getDocs(query(collection(db, 'review_reports'), orderBy('createdAt', 'desc'), limit(100)))
+        getDocs(query(collection(db, 'businessRequests'), orderBy('createdAt', 'desc'), limit(50))).catch(() => getDocs(query(collection(db, 'businessRequests'), limit(50)))),
+        getDocs(query(collection(db, 'businesses'), orderBy('createdAt', 'desc'), limit(50))).catch(() => getDocs(query(collection(db, 'businesses'), limit(50)))),
+        getDocs(query(collection(db, 'marketingRequests'), orderBy('createdAt', 'desc'), limit(40))),
+        getDocs(query(collection(db, 'jobs'), orderBy('createdAt', 'desc'), limit(40))),
+        getDocs(query(collection(db, 'bannerBookingRequests'), orderBy('createdAt', 'desc'), limit(40))),
+        getDocs(query(collection(db, 'news'), orderBy('createdAt', 'desc'), limit(40))),
+        getDocs(query(collection(db, 'housings'), orderBy('createdAt', 'desc'), limit(40))),
+        getDocs(query(collection(db, 'tourism'), limit(40))),
+        getDocs(query(collection(db, 'edit_suggestions'), orderBy('createdAt', 'desc'), limit(40))),
+        getDocs(query(collection(db, 'review_reports'), orderBy('createdAt', 'desc'), limit(40)))
       ]);
 
       // 1. Config
@@ -1879,19 +1879,25 @@ export function AdminDashboard() {
   const [upgradeRequestsList, setUpgradeRequestsList] = useState<UpgradeRequest[]>([]);
 
   useEffect(() => {
-    if (!db) return;
-    const q = query(collection(db, 'upgradeRequests'), orderBy('createdAt', 'desc'));
-    const unsub = onSnapshot(
-      q,
-      (snapshot) => {
-        const list: UpgradeRequest[] = [];
-        snapshot.forEach((d) => list.push({ id: d.id, ...d.data() } as UpgradeRequest));
-        setUpgradeRequestsList(list);
-      },
-      (err) => console.error('Error fetching upgrade requests for header:', err)
-    );
-    return () => unsub();
-  }, []);
+    if (!db || !currentUser) return;
+    try {
+      const q = query(collection(db, 'upgradeRequests'), orderBy('createdAt', 'desc'));
+      const unsub = onSnapshot(
+        q,
+        (snapshot) => {
+          const list: UpgradeRequest[] = [];
+          snapshot.forEach((d) => list.push({ id: d.id, ...d.data() } as UpgradeRequest));
+          setUpgradeRequestsList(list);
+        },
+        (err) => {
+          console.warn('Upgrade requests listener notice:', err?.message || err);
+        }
+      );
+      return () => unsub();
+    } catch (e) {
+      console.warn('Upgrade requests query setup warning:', e);
+    }
+  }, [currentUser]);
 
   const pendingShopsUpgradeCount = useMemo(() => {
     return upgradeRequestsList.filter((r) => {

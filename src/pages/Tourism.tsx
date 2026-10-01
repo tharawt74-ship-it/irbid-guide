@@ -204,7 +204,7 @@ export function Tourism() {
           await setDoc(doc(db, 'tourism', editingSpot.id), spotPayload, { merge: true });
         }
         setSpots(prev => prev.map(item => item.id === editingSpot.id ? { id: editingSpot.id, ...spotPayload } as TourismSpot : item));
-        showToast('تم تعديل المعلم السياحي بنجاح 🎉');
+        showToast('تم تعديل المعلم السياحي بنجاح');
       } else {
         // Add new mode
         let newId = `spot-${Date.now()}`;
@@ -214,7 +214,7 @@ export function Tourism() {
         }
         const newSpot: TourismSpot = { id: newId, ...spotPayload } as TourismSpot;
         setSpots(prev => [newSpot, ...prev]);
-        showToast('تمت إضافة المعلم السياحي الجديد بنجاح 🚀');
+        showToast('تمت إضافة المعلم السياحي الجديد بنجاح');
       }
       setIsModalOpen(false);
     } catch (err) {
@@ -272,11 +272,11 @@ export function Tourism() {
         });
       } else {
         await navigator.clipboard.writeText(shareUrl);
-        showToast('تم نسخ رابط المعلم السياحي بنجاح! 🔗');
+        showToast('تم نسخ رابط المعلم السياحي بنجاح!');
       }
     } catch (err) {
       await navigator.clipboard.writeText(shareUrl);
-      showToast('تم نسخ رابط المعلم السياحي بنجاح! 🔗');
+      showToast('تم نسخ رابط المعلم السياحي بنجاح!');
     }
   };
 
@@ -354,7 +354,7 @@ export function Tourism() {
               referrerPolicy="no-referrer"
             />
             <div className="absolute top-4 right-4 bg-[#1a4d2e] text-white px-3.5 py-1.5 rounded-full text-xs font-black shadow-md">
-              {activeSpot.category === 'أثري' ? '🕌 معالم أثرية' : activeSpot.category === 'طبيعة' ? '🌲 طبيعة ومحميات' : activeSpot.category === 'ترفيه' ? '🎡 ترفيه ومتنزهات' : '🏛️ متاحف وثقافة'}
+              {activeSpot.category === 'أثري' ? 'معالم أثرية' : activeSpot.category === 'طبيعة' ? 'طبيعة ومحميات' : activeSpot.category === 'ترفيه' ? 'ترفيه ومتنزهات' : 'متاحف وثقافة'}
             </div>
             
             <div className="absolute bottom-4 right-4 bg-amber-500 text-stone-950 px-3 py-1 rounded-xl text-xs font-black flex items-center gap-1 shadow-sm">
@@ -385,14 +385,14 @@ export function Tourism() {
               <div className="space-y-1 text-xs">
                 <span className="font-black text-[#1a4d2e] block flex items-center gap-1">
                   <Clock className="h-4 w-4 text-[#ff9f1c]" />
-                  ⏱ أوقات الدوام والزيارة:
+                  <span>أوقات الدوام والزيارة:</span>
                 </span>
                 <span className="text-stone-700 font-bold">{activeSpot.openingHours}</span>
               </div>
               <div className="space-y-1 text-xs">
                 <span className="font-black text-[#1a4d2e] block flex items-center gap-1">
                   <DollarSign className="h-4 w-4 text-emerald-600" />
-                  💵 تذاكر ورسوم الدخول:
+                  <span>تذاكر ورسوم الدخول:</span>
                 </span>
                 <span className="text-stone-700 font-bold">{activeSpot.entryFee}</span>
               </div>
@@ -507,43 +507,31 @@ export function Tourism() {
       {/* Banner Slideshow */}
       <BannerSlideshow banners={banners} />
 
-      {/* Page Header & Search Bar (Compact & Sleek) */}
-      <div className="bg-white rounded-2xl md:rounded-3xl p-3.5 sm:p-5 border border-[#e5e1da] shadow-xs space-y-3 sm:space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="space-y-1">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <div className="inline-flex items-center gap-1 bg-emerald-50 text-[#1a4d2e] border border-emerald-200 px-2.5 py-0.5 rounded-full text-[11px] font-black">
-                <Compass className="h-3 w-3 text-[#1a4d2e]" />
-                <span>اكتشف سياحة إربد</span>
-              </div>
-              {isAdmin && (
-                <div className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full text-[11px] font-bold">
-                  <ShieldCheck className="h-3 w-3 text-emerald-700" />
-                  <span>لوحة إدارة المعالم</span>
-                </div>
-              )}
+      {/* Page Header & Search Bar (2026 Mobile Optimized Design) */}
+      <div className="bg-gradient-to-br from-[#1a4d2e] via-[#153e25] to-[#0f2e1d] text-white rounded-3xl p-4 sm:p-6 shadow-xl border border-emerald-800/40 relative overflow-hidden space-y-3.5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="w-9 h-9 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/10 text-emerald-300">
+              <Compass className="h-5 w-5 text-emerald-300" />
+            </span>
+            <div>
+              <h1 className="text-lg sm:text-2xl font-black tracking-tight text-white">
+                أماكن سياحية ومعالم إربد
+              </h1>
+              <p className="text-[11px] sm:text-xs text-emerald-100/80 font-medium">
+                آثار أم قيس، غابات برقش، المتاحف والمنتزهات الطبيعية
+              </p>
             </div>
-            
-            <h1 className="text-xl sm:text-2xl font-black text-stone-900 tracking-tight">
-              أماكن سياحية ومعالم إربد
-            </h1>
-            
-            <p className="hidden sm:block text-stone-500 text-xs font-medium leading-relaxed">
-              استكشف آثار أم قيس وبيلا، أحضان غابات برقش والمتاحف العريقة.
-            </p>
           </div>
 
-          {/* Quick Actions in Banner - Only for Admin */}
           {isAdmin && (
-            <div className="shrink-0">
-              <button
-                onClick={openAddModal}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 bg-[#1a4d2e] hover:bg-[#143e25] text-white px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-xs cursor-pointer"
-              >
-                <Plus className="h-4 w-4 text-[#ff9f1c]" />
-                <span>إضافة معلم جديد</span>
-              </button>
-            </div>
+            <button
+              onClick={openAddModal}
+              className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#ff9f1c] hover:bg-[#f08f0c] text-stone-950 font-black text-xs rounded-xl shadow-md transition-all active:scale-95 cursor-pointer shrink-0"
+            >
+              <Plus className="h-4 w-4" />
+              <span>إضافة معلم</span>
+            </button>
           )}
         </div>
 
@@ -554,27 +542,27 @@ export function Tourism() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="ابحث عن معلّم (أم قيس، غابة، متحف، سد)..."
-            className="w-full bg-[#fdfcfb] text-stone-900 placeholder:text-stone-400 border border-[#e5e1da] rounded-xl px-3.5 py-2.5 pr-10 text-xs sm:text-sm focus:outline-none focus:border-[#1a4d2e] focus:bg-white transition-all shadow-inner"
+            className="w-full bg-white/10 backdrop-blur-md text-white placeholder:text-stone-300 border border-white/20 rounded-2xl px-4 py-3 pr-10 text-xs sm:text-sm focus:outline-none focus:bg-white/20 transition-all shadow-inner"
           />
-          <Search className="h-4 w-4 text-stone-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <Search className="h-4 w-4 text-emerald-200 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           {searchQuery && (
             <button 
               onClick={() => setSearchQuery('')}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 p-1"
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-300 hover:text-white p-1.5"
             >
-              <X className="h-3.5 w-3.5" />
+              <X className="h-4 w-4" />
             </button>
           )}
         </div>
       </div>
 
       {/* Category Filter Tabs */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none border-b border-stone-100">
+      <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none snap-x -mx-4 px-4 sm:mx-0 sm:px-0">
         {CATEGORIES.map(cat => (
           <button
             key={cat}
             onClick={() => setSelectedCategory(cat)}
-            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+            className={`snap-start px-4.5 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer min-h-[44px] flex items-center shrink-0 active:scale-95 ${
               selectedCategory === cat
                 ? 'bg-[#1a4d2e] text-white shadow-xs font-black'
                 : 'bg-white text-stone-600 border border-[#e5e1da] hover:bg-stone-50'
@@ -639,7 +627,7 @@ export function Tourism() {
                     referrerPolicy="no-referrer"
                   />
                   <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-md text-stone-800 px-2.5 py-1 rounded-lg text-[10px] font-black shadow-2xs">
-                    {spot.category === 'أثري' ? '🏯 معالم أثرية' : spot.category === 'طبيعة' ? '🌲 طبيعة ومحميات' : spot.category === 'ترفيه' ? '🎡 ترفيه وتسلية' : '🏛️ ثقافة وفنون'}
+                    {spot.category === 'أثري' ? 'معالم أثرية' : spot.category === 'طبيعة' ? 'طبيعة ومحميات' : spot.category === 'ترفيه' ? 'ترفيه وتسلية' : 'ثقافة وفنون'}
                   </div>
                 </div>
 
@@ -759,10 +747,10 @@ export function Tourism() {
                     onChange={(e) => setFormCategory(e.target.value as any)}
                     className="w-full p-3 bg-stone-50 border border-[#e5e1da] rounded-xl text-[#2d2a26] text-sm focus:bg-white focus:border-[#1a4d2e] outline-none"
                   >
-                    <option value="أثري">أثري / تاريخي 🏯</option>
-                    <option value="طبيعة">طبيعة ومحميات 🌲</option>
-                    <option value="ترفيه">ترفيه وتسلية 🎡</option>
-                    <option value="ثقافة">ثقافة ومتاحف 🏛️</option>
+                    <option value="أثري">أثري / تاريخي</option>
+                    <option value="طبيعة">طبيعة ومحميات</option>
+                    <option value="ترفيه">ترفيه وتسلية</option>
+                    <option value="ثقافة">ثقافة ومتاحف</option>
                   </select>
                 </div>
 

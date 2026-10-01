@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router';
 import { 
   Home as HomeIcon, Search, Plus, MapPin, DollarSign, 
   Phone, MessageSquare, Shield, Check, X, Filter, Info, 
   Grid, List, Sparkles, Send, Award, GraduationCap, Building2, Eye, Trash2,
-  Clock, CheckCircle2, AlertCircle, Edit3, User, ArrowLeft, Crown
+  Clock, CheckCircle2, AlertCircle, Edit3, User, ArrowLeft, Crown, Key, Building
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { collection, getDocs, deleteDoc, doc, addDoc, query, orderBy, limit } from 'firebase/firestore';
@@ -26,15 +26,18 @@ import { IRBID_REGIONS_CATEGORIZED } from '../lib/categories';
 import { Pagination } from '../components/common/Pagination';
 import { BusinessCardSkeleton } from '../components/common/Skeleton';
 import { useConfirm } from '../contexts/ConfirmContext';
+import { useHeaderVisibility } from '../lib/useHeaderVisibility';
 
 export function Housing() {
   const { confirm } = useConfirm();
   const navigate = useNavigate();
   const { currentUser, isAdmin } = useAuth();
+  const showHeader = useHeaderVisibility();
   const [housings, setHousings] = useState<HousingItem[]>([]);
   const [banners, setBanners] = useState<HomepageBanner[]>(DEFAULT_HOUSING_BANNERS);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [stickySearchInput, setStickySearchInput] = useState('');
   const [activeCategory, setActiveCategory] = useState<'sale' | 'rent' | 'students' | 'roommates'>('rent');
   const [selectedDistrict, setSelectedDistrict] = useState<string>('الكل');
   const [minPrice, setMinPrice] = useState<string>('');
@@ -48,6 +51,22 @@ export function Housing() {
   const [sortBy, setSortBy] = useState<string>('newest');
   const [showFiltersMobile, setShowFiltersMobile] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+
+  const activeHousingCategoryRef = useRef<HTMLButtonElement | null>(null);
+
+  // Auto scroll selected housing category tab into view
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (activeHousingCategoryRef.current) {
+        activeHousingCategoryRef.current.scrollIntoView({
+          behavior: 'smooth',
+          block: 'nearest',
+          inline: 'center'
+        });
+      }
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [activeCategory]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -98,48 +117,15 @@ export function Housing() {
       const snap = await getDocs(ref);
       const items: any[] = [];
       snap.forEach(d => {
-        items.push({ id: d.id, ...d.data() });
+        const data = d.data();
+        if (!data.isDeleted && !data.isDemo) {
+          items.push({ id: d.id, ...data });
+        }
       });
-      
-      if (items.length === 0) {
-        const demoRoommates = [
-          {
-            id: 'rm1',
-            name: 'أحمد التميمي',
-            gender: 'طالب',
-            university: 'جامعة العلوم والتكنولوجيا',
-            budget: '60 - 80 دينار شهرياً',
-            description: 'طالب هندسة حاسوب في السنة الثالثة، هادئ وغير مدخن ومحافظ على الصلاة. أبحث عن رفيق سكن لمشاركتي شقة مفروشة غرفتين وصالة قريبة من البوابة الرئيسية للجامعة للتوفير في التكاليف والنقل.',
-            contactPhone: '0787766554',
-            createdAt: Date.now() - 3600000 * 24
-          },
-          {
-            id: 'rm2',
-            name: 'سارة عبيدات',
-            gender: 'طالبة',
-            university: 'جامعة اليرموك',
-            budget: '50 - 70 دينار شهرياً',
-            description: 'طالبة صيدلة في السنة الثانية، أبحث عن رفيقة سكن ملتزمة وهادئة للمشاركة في شقة قريبة من كلية الصيدلة (البوابة الشمالية). الشقة مؤمنة بالكامل وتحتاج فقط لتقاسم الإيجار السنوي.',
-            contactPhone: '0798877665',
-            createdAt: Date.now() - 3600000 * 48
-          },
-          {
-            id: 'rm3',
-            name: 'محمد بني هاني',
-            gender: 'طالب',
-            university: 'جامعة اليرموك',
-            budget: '45 - 60 دينار شهرياً',
-            description: 'طالب تكنولوجيا معلومات، أبحث عن رفيق سكن لمشاركة استوديو مجهز بالكامل بجانب دوار القبة. الإيجار الإجمالي 100 دينار (50 دينار لكل منا). هادئ وملتزم بدراستي.',
-            contactPhone: '0779988776',
-            createdAt: Date.now() - 3600000 * 72
-          }
-        ];
-        setRoommates(demoRoommates);
-      } else {
-        setRoommates(items.sort((a, b) => b.createdAt - a.createdAt));
-      }
+      setRoommates(items.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)));
     } catch (err) {
       console.error("Error loading roommates:", err);
+      setRoommates([]);
     } finally {
       setLoadingRoommates(false);
     }
@@ -178,7 +164,7 @@ export function Housing() {
         createdAt: Date.now()
       });
 
-      showToast('🎉 تم تسجيل طلب المعاينة والحجز بنجاح! سيتم التواصل معك لتأكيد الموعد.');
+      showToast('تم تسجيل طلب المعاينة والحجز بنجاح! سيتم التواصل معك لتأكيد الموعد.');
       setIsBookingFormOpen(false);
       setBookingForm({ studentName: '', studentPhone: '', visitDate: '', visitTime: '', notes: '', gender: 'طالب' });
     } catch (err) {
@@ -204,7 +190,7 @@ export function Housing() {
         createdAt: Date.now()
       };
       await addDoc(ref, docData);
-      showToast('🚀 تم نشر طلب رفيق السكن بنجاح في دليل إربد!');
+      showToast('تم نشر طلب رفيق السكن بنجاح في دليل إربد!');
       setIsRoommateFormOpen(false);
       setRoommateForm({ name: '', gender: 'طالب', university: 'اليرموك', budget: '', description: '', contactPhone: '' });
       loadRoommates();
@@ -217,8 +203,10 @@ export function Housing() {
   const loadHousings = async () => {
     const cached = getCachedHousings();
     if (cached && cached.length > 0) {
-      setHousings(cached);
+      const validCached = cached.filter(h => !h.isDeleted && !h.isDemo && (h.status === 'approved' || !h.status || isAdmin));
+      setHousings(validCached);
       setLoading(false);
+      return;
     } else {
       setLoading(true);
     }
@@ -235,7 +223,9 @@ export function Housing() {
       
       snap.forEach(d => {
         const data = d.data();
-        items.push({ id: d.id, ...data } as HousingItem);
+        if (!data.isDeleted && !data.isDemo && (data.status === 'approved' || !data.status || isAdmin)) {
+          items.push({ id: d.id, ...data } as HousingItem);
+        }
       });
 
       setHousings(items);
@@ -253,6 +243,15 @@ export function Housing() {
     fetchPageBanners(['سكنات', 'شقق', 'جامعة', 'اليرموك', 'التكنو'], DEFAULT_HOUSING_BANNERS, 'housing')
       .then(res => setBanners(res))
       .catch(() => setBanners(DEFAULT_HOUSING_BANNERS));
+
+    const handleOpenAddModal = () => {
+      setEditingHousing(null);
+      setIsFormOpen(true);
+    };
+    window.addEventListener('open-add-housing-modal', handleOpenAddModal);
+    return () => {
+      window.removeEventListener('open-add-housing-modal', handleOpenAddModal);
+    };
   }, []);
 
   const handleSaveSuccess = (savedListing: HousingItem) => {
@@ -458,70 +457,208 @@ export function Housing() {
         </div>
       )}
 
+      {/* ========================================================================= */}
+      {/* MOBILE STICKY TOP APP BAR (Positioned Above Promotional Banner on Mobile) */}
+      {/* ========================================================================= */}
+      <div className={cn(
+        "lg:hidden sticky z-30 bg-white/95 backdrop-blur-md border-b border-stone-200/80 shadow-2xs -mx-4 sm:-mx-6 px-4 sm:px-6 py-2.5 space-y-2 transition-all duration-300",
+        showHeader ? "top-[62px] sm:top-[68px] md:top-[72px]" : "top-0"
+      )}>
+        {/* Row 1: Search Bar & Filter Sheet Button */}
+        <div className="flex items-center gap-2">
+          {/* Integrated Search Input */}
+          <form 
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (stickySearchInput.trim()) {
+                navigate(`/search?q=${encodeURIComponent(stickySearchInput.trim())}&tab=housing`);
+              }
+            }}
+            className="relative flex-1 min-w-0"
+          >
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-stone-400 pointer-events-none" />
+            <input
+              type="search"
+              enterKeyHint="search"
+              placeholder="عن ماذا تبحث؟"
+              value={stickySearchInput}
+              onChange={(e) => setStickySearchInput(e.target.value)}
+              className="w-full pl-8 pr-8 py-2 bg-stone-100/90 border border-stone-200 rounded-xl text-xs font-bold placeholder:text-stone-400 focus:outline-none focus:bg-white focus:border-[#1a4d2e] transition-all cursor-text"
+            />
+            {stickySearchInput && (
+              <button
+                type="button"
+                onClick={() => setStickySearchInput('')}
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 p-1 rounded-full cursor-pointer"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </form>
+
+          {/* Filter Sheet Trigger Button */}
+          <button
+            onClick={() => setShowFiltersMobile(true)}
+            className="relative px-3.5 py-2 bg-[#1a4d2e] text-white rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-xs active:scale-95 transition-all shrink-0 cursor-pointer"
+          >
+            <Filter className="h-3.5 w-3.5 text-[#ff9f1c]" />
+            <span>فلترة</span>
+            {(() => {
+              const count = [
+                activeCategory !== 'roommates' && selectedDistrict !== 'الكل',
+                activeCategory !== 'roommates' && minPrice !== '',
+                activeCategory !== 'roommates' && maxPrice !== '',
+                (activeCategory === 'students' || activeCategory === 'roommates') && selectedUniv !== 'الكل',
+                activeCategory !== 'roommates' && selectedRooms !== 'الكل',
+                activeCategory !== 'roommates' && selectedServices.length > 0,
+                (activeCategory === 'students' || activeCategory === 'roommates') && selectedGender !== 'الكل'
+              ].filter(Boolean).length;
+              return count > 0 ? (
+                <span className="w-4 h-4 bg-amber-400 text-stone-900 rounded-full font-black text-[10px] flex items-center justify-center -mr-0.5">
+                  {count}
+                </span>
+              ) : null;
+            })()}
+          </button>
+        </div>
+
+        {/* Row 2: Category Tabs Carousel */}
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar scroll-smooth pt-0.5 pb-1 -mx-2.5 px-2.5 sm:-mx-4 sm:px-4" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+          <button
+            ref={activeCategory === 'rent' ? activeHousingCategoryRef : null}
+            onClick={() => {
+              setActiveCategory('rent');
+              setSelectedDistrict('الكل');
+              setMinPrice('');
+              setMaxPrice('');
+              setSelectedRooms('الكل');
+              setSelectedUniv('الكل');
+              setSelectedServices([]);
+            }}
+            className={`shrink-0 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border min-h-[38px] ${
+              activeCategory === 'rent'
+                ? 'bg-gradient-to-r from-[#1a4d2e] to-emerald-700 text-white border-transparent shadow-xs font-black'
+                : 'bg-white text-stone-700 border-stone-200 hover:border-emerald-300'
+            }`}
+          >
+            <Building className="h-3.5 w-3.5 shrink-0" />
+            <span>شقق للإيجار</span>
+          </button>
+
+          <button
+            ref={activeCategory === 'sale' ? activeHousingCategoryRef : null}
+            onClick={() => {
+              setActiveCategory('sale');
+              setSelectedDistrict('الكل');
+              setMinPrice('');
+              setMaxPrice('');
+              setSelectedRooms('الكل');
+              setSelectedUniv('الكل');
+              setSelectedServices([]);
+            }}
+            className={`shrink-0 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border min-h-[38px] ${
+              activeCategory === 'sale'
+                ? 'bg-gradient-to-r from-[#1a4d2e] to-emerald-700 text-white border-transparent shadow-xs font-black'
+                : 'bg-white text-stone-700 border-stone-200 hover:border-emerald-300'
+            }`}
+          >
+            <Key className="h-3.5 w-3.5 shrink-0" />
+            <span>شقق للبيع</span>
+          </button>
+
+          <button
+            ref={activeCategory === 'students' ? activeHousingCategoryRef : null}
+            onClick={() => {
+              setActiveCategory('students');
+              setSelectedDistrict('الكل');
+              setMinPrice('');
+              setMaxPrice('');
+              setSelectedRooms('الكل');
+              setSelectedUniv('الكل');
+              setSelectedServices([]);
+            }}
+            className={`shrink-0 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border min-h-[38px] ${
+              activeCategory === 'students'
+                ? 'bg-gradient-to-r from-[#1a4d2e] to-emerald-700 text-white border-transparent shadow-xs font-black'
+                : 'bg-white text-stone-700 border-stone-200 hover:border-emerald-300'
+            }`}
+          >
+            <GraduationCap className="h-3.5 w-3.5 shrink-0" />
+            <span>سكنات الطلاب</span>
+          </button>
+
+          <button
+            ref={activeCategory === 'roommates' ? activeHousingCategoryRef : null}
+            onClick={() => {
+              setActiveCategory('roommates');
+            }}
+            className={`shrink-0 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border min-h-[38px] ${
+              activeCategory === 'roommates'
+                ? 'bg-gradient-to-r from-[#1a4d2e] to-emerald-700 text-white border-transparent shadow-xs font-black'
+                : 'bg-white text-stone-700 border-stone-200 hover:border-emerald-300'
+            }`}
+          >
+            <Users className="h-3.5 w-3.5 shrink-0" />
+            <span>رفقاء السكن</span>
+          </button>
+        </div>
+      </div>
+
       {/* Banner Slideshow */}
       <BannerSlideshow banners={banners} />
 
-      {/* Page Header & Search Bar (Compact & Sleek) */}
-      <div className="bg-white rounded-2xl md:rounded-3xl p-3.5 sm:p-5 border border-[#e5e1da] shadow-xs space-y-3 sm:space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="space-y-1">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <div className="inline-flex items-center gap-1 bg-emerald-50 text-[#1a4d2e] border border-emerald-200 px-2.5 py-0.5 rounded-full text-[11px] font-black">
-                <Building2 className="h-3 w-3 text-[#1a4d2e]" />
-                <span>سكنات وعقارات إربد</span>
-              </div>
-              <div className="hidden sm:inline-flex items-center gap-1 bg-stone-100 text-stone-700 border border-stone-200 px-2.5 py-0.5 rounded-full text-[11px] font-bold">
-                <GraduationCap className="h-3 w-3 text-stone-600" />
-                <span>للطلاب والعائلات</span>
-              </div>
+      {/* Desktop Page Header (Preserved) */}
+      <div className="hidden lg:block bg-gradient-to-br from-[#1a4d2e] via-[#153e25] to-[#0f2e1d] text-white rounded-3xl p-6 shadow-xl border border-emerald-800/40 relative overflow-hidden space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="w-10 h-10 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/10 text-emerald-300">
+              <Building2 className="h-6 w-6 text-emerald-300" />
+            </span>
+            <div>
+              <h1 className="text-2xl font-black tracking-tight text-white">
+                عقارات وسكنات إربد
+              </h1>
+              <p className="text-xs text-emerald-100/80 font-medium">
+                شقق للإيجار، شقق للبيع، سكنات طلاب ورفقاء سكن
+              </p>
             </div>
-
-            <h1 className="text-xl sm:text-2xl font-black text-stone-900 tracking-tight">
-              عقارات وسكنات إربد
-            </h1>
-
-            <p className="hidden sm:block text-stone-500 text-xs font-medium leading-relaxed">
-              ابحث عن سكنات طالبات آمنة، سكنات شباب، شقق عائلية أو أستوديوهات مفروشة للإيجار.
-            </p>
           </div>
 
-          <div className="shrink-0">
-            <button
-              onClick={() => {
-                setEditingHousing(null);
-                setIsFormOpen(true);
-              }}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 bg-[#1a4d2e] hover:bg-[#143e25] text-white px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-xs cursor-pointer"
-            >
-              <Plus className="h-4 w-4" />
-              <span>أعلن عن عقارك</span>
-            </button>
-          </div>
+          <button
+            onClick={() => {
+              setEditingHousing(null);
+              setIsFormOpen(true);
+            }}
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#ff9f1c] hover:bg-[#f08f0c] text-stone-950 font-black text-xs rounded-xl shadow-md transition-all active:scale-95 cursor-pointer"
+          >
+            <Plus className="h-4 w-4" />
+            <span>أعلن عن عقارك</span>
+          </button>
         </div>
 
-        {/* Search Input */}
+        {/* Search Input Bar */}
         <div className="relative">
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="ابحث بالسكن (سكن طالبات، أستوديو، الحي الجنوبي، شارع الجامعة)..."
-            className="w-full bg-[#fdfcfb] text-stone-900 placeholder:text-stone-400 border border-[#e5e1da] rounded-xl px-3.5 py-2.5 pr-10 text-xs sm:text-sm focus:outline-none focus:border-[#1a4d2e] focus:bg-white transition-all shadow-inner"
+            placeholder="ابحث بالسكن، الحي الجنوبي، شارع الجامعة، استوديو..."
+            className="w-full bg-white/10 backdrop-blur-md text-white placeholder:text-stone-300 border border-white/20 rounded-2xl px-4 py-3 pr-10 text-sm focus:outline-none focus:bg-white/20 transition-all shadow-inner"
           />
-          <Search className="h-4 w-4 text-stone-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <Search className="h-4 w-4 text-emerald-200 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           {searchQuery && (
             <button 
               onClick={() => setSearchQuery('')}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 p-1"
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-300 hover:text-white p-1.5"
             >
-              <X className="h-3.5 w-3.5" />
+              <X className="h-4 w-4" />
             </button>
           )}
         </div>
       </div>
 
-      {/* Section Tab Switcher - Exactly 4 Categories */}
-      <div className="grid grid-cols-2 md:grid-cols-4 bg-stone-100 p-1.5 rounded-2xl max-w-2xl mx-auto gap-1 border border-stone-200">
+      {/* Desktop Section Tab Switcher - Exactly 4 Categories */}
+      <div className="hidden lg:grid grid-cols-4 bg-stone-100 p-1.5 rounded-2xl max-w-2xl mx-auto gap-1 border border-stone-200">
         <button
           onClick={() => {
             setActiveCategory('rent');
@@ -538,7 +675,7 @@ export function Housing() {
               : 'text-stone-600 hover:text-[#1a4d2e] hover:bg-white/50'
           }`}
         >
-          <span>🏠</span>
+          <Building className="h-4 w-4 shrink-0" />
           <span>شقق للإيجار</span>
         </button>
 
@@ -558,7 +695,7 @@ export function Housing() {
               : 'text-stone-600 hover:text-[#1a4d2e] hover:bg-white/50'
           }`}
         >
-          <span>🔑</span>
+          <Key className="h-4 w-4 shrink-0" />
           <span>شقق للبيع</span>
         </button>
 
@@ -578,7 +715,7 @@ export function Housing() {
               : 'text-stone-600 hover:text-[#1a4d2e] hover:bg-white/50'
           }`}
         >
-          <span>🎓</span>
+          <GraduationCap className="h-4 w-4 shrink-0" />
           <span>سكنات الطلاب</span>
         </button>
 
@@ -592,36 +729,22 @@ export function Housing() {
               : 'text-stone-600 hover:text-[#1a4d2e] hover:bg-white/50'
           }`}
         >
-          <span>🤝</span>
+          <Users className="h-4 w-4 shrink-0" />
           <span>رفقاء السكن</span>
         </button>
       </div>
 
-      {/* Mobile Filter Trigger Button */}
-      <div className="lg:hidden flex items-center justify-between bg-white border border-[#e5e1da] p-3.5 rounded-2xl shadow-xs">
-        <span className="text-xs font-black text-stone-500">تصفية الخيارات المتاحة:</span>
+      {/* Mobile Wide Banner Action: "أضف عقارك" button below promotional banner */}
+      <div className="lg:hidden my-2.5">
         <button
-          onClick={() => setShowFiltersMobile(true)}
-          className="inline-flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-[#1a4d2e] border border-emerald-200/60 px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer shadow-xs"
+          onClick={() => {
+            setEditingHousing(null);
+            setIsFormOpen(true);
+          }}
+          className="w-full py-3.5 px-5 bg-gradient-to-r from-[#1a4d2e] via-emerald-800 to-[#1a4d2e] hover:from-emerald-800 hover:to-emerald-700 text-white font-black text-xs sm:text-sm rounded-2xl shadow-md flex items-center justify-center gap-2 active:scale-[0.99] border border-emerald-700/60 cursor-pointer"
         >
-          <Filter className="h-4 w-4" />
-          <span>فلاتر</span>
-          {(() => {
-            const count = [
-              activeCategory !== 'roommates' && selectedDistrict !== 'الكل',
-              activeCategory !== 'roommates' && minPrice !== '',
-              activeCategory !== 'roommates' && maxPrice !== '',
-              (activeCategory === 'students' || activeCategory === 'roommates') && selectedUniv !== 'الكل',
-              activeCategory !== 'roommates' && selectedRooms !== 'الكل',
-              activeCategory !== 'roommates' && selectedServices.length > 0,
-              (activeCategory === 'students' || activeCategory === 'roommates') && selectedGender !== 'الكل'
-            ].filter(Boolean).length;
-            return count > 0 ? (
-              <span className="w-5 h-5 rounded-full bg-[#ff9f1c] text-stone-900 flex items-center justify-center text-[10px] font-black animate-pulse">
-                {count}
-              </span>
-            ) : null;
-          })()}
+          <Plus className="h-4.5 w-4.5 text-[#ff9f1c]" />
+          <span>أضف عقارك أو سكنك مجاناً</span>
         </button>
       </div>
 
@@ -1341,8 +1464,8 @@ export function Housing() {
                         </div>
 
                         {/* Action row */}
-                        <div className="p-5 pt-0">
-                          <div className="pt-4 border-t border-[#e5e1da] flex flex-wrap items-center justify-between gap-y-3 gap-x-2">
+                        <div className="p-4 sm:p-5 pt-0">
+                          <div className="pt-3.5 border-t border-[#e5e1da] flex items-center justify-between gap-2">
                             <div className="flex items-center gap-1.5 shrink-0 flex-nowrap">
                               {(h.contactMode === 'both' || h.contactMode === 'whatsapp_only' || !h.contactMode) && (
                                 <a
@@ -1350,9 +1473,9 @@ export function Housing() {
                                   target="_blank"
                                   rel="noreferrer"
                                   onClick={(e) => e.stopPropagation()}
-                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors shadow-xs cursor-pointer shrink-0"
+                                  className="inline-flex items-center justify-center min-h-[44px] gap-1.5 px-3 py-2 sm:py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer shrink-0"
                                 >
-                                  <WhatsApp3DIcon className="h-3.5 w-3.5 text-white" />
+                                  <WhatsApp3DIcon className="h-4 w-4 text-white" />
                                   <span>واتساب</span>
                                 </a>
                               )}
@@ -1361,9 +1484,9 @@ export function Housing() {
                                 <a
                                   href={`tel:${h.contactPhone}`}
                                   onClick={(e) => e.stopPropagation()}
-                                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-[#1a4d2e] hover:bg-[#133c23] text-white rounded-xl text-xs font-bold transition-colors shadow-xs shrink-0"
+                                  className="inline-flex items-center justify-center min-h-[44px] gap-1.5 px-3 py-2 sm:py-1.5 bg-[#1a4d2e] hover:bg-[#133c23] active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-xs shrink-0"
                                 >
-                                  <Phone3DIcon className="h-3.5 w-3.5 text-white" />
+                                  <Phone3DIcon className="h-4 w-4 text-white" />
                                   <span>اتصال</span>
                                 </a>
                               )}
@@ -1381,16 +1504,16 @@ export function Housing() {
                               {isAdmin && (
                                 <button
                                   onClick={(e) => handleDeleteListing(h, e)}
-                                  className="p-1.5 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors shrink-0 ml-1"
+                                  className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors shrink-0 ml-1"
                                   title="حذف الإعلان"
                                 >
                                   <X className="h-4 w-4" />
                                 </button>
                               )}
 
-                              <span className="text-xs font-black text-[#1a4d2e] group-hover:underline flex items-center gap-1 mr-1 shrink-0">
+                              <span className="text-xs font-black text-[#1a4d2e] group-hover:underline flex items-center gap-1 px-2 py-2 min-h-[44px] shrink-0">
                                 <span>تفاصيل</span>
-                                <Eye className="h-3.5 w-3.5 text-[#ff9f1c]" />
+                                <Eye className="h-4 w-4 text-[#ff9f1c]" />
                               </span>
                             </div>
                           </div>
@@ -1418,7 +1541,10 @@ export function Housing() {
               <div className="space-y-6">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-emerald-50/50 p-6 rounded-3xl border border-emerald-100/70">
                   <div>
-                    <h3 className="text-lg font-black text-emerald-950">🤝 ملتقى رفقاء السكن في إربد</h3>
+                    <h3 className="text-lg font-black text-emerald-950 flex items-center gap-2">
+                      <Users className="h-5 w-5 text-emerald-700 shrink-0" />
+                      <span>ملتقى رفقاء السكن في إربد</span>
+                    </h3>
                     <p className="text-xs text-emerald-800/80 mt-1 font-bold">هل تبحث عن طالب أو طالبة لمشاركتك إيجار شقة؟ تصفح الإعلانات أو انشر طلبك مجاناً لتجد الرفيق المناسب.</p>
                   </div>
                   <button
@@ -1611,7 +1737,10 @@ export function Housing() {
 
             {/* Services/Amenities Checkboxes */}
             <div className="space-y-2">
-              <h4 className="font-black text-xs text-[#1a4d2e] uppercase tracking-wider">🌟 الخدمات والمرافق المتوفرة:</h4>
+              <h4 className="font-black text-xs text-[#1a4d2e] uppercase tracking-wider flex items-center gap-1.5">
+                <Sparkles className="h-4 w-4 text-emerald-700 shrink-0" />
+                <span>الخدمات والمرافق المتوفرة:</span>
+              </h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 bg-emerald-50/40 p-4 rounded-2xl border border-emerald-100">
                 {selectedDetail.services.map((serv, idx) => (
                   <div key={idx} className="flex items-center gap-2 text-xs font-bold text-emerald-950">
@@ -1689,7 +1818,10 @@ export function Housing() {
         <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto" dir="rtl">
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-stone-200 relative my-auto space-y-6">
             <div className="flex items-center justify-between border-b border-stone-100 pb-3">
-              <h3 className="text-lg font-black text-stone-900">🤝 انشر طلب رفيق سكن جديد</h3>
+              <h3 className="text-lg font-black text-stone-900 flex items-center gap-2">
+                <Users className="h-5 w-5 text-[#1a4d2e] shrink-0" />
+                <span>انشر طلب رفيق سكن جديد</span>
+              </h3>
               <button onClick={() => setIsRoommateFormOpen(false)} className="text-stone-400 hover:text-stone-600 p-1">
                 <X className="h-5 w-5" />
               </button>
@@ -1777,9 +1909,10 @@ export function Housing() {
               <div className="pt-3 flex gap-2">
                 <button
                   type="submit"
-                  className="flex-1 py-3 bg-[#1a4d2e] hover:bg-[#123620] text-white font-black text-xs rounded-xl transition-all shadow-md cursor-pointer text-center"
+                  className="flex-1 py-3 bg-[#1a4d2e] hover:bg-[#123620] text-white font-black text-xs rounded-xl transition-all shadow-md cursor-pointer text-center inline-flex items-center justify-center gap-1.5"
                 >
-                  🚀 نشر الطلب مجاناً
+                  <Send className="h-4 w-4" />
+                  <span>نشر الطلب مجاناً</span>
                 </button>
                 <button
                   type="button"
@@ -1800,7 +1933,10 @@ export function Housing() {
           <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-stone-200 relative my-auto space-y-6">
             <div className="flex items-center justify-between border-b border-stone-100 pb-3">
               <div className="space-y-0.5">
-                <h3 className="text-sm font-black text-stone-400 uppercase tracking-widest">🗓️ حجز موعد معاينة مباشر</h3>
+                <h3 className="text-sm font-black text-stone-400 uppercase tracking-widest flex items-center gap-1.5">
+                  <Calendar className="h-4 w-4 text-stone-400" />
+                  <span>حجز موعد معاينة مباشر</span>
+                </h3>
                 <h4 className="text-base font-black text-[#1a4d2e] line-clamp-1">{selectedHousingForBooking.title}</h4>
               </div>
               <button onClick={() => setIsBookingFormOpen(false)} className="text-stone-400 hover:text-stone-600 p-1">
@@ -1880,16 +2016,18 @@ export function Housing() {
                 ></textarea>
               </div>
 
-              <div className="bg-amber-50 border border-amber-100 p-3 rounded-xl text-[10px] text-amber-800 leading-relaxed font-bold">
-                ⚠️ ملاحظة: طلب المعاينة مجاني تماماً وسيصل إلى مالك العقار مباشرة، وسيتواصل معك عبر الهاتف أو الواتساب خلال ساعات لتأكيد الموعد النهائي ومرافقتك لزيارة السكن.
+              <div className="bg-amber-50 border border-amber-200/80 p-3 rounded-xl text-[10px] text-amber-900 leading-relaxed font-bold flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                <span>ملاحظة: طلب المعاينة مجاني تماماً وسيصل إلى مالك العقار مباشرة، وسيتواصل معك عبر الهاتف أو الواتساب لتأكيد الموعد النهائي ومرافقتك لزيارة السكن.</span>
               </div>
 
               <div className="pt-2 flex gap-2">
                 <button
                   type="submit"
-                  className="flex-1 py-3 bg-[#1a4d2e] hover:bg-[#123620] text-white font-black text-xs rounded-xl transition-all shadow-md cursor-pointer text-center"
+                  className="flex-1 py-3 bg-[#1a4d2e] hover:bg-[#123620] text-white font-black text-xs rounded-xl transition-all shadow-md cursor-pointer text-center inline-flex items-center justify-center gap-1.5"
                 >
-                  📅 إرسال طلب الحجز
+                  <Calendar className="h-4 w-4" />
+                  <span>إرسال طلب الحجز</span>
                 </button>
                 <button
                   type="button"

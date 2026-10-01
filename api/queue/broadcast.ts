@@ -95,11 +95,7 @@ export default async function handler(req: any, res: any) {
     const supervisorDoc = await db.collection('supervisors').doc(uid).get();
 
     const allowedEmails = [
-      "princessofx2344@gmail.com",
-      "d42902672@gmail.com",
-      "admin@shoofiirbid.com",
-      "irbid.admin@gmail.com",
-      "tharawt74@gmail.com"
+      "princessofx2344@gmail.com"
     ];
     const isEmailAdmin = allowedEmails.includes(email);
 

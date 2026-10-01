@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { collection, query, orderBy, getDocs, limit } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
@@ -18,9 +18,10 @@ import { CategoriesModal } from '../components/CategoriesModal';
 import { Pagination } from '../components/common/Pagination';
 import { CategoryButtonLabel } from '../components/CategoryButtonLabel';
 import { BlurredVerticalTextScroller } from '../components/common/BlurredVerticalTextScroller';
-import { getCachedBusinesses, setCachedBusinesses, getCachedBanners, setCachedBanners } from '../lib/dataCache';
+import { getCachedBusinesses, setCachedBusinesses, getCachedBanners, setCachedBanners, isBusinessesCacheFresh } from '../lib/dataCache';
 import { BOOK_YOUR_AD_BANNER } from '../lib/pageBanners';
 import { compareBusinessesByTier, isBusinessCurrentlyFeatured } from '../lib/vipHelper';
+import { cn } from '../lib/utils';
 import { 
   MapPin, Star, Search, Store, Filter, X,
   LayoutGrid, UtensilsCrossed, Coffee, CakeSlice, 
@@ -109,6 +110,114 @@ export function Home() {
   const [isSubCategoriesExpanded, setIsSubCategoriesExpanded] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
 
+  // Mobile Sticky Header & Filters States
+  const [stickySearchInput, setStickySearchInput] = useState('');
+  const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
+  const [isPastFirstCard, setIsPastFirstCard] = useState(false);
+  const [isAtFooter, setIsAtFooter] = useState(false);
+  const listingsSectionRef = useRef<HTMLDivElement>(null);
+
+  const activeMobileCatRef = useRef<HTMLButtonElement | null>(null);
+  const activeMobileSubCatRef = useRef<HTMLButtonElement | null>(null);
+  const activeListingCatRef = useRef<HTMLButtonElement | null>(null);
+
+  // Auto scroll selected main category into view across mobile sticky header and listing cards
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (activeMobileCatRef.current) {
+        activeMobileCatRef.current.scrollIntoView({
+          behavior: 'smooth',
+          block: 'nearest',
+          inline: 'center'
+        });
+      }
+      if (activeListingCatRef.current) {
+        activeListingCatRef.current.scrollIntoView({
+          behavior: 'smooth',
+          block: 'nearest',
+          inline: 'center'
+        });
+      }
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [categoryFilter]);
+
+  // Auto scroll selected subcategory into view in mobile sticky header
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (activeMobileSubCatRef.current) {
+        activeMobileSubCatRef.current.scrollIntoView({
+          behavior: 'smooth',
+          block: 'nearest',
+          inline: 'center'
+        });
+      }
+    }, 120);
+    return () => clearTimeout(timer);
+  }, [subCategoryFilter, categoryFilter]);
+
+  const activeFiltersCount = useMemo(() => {
+    let count = 0;
+    if (categoryFilter) count++;
+    if (subCategoryFilter) count++;
+    if (regionFilter && regionFilter !== 'الكل') count++;
+    if (openNowFilter) count++;
+    if (favoritesOnly) count++;
+    if (activeTab !== 'all') count++;
+    return count;
+  }, [categoryFilter, subCategoryFilter, regionFilter, openNowFilter, favoritesOnly, activeTab]);
+
+  // Track scroll position to coordinate mobile sticky header and main site header
+  useEffect(() => {
+    let ticking = false;
+
+    const handleScroll = () => {
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          // 1. Check if user scrolled past the first business card
+          let pastFirst = false;
+          if (listingsSectionRef.current) {
+            const rect = listingsSectionRef.current.getBoundingClientRect();
+            pastFirst = rect.top <= 75;
+          }
+
+          // 2. Check if user reached the footer
+          let atFooter = false;
+          const footerEl = document.querySelector('footer');
+          if (footerEl) {
+            const fRect = footerEl.getBoundingClientRect();
+            atFooter = fRect.top <= window.innerHeight - 30;
+          }
+
+          setIsPastFirstCard(pastFirst);
+          setIsAtFooter(atFooter);
+
+          // In mobile view (<1024px):
+          if (window.innerWidth < 1024) {
+            if (pastFirst && !atFooter) {
+              // Sticky header active -> hide main site header
+              window.dispatchEvent(new CustomEvent('app-header-visibility', { detail: { visible: false } }));
+            } else {
+              // Sticky header inactive (at top or at footer) -> show main site header
+              window.dispatchEvent(new CustomEvent('app-header-visibility', { detail: { visible: true } }));
+            }
+          }
+
+          ticking = false;
+        });
+        ticking = true;
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll();
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      window.dispatchEvent(new CustomEvent('app-header-visibility', { detail: { visible: true } }));
+    };
+  }, [loading, businesses.length]);
+
   useEffect(() => {
     setCurrentPage(1);
   }, [categoryFilter, subCategoryFilter, regionFilter, ratingFilter, openNowFilter, favoritesOnly, activeTab, searchTerm]);
@@ -128,13 +237,17 @@ export function Home() {
         return;
       }
 
-      // If we already have fresh cached data, don't block the UI with a spinner
+      // If we already have fresh cached data, use it immediately and skip Firestore read
       const cached = getCachedBusinesses();
+      const isFresh = isBusinessesCacheFresh();
       if (cached && cached.length > 0) {
         setBusinesses(cached);
         const cachedB = getCachedBanners();
         if (cachedB) setBanners(cachedB);
         setLoading(false);
+        if (isFresh) {
+          return;
+        }
       }
       
       try {
@@ -323,7 +436,7 @@ export function Home() {
     fetchBusinesses();
   }, []);
 
-  const { categories, globalSettings } = useSystemSettings();
+  const { categories, globalSettings, neighborhoods } = useSystemSettings();
   const heroStyle = globalSettings?.heroSectionStyle || 'wheel_box';
   const mainCategories = categories.map(c => c.name);
   
@@ -507,6 +620,334 @@ export function Home() {
         canonicalUrl="https://shofibirbid.site/"
       />
       
+      {/* ========================================================================= */}
+      {/* MOBILE STICKY APP BAR (Appears ONLY after passing the first business card and before footer) */}
+      {/* ========================================================================= */}
+      <div 
+        className={cn(
+          "lg:hidden fixed left-0 right-0 top-0 z-40 bg-white/95 backdrop-blur-md border-b border-stone-200/90 shadow-sm px-4 py-2.5 space-y-2 transition-all duration-300",
+          (isPastFirstCard && !isAtFooter) ? "translate-y-0 opacity-100 pointer-events-auto" : "-translate-y-full opacity-0 pointer-events-none"
+        )}
+      >
+        {/* Row 1: Search Input & Filter Button */}
+        <div className="flex items-center gap-2">
+          {/* Integrated Search Input */}
+          <form 
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (stickySearchInput.trim()) {
+                navigate(`/search?q=${encodeURIComponent(stickySearchInput.trim())}`);
+              }
+            }}
+            className="relative flex-1 min-w-0"
+          >
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-stone-400 pointer-events-none" />
+            <input
+              type="search"
+              enterKeyHint="search"
+              placeholder="عن ماذا تبحث؟"
+              value={stickySearchInput}
+              onChange={(e) => setStickySearchInput(e.target.value)}
+              className="w-full pl-8 pr-8 py-2 bg-stone-100/90 border border-stone-200 rounded-xl text-xs font-bold placeholder:text-stone-400 focus:outline-none focus:bg-white focus:border-[#1a4d2e] transition-all cursor-text"
+            />
+            {stickySearchInput && (
+              <button
+                type="button"
+                onClick={() => setStickySearchInput('')}
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 p-1 rounded-full cursor-pointer"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </form>
+
+          {/* Filter Sheet Trigger Button */}
+          <button
+            type="button"
+            onClick={() => setIsMobileFilterOpen(true)}
+            className="relative px-3 py-2 bg-[#1a4d2e] text-white rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-xs active:scale-95 transition-all shrink-0 cursor-pointer"
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+            <span>فلترة</span>
+            {activeFiltersCount > 0 && (
+              <span className="w-4 h-4 bg-amber-400 text-stone-900 rounded-full font-black text-[10px] flex items-center justify-center -mr-0.5">
+                {activeFiltersCount}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Row 2: Horizontal Category Pills Carousel (Edge-To-Edge Scroll) */}
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar scroll-smooth pt-0.5 pb-1 -mx-2.5 px-2.5 sm:-mx-4 sm:px-4" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+          {/* All Category Pill */}
+          <button
+            type="button"
+            ref={categoryFilter === '' ? activeMobileCatRef : null}
+            onClick={() => {
+              setCategoryFilter('');
+              setSubCategoryFilter('');
+            }}
+            className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1 cursor-pointer border ${
+              categoryFilter === ''
+                ? 'bg-gradient-to-r from-[#1a4d2e] to-emerald-800 text-white border-transparent shadow-xs font-black'
+                : 'bg-white text-stone-700 border-stone-200 hover:border-emerald-300'
+            }`}
+          >
+            <span>الكل</span>
+            <span className="text-[10px] opacity-80">({businesses.length})</span>
+          </button>
+
+          {/* Main Category Pills */}
+          {mainCategories.map((cat) => {
+            const isSelected = categoryFilter === cat;
+            return (
+              <button
+                type="button"
+                key={cat}
+                ref={isSelected ? activeMobileCatRef : null}
+                onClick={() => {
+                  setCategoryFilter(isSelected ? '' : cat);
+                  setSubCategoryFilter('');
+                }}
+                className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1 cursor-pointer border ${
+                  isSelected
+                    ? 'bg-gradient-to-r from-[#1a4d2e] to-emerald-800 text-white border-transparent shadow-xs font-black'
+                    : 'bg-white text-stone-700 border-stone-200 hover:border-emerald-300'
+                }`}
+              >
+                <span>{cat}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Row 3: Subcategory Pills (If Category Selected - Edge-To-Edge Scroll) */}
+        {categoryFilter && getSubCats(categoryFilter).length > 0 && (
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar scroll-smooth pt-0.5 pb-1 -mx-2.5 px-2.5 sm:-mx-4 sm:px-4 border-t border-stone-100" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+            <button
+              type="button"
+              ref={subCategoryFilter === '' ? activeMobileSubCatRef : null}
+              onClick={() => setSubCategoryFilter('')}
+              className={`shrink-0 px-2.5 py-1 rounded-full text-[11px] font-bold transition-all cursor-pointer border ${
+                subCategoryFilter === ''
+                  ? 'bg-[#1a4d2e] text-white border-transparent font-black'
+                  : 'bg-stone-100 text-stone-600 border-stone-200'
+              }`}
+            >
+              الكل الفرعي
+            </button>
+            {getSubCats(categoryFilter).map((subCat) => (
+              <button
+                type="button"
+                key={subCat}
+                ref={subCategoryFilter === subCat ? activeMobileSubCatRef : null}
+                onClick={() => setSubCategoryFilter(subCat)}
+                className={`shrink-0 px-2.5 py-1 rounded-full text-[11px] font-bold transition-all cursor-pointer border ${
+                  subCategoryFilter === subCat
+                    ? 'bg-[#1a4d2e] text-white border-transparent font-black'
+                    : 'bg-stone-100 text-stone-600 border-stone-200'
+                }`}
+              >
+                {subCat}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ========================================================================= */}
+      {/* MOBILE FILTER SHEET / DRAWER (App-Style Experience)                      */}
+      {/* ========================================================================= */}
+      {isMobileFilterOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden flex flex-col justify-end bg-black/60 backdrop-blur-xs animate-in fade-in duration-200" dir="rtl">
+          <div 
+            className="absolute inset-0"
+            onClick={() => setIsMobileFilterOpen(false)}
+          />
+          <div className="relative bg-white rounded-t-3xl max-h-[85vh] flex flex-col shadow-2xl border-t border-stone-200 overflow-hidden animate-in slide-in-from-bottom duration-300">
+            {/* Sheet Handle Bar */}
+            <div className="pt-3 pb-1 flex justify-center">
+              <div className="w-12 h-1.5 bg-stone-300 rounded-full" />
+            </div>
+
+            {/* Sheet Header */}
+            <div className="p-4 border-b border-stone-100 flex items-center justify-between bg-stone-50/50">
+              <div className="flex items-center gap-2">
+                <SlidersHorizontal className="h-5 w-5 text-[#1a4d2e]" />
+                <h3 className="font-black text-stone-900 text-base">فلترة وتخصيص المنشآت</h3>
+              </div>
+              <div className="flex items-center gap-3">
+                {activeFiltersCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCategoryFilter('');
+                      setSubCategoryFilter('');
+                      setRegionFilter('');
+                      setOpenNowFilter(false);
+                      setFavoritesOnly(false);
+                      setActiveTab('all');
+                      setSearchTerm('');
+                    }}
+                    className="text-xs font-bold text-red-600 hover:underline cursor-pointer"
+                  >
+                    إعادة ضبط
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsMobileFilterOpen(false)}
+                  className="p-1 text-stone-400 hover:text-stone-700 rounded-full hover:bg-stone-100 cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Sheet Body */}
+            <div className="p-4 overflow-y-auto space-y-5 text-xs">
+              {/* Location / Region Filter */}
+              <div className="space-y-2">
+                <label className="font-black text-stone-800 flex items-center gap-1.5">
+                  <MapPin className="h-4 w-4 text-[#1a4d2e]" />
+                  <span>الموقع أو الحي في إربد</span>
+                </label>
+                <select
+                  value={regionFilter}
+                  onChange={(e) => setRegionFilter(e.target.value)}
+                  className="w-full bg-stone-50 border border-stone-200 rounded-xl py-2.5 px-3 font-bold text-stone-800 focus:outline-none focus:border-[#1a4d2e]"
+                >
+                  <option value="">جميع مناطق وأحياء إربد</option>
+                  {neighborhoods && neighborhoods.map((group) => (
+                    <optgroup key={group.groupName} label={group.groupName}>
+                      {group.areas.map((area) => (
+                        <option key={area} value={area}>{area}</option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </div>
+
+              {/* Status Toggles: Open Now & Favorites */}
+              <div className="space-y-2">
+                <label className="font-black text-stone-800 flex items-center gap-1.5">
+                  <Clock className="h-4 w-4 text-[#1a4d2e]" />
+                  <span>حالة المنشأة والمفضلة</span>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setOpenNowFilter(!openNowFilter)}
+                    className={`p-2.5 rounded-xl font-bold border text-center transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                      openNowFilter
+                        ? 'bg-emerald-600 text-white border-transparent shadow-xs'
+                        : 'bg-stone-50 text-stone-700 border-stone-200'
+                    }`}
+                  >
+                    <Clock className="h-3.5 w-3.5" />
+                    <span>مفتوح الآن</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFavoritesOnly(!favoritesOnly)}
+                    className={`p-2.5 rounded-xl font-bold border text-center transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                      favoritesOnly
+                        ? 'bg-rose-600 text-white border-transparent shadow-xs'
+                        : 'bg-stone-50 text-stone-700 border-stone-200'
+                    }`}
+                  >
+                    <Heart className={`h-3.5 w-3.5 ${favoritesOnly ? 'fill-white' : ''}`} />
+                    <span>المفضلة ({userFavorites.length})</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Display Tabs Filter */}
+              <div className="space-y-2">
+                <label className="font-black text-stone-800 flex items-center gap-1.5">
+                  <SlidersHorizontal className="h-4 w-4 text-[#1a4d2e]" />
+                  <span>تبويبات العرض والترتيب</span>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { id: 'all', label: 'الكل' },
+                    { id: 'featured', label: 'المميزة' },
+                    { id: 'popular', label: 'الأكثر شعبية' },
+                    { id: 'recent', label: 'الأحدث' }
+                  ].map((tab) => (
+                    <button
+                      type="button"
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id as any)}
+                      className={`p-2.5 rounded-xl font-bold border text-center transition-all cursor-pointer ${
+                        activeTab === tab.id
+                          ? 'bg-[#1a4d2e] text-white border-transparent shadow-xs'
+                          : 'bg-stone-50 text-stone-700 border-stone-200'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Category Selector */}
+              <div className="space-y-2">
+                <label className="font-black text-stone-800 flex items-center gap-1.5">
+                  <Store className="h-4 w-4 text-[#1a4d2e]" />
+                  <span>التصنيف الرئيسي</span>
+                </label>
+                <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto p-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCategoryFilter('');
+                      setSubCategoryFilter('');
+                    }}
+                    className={`px-3 py-1.5 rounded-xl font-bold border transition-all cursor-pointer ${
+                      categoryFilter === ''
+                        ? 'bg-[#1a4d2e] text-white border-transparent'
+                        : 'bg-stone-50 text-stone-700 border-stone-200'
+                    }`}
+                  >
+                    الكل
+                  </button>
+                  {mainCategories.map((c) => (
+                    <button
+                      type="button"
+                      key={c}
+                      onClick={() => {
+                        setCategoryFilter(c);
+                        setSubCategoryFilter('');
+                      }}
+                      className={`px-3 py-1.5 rounded-xl font-bold border transition-all cursor-pointer ${
+                        categoryFilter === c
+                          ? 'bg-[#1a4d2e] text-white border-transparent'
+                          : 'bg-stone-50 text-stone-700 border-stone-200'
+                      }`}
+                    >
+                      {c}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Sheet Footer */}
+            <div className="p-4 border-t border-stone-100 bg-stone-50">
+              <button
+                type="button"
+                onClick={() => setIsMobileFilterOpen(false)}
+                className="w-full bg-[#1a4d2e] hover:bg-[#143e24] text-white py-3 rounded-2xl font-black text-sm shadow-md active:scale-98 transition-all cursor-pointer"
+              >
+                تطبيق الفلترة (عرض {displayedBusinesses.length} منشأة)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
       
 
       {/* Dynamic Hero Section according to Admin Control Panel Settings */}
@@ -689,6 +1130,7 @@ export function Home() {
               const { icon: Icon } = getCategoryMeta('الكل');
               return (
                 <button
+                  ref={isSelected ? activeListingCatRef : null}
                   onClick={() => {
                     setCategoryFilter('');
                     setSubCategoryFilter('');
@@ -716,6 +1158,7 @@ export function Home() {
               return (
                 <button
                   key={cat}
+                  ref={isSelected ? activeListingCatRef : null}
                   onClick={() => {
                     setCategoryFilter(isSelected ? '' : cat);
                     setSubCategoryFilter('');
@@ -842,7 +1285,7 @@ export function Home() {
           </p>
         </div>
       ) : (
-        <div className="space-y-6">
+        <div id="directory-explorer" ref={listingsSectionRef} className="space-y-6">
           {/* Elite Tabs Filter & Header */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-4 border-b border-[#e5e1da] pb-3 md:pb-4">
             <div className="flex items-center gap-2">

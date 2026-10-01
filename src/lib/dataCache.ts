@@ -204,6 +204,26 @@ export function setCachedBusinesses(data: Business[]) {
   });
 }
 
+export function isBusinessesCacheFresh(): boolean {
+  if (cachedBusinesses && (Date.now() - cachedBusinesses.timestamp < CACHE_TTL_MS)) {
+    return true;
+  }
+  if (typeof window !== 'undefined') {
+    try {
+      const stored = localStorage.getItem(BIZ_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && Array.isArray(parsed.data) && parsed.data.length > 0 && (Date.now() - parsed.timestamp < CACHE_TTL_MS)) {
+          return true;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return false;
+}
+
 export function getCachedBanners(): HomepageBanner[] | null {
   if (cachedBanners && (Date.now() - cachedBanners.timestamp < CACHE_TTL_MS)) {
     return cachedBanners.data;
@@ -268,5 +288,216 @@ export function setCachedBusinessDetail(key: string, data: any) {
 export function invalidateCache() {
   cachedBusinesses = null;
   cachedBanners = null;
+  cachedOffers = null;
+  cachedJobs = null;
+  cachedHousings = null;
+  cachedProducts = null;
   businessDetailsMap.clear();
+  userProfileDataMap.clear();
+  userRequestsMap.clear();
+
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.removeItem(BIZ_STORAGE_KEY);
+      localStorage.removeItem(BANNERS_STORAGE_KEY);
+      localStorage.removeItem(OFFERS_STORAGE_KEY);
+      localStorage.removeItem(JOBS_STORAGE_KEY);
+      localStorage.removeItem(HOUSINGS_STORAGE_KEY);
+      localStorage.removeItem(PRODUCTS_STORAGE_KEY);
+
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith('shoof_user_profile_data_') || key.startsWith('shoof_user_requests_'))) {
+          localStorage.removeItem(key);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
 }
+
+export function updateBusinessMenuItemsInCache(businessId: string, updatedMenuItems: any[]) {
+  if (!businessId || !Array.isArray(updatedMenuItems)) return;
+
+  // 1. Update in-memory businesses cache
+  if (cachedBusinesses?.data) {
+    cachedBusinesses.data = cachedBusinesses.data.map(b => {
+      if (b.id === businessId) {
+        return { ...b, menuItems: updatedMenuItems };
+      }
+      return b;
+    });
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(BIZ_STORAGE_KEY, JSON.stringify(cachedBusinesses));
+      } catch {
+        // ignore quota
+      }
+    }
+  }
+
+  // 2. Update in businessDetailsMap
+  for (const [key, item] of businessDetailsMap.entries()) {
+    if (item.data?.id === businessId) {
+      businessDetailsMap.set(key, {
+        ...item,
+        data: {
+          ...item.data,
+          menuItems: updatedMenuItems
+        },
+        timestamp: Date.now()
+      });
+    }
+  }
+
+  // 3. Update in user profile caches
+  for (const [uid, userProfile] of userProfileDataMap.entries()) {
+    if (userProfile.data?.businesses) {
+      userProfile.data.businesses = userProfile.data.businesses.map(b => {
+        if (b.id === businessId) {
+          return { ...b, menuItems: updatedMenuItems };
+        }
+        return b;
+      });
+    }
+  }
+}
+
+export function removeBusinessFromAllCaches(businessId: string) {
+  if (!businessId) return;
+
+  // 1. Purge from in-memory businesses cache
+  if (cachedBusinesses?.data) {
+    cachedBusinesses.data = cachedBusinesses.data.filter(
+      b => b.id !== businessId && b.parentBusinessId !== businessId
+    );
+  }
+
+  // 2. Purge from detail mappings
+  businessDetailsMap.delete(businessId);
+  for (const [key, item] of businessDetailsMap.entries()) {
+    if (item.data?.id === businessId || item.data?.parentBusinessId === businessId) {
+      businessDetailsMap.delete(key);
+    }
+  }
+
+  // 3. Purge offers & jobs
+  if (cachedOffers?.data) {
+    cachedOffers.data = cachedOffers.data.filter(o => o.businessId !== businessId);
+  }
+  if (cachedJobs?.data) {
+    cachedJobs.data = cachedJobs.data.filter(j => j.businessId !== businessId);
+  }
+
+  // 4. Purge from all user profile caches
+  for (const [uid, userProfile] of userProfileDataMap.entries()) {
+    if (userProfile.data?.businesses) {
+      userProfile.data.businesses = userProfile.data.businesses.filter(
+        b => b.id !== businessId && b.parentBusinessId !== businessId
+      );
+    }
+  }
+
+  // 5. Invalidate persistent and runtime caches
+  invalidateCache();
+}
+
+export interface UserProfileCacheData {
+  businesses: Business[];
+  userJobs: any[];
+  userHousings: any[];
+}
+
+export interface UserRequestsCacheData {
+  businessRequests: any[];
+  marketingRequests: any[];
+}
+
+const userProfileDataMap = new Map<string, CachedData<UserProfileCacheData>>();
+const userRequestsMap = new Map<string, CachedData<UserRequestsCacheData>>();
+
+export function getCachedUserProfileData(uid: string): UserProfileCacheData | null {
+  if (!uid) return null;
+  const inMem = userProfileDataMap.get(uid);
+  if (inMem && (Date.now() - inMem.timestamp < CACHE_TTL_MS)) {
+    return inMem.data;
+  }
+  if (typeof window !== 'undefined') {
+    try {
+      const stored = localStorage.getItem('shoof_user_profile_data_' + uid);
+      if (stored) {
+        const parsed: CachedData<UserProfileCacheData> = JSON.parse(stored);
+        if (parsed && parsed.data && (Date.now() - parsed.timestamp < PERSISTENT_TTL_MS)) {
+          userProfileDataMap.set(uid, parsed);
+          return parsed.data;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return null;
+}
+
+export function setCachedUserProfileData(uid: string, data: UserProfileCacheData) {
+  if (!uid) return;
+  const entry = { data, timestamp: Date.now() };
+  userProfileDataMap.set(uid, entry);
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem('shoof_user_profile_data_' + uid, JSON.stringify(entry));
+    } catch {
+      // ignore
+    }
+  }
+}
+
+export function invalidateUserProfileCache(uid?: string) {
+  if (uid) {
+    userProfileDataMap.delete(uid);
+    userRequestsMap.delete(uid);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem('shoof_user_profile_data_' + uid);
+        localStorage.removeItem('shoof_user_requests_' + uid);
+      } catch {}
+    }
+  } else {
+    userProfileDataMap.clear();
+    userRequestsMap.clear();
+  }
+}
+
+export function getCachedUserRequests(uid: string): UserRequestsCacheData | null {
+  if (!uid) return null;
+  const inMem = userRequestsMap.get(uid);
+  if (inMem && (Date.now() - inMem.timestamp < CACHE_TTL_MS)) {
+    return inMem.data;
+  }
+  if (typeof window !== 'undefined') {
+    try {
+      const stored = localStorage.getItem('shoof_user_requests_' + uid);
+      if (stored) {
+        const parsed: CachedData<UserRequestsCacheData> = JSON.parse(stored);
+        if (parsed && parsed.data && (Date.now() - parsed.timestamp < PERSISTENT_TTL_MS)) {
+          userRequestsMap.set(uid, parsed);
+          return parsed.data;
+        }
+      }
+    } catch {}
+  }
+  return null;
+}
+
+export function setCachedUserRequests(uid: string, data: UserRequestsCacheData) {
+  if (!uid) return;
+  const entry = { data, timestamp: Date.now() };
+  userRequestsMap.set(uid, entry);
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem('shoof_user_requests_' + uid, JSON.stringify(entry));
+    } catch {}
+  }
+}
+

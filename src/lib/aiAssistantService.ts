@@ -758,10 +758,7 @@ export async function filterStructuredEntities(
         console.warn("Could not query Firestore housings:", err);
       }
     }
-    if (allHousings.length === 0 && appConfig.showDemoData && DEMO_SEED_DATA?.housings) {
-      allHousings = DEMO_SEED_DATA.housings || [];
-      setCachedHousings(allHousings);
-    }
+    allHousings = (allHousings || []).filter(h => !h.isDemo && !h.isDeleted && (h.status === 'approved' || !h.status));
 
     for (const h of allHousings) {
       if (h.isOccupied || h.status === 'hidden' || h.isAvailable === false) continue;

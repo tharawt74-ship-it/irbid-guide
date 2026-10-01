@@ -483,6 +483,64 @@ export async function exportPosterAsPng(elementId: string, filename: string = 'p
 }
 
 /**
+ * Downloads a standalone, crisp high-resolution QR code as a PNG image file
+ */
+export async function downloadQrCodeAsPng(
+  targetUrl: string,
+  filename: string = 'qrcode.png',
+  colorHex: string = '#1a4d2e',
+  bgHex: string = '#ffffff'
+) {
+  try {
+    const cleanColor = colorHex.replace('#', '').trim() || '000000';
+    const cleanBg = bgHex.replace('#', '').trim() || 'ffffff';
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=1200x1200&data=${encodeURIComponent(targetUrl)}&color=${cleanColor}&bgcolor=${cleanBg}&margin=2&format=png`;
+
+    const response = await fetch(qrUrl);
+    if (!response.ok) throw new Error('Failed to fetch QR code image');
+    const blob = await response.blob();
+    const blobUrl = URL.createObjectURL(blob);
+
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = filename.endsWith('.png') ? filename : `${filename}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+  } catch (err) {
+    console.error('Error downloading QR code:', err);
+    // Fallback using canvas
+    try {
+      const cleanColor = colorHex.replace('#', '').trim() || '000000';
+      const cleanBg = bgHex.replace('#', '').trim() || 'ffffff';
+      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=1200x1200&data=${encodeURIComponent(targetUrl)}&color=${cleanColor}&bgcolor=${cleanBg}&margin=2&format=png`;
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 1200;
+        canvas.height = 1200;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0);
+          const link = document.createElement('a');
+          link.download = filename.endsWith('.png') ? filename : `${filename}.png`;
+          link.href = canvas.toDataURL('image/png');
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        }
+      };
+      img.src = qrUrl;
+    } catch (fallbackErr) {
+      console.error('Fallback error downloading QR:', fallbackErr);
+      window.open(`https://api.qrserver.com/v1/create-qr-code/?size=1200x1200&data=${encodeURIComponent(targetUrl)}&color=${colorHex.replace('#','')}&bgcolor=${bgHex.replace('#','')}&margin=2&format=png`, '_blank');
+    }
+  }
+}
+
+/**
  * Detects text direction based on the first strong letter or element type.
  * Rule:
  * - If element is english_text -> 'ltr'

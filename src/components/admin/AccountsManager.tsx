@@ -127,34 +127,78 @@ export function AccountsManager({ businesses: initialBusinesses = [] }: Accounts
  }
  };
 
- const handleBulkDeleteUsers = async () => {
- if (selectedUids.length === 0) return;
- if (!window.confirm(`تحذير هام جداً: هل أنت متأكد من حذف الحسابات المحددة (${selectedUids.length} حساب) نهائياً من النظام؟ لا يمكن التراجع عن هذا الإجراء!`)) return;
+  // Helper to permanently delete a user from Auth & Firestore
+  const executePermanentUserDeletion = async (targetUid: string, targetEmail?: string) => {
+    // 1. Call server API to delete from Firebase Authentication
+    try {
+      const token = await currentUser?.getIdToken();
+      if (token) {
+        await fetch('/api/auth/delete-user', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + token
+          },
+          body: JSON.stringify({
+            targetUid,
+            targetEmail
+          })
+        });
+      }
+    } catch (apiErr) {
+      console.warn('Backend auth deletion notice:', apiErr);
+    }
 
- try {
- setLoading(true);
- for (const uid of selectedUids) {
- if (uid === currentUser?.uid) continue;
- await deleteDoc(doc(db, 'users', uid));
- }
- showToast(`تم حذف الحسابات المحددة (${selectedUids.length} حساب) نهائياً بنجاح`, 'info');
- setSelectedUids([]);
- await fetchUsers();
- } catch (err) {
- console.error(err);
- showToast('حدث خطأ أثناء الحذف الجماعي للحسابات', 'error');
- } finally {
- setLoading(false);
- }
- };
+    // 2. Delete Firestore documents directly as well
+    if (db) {
+      try {
+        await deleteDoc(doc(db, 'users', targetUid));
+      } catch (e) {
+        console.warn('deleteDoc users notice:', e);
+      }
+      try {
+        await deleteDoc(doc(db, 'supervisors', targetUid));
+      } catch {}
+      try {
+        await deleteDoc(doc(db, 'admins', targetUid));
+      } catch {}
+      if (targetEmail) {
+        try {
+          await setDoc(doc(db, 'deleted_emails', targetEmail.toLowerCase().trim()), {
+            email: targetEmail.toLowerCase().trim(),
+            uid: targetUid,
+            deletedAt: Date.now()
+          }, { merge: true });
+        } catch {}
+      }
+    }
+  };
 
- const ADMIN_BOOTSTRAP_EMAILS = [
- 'princessofx2344@gmail.com',
- 'd42902672@gmail.com',
- 'admin@shoofiirbid.com',
- 'irbid.admin@gmail.com',
- 'tharawt74@gmail.com'
- ];
+  const handleBulkDeleteUsers = async () => {
+    if (selectedUids.length === 0) return;
+    if (!window.confirm('تحذير هام جداً: هل أنت متأكد من حذف الحسابات المحددة (' + selectedUids.length + ' حساب) نهائياً من النظام وسجلات الدخول؟ لا يمكن التراجع عن هذا الإجراء!')) return;
+
+    try {
+      setLoading(true);
+      for (const uid of selectedUids) {
+        if (uid === currentUser?.uid) continue;
+        const targetUser = users.find(u => u.uid === uid);
+        await executePermanentUserDeletion(uid, targetUser?.email);
+      }
+      showToast('تم حذف الحسابات المحددة (' + selectedUids.length + ' حساب) نهائياً بنجاح', 'info');
+      setSelectedUids([]);
+      await fetchUsers();
+    } catch (err) {
+      console.error(err);
+      showToast('حدث خطأ أثناء الحذف الجماعي للحسابات', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const ADMIN_BOOTSTRAP_EMAILS = [
+    'princessofx2344@gmail.com'
+  ];
 
  // Fetch all user accounts & businesses from Firestore
  const fetchUsers = async () => {
@@ -456,21 +500,22 @@ export function AccountsManager({ businesses: initialBusinesses = [] }: Accounts
  };
 
  // Handle Delete User
- const handleDeleteUser = async () => {
- if (!db || !isAdmin || !selectedUserForDelete) return;
- setSubmitting(true);
- try {
- await deleteDoc(doc(db, 'users', selectedUserForDelete.uid));
- setUsers(prev => prev.filter(u => u.uid !== selectedUserForDelete.uid));
- showToast(`تم حذف الحساب (${selectedUserForDelete.displayName}) نهائياً.`);
- setSelectedUserForDelete(null);
- } catch (err) {
- console.error('Error deleting user:', err);
- showToast('حدث خطأ أثناء حذف الحساب', 'error');
- } finally {
- setSubmitting(false);
- }
- };
+  // Handle Delete User
+  const handleDeleteUser = async () => {
+    if (!db || !isAdmin || !selectedUserForDelete) return;
+    setSubmitting(true);
+    try {
+      await executePermanentUserDeletion(selectedUserForDelete.uid, selectedUserForDelete.email);
+      setUsers(prev => prev.filter(u => u.uid !== selectedUserForDelete.uid));
+      showToast('تم حذف الحساب (' + selectedUserForDelete.displayName + ') نهائياً من النظام وسجلات الدخول.');
+      setSelectedUserForDelete(null);
+    } catch (err) {
+      console.error('Error deleting user:', err);
+      showToast('حدث خطأ أثناء حذف الحساب', 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
  // Helper for Role labels
  const getRoleBadge = (role: UserRole) => {

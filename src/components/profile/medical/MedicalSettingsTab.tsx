@@ -83,11 +83,8 @@ export function MedicalSettingsTab({
         <div>
           <h3 className="text-base font-black text-[#2d2a26] flex items-center gap-2">
             <Settings className="h-5 w-5 text-teal-700" />
-            إدارة الفريق، التفويض، والخصوصية
+            إعدادات الخصوصية والصلاحيات
           </h3>
-          <p className="text-xs text-stone-500 mt-0.5">
-            تفويض السكرتاريا والاستقبال، التحكم في ظهور المنشأة، والطباعة الذكية
-          </p>
         </div>
         <button
           type="submit"
@@ -100,15 +97,12 @@ export function MedicalSettingsTab({
       </div>
 
       {/* Reception / Staff Delegation */}
-      <div className="bg-white border-0 sm:border border-stone-200 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 space-y-4 shadow-none sm:shadow-2xs">
-        <div className="space-y-1">
-          <h4 className="text-xs font-black text-stone-900 flex items-center gap-1.5">
-            <Users className="h-4 w-4 text-teal-600" />
-            تفويض موظفي الاستقبال والسكرتاريا (Reception Staff):
+      <div className="bg-white border border-stone-200 rounded-2xl p-5 space-y-4 shadow-2xs">
+        <div className="flex items-center gap-2">
+          <Users className="h-4.5 w-4.5 text-teal-700" />
+          <h4 className="text-xs font-black text-stone-900">
+            تفويض موظفي الاستقبال والسكرتاريا
           </h4>
-          <p className="text-[11px] text-stone-500">
-            أدخل الإيميل المسجل لموظفي العيادة أو الاستقبال لتمكينهم من الدخول وإدارة الحجوزات والمعلومات دون الحاجة لمشاركة حسابك الشخصي.
-          </p>
         </div>
 
         <div className="flex gap-2">
@@ -130,7 +124,7 @@ export function MedicalSettingsTab({
           </button>
         </div>
 
-        {staffEmails.length > 0 ? (
+        {staffEmails.length > 0 && (
           <div className="flex flex-wrap gap-2 pt-2">
             {staffEmails.map((email) => (
               <span
@@ -150,73 +144,50 @@ export function MedicalSettingsTab({
               </span>
             ))}
           </div>
-        ) : (
-          <p className="text-xs text-stone-400 py-1">
-            لم يتم تفويض أي موظف استقبال بعد. حسابك المالك هو الوحيد المصرح له بالإدارة.
-          </p>
         )}
       </div>
 
       {/* Visibility & Privacy */}
-      <div className="bg-white border-0 sm:border border-stone-200 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 space-y-4 shadow-none sm:shadow-2xs">
-        <h4 className="text-xs font-black text-stone-900 flex items-center gap-1.5">
-          <Eye className="h-4 w-4 text-teal-600" />
-          خيارات الظهور والخصوصية في دليل بلديتي إربد:
-        </h4>
+      <div className="bg-white border border-stone-200 rounded-2xl p-5 space-y-3 shadow-2xs">
+        <div className="flex items-center gap-2 pb-2 border-b border-stone-100">
+          <Eye className="h-4.5 w-4.5 text-teal-700" />
+          <h4 className="text-xs font-black text-stone-900">خيارات الظهور والخصوصية</h4>
+        </div>
 
         <div className="space-y-3">
-          <div className="flex items-center justify-between p-3 rounded-xl border border-stone-200 bg-stone-50/60">
-            <div className="space-y-0.5">
-              <span className="text-xs font-black text-stone-900 block">
-                تعليق ظهور المنشأة في الدليل العام والبحث (إخفاء مؤقت)
-              </span>
-              <span className="text-[11px] text-stone-500 block">
-                مفيد في أوقات الإجازات السنوية أو أعمال الصيانة في العيادة
-              </span>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={isHidden}
-                onChange={(e) => setIsHidden(e.target.checked)}
-                className="sr-only peer"
-              />
-              <div className="w-11 h-6 bg-stone-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-stone-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-600"></div>
-            </label>
-          </div>
+          <label className="flex items-center justify-between p-3.5 rounded-xl border border-stone-200 bg-stone-50/60 cursor-pointer hover:bg-stone-50 transition-colors">
+            <span className="text-xs font-black text-stone-900">
+              تعليق ظهور المنشأة بالدليل العام والبحث (إخفاء مؤقت)
+            </span>
+            <input
+              type="checkbox"
+              checked={isHidden}
+              onChange={(e) => setIsHidden(e.target.checked)}
+              className="h-5 w-5 rounded text-amber-600 focus:ring-amber-500 border-stone-300 cursor-pointer"
+            />
+          </label>
 
-          <div className="flex items-center justify-between p-3 rounded-xl border border-stone-200 bg-stone-50/60">
-            <div className="space-y-0.5">
-              <span className="text-xs font-black text-stone-900 block">
-                إخفاء صندوق تقييمات المراجعين من الصفحة العامة
-              </span>
-              <span className="text-[11px] text-stone-500 block">
-                لن يتمكن الزوار من قراءة التقييمات العامة مع إبقاء التقييم الإجمالي فقط
-              </span>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={hideSiteReviews}
-                onChange={(e) => setHideSiteReviews(e.target.checked)}
-                className="sr-only peer"
-              />
-              <div className="w-11 h-6 bg-stone-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-stone-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600"></div>
-            </label>
-          </div>
+          <label className="flex items-center justify-between p-3.5 rounded-xl border border-stone-200 bg-stone-50/60 cursor-pointer hover:bg-stone-50 transition-colors">
+            <span className="text-xs font-black text-stone-900">
+              إخفاء صندوق تقييمات المراجعين من الصفحة العامة
+            </span>
+            <input
+              type="checkbox"
+              checked={hideSiteReviews}
+              onChange={(e) => setHideSiteReviews(e.target.checked)}
+              className="h-5 w-5 rounded text-teal-600 focus:ring-teal-600 border-stone-300 cursor-pointer"
+            />
+          </label>
         </div>
       </div>
 
       {/* QR Poster & Printouts */}
-      <div className="bg-white border-0 sm:border border-stone-200 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 flex items-center justify-between flex-wrap gap-3 shadow-none sm:shadow-2xs">
-        <div className="space-y-0.5">
-          <h4 className="text-xs font-black text-stone-900 flex items-center gap-1.5">
-            <QrCode className="h-4 w-4 text-teal-600" />
-            طباعة ملصق الاستقبال الذكي (Smart QR Poster):
+      <div className="bg-white border border-stone-200 rounded-2xl p-5 flex items-center justify-between flex-wrap gap-3 shadow-2xs">
+        <div className="flex items-center gap-2">
+          <QrCode className="h-4.5 w-4.5 text-teal-700" />
+          <h4 className="text-xs font-black text-stone-900">
+            طباعة ملصق الاستقبال الذكي (Smart QR Poster)
           </h4>
-          <p className="text-[11px] text-stone-500">
-            بوستر مهني جاهز للطباعة والتعليق في مكتب الاستقبال لتسهيل فتح الملف وحجز المواعيد
-          </p>
         </div>
         <button
           type="button"
@@ -224,20 +195,17 @@ export function MedicalSettingsTab({
           className="px-5 py-2.5 bg-stone-900 hover:bg-black text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center gap-2"
         >
           <QrCode className="h-4 w-4" />
-          <span>توليد ومعاينة البوستر 🖨️</span>
+          <span>توليد ومعاينة البوستر</span>
         </button>
       </div>
 
       {/* Danger Zone: Delete Facility */}
-      <div className="bg-rose-50/60 border-0 sm:border border-rose-200 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 flex items-center justify-between flex-wrap gap-3 shadow-none sm:shadow-2xs">
-        <div className="space-y-0.5">
-          <h4 className="text-xs font-black text-rose-900 flex items-center gap-1.5">
-            <AlertTriangle className="h-4 w-4 text-rose-600" />
-            منطقة الحذف النهائي للمنشأة:
+      <div className="bg-rose-50/60 border border-rose-200 rounded-2xl p-5 flex items-center justify-between flex-wrap gap-3 shadow-2xs">
+        <div className="flex items-center gap-2">
+          <AlertTriangle className="h-4.5 w-4.5 text-rose-600" />
+          <h4 className="text-xs font-black text-rose-900">
+            منطقة الحذف النهائي للمنشأة
           </h4>
-          <p className="text-[11px] text-rose-700">
-            سيؤدي هذا الإجراء إلى حذف صفحة العيادة وجميع بياناتها وتقييماتها بشكل لا رجعة فيه.
-          </p>
         </div>
         <button
           type="button"

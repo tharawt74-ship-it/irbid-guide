@@ -39,6 +39,19 @@ export default defineConfig(({ mode }) => {
       alias: {
         '@': path.resolve(__dirname, '.'),
       },
+      dedupe: ['react', 'react-dom', 'react-router'],
+    },
+    optimizeDeps: {
+      include: [
+        'react',
+        'react-dom',
+        'react-router',
+        'lucide-react',
+        'motion/react',
+        'firebase/app',
+        'firebase/firestore',
+        'firebase/auth',
+      ],
     },
     build: {
       chunkSizeWarningLimit: 1000,

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   Briefcase, Search, Plus, MapPin, Clock, DollarSign, 
@@ -8,10 +8,10 @@ import {
 } from 'lucide-react';
 import { collection, getDocs, doc, deleteDoc, query, orderBy, limit } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { getCachedJobs, setCachedJobs } from '../lib/dataCache';
+import { getCachedJobs, setCachedJobs, getCachedBusinesses, setCachedBusinesses } from '../lib/dataCache';
 import { JobOffer, Business, HomepageBanner } from '../types';
 import { useAuth } from '../contexts/AuthContext';
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { JobFormModal } from '../components/jobs/JobFormModal';
 import { getAppConfig } from '../lib/demoDataHelper';
 import { BlueCheckIcon } from '../components/vip/VerifiedBadge';
@@ -28,38 +28,95 @@ import { CategoriesModal } from '../components/CategoriesModal';
 import { Pagination } from '../components/common/Pagination';
 import { JobCardSkeleton } from '../components/common/Skeleton';
 import { useConfirm } from '../contexts/ConfirmContext';
+import { cn } from '../lib/utils';
+import { useHeaderVisibility } from '../lib/useHeaderVisibility';
+
+import { BUSINESS_CATEGORIES, MainCategory, normalizeArabic } from '../lib/categories';
 
 const JOB_TYPES = ['الكل', 'دوام كامل', 'دوام جزئي', 'مناسب للطلاب', 'عمل عن بعد'];
 
+function isMatchingJobLocation(selectedReg: string, jobLocation: string, jobCompany: string): boolean {
+  if (!selectedReg || selectedReg === 'الكل' || !selectedReg.trim()) return true;
+
+  const selNorm = normalizeArabic(selectedReg);
+  const locNorm = normalizeArabic(jobLocation || '');
+  const compNorm = normalizeArabic(jobCompany || '');
+
+  if (locNorm.includes(selNorm) || compNorm.includes(selNorm)) {
+    return true;
+  }
+
+  const cleanReg = selectedReg.replace(/\(.*?\)/g, '').replace(/\/.*$/g, '').trim();
+  const cleanNorm = normalizeArabic(cleanReg);
+
+  if (cleanNorm && (locNorm.includes(cleanNorm) || compNorm.includes(cleanNorm))) {
+    return true;
+  }
+
+  const tokens = selNorm.split(' ').filter(t => t.length > 2 && t !== 'شارع' && t !== 'طريق' && t !== 'لواء' && t !== 'قرى' && t !== 'مدينة' && t !== 'حي' && t !== 'مجمع');
+  if (tokens.length === 0) return true;
+
+  return tokens.some(t => locNorm.includes(t) || compNorm.includes(t));
+}
+
 export function Jobs() {
+  const navigate = useNavigate();
   const { confirm } = useConfirm();
   const { currentUser, isAdmin, isStaff, isMerchant, ownedBusinesses } = useAuth();
-  const { categories } = useSystemSettings();
+  const { categories, neighborhoods } = useSystemSettings();
   const mainCategories = categories.map(c => c.name);
   const getSubCats = (catName: string) => categories.find(c => c.name === catName)?.subcategories || [];
 
   const hasBusiness = Boolean(currentUser && (isAdmin || isStaff || isMerchant || (ownedBusinesses && ownedBusinesses.length > 0)));
 
   const [jobs, setJobs] = useState<JobOffer[]>([]);
+  const [businessMap, setBusinessMap] = useState<Record<string, Business>>({});
   const [banners, setBanners] = useState<HomepageBanner[]>(DEFAULT_JOBS_BANNERS);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [stickySearchInput, setStickySearchInput] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('الكل');
   const [selectedSubCategory, setSelectedSubCategory] = useState('');
   const [selectedJobType, setSelectedJobType] = useState('الكل');
+  const [selectedRegion, setSelectedRegion] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
 
+  const activeJobTypeRef = useRef<HTMLButtonElement | null>(null);
+
+  // Auto scroll selected job type pill into view
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (activeJobTypeRef.current) {
+        activeJobTypeRef.current.scrollIntoView({
+          behavior: 'smooth',
+          block: 'nearest',
+          inline: 'center'
+        });
+      }
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [selectedJobType]);
+
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, selectedCategory, selectedSubCategory, selectedJobType]);
+  }, [searchQuery, selectedCategory, selectedSubCategory, selectedJobType, selectedRegion]);
 
   // Modal states
+  const showHeader = useHeaderVisibility();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCategoriesModalOpen, setIsCategoriesModalOpen] = useState(false);
+  const [showFiltersMobile, setShowFiltersMobile] = useState(false);
   const [isSubCategoriesExpanded, setIsSubCategoriesExpanded] = useState(false);
   const [editingJob, setEditingJob] = useState<JobOffer | null>(null);
   const [selectedDetailJob, setSelectedDetailJob] = useState<JobOffer | null>(null);
+
+  const activeFiltersCount = [
+    selectedCategory !== 'الكل',
+    selectedSubCategory !== '',
+    selectedJobType !== 'الكل',
+    selectedRegion !== ''
+  ].filter(Boolean).length;
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -76,10 +133,31 @@ export function Jobs() {
           .then(res => setBanners(res))
           .catch(() => setBanners(DEFAULT_JOBS_BANNERS));
 
+        // Load businesses to accurately map shop main/sub categories & districts
+        const cachedBiz = getCachedBusinesses();
+        if (cachedBiz && cachedBiz.length > 0) {
+          const map: Record<string, Business> = {};
+          cachedBiz.forEach(b => { map[b.id] = b; });
+          setBusinessMap(map);
+        } else if (db) {
+          getDocs(collection(db, 'businesses')).then(snap => {
+            const map: Record<string, Business> = {};
+            const list: Business[] = [];
+            snap.forEach(d => {
+              const b = { id: d.id, ...d.data() } as Business;
+              map[b.id] = b;
+              list.push(b);
+            });
+            setBusinessMap(map);
+            setCachedBusinesses(list);
+          }).catch(console.error);
+        }
+
         const cached = getCachedJobs();
         if (cached && cached.length > 0) {
           setJobs(cached);
           setLoading(false);
+          return;
         }
 
         if (!db) {
@@ -164,34 +242,52 @@ export function Jobs() {
     }
   };
 
-  // Filter jobs
+  // Filter jobs with business category, subcategory, and district enrichment
   const filteredJobs = jobs.filter(job => {
+    const biz = job.businessId ? businessMap[job.businessId] : null;
+
+    // Derived category, subcategory, district, and company name from publishing business
+    const effectiveCategory = biz?.category || job.businessCategory || job.category || '';
+    const effectiveSubCat = biz?.subCategory || job.businessSubCategory || job.subCategory || '';
+    const effectiveDistrict = biz?.district || biz?.address || biz?.region || job.businessDistrict || job.location || '';
+    const effectiveCompany = biz?.name || job.company || '';
+
+    // Category & Subcategory matching
     let matchesCategory = true;
     if (selectedCategory && selectedCategory !== 'الكل') {
       const validSubCats = getSubCats(selectedCategory);
       if (selectedSubCategory) {
         matchesCategory = 
-          job.category === selectedSubCategory || 
-          job.category.includes(selectedSubCategory) ||
-          selectedSubCategory.includes(job.category);
+          effectiveCategory === selectedSubCategory || 
+          effectiveSubCat === selectedSubCategory ||
+          job.category === selectedSubCategory ||
+          (job.subCategory && job.subCategory === selectedSubCategory);
       } else {
         matchesCategory = 
-          job.category === selectedCategory || 
-          job.category.includes(selectedCategory) ||
-          selectedCategory.includes(job.category) ||
-          validSubCats.some(s => job.category === s || job.category.includes(s) || s.includes(job.category));
+          effectiveCategory === selectedCategory || 
+          job.category === selectedCategory ||
+          validSubCats.some(s => effectiveCategory === s || effectiveSubCat === s || job.category === s) ||
+          effectiveCategory.includes(selectedCategory) ||
+          selectedCategory.includes(effectiveCategory);
       }
     }
 
+    // Job Type matching
     const matchesType = selectedJobType === 'الكل' || job.jobType === selectedJobType;
-    const matchesSearch = 
-      job.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      job.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      job.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      job.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (job.category && job.category.toLowerCase().includes(searchQuery.toLowerCase()));
 
-    return matchesCategory && matchesType && matchesSearch;
+    // Location matching
+    const matchesLocation = !selectedRegion || selectedRegion === 'الكل' || isMatchingJobLocation(selectedRegion, effectiveDistrict, effectiveCompany);
+
+    // Search query matching
+    const matchesSearch = !searchQuery ||
+      job.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      effectiveCompany.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      effectiveDistrict.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      job.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      effectiveCategory.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      effectiveSubCat.toLowerCase().includes(searchQuery.toLowerCase());
+
+    return matchesCategory && matchesType && matchesLocation && matchesSearch;
   });
 
   return (
@@ -210,65 +306,170 @@ export function Jobs() {
         </div>
       )}
 
+      {/* ========================================================================= */}
+      {/* MOBILE STICKY TOP APP BAR (Positioned Above Promotional Banner on Mobile) */}
+      {/* ========================================================================= */}
+      <div className={cn(
+        "lg:hidden sticky z-30 bg-white/95 backdrop-blur-md border-b border-stone-200/80 shadow-2xs -mx-4 sm:-mx-6 px-4 sm:px-6 py-2.5 space-y-2 transition-all duration-300",
+        showHeader ? "top-[62px] sm:top-[68px] md:top-[72px]" : "top-0"
+      )}>
+        {/* Row 1: Search Bar & Filters Button */}
+        <div className="flex items-center gap-2">
+          {/* Integrated Search Input */}
+          <form 
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (stickySearchInput.trim()) {
+                navigate(`/search?q=${encodeURIComponent(stickySearchInput.trim())}&tab=jobs`);
+              }
+            }}
+            className="relative flex-1 min-w-0"
+          >
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-stone-400 pointer-events-none" />
+            <input
+              type="search"
+              enterKeyHint="search"
+              placeholder="عن ماذا تبحث؟"
+              value={stickySearchInput}
+              onChange={(e) => setStickySearchInput(e.target.value)}
+              className="w-full pl-8 pr-8 py-2 bg-stone-100/90 border border-stone-200 rounded-xl text-xs font-bold placeholder:text-stone-400 focus:outline-none focus:bg-white focus:border-[#1a4d2e] transition-all cursor-text"
+            />
+            {stickySearchInput && (
+              <button
+                type="button"
+                onClick={() => setStickySearchInput('')}
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 p-1 rounded-full cursor-pointer"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </form>
+
+          {/* Filters Button (Replaces Categories Button) */}
+          <button
+            onClick={() => setShowFiltersMobile(true)}
+            className="relative px-3.5 py-2 bg-[#1a4d2e] text-white rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-xs active:scale-95 transition-all shrink-0 cursor-pointer"
+          >
+            <Filter className="h-3.5 w-3.5 text-[#ff9f1c]" />
+            <span>فلاتر</span>
+            {activeFiltersCount > 0 && (
+              <span className="w-4 h-4 bg-amber-400 text-stone-900 rounded-full font-black text-[10px] flex items-center justify-center -mr-0.5">
+                {activeFiltersCount}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Row 2: Job Types Horizontal Carousel */}
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar scroll-smooth pt-0.5 pb-1 -mx-2.5 px-2.5 sm:-mx-4 sm:px-4" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+          {JOB_TYPES.map((type) => (
+            <button
+              key={type}
+              ref={selectedJobType === type ? activeJobTypeRef : null}
+              onClick={() => setSelectedJobType(type)}
+              className={`shrink-0 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1 cursor-pointer border min-h-[36px] ${
+                selectedJobType === type
+                  ? 'bg-gradient-to-r from-[#1a4d2e] to-emerald-700 text-white border-transparent shadow-xs font-black'
+                  : 'bg-white text-stone-700 border-stone-200 hover:border-emerald-300'
+              }`}
+            >
+              <span>{type}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Banner Slideshow */}
       <BannerSlideshow banners={banners} />
 
-      {/* Page Header & Search Bar (Compact & Sleek) */}
-      <div className="bg-white rounded-2xl md:rounded-3xl p-3.5 sm:p-5 border border-[#e5e1da] shadow-xs space-y-3 sm:space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="space-y-1">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <div className="inline-flex items-center gap-1 bg-emerald-50 text-[#1a4d2e] border border-emerald-200 px-2.5 py-0.5 rounded-full text-[11px] font-black">
-                <Briefcase className="h-3 w-3 text-[#1a4d2e]" />
-                <span>سوق عمل إربد</span>
-              </div>
-              <div className="hidden sm:inline-flex items-center gap-1 bg-stone-100 text-stone-700 border border-stone-200 px-2.5 py-0.5 rounded-full text-[11px] font-bold">
-                <GraduationCap className="h-3 w-3 text-stone-600" />
-                <span>شواغر المحلات والشركات والطلاب</span>
+      {/* Mobile Wide Banner Action: "نشر وظيفة" button for shop owners */}
+      {hasBusiness && (
+        <div className="lg:hidden my-2.5">
+          <button
+            type="button"
+            onClick={openAddModal}
+            className="w-full py-3.5 px-5 bg-gradient-to-r from-[#1a4d2e] via-emerald-800 to-[#1a4d2e] hover:from-emerald-800 hover:to-emerald-700 text-white font-black text-xs sm:text-sm rounded-2xl shadow-md flex items-center justify-center gap-2 active:scale-[0.99] border border-emerald-700/60 cursor-pointer"
+          >
+            <Plus className="h-4.5 w-4.5 text-[#ff9f1c]" />
+            <span>أعلن عن فرصة عمل جديدة لمشروعك</span>
+          </button>
+        </div>
+      )}
+
+      {/* Desktop Page Header (Preserved & Enhanced with Location Filter) */}
+      <div className="hidden lg:block bg-gradient-to-br from-[#1a4d2e] via-[#153e25] to-[#0f2e1d] text-white rounded-3xl p-6 shadow-xl border border-emerald-800/40 relative overflow-hidden">
+        <div className="absolute -left-10 -bottom-10 w-40 h-40 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none" />
+        
+        <div className="relative space-y-3.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="w-10 h-10 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/10 text-emerald-300">
+                <Briefcase className="h-6 w-6" />
+              </span>
+              <div>
+                <h1 className="text-2xl font-black tracking-tight text-white">
+                  وظائف وشواغر إربد
+                </h1>
+                <p className="text-xs text-emerald-100/80 font-medium">
+                  سوق العمل والشواغر المتاحة في المحلات والشركات
+                </p>
               </div>
             </div>
 
-            <h1 className="text-xl sm:text-2xl font-black text-stone-900 tracking-tight">
-              وظائف وشواغر إربد
-            </h1>
-
-            <p className="hidden sm:block text-stone-500 text-xs font-medium leading-relaxed">
-              تصفح أحدث الفرص الشاغرة في محافظة إربد أو انشر إعلان توظيف لمحلك واستقطب أصحاب الكفاءات.
-            </p>
+            {hasBusiness && (
+              <button
+                type="button"
+                onClick={openAddModal}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#ff9f1c] hover:bg-[#f08f0c] text-stone-950 font-black text-xs rounded-xl shadow-md transition-all active:scale-95 cursor-pointer"
+              >
+                <Plus className="h-4 w-4" />
+                <span>نشر وظيفة</span>
+              </button>
+            )}
           </div>
-        </div>
 
-        {/* Quick Action for Shop Owners */}
-        {hasBusiness && (
-          <div className="pt-1">
-            <button
-              type="button"
-              onClick={openAddModal}
-              className="w-full py-3.5 sm:py-4 px-6 bg-gradient-to-r from-[#1a4d2e] via-emerald-800 to-[#1a4d2e] hover:from-emerald-800 hover:to-emerald-700 text-white font-black text-sm sm:text-base rounded-2xl sm:rounded-3xl shadow-md hover:shadow-lg transition-all duration-300 flex items-center justify-center cursor-pointer active:scale-[0.99] border border-emerald-700/60"
-            >
-              <span className="tracking-wide">انشر وظيفة شاغرة جديدة لمشروعك</span>
-            </button>
+          {/* Search Input Bar & Location Filter Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {/* Search Input */}
+            <div className="relative md:col-span-2">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="ابحث المسمى الوظيفي، المحل، أو المنطقة..."
+                className="w-full bg-white/10 backdrop-blur-md text-white placeholder:text-stone-300 border border-white/20 rounded-2xl px-4 py-3 pr-10 text-sm focus:outline-none focus:bg-white/20 transition-all shadow-inner"
+              />
+              <Search className="h-4 w-4 text-emerald-200 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              {searchQuery && (
+                <button 
+                  onClick={() => setSearchQuery('')}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-300 hover:text-white p-1.5"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+
+            {/* Location Dropdown */}
+            <div className="relative">
+              <select
+                value={selectedRegion}
+                onChange={(e) => setSelectedRegion(e.target.value)}
+                className="w-full bg-white/10 backdrop-blur-md text-white border border-white/20 rounded-2xl px-4 py-3 pr-10 pl-8 text-sm font-bold focus:outline-none focus:bg-white/20 transition-all shadow-inner cursor-pointer appearance-none"
+              >
+                <option value="" className="text-stone-900 font-bold">جميع مناطق وأحياء إربد</option>
+                {neighborhoods && neighborhoods.map((group) => (
+                  <optgroup key={group.groupName} label={group.groupName} className="text-stone-900 font-bold">
+                    {group.areas.map((area) => (
+                      <option key={area} value={area} className="text-stone-900 font-medium">{area}</option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+              <MapPin className="h-4 w-4 text-emerald-200 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <ChevronDown className="h-4 w-4 text-emerald-200 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
           </div>
-        )}
-
-        {/* Search Bar */}
-        <div className="relative">
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="ابحث بمسمى الوظيفة (باريستا، كاشير، مسوق)، اسم المحل، أو المنطقة..."
-            className="w-full bg-[#fdfcfb] text-stone-900 placeholder:text-stone-400 border border-[#e5e1da] rounded-xl px-3.5 py-2.5 pr-10 text-xs sm:text-sm focus:outline-none focus:border-[#1a4d2e] focus:bg-white transition-all shadow-inner"
-          />
-          <Search className="h-4 w-4 text-stone-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-          {searchQuery && (
-            <button 
-              onClick={() => setSearchQuery('')}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 p-1"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          )}
         </div>
       </div>
 
@@ -439,14 +640,14 @@ export function Jobs() {
         </div>
       )}
 
-      {/* Job Types Bar */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+      {/* Job Types Bar (Preserved on Desktop, Hidden on Mobile as it is present in Sticky Header) */}
+      <div className="hidden lg:flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none snap-x -mx-4 px-4 sm:mx-0 sm:px-0">
         <span className="text-xs font-black text-stone-400 shrink-0 ml-1">نوع الدوام:</span>
         {JOB_TYPES.map(type => (
           <button
             key={type}
             onClick={() => setSelectedJobType(type)}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+            className={`snap-start px-4 py-2 sm:py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer min-h-[40px] sm:min-h-[36px] flex items-center active:scale-95 ${
               selectedJobType === type
                 ? 'bg-[#ff9f1c] text-white shadow-xs'
                 : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
@@ -458,14 +659,26 @@ export function Jobs() {
       </div>
 
       {/* Results Header Count */}
-      <div className="flex items-center justify-between text-xs text-stone-500 font-bold px-1">
-        <span>عرض ({filteredJobs.length}) شاغر وظيفي متاح في إربد</span>
-        {(selectedCategory !== 'الكل' || selectedSubCategory !== '' || selectedJobType !== 'الكل' || searchQuery) && (
+      <div className="flex items-center justify-between text-xs text-stone-500 font-bold px-1 gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span>عرض ({filteredJobs.length}) شاغر وظيفي متاح في إربد</span>
+          {selectedRegion && (
+            <span className="inline-flex items-center gap-1 bg-emerald-100 text-[#1a4d2e] px-2.5 py-0.5 rounded-full text-xs font-bold border border-emerald-200">
+              <MapPin className="h-3 w-3 text-[#ff9f1c]" />
+              <span>{selectedRegion}</span>
+              <button onClick={() => setSelectedRegion('')} className="hover:text-red-600 p-0.5 cursor-pointer" title="إزالة فلتر المنطقة">
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          )}
+        </div>
+        {(selectedCategory !== 'الكل' || selectedSubCategory !== '' || selectedJobType !== 'الكل' || selectedRegion !== '' || searchQuery) && (
           <button
             onClick={() => {
               setSelectedCategory('الكل');
               setSelectedSubCategory('');
               setSelectedJobType('الكل');
+              setSelectedRegion('');
               setSearchQuery('');
             }}
             className="text-[#1a4d2e] hover:underline cursor-pointer"
@@ -506,117 +719,111 @@ export function Jobs() {
           <div id="jobs-grid" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
             {filteredJobs
               .slice((currentPage - 1) * 15, currentPage * 15)
-              .map((job) => (
-              <div
-                key={job.id}
-                onClick={() => setSelectedDetailJob(job)}
-                className="bg-white rounded-3xl p-5 sm:p-6 border border-[#e5e1da] hover:border-[#1a4d2e]/40 hover:shadow-lg transition-all flex flex-col justify-between group relative cursor-pointer"
-              >
-              <div className="space-y-3.5">
-                
-                {/* Top Badges */}
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="bg-stone-100 text-stone-700 text-[11px] font-bold px-2.5 py-0.5 rounded-md">
-                      {job.category}
-                    </span>
-                    <span className="bg-emerald-50 text-[#1a4d2e] text-[11px] font-bold px-2.5 py-0.5 rounded-md">
-                      {job.jobType}
-                    </span>
-                  </div>
+              .map((job) => {
+                const biz = job.businessId ? businessMap[job.businessId] : null;
+                const effectiveCategory = biz?.category || job.businessCategory || job.category || '';
+                const effectiveSubCat = biz?.subCategory || job.businessSubCategory || job.subCategory || '';
+                const effectiveDistrict = biz?.district || biz?.address || biz?.region || job.businessDistrict || job.location || '';
+                const effectiveCompany = biz?.name || job.company || '';
 
-                  {job.isUrgent && (
-                    <span className="bg-red-50 text-red-600 border border-red-200 text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1 shrink-0 animate-pulse">
-                      <Flame className="h-3 w-3 fill-red-600" />
-                      شاغر عاجل
-                    </span>
-                  )}
-                </div>
+                const displayCategoryTag = (effectiveSubCat && effectiveSubCat.trim() !== effectiveCategory.trim() && !effectiveCategory.includes(effectiveSubCat))
+                  ? `${effectiveCategory} • ${effectiveSubCat}`
+                  : effectiveCategory;
 
-                {/* Title & Company */}
-                <div>
-                  <h3 className="font-black text-lg text-[#2d2a26] group-hover:text-[#1a4d2e] transition-colors line-clamp-1">
-                    {job.title}
-                  </h3>
-                  
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-stone-500 mt-1">
-                    <Building2 className="h-3.5 w-3.5 text-[#ff9f1c] shrink-0" />
-                    <span className="truncate">{job.company}</span>
-                    {job.businessId && (
-                      <span className="bg-sky-50 text-sky-700 text-[10px] font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1 border border-sky-200/80">
-                        <BlueCheckIcon className="h-3 w-3" />
-                        <span>محل موثّق</span>
-                      </span>
-                    )}
-                  </div>
-                </div>
+                return (
+                  <div
+                    key={job.id}
+                    onClick={() => setSelectedDetailJob(job)}
+                    className="bg-white rounded-3xl p-4 sm:p-6 border border-[#e5e1da] hover:border-[#1a4d2e]/40 shadow-xs hover:shadow-lg transition-all flex flex-col justify-between group relative cursor-pointer active:scale-[0.99]"
+                  >
+                  <div className="space-y-3">
+                    
+                    {/* Header Row */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-start gap-2.5">
+                        <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-[#1a4d2e] border border-emerald-100 flex items-center justify-center shrink-0 font-black text-sm">
+                          <Building2 className="h-5 w-5 text-[#1a4d2e]" />
+                        </div>
+                        <div>
+                          <h3 className="font-black text-base text-[#2d2a26] group-hover:text-[#1a4d2e] transition-colors line-clamp-1">
+                            {job.title}
+                          </h3>
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-stone-500 mt-0.5">
+                            <span className="truncate">{effectiveCompany}</span>
+                            {job.businessId && (
+                              <span className="bg-sky-50 text-sky-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full inline-flex items-center gap-0.5 border border-sky-200">
+                                <BlueCheckIcon className="h-3 w-3" />
+                                <span>موثّق</span>
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
 
-                {/* Description snippet */}
-                <p className="text-stone-600 text-xs leading-relaxed line-clamp-2">
-                  {job.description}
-                </p>
-
-                {/* Benefits mini badges if available */}
-                {job.benefits && job.benefits.length > 0 && (
-                  <div className="flex flex-wrap gap-1 pt-1">
-                    {job.benefits.slice(0, 2).map((b, idx) => (
-                      <span key={idx} className="bg-stone-50 text-stone-600 border border-stone-200/60 text-[10px] font-bold px-2 py-0.5 rounded-md">
-                        {b}
-                      </span>
-                    ))}
-                    {job.benefits.length > 2 && (
-                      <span className="text-[10px] font-bold text-[#1a4d2e] self-center">
-                        +{job.benefits.length - 2} ميزات
-                      </span>
-                    )}
-                  </div>
-                )}
-
-                {/* Meta details (Location, Salary, Shifts) */}
-                <div className="pt-2 border-t border-stone-100 space-y-1.5 text-xs text-stone-500">
-                  <div className="flex items-center gap-1.5">
-                    <MapPin className="h-3.5 w-3.5 text-stone-400 shrink-0" />
-                    <span className="truncate">{job.location}</span>
-                  </div>
-
-                  {job.workHours && (
-                    <div className="flex items-center gap-1.5 text-stone-600 font-bold">
-                      <Clock className="h-3.5 w-3.5 text-sky-600 shrink-0" />
-                      <span className="truncate">{job.workHours}</span>
+                      {job.isUrgent && (
+                        <span className="bg-red-50 text-red-600 border border-red-200 text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1 shrink-0">
+                          <Flame className="h-3 w-3 fill-red-600" />
+                          <span>عاجل</span>
+                        </span>
+                      )}
                     </div>
-                  )}
 
-                  {job.salary && (
-                    <div className="flex items-center gap-1.5 text-[#1a4d2e] font-black">
-                      <DollarSign className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                      <span className="truncate">{job.salary}</span>
+                    {/* Job Types & Category Badges */}
+                    <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                      <span className="bg-[#1a4d2e]/10 text-[#1a4d2e] text-[11px] font-bold px-2.5 py-1 rounded-xl">
+                        {displayCategoryTag}
+                      </span>
+                      <span className="bg-emerald-50 text-emerald-800 text-[11px] font-bold px-2.5 py-1 rounded-xl">
+                        {job.jobType}
+                      </span>
+                      {job.salary && (
+                        <span className="bg-amber-50 text-amber-900 border border-amber-200/80 text-[11px] font-black px-2.5 py-1 rounded-xl flex items-center gap-1 mr-auto">
+                          <DollarSign className="h-3 w-3 text-amber-600 shrink-0" />
+                          <span>{job.salary}</span>
+                        </span>
+                      )}
                     </div>
-                  )}
-                </div>
 
+                    {/* Snippet */}
+                    <p className="text-stone-600 text-xs leading-relaxed line-clamp-2">
+                      {job.description}
+                    </p>
+
+                    {/* Meta Row */}
+                    <div className="flex items-center justify-between text-xs text-stone-500 font-bold pt-2 border-t border-stone-100 gap-2">
+                      <div className="flex items-center gap-1 truncate">
+                        <MapPin className="h-3.5 w-3.5 text-[#ff9f1c] shrink-0" />
+                        <span className="truncate">{effectiveDistrict}</span>
+                      </div>
+                      {job.workHours && (
+                        <div className="flex items-center gap-1 text-stone-600 shrink-0">
+                          <Clock className="h-3.5 w-3.5 text-sky-600 shrink-0" />
+                          <span>{job.workHours}</span>
+                        </div>
+                      )}
+                    </div>
               </div>
 
-              {/* Action Buttons */}
-              <div className="pt-4 border-t border-[#e5e1da] mt-4 flex flex-wrap items-center justify-between gap-y-3 gap-x-2">
-                
-                <div className="flex items-center gap-1.5 shrink-0 flex-nowrap">
+              {/* Action Buttons Row */}
+              <div className="pt-3 border-t border-[#e5e1da] mt-3 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
                   <a
                     href={getWhatsAppUrl(job.contactWhatsapp || job.contactPhone, formatJobWhatsAppMessage(job.title, job.company))}
                     target="_blank"
                     rel="noreferrer"
                     onClick={(e) => e.stopPropagation()}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors shadow-xs cursor-pointer shrink-0"
+                    className="inline-flex items-center justify-center min-h-[44px] px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
                   >
-                    <WhatsApp3DIcon className="h-3.5 w-3.5 text-white" />
+                    <WhatsApp3DIcon className="h-4 w-4 text-white" />
                     <span>واتساب</span>
                   </a>
 
                   <a
                     href={`tel:${job.contactPhone}`}
                     onClick={(e) => e.stopPropagation()}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-[#1a4d2e] hover:bg-[#133c23] text-white rounded-xl text-xs font-bold transition-colors shadow-xs shrink-0"
+                    className="inline-flex items-center justify-center min-h-[44px] px-3 py-2 bg-[#1a4d2e] hover:bg-[#133c23] active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-xs"
                   >
-                    <Phone3DIcon className="h-3.5 w-3.5 text-white" />
+                    <Phone3DIcon className="h-4 w-4 text-white" />
                     <span>اتصال</span>
                   </a>
 
@@ -629,39 +836,38 @@ export function Jobs() {
                   />
                 </div>
 
-
-                <div className="flex items-center gap-1 shrink-0 flex-nowrap">
+                <div className="flex items-center gap-1">
                   {(isAdmin || currentUser?.uid === job.userId) && (
-                    <div className="flex items-center gap-0.5 ml-1 shrink-0">
+                    <div className="flex items-center gap-0.5 ml-1">
                       <button
                         onClick={(e) => openEditModal(job, e)}
-                        className="p-1.5 text-stone-400 hover:text-stone-800 hover:bg-stone-100 rounded-lg transition-colors shrink-0"
+                        className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center text-stone-400 hover:text-stone-800 hover:bg-stone-100 rounded-xl transition-colors"
                         title="تعديل الشاغر"
                       >
-                        <Pencil className="h-3.5 w-3.5" />
+                        <Pencil className="h-4 w-4" />
                       </button>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           handleDeleteJob(job.id);
                         }}
-                        className="p-1.5 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors shrink-0"
+                        className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors"
                         title="حذف الشاغر"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
                   )}
                   
-                  <span className="text-xs font-black text-[#1a4d2e] group-hover:underline flex items-center gap-1 mr-1 shrink-0">
-                    <span>التفاصيل</span>
-                    <Eye className="h-3.5 w-3.5 text-[#ff9f1c]" />
-                  </span>
+                      <span className="text-xs font-black text-[#1a4d2e] group-hover:underline flex items-center gap-1 px-2 py-2 min-h-[44px]">
+                        <span>التفاصيل</span>
+                        <Eye className="h-4 w-4 text-[#ff9f1c]" />
+                      </span>
+                    </div>
+                  </div>
                 </div>
-
-              </div>
-            </div>
-          ))}
+              );
+            })}
           </div>
 
           <Pagination
@@ -884,6 +1090,147 @@ export function Jobs() {
         onJobSaved={handleJobSaved}
         editingJob={editingJob}
       />
+
+      {/* Mobile Overlay Filter Bottom Sheet */}
+      {showFiltersMobile && createPortal(
+        <div className="fixed inset-0 z-[100000] lg:hidden bg-stone-900/60 backdrop-blur-xs flex items-end justify-center animate-in fade-in duration-200" dir="rtl">
+          <div className="w-full bg-white max-h-[85vh] rounded-t-[2rem] flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-300 overflow-hidden">
+            {/* Fixed Header */}
+            <div className="p-5 pb-3 border-b border-stone-100 flex flex-col shrink-0">
+              <div className="w-12 h-1 bg-stone-200 rounded-full mx-auto mb-3 shrink-0" />
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-8 h-8 rounded-xl bg-emerald-100 flex items-center justify-center text-[#1a4d2e]">
+                    <Filter className="h-4 w-4 text-[#ff9f1c]" />
+                  </span>
+                  <h3 className="font-black text-stone-900 text-base">تصفية الوظائف والشواغر</h3>
+                </div>
+                <button
+                  onClick={() => setShowFiltersMobile(false)}
+                  className="w-8 h-8 rounded-full bg-stone-100 text-stone-500 hover:text-stone-900 flex items-center justify-center cursor-pointer transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Scrollable Filters Content */}
+            <div className="p-5 overflow-y-auto space-y-5 flex-1">
+              {/* 1. Location Selection (التحديد حسب المنطقة) */}
+              <div className="space-y-2">
+                <label className="font-black text-xs text-stone-800 flex items-center gap-1.5">
+                  <MapPin className="h-4 w-4 text-[#ff9f1c]" />
+                  <span>تحديد المنطقة أو الحي بإربد</span>
+                </label>
+                <select
+                  value={selectedRegion}
+                  onChange={(e) => setSelectedRegion(e.target.value)}
+                  className="w-full bg-stone-50 border border-stone-200 rounded-xl py-2.5 px-3 font-bold text-xs text-stone-800 focus:outline-none focus:border-emerald-600 cursor-pointer"
+                >
+                  <option value="">جميع مناطق وأحياء إربد</option>
+                  {neighborhoods && neighborhoods.map((group) => (
+                    <optgroup key={group.groupName} label={group.groupName}>
+                      {group.areas.map((area) => (
+                        <option key={area} value={area}>{area}</option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </div>
+
+              {/* 2. Main Category Selection (التخصص / القسم) */}
+              <div className="space-y-2">
+                <label className="font-black text-xs text-stone-800 flex items-center gap-1.5">
+                  <Briefcase className="h-4 w-4 text-emerald-700" />
+                  <span>تخصص الوظيفة / القسم الرئيسي</span>
+                </label>
+                <select
+                  value={selectedCategory}
+                  onChange={(e) => {
+                    setSelectedCategory(e.target.value);
+                    setSelectedSubCategory('');
+                  }}
+                  className="w-full bg-stone-50 border border-stone-200 rounded-xl py-2.5 px-3 font-bold text-xs text-stone-800 focus:outline-none focus:border-emerald-600 cursor-pointer"
+                >
+                  <option value="الكل">جميع التخصصات والأقسام</option>
+                  {mainCategories.map((cat) => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Subcategory Selection if category is chosen */}
+              {selectedCategory && selectedCategory !== 'الكل' && getSubCats(selectedCategory).length > 0 && (
+                <div className="space-y-2">
+                  <label className="font-black text-xs text-stone-700 flex items-center gap-1.5">
+                    <Sparkles className="h-3.5 w-3.5 text-emerald-600" />
+                    <span>التخصص الفرعي</span>
+                  </label>
+                  <select
+                    value={selectedSubCategory}
+                    onChange={(e) => setSelectedSubCategory(e.target.value)}
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl py-2.5 px-3 font-bold text-xs text-stone-800 focus:outline-none focus:border-emerald-600 cursor-pointer"
+                  >
+                    <option value="">جميع التخصصات الفرعية</option>
+                    {getSubCats(selectedCategory).map((subCat) => (
+                      <option key={subCat} value={subCat}>{subCat}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* 3. Job Type Selection (نوع الدوام) */}
+              <div className="space-y-2">
+                <label className="font-black text-xs text-stone-800 flex items-center gap-1.5">
+                  <Clock className="h-4 w-4 text-amber-600" />
+                  <span>نوع الدوام</span>
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {JOB_TYPES.map((type) => (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() => setSelectedJobType(type)}
+                      className={`px-3 py-2 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+                        selectedJobType === type
+                          ? 'bg-[#1a4d2e] text-white border-transparent shadow-xs'
+                          : 'bg-stone-50 text-stone-700 border-stone-200 hover:bg-stone-100'
+                      }`}
+                    >
+                      {type}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Fixed Footer Actions */}
+            <div className="p-4 border-t border-stone-100 bg-stone-50/80 flex items-center gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedCategory('الكل');
+                  setSelectedSubCategory('');
+                  setSelectedJobType('الكل');
+                  setSelectedRegion('');
+                  setSearchQuery('');
+                }}
+                className="py-3 px-4 bg-white border border-stone-200 text-stone-700 hover:text-stone-900 rounded-xl font-bold text-xs transition-colors shrink-0 cursor-pointer"
+              >
+                إعادة تعيين
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowFiltersMobile(false)}
+                className="flex-1 py-3 px-4 bg-gradient-to-r from-[#1a4d2e] to-emerald-700 text-white rounded-xl font-black text-xs shadow-md active:scale-98 transition-all cursor-pointer"
+              >
+                تطبيق الفلاتر ({filteredJobs.length} شاغر)
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
 
       {/* Categories Modal */}
       <CategoriesModal

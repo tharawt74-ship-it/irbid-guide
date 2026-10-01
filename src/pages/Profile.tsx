@@ -1,5 +1,5 @@
 import { useConfirm } from '../contexts/ConfirmContext';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { getAppConfig } from '../lib/demoDataHelper';
 import { deleteBusinessCascading } from '../lib/businessDeleteHelper';
@@ -31,8 +31,8 @@ import { sanitizeFirestorePayload, compressAndSanitizeFirestorePayload } from '.
 import { sanitizeInput, containsUrlOrLink, stripUrlsAndLinks } from '../lib/security';
 import { getLiveWorkingStatus } from '../lib/businessHoursHelper';
 import { linkUserToMatchedBusinesses } from '../lib/authPhoneHelper';
-import { invalidateCache } from '../lib/dataCache';
-import { BUSINESS_CATEGORIES, MainCategory, IRBID_REGIONS_CATEGORIZED } from '../lib/categories';
+import { invalidateCache, getCachedUserProfileData, setCachedUserProfileData, getCachedUserRequests, setCachedUserRequests } from '../lib/dataCache';
+import { BUSINESS_CATEGORIES, MainCategory, IRBID_REGIONS_CATEGORIZED, isFoodAndDrinkBusiness } from '../lib/categories';
 import { SearchableSelect } from '../components/ui/SearchableSelect';
 import { WorkingHoursEditor } from '../components/ui/WorkingHoursEditor';
 import { ImageUploader } from '../components/ui/ImageUploader';
@@ -45,6 +45,7 @@ import { VisitorRewardsTab } from '../components/profile/VisitorRewardsTab';
 import { VisitorHousingsTab } from '../components/profile/VisitorHousingsTab';
 import { MedicalFacilitiesTab } from '../components/profile/MedicalFacilitiesTab';
 import { ReviewsQrTab } from '../components/profile/ReviewsQrTab';
+import { ReviewsRewardsTab } from '../components/profile/ReviewsRewardsTab';
 import { isMedicalBusiness } from '../lib/medicalHelper';
 import { PrintableQrPosterModal } from '../components/profile/PrintableQrPosterModal';
 import { MultiBranchModal } from '../components/profile/MultiBranchModal';
@@ -60,83 +61,40 @@ import { QuickContactModal } from '../components/profile/QuickContactModal';
 import { MarketingHubModal } from '../components/profile/MarketingHubModal';
 import { VipSubscriptionStatusModal } from '../components/vip/VipSubscriptionStatusModal';
 
-export function isFoodAndDrinkBusiness(biz: Business | null | undefined): boolean {
-  if (!biz) return false;
-  // If merchant already enabled QR menu or has menu dishes, always preserve the feature
-  if (biz.menuQrEnabled || (biz.menuItems && biz.menuItems.length > 0)) return true;
-  
-  const rawCat = (biz.category || '').trim();
-  const rawSubCat = (biz.subCategory || '').trim();
-  // Strip any legacy emoji or symbols if present in legacy data
-  const cat = rawCat.replace(/^[^\p{L}\p{N}]+/u, '').trim();
-  const subCat = rawSubCat.replace(/^[^\p{L}\p{N}]+/u, '').trim();
 
-  const fbList = BUSINESS_CATEGORIES["مأكولات ومشروبات"] || [];
-  if (
-    rawCat === 'مأكولات ومشروبات' || 
-    cat === 'مأكولات ومشروبات' || 
-    rawCat === 'مطاعم ومقاهي' || 
-    cat === 'مطاعم ومقاهي' ||
-    fbList.includes(rawCat) || 
-    fbList.includes(cat) || 
-    fbList.includes(rawSubCat) || 
-    fbList.includes(subCat)
-  ) {
-    return true;
-  }
-
-  const combined = (cat + ' ' + subCat + ' ' + (biz.name || '') + ' ' + (biz.description || '')).toLowerCase();
-  return (
-    combined.includes('مأكولات') || 
-    combined.includes('مشروبات') || 
-    combined.includes('مطاعم') || 
-    combined.includes('مطعم') || 
-    combined.includes('كافيه') || 
-    combined.includes('مقهى') || 
-    combined.includes('حلويات') ||
-    combined.includes('شاورما') ||
-    combined.includes('برجر') ||
-    combined.includes('بيتزا') ||
-    combined.includes('فلافل') ||
-    combined.includes('قهوة') ||
-    combined.includes('سناكات') ||
-    combined.includes('عصائر') ||
-    combined.includes('مخبوزات') ||
-    combined.includes('مخبز') ||
-    combined.includes('معجنات') ||
-    combined.includes('مشاوي') ||
-    combined.includes('ملاحم') ||
-    combined.includes('ملحمة') ||
-    combined.includes('دواجن') ||
-    combined.includes('بوظة') ||
-    combined.includes('آيس كريم') ||
-    combined.includes('مناقيش') ||
-    combined.includes('تواصي') ||
-    combined.includes('مطابخ') ||
-    combined.includes('مطبخ') ||
-    combined.includes('food') ||
-    combined.includes('cafe') ||
-    combined.includes('restaurant') ||
-    combined.includes('burger') ||
-    combined.includes('shawarma') ||
-    combined.includes('pizza')
-  );
-}
 
 export function Profile() {
  const { confirm } = useConfirm();
- const { currentUser, isAdmin, isSupervisor, isStaff, userRole, supervisorPermissions } = useAuth();
+ const { currentUser, isAdmin, isSupervisor, isStaff, userRole, supervisorPermissions, ownedBusinesses } = useAuth();
  const location = useLocation();
- const [businesses, setBusinesses] = useState<Business[]>([]);
- const [userJobs, setUserJobs] = useState<JobOffer[]>([]);
- const [userHousings, setUserHousings] = useState<HousingItem[]>([]);
- const [loading, setLoading] = useState(true);
+
+ // Instant cache check for zero-delay navigation in the same tab and across visits
+ const initialCached = currentUser?.uid ? getCachedUserProfileData(currentUser.uid) : null;
+ const initialBusinesses = (initialCached?.businesses && initialCached.businesses.length > 0)
+   ? initialCached.businesses
+   : (ownedBusinesses && ownedBusinesses.length > 0 ? ownedBusinesses : []);
+
+ const [businesses, setBusinesses] = useState<Business[]>(initialBusinesses);
+ const [userJobs, setUserJobs] = useState<JobOffer[]>((initialCached?.userJobs as JobOffer[]) || []);
+ const [userHousings, setUserHousings] = useState<HousingItem[]>((initialCached?.userHousings as HousingItem[]) || []);
+ const [loading, setLoading] = useState<boolean>(() => {
+   // If not logged in, or if we already have cached profile data or owned businesses, DO NOT show blocking loading screen!
+   if (!currentUser) return false;
+   if (initialCached || (ownedBusinesses && ownedBusinesses.length > 0)) return false;
+   return true;
+ });
  const [profileMainTab, setProfileMainTab] = useState<'hub' | 'visitor' | 'dashboard' | 'housing' | 'staff' | 'requests' | 'qr-scanner'>('hub');
  const [dashboardSubTab, setDashboardSubTab] = useState<'commercial' | 'medical'>('commercial');
  const [visitorSubTab, setVisitorSubTab] = useState<'favorites' | 'reviews' | 'rewards' | 'account'>('favorites');
  const [requestsSubTab, setRequestsSubTab] = useState<'businesses' | 'marketing'>('businesses');
- const [userBusinessRequests, setUserBusinessRequests] = useState<any[]>([]);
- const [userMarketingRequests, setUserMarketingRequests] = useState<any[]>([]);
+ const [userBusinessRequests, setUserBusinessRequests] = useState<any[]>(() => {
+   const cachedReqs = currentUser?.uid ? getCachedUserRequests(currentUser.uid) : null;
+   return cachedReqs?.businessRequests || [];
+ });
+ const [userMarketingRequests, setUserMarketingRequests] = useState<any[]>(() => {
+   const cachedReqs = currentUser?.uid ? getCachedUserRequests(currentUser.uid) : null;
+   return cachedReqs?.marketingRequests || [];
+ });
  const [loadingRequests, setLoadingRequests] = useState(false);
  
  // Categorize businesses into commercial stores vs medical clinics/facilities
@@ -267,11 +225,12 @@ export function Profile() {
  const [isQuickContactModalOpen, setIsQuickContactModalOpen] = useState(false);
  const [isQrPosterSelectionModalOpen, setIsQrPosterSelectionModalOpen] = useState(false);
  const [menuQrInitialSubTab, setMenuQrInitialSubTab] = useState<'menu_design' | 'poster_customizer'>('menu_design');
+ const [menuQrKey, setMenuQrKey] = useState(0);
 
  // Active business management state
  const [selectedBusiness, setSelectedBusiness] = useState<Business | null>(null);
  const [merchantSubTab, setMerchantSubTab] = useState<'businesses' | 'housings' | 'jobs' | 'qr-scanner'>('businesses');
- const [activeSectionTab, setActiveSectionTab] = useState<'overview' | 'edit_info' | 'menu_qr' | 'offers' | 'jobs' | 'marketing' | 'reviews' | 'homepage_banner' | 'shared_accounts' | 'housings'>('overview');
+ const [activeSectionTab, setActiveSectionTab] = useState<'overview' | 'edit_info' | 'menu_qr' | 'offers' | 'jobs' | 'marketing' | 'reviews' | 'homepage_banner' | 'shared_accounts' | 'housings' | 'settings'>('overview');
  const [reviewsSubTab, setReviewsSubTab] = useState<'list' | 'rewards' | 'qr'>('list');
 
  // Custom Banner request state
@@ -284,11 +243,58 @@ export function Profile() {
  const [replyTexts, setReplyTexts] = useState<{[reviewId: string]: string}>({});
 
  // Offer management state
- const [offers, setOffers] = useState<any[]>([]);
- const [loadingOffers, setLoadingOffers] = useState(false);
- const [isAddingOffer, setIsAddingOffer] = useState(false);
- const [editingOfferId, setEditingOfferId] = useState<string | null>(null);
- const [submittingOffer, setSubmittingOffer] = useState(false);
+  const [offers, setOffers] = useState<any[]>([]);
+  const [loadingOffers, setLoadingOffers] = useState(false);
+  const [isAddingOffer, setIsAddingOffer] = useState(false);
+  const [editingOfferId, setEditingOfferId] = useState<string | null>(null);
+  const [submittingOffer, setSubmittingOffer] = useState(false);
+
+  // Auto-scroll logic:
+  // 1. Top-level page/view navigation scrolls to top
+  const isInitialMount = useRef(true);
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+      return;
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [
+    profileMainTab,
+    dashboardSubTab,
+    visitorSubTab,
+    requestsSubTab,
+    selectedBusiness?.id,
+    editingBusiness?.id
+  ]);
+
+  // 2. Main section tabs navigation scrolls to the main tabs header
+  const prevActiveSectionTab = useRef(activeSectionTab);
+  useEffect(() => {
+    if (prevActiveSectionTab.current === activeSectionTab) return;
+    prevActiveSectionTab.current = activeSectionTab;
+
+    const navEl = document.getElementById('merchant-main-tabs-nav');
+    if (navEl) {
+      const navOffset = 85;
+      const targetPos = navEl.getBoundingClientRect().top + window.scrollY - navOffset;
+      window.scrollTo({ top: Math.max(0, targetPos), behavior: 'smooth' });
+    }
+  }, [activeSectionTab]);
+
+  // 3. Reviews sub-tabs navigation scrolls to the reviews section header
+  const prevReviewsSubTab = useRef(reviewsSubTab);
+  useEffect(() => {
+    if (prevReviewsSubTab.current === reviewsSubTab) return;
+    prevReviewsSubTab.current = reviewsSubTab;
+
+    const reviewsEl = document.getElementById('reviews-section-header');
+    if (reviewsEl) {
+      const navOffset = 85;
+      const targetPos = reviewsEl.getBoundingClientRect().top + window.scrollY - navOffset;
+      window.scrollTo({ top: Math.max(0, targetPos), behavior: 'smooth' });
+    }
+  }, [reviewsSubTab]);
  const [newOfferForm, setNewOfferForm] = useState({
  title: '',
  discountType: 'percentage', // 'percentage' | 'fixed'
@@ -961,8 +967,8 @@ export function Profile() {
  }
  };
 
- const fetchUserJobs = async (userBizList: Business[]) => {
- if (!currentUser) return;
+ const fetchUserJobs = async (userBizList: Business[]): Promise<JobOffer[]> => {
+ if (!currentUser) return [];
  try {
  let jobsList: JobOffer[] = [];
  if (db) {
@@ -993,13 +999,15 @@ export function Profile() {
  }
 
  setUserJobs(jobsList);
+ return jobsList;
  } catch (err) {
  console.error("Error fetching user jobs:", err);
+ return [];
  }
  };
 
- const fetchUserHousings = async () => {
- if (!currentUser || !db) return;
+ const fetchUserHousings = async (): Promise<HousingItem[]> => {
+ if (!currentUser || !db) return [];
  try {
  const q = query(collection(db, 'housings'), where('userId', '==', currentUser.uid));
  const snap = await getDocs(q);
@@ -1008,38 +1016,55 @@ export function Profile() {
  list.push({ id: d.id, ...d.data() } as HousingItem);
  });
  setUserHousings(list);
+ return list;
  } catch (err) {
  console.error("Error fetching user housings:", err);
+ return [];
  }
  };
 
- const fetchUserRequests = async () => {
+ const fetchUserRequests = async (force: boolean = false) => {
  if (!currentUser || !db) return;
+ 
+ // Check cached requests for zero-delay response
+ if (!force) {
+ const cached = getCachedUserRequests(currentUser.uid);
+ if (cached && (cached.businessRequests.length > 0 || cached.marketingRequests.length > 0)) {
+ setUserBusinessRequests(cached.businessRequests);
+ setUserMarketingRequests(cached.marketingRequests);
+ return;
+ }
+ }
+
  setLoadingRequests(true);
  try {
- const qBiz = query(
- collection(db, 'businessRequests'),
- where('userId', '==', currentUser.uid)
- );
- const snapBiz = await getDocs(qBiz);
+ const [snapBiz, snapMarket] = await Promise.all([
+ getDocs(query(collection(db, 'businessRequests'), where('userId', '==', currentUser.uid))).catch(() => null),
+ getDocs(query(collection(db, 'marketingRequests'), where('userId', '==', currentUser.uid))).catch(() => null)
+ ]);
+
  const bizList: any[] = [];
+ if (snapBiz) {
  snapBiz.forEach(d => {
  bizList.push({ id: d.id, ...d.data() });
  });
+ }
  bizList.sort((a, b) => (b.createdAt || b.submittedAt || 0) - (a.createdAt || a.submittedAt || 0));
  setUserBusinessRequests(bizList);
 
- const qMarket = query(
- collection(db, 'marketingRequests'),
- where('userId', '==', currentUser.uid)
- );
- const snapMarket = await getDocs(qMarket);
  const marketList: any[] = [];
+ if (snapMarket) {
  snapMarket.forEach(d => {
  marketList.push({ id: d.id, ...d.data() });
  });
+ }
  marketList.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
  setUserMarketingRequests(marketList);
+
+ setCachedUserRequests(currentUser.uid, {
+ businessRequests: bizList,
+ marketingRequests: marketList
+ });
  } catch (err) {
  console.error("Error fetching user requests:", err);
  } finally {
@@ -1047,132 +1072,7 @@ export function Profile() {
  }
  };
 
- const fetchUserBusinesses = async () => {
- if (!currentUser || !db) return;
- try {
- const userEmail = currentUser.email?.trim().toLowerCase() || '';
- const phoneDigits = currentUser.phoneNumber?.replace(/\D/g, '') || 
- (userEmail.startsWith('phone_') ? userEmail.replace('phone_', '').split('@')[0] : '');
-
- // Ensure any business created with this user's email or phone in the golden contact field is auto-linked to userId = currentUser.uid
- await linkUserToMatchedBusinesses(currentUser.uid, phoneDigits, userEmail);
-
- // Auto-healing/recovery step: check if there are approved business requests belonging to this user
- // that haven't been linked to their userId yet, and link them automatically.
- try {
-   const [snapReqByUid, snapReqByEmail] = await Promise.all([
-     getDocs(query(collection(db, 'businessRequests'), where('userId', '==', currentUser.uid))).catch(() => null),
-     userEmail ? getDocs(query(collection(db, 'businessRequests'), where('userEmail', '==', userEmail))).catch(() => null) : null
-   ]);
-
-   const userCreatedBusinessNames = new Set<string>();
-   const processReqSnap = (snap: any) => {
-     if (snap && !snap.empty) {
-       snap.forEach((d: any) => {
-         const data = d.data();
-         if (data.name) {
-           userCreatedBusinessNames.add(data.name.trim().toLowerCase());
-         }
-       });
-     }
-   };
-   processReqSnap(snapReqByUid);
-   processReqSnap(snapReqByEmail);
-
-   if (userCreatedBusinessNames.size > 0) {
-     const allBizSnap = await getDocs(collection(db, 'businesses')).catch(() => null);
-     if (allBizSnap && !allBizSnap.empty) {
-       const healingUpdates: Promise<any>[] = [];
-       allBizSnap.forEach(docSnap => {
-         const data = docSnap.data();
-         const bizName = (data.name || '').trim().toLowerCase();
-         if (userCreatedBusinessNames.has(bizName)) {
-           // Found a business whose name matches their approved/pending requests!
-           // If it doesn't have their userId set, link it immediately
-           if (data.userId !== currentUser.uid) {
-             const docRef = doc(db, 'businesses', docSnap.id);
-             const matchedRequest = (snapReqByUid?.docs || [])
-               .concat(snapReqByEmail?.docs || [])
-               .find((d: any) => (d.data().name || '').trim().toLowerCase() === bizName);
-             
-             const reqData = matchedRequest?.data() || {};
-             const bizUpdate = {
-               userId: currentUser.uid,
-               isVerified: true,
-               userEmail: reqData.userEmail || reqData.ownerEmail || userEmail,
-               ownerEmail: reqData.ownerEmail || reqData.userEmail || userEmail,
-               ownerPhone: reqData.ownerPhone || reqData.phone || phoneDigits || '',
-               ownerContact: reqData.ownerContact || reqData.userEmail || userEmail,
-             };
-             
-             healingUpdates.push(updateDoc(docRef, bizUpdate).catch(err => console.warn("Failed to auto-heal business:", err)));
-           }
-         }
-       });
-       if (healingUpdates.length > 0) {
-         await Promise.all(healingUpdates);
-       }
-     }
-   }
- } catch (healErr) {
-   console.warn("Could not execute auto-healing for owner shops:", healErr);
- }
-
- // Query stores where userId == currentUser.uid
- const q = query(collection(db, 'businesses'), where('userId', '==', currentUser.uid));
- const snapshot = await getDocs(q);
- const userBizMap = new Map<string, Business>();
-
- snapshot.forEach(docSnap => {
- userBizMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as Business);
- });
-
- // Or where they are added as a delegated staff member in staffEmails array
- if (userEmail) {
- const qStaff = query(collection(db, 'businesses'), where('staffEmails', 'array-contains', userEmail));
- const snapStaff = await getDocs(qStaff).catch(() => null);
- if (snapStaff) {
- snapStaff.forEach(docSnap => {
- if (!userBizMap.has(docSnap.id)) {
- userBizMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as Business);
- }
- });
- }
- }
-
-  // Secondary fallback check for ownerEmail or ownerPhone
- if (userEmail || phoneDigits) {
- try {
- const [snapEmail, snapPhone, snapContact, snapUserEmail] = await Promise.all([
- userEmail ? getDocs(query(collection(db, 'businesses'), where('ownerEmail', '==', userEmail))).catch(() => null) : null,
- phoneDigits ? getDocs(query(collection(db, 'businesses'), where('ownerPhone', '==', phoneDigits))).catch(() => null) : null,
- userEmail ? getDocs(query(collection(db, 'businesses'), where('ownerContact', '==', userEmail))).catch(() => null) : null,
- userEmail ? getDocs(query(collection(db, 'businesses'), where('userEmail', '==', userEmail))).catch(() => null) : null
- ]);
- if (snapEmail && !snapEmail.empty) {
- snapEmail.forEach(docSnap => userBizMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as Business));
- }
- if (snapPhone && !snapPhone.empty) {
- snapPhone.forEach(docSnap => userBizMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as Business));
- }
- if (snapContact && !snapContact.empty) {
- snapContact.forEach(docSnap => userBizMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as Business));
- }
- if (snapUserEmail && !snapUserEmail.empty) {
- snapUserEmail.forEach(docSnap => userBizMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as Business));
- }
- } catch (e) {
- console.warn("Could not query secondary owned businesses in Profile:", e);
- }
- }
- 
- const userBusinesses: Business[] = Array.from(userBizMap.values()).map(b => ({
-    ...b,
-    name: b.name || '',
-    category: b.category || '',
-    subCategory: b.subCategory || ''
-  }));
-  setBusinesses(userBusinesses);
+ const applyTabAndBusinessSelection = (userBusinesses: Business[]) => {
  const medList = userBusinesses.filter(b => isMedicalBusiness(b) || !!b.medicalProfile || b.requestType === 'medical_facility_registration');
  const commList = userBusinesses.filter(b => !(isMedicalBusiness(b) || !!b.medicalProfile || b.requestType === 'medical_facility_registration'));
 
@@ -1227,8 +1127,104 @@ export function Profile() {
  setDashboardSubTab('medical');
  }
  }
- fetchUserJobs(userBusinesses);
- fetchUserHousings();
+ };
+
+ const fetchUserBusinesses = async () => {
+ if (!currentUser || !db) {
+ setLoading(false);
+ return;
+ }
+
+ // 1. Check if we already have fresh cached data
+ const cached = getCachedUserProfileData(currentUser.uid);
+ if (cached && cached.businesses && cached.businesses.length >= 0) {
+ setBusinesses(cached.businesses);
+ if (cached.userJobs) setUserJobs(cached.userJobs);
+ if (cached.userHousings) setUserHousings(cached.userHousings);
+ applyTabAndBusinessSelection(cached.businesses);
+ setLoading(false);
+ return;
+ }
+
+ try {
+ const userEmail = currentUser.email?.trim().toLowerCase() || '';
+ const phoneDigits = currentUser.phoneNumber?.replace(/\D/g, '') || 
+ (userEmail.startsWith('phone_') ? userEmail.replace('phone_', '').split('@')[0] : '');
+
+ // Ensure any business created with this user's email or phone in the golden contact field is linked
+ await linkUserToMatchedBusinesses(currentUser.uid, phoneDigits, userEmail);
+
+ // Targeted queries for user's businesses
+ const q = query(collection(db, 'businesses'), where('userId', '==', currentUser.uid));
+ const snapshot = await getDocs(q);
+ const userBizMap = new Map<string, Business>();
+
+ snapshot.forEach(docSnap => {
+ userBizMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as Business);
+ });
+
+ // Delegated staff query
+ if (userEmail) {
+ const qStaff = query(collection(db, 'businesses'), where('staffEmails', 'array-contains', userEmail));
+ const snapStaff = await getDocs(qStaff).catch(() => null);
+ if (snapStaff) {
+ snapStaff.forEach(docSnap => {
+ if (!userBizMap.has(docSnap.id)) {
+ userBizMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as Business);
+ }
+ });
+ }
+ }
+
+ // Secondary fallback check for ownerEmail or ownerPhone only if not already found
+ if (userBizMap.size === 0 && (userEmail || phoneDigits)) {
+ try {
+ const [snapEmail, snapPhone, snapContact, snapUserEmail] = await Promise.all([
+ userEmail ? getDocs(query(collection(db, 'businesses'), where('ownerEmail', '==', userEmail))).catch(() => null) : null,
+ phoneDigits ? getDocs(query(collection(db, 'businesses'), where('ownerPhone', '==', phoneDigits))).catch(() => null) : null,
+ userEmail ? getDocs(query(collection(db, 'businesses'), where('ownerContact', '==', userEmail))).catch(() => null) : null,
+ userEmail ? getDocs(query(collection(db, 'businesses'), where('userEmail', '==', userEmail))).catch(() => null) : null
+ ]);
+ if (snapEmail && !snapEmail.empty) {
+ snapEmail.forEach(docSnap => userBizMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as Business));
+ }
+ if (snapPhone && !snapPhone.empty) {
+ snapPhone.forEach(docSnap => userBizMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as Business));
+ }
+ if (snapContact && !snapContact.empty) {
+ snapContact.forEach(docSnap => userBizMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as Business));
+ }
+ if (snapUserEmail && !snapUserEmail.empty) {
+ snapUserEmail.forEach(docSnap => userBizMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as Business));
+ }
+ } catch (e) {
+ console.warn("Could not query secondary owned businesses in Profile:", e);
+ }
+ }
+ 
+ const userBusinesses: Business[] = Array.from(userBizMap.values()).map(b => ({
+ ...b,
+ name: b.name || '',
+ category: b.category || '',
+ subCategory: b.subCategory || ''
+ }));
+
+ setBusinesses(userBusinesses);
+ applyTabAndBusinessSelection(userBusinesses);
+
+ // Concurrent fetch for jobs and housings
+ const [jobsList, housingsList] = await Promise.all([
+ fetchUserJobs(userBusinesses),
+ fetchUserHousings()
+ ]);
+
+ // Cache the result in memory and localStorage for zero-delay visits
+ setCachedUserProfileData(currentUser.uid, {
+ businesses: userBusinesses,
+ userJobs: jobsList,
+ userHousings: housingsList
+ });
+
  } catch (err) {
  console.error("Error fetching profile businesses:", err);
  } finally {
@@ -1237,14 +1233,30 @@ export function Profile() {
  };
 
  useEffect(() => {
+ if (!currentUser) {
+ setLoading(false);
+ return;
+ }
+
+ // Check if we already have valid cached data
+ const cached = getCachedUserProfileData(currentUser.uid);
+ if (cached && cached.businesses) {
+ setBusinesses(cached.businesses);
+ if (cached.userJobs) setUserJobs(cached.userJobs);
+ if (cached.userHousings) setUserHousings(cached.userHousings);
+ applyTabAndBusinessSelection(cached.businesses);
+ setLoading(false);
+ return;
+ }
+
  fetchUserBusinesses();
- }, [currentUser, isStaff, location.search]);
+ }, [currentUser?.uid, location.search]);
 
  useEffect(() => {
  if (profileMainTab === 'requests') {
  fetchUserRequests();
  }
- }, [profileMainTab, currentUser]);
+ }, [profileMainTab, currentUser?.uid]);
 
  // Ensure active tab corresponds to an allowed tab for current user status
  useEffect(() => {
@@ -1278,12 +1290,21 @@ export function Profile() {
  };
 
  const handleJobSaved = (savedJob: JobOffer) => {
+ let updatedJobs: JobOffer[];
  if (jobToEdit) {
- setUserJobs(prev => prev.map(j => j.id === savedJob.id ? savedJob : j));
+ updatedJobs = userJobs.map(j => j.id === savedJob.id ? savedJob : j);
  setJobSuccessMessage('تم تحديث بيانات الشاغر الوظيفي بنجاح!');
  } else {
- setUserJobs(prev => [savedJob, ...prev]);
+ updatedJobs = [savedJob, ...userJobs];
  setJobSuccessMessage('تم نشر الوظيفة بنجاح وستظهر فوراً في صفحة الوظائف!');
+ }
+ setUserJobs(updatedJobs);
+ if (currentUser?.uid) {
+ setCachedUserProfileData(currentUser.uid, {
+ businesses,
+ userJobs: updatedJobs,
+ userHousings
+ });
  }
  setTimeout(() => setJobSuccessMessage(null), 5000);
  };
@@ -1297,7 +1318,15 @@ export function Profile() {
  console.error(e);
  }
  }
- setUserJobs(prev => prev.filter(j => j.id !== id));
+ const updatedJobs = userJobs.filter(j => j.id !== id);
+ setUserJobs(updatedJobs);
+ if (currentUser?.uid) {
+ setCachedUserProfileData(currentUser.uid, {
+ businesses,
+ userJobs: updatedJobs,
+ userHousings
+ });
+ }
  
  // Update local storage
  const local = localStorage.getItem('irbid_jobs_listings_v1');
@@ -1318,29 +1347,52 @@ export function Profile() {
 
  const handleDeleteBusiness = async (businessId: string) => {
  if (!db || !currentUser) return;
- const target = businesses.find(b => b.id === businessId);
+ const target = businesses.find(b => b.id === businessId) || (selectedBusiness?.id === businessId ? selectedBusiness : null);
  if (!target) return;
- if (target.userId !== currentUser.uid && !isAdmin) {
- alert("غير مصرح لك بحذف هذا المحل!");
+
+ const userEmail = currentUser.email?.trim().toLowerCase() || '';
+ const phoneDigits = currentUser.phoneNumber?.replace(/\D/g, '') || 
+   (userEmail.startsWith('phone_') ? userEmail.replace('phone_', '').split('@')[0] : '');
+ const targetPhone = (target.ownerPhone || target.phone || target.ownerContact || '').replace(/\D/g, '');
+ const isPhoneMatch = Boolean(phoneDigits && phoneDigits.length >= 8 && targetPhone && (targetPhone.includes(phoneDigits) || phoneDigits.includes(targetPhone)));
+
+ const isOwner = target.userId === currentUser.uid ||
+ target.ownerId === currentUser.uid ||
+ (target.ownerEmail && userEmail && target.ownerEmail.toLowerCase() === userEmail) ||
+ (target.userEmail && userEmail && target.userEmail.toLowerCase() === userEmail) ||
+ (target.staffEmails && userEmail && target.staffEmails.includes(userEmail)) ||
+ isPhoneMatch ||
+ (!target.userId && !target.ownerId);
+
+ if (!isOwner && !isAdmin) {
+ setJobSuccessMessage("غير مصرح لك بحذف هذه المنشأة.");
+ setTimeout(() => setJobSuccessMessage(null), 4000);
  return;
  }
 
  try {
  await deleteBusinessCascading(businessId, target.name);
 
- setBusinesses(prev => prev.filter(b => b.id !== businessId));
- invalidateCache();
+ const remaining = businesses.filter(b => b.id !== businessId && b.parentBusinessId !== businessId);
+ setBusinesses(remaining);
+ if (currentUser?.uid) {
+ setCachedUserProfileData(currentUser.uid, {
+ businesses: remaining,
+ userJobs,
+ userHousings
+ });
+ }
  if (selectedBusiness?.id === businessId) {
- const remaining = businesses.filter(b => b.id !== businessId);
  setSelectedBusiness(remaining.length > 0 ? remaining[0] : null);
  setActiveSectionTab('overview');
  }
  setEditingBusiness(null);
- setJobSuccessMessage(`تم حذف صفحة المحل "${target.name}" بنجاح.`);
+ setJobSuccessMessage(`تم حذف المنشأة "${target.name}" نهائياً بنجاح.`);
  setTimeout(() => setJobSuccessMessage(null), 4000);
  } catch (err) {
  console.error("Error deleting business:", err);
- alert("حدث خطأ أثناء حذف صفحة المحل، يرجى المحاولة مرة أخرى.");
+ setJobSuccessMessage("حدث خطأ أثناء حذف المنشأة، يرجى المحاولة لاحقاً.");
+ setTimeout(() => setJobSuccessMessage(null), 4000);
  }
  };
 
@@ -1433,7 +1485,17 @@ export function Profile() {
  ...dataToSave
  };
 
- setBusinesses(prev => prev.map(b => b.id === targetBusiness.id ? mergedBusiness : b));
+ setBusinesses(prev => {
+ const next = prev.map(b => b.id === targetBusiness.id ? mergedBusiness : b);
+ if (currentUser?.uid) {
+ setCachedUserProfileData(currentUser.uid, {
+ businesses: next,
+ userJobs,
+ userHousings
+ });
+ }
+ return next;
+ });
  invalidateCache();
 
  if (selectedBusiness && selectedBusiness.id === targetBusiness.id) {
@@ -1509,7 +1571,7 @@ export function Profile() {
  )}
 
  {/* Admin Email Verification Warning Banner */}
- {currentUser && ['princessofx2344@gmail.com', 'd42902672@gmail.com', 'admin@shoofiirbid.com', 'irbid.admin@gmail.com'].includes(currentUser.email?.toLowerCase().trim() || '') && !isAdmin && (
+ {currentUser && ['princessofx2344@gmail.com'].includes(currentUser.email?.toLowerCase().trim() || '') && !isAdmin && (
  <div className="bg-amber-50/70 border-2 border-amber-300 p-6 rounded-3xl text-right space-y-4 shadow-sm animate-in fade-in-50 duration-300">
  <div className="flex items-start gap-3">
  <div className="p-2 bg-amber-100 rounded-2xl text-amber-800 shrink-0 mt-0.5">
@@ -1696,16 +1758,23 @@ export function Profile() {
  }
  }}
  onOpenQrPosters={() => {
- const targetBiz = selectedBusiness || (businesses.length > 0 ? businesses[0] : null);
+ const targetBiz = selectedBusiness || (commercialBusinesses.length > 0 ? commercialBusinesses[0] : (businesses.length > 0 ? businesses[0] : null));
  if (targetBiz) {
+ setSelectedBusiness(targetBiz);
  const isRestaurant = isFoodAndDrinkBusiness(targetBiz);
  if (isRestaurant) {
  setSelectedBusinessForMenu(targetBiz);
  setIsQrPosterSelectionModalOpen(true);
  } else {
  setProfileMainTab('dashboard');
+ setDashboardSubTab('commercial');
+ setMerchantSubTab('businesses');
  setActiveSectionTab('reviews');
  setReviewsSubTab('qr');
+ setIsAddingOffer(false);
+ setTimeout(() => {
+   window.scrollTo({ top: 0, behavior: 'smooth' });
+ }, 50);
  }
  }
  }}
@@ -1771,7 +1840,17 @@ export function Profile() {
    await updateDoc(doc(db, 'businesses', targetBiz.id), { workingHours: updatedHours });
    invalidateCache();
    const updatedBiz = { ...targetBiz, workingHours: updatedHours };
-   setBusinesses(prev => prev.map(b => b.id === targetBiz.id ? updatedBiz : b));
+   setBusinesses(prev => {
+     const next = prev.map(b => b.id === targetBiz.id ? updatedBiz : b);
+     if (currentUser?.uid) {
+       setCachedUserProfileData(currentUser.uid, {
+         businesses: next,
+         userJobs,
+         userHousings
+       });
+     }
+     return next;
+   });
    if (selectedBusiness?.id === targetBiz.id) {
      setSelectedBusiness(updatedBiz);
    }
@@ -2432,6 +2511,7 @@ export function Profile() {
  const primaryBusinesses = commercialBusinesses.filter(b => !b.parentBusinessId || !commercialBusinesses.some(p => p.id === b.parentBusinessId));
  const currentPrimaryBiz = primaryBusinesses.find(p => p.id === selectedBusiness?.id || p.id === selectedBusiness?.parentBusinessId) || primaryBusinesses[0] || selectedBusiness;
  const currentBranches = commercialBusinesses.filter(b => b.id === currentPrimaryBiz?.id || b.parentBusinessId === currentPrimaryBiz?.id);
+ const hasSingleStoreAndBranch = primaryBusinesses.length === 1 && currentBranches.length === 1;
 
  return (
  <div className="flex flex-col lg:flex-row lg:items-center justify-between bg-white border-0 sm:border border-stone-200/80 p-3 sm:p-4 rounded-xl sm:rounded-2xl shadow-none sm:shadow-2xs gap-3.5">
@@ -2449,7 +2529,22 @@ export function Profile() {
  )}
  </div>
 
- {/* Dual Selectors: One for Business, One for Branch */}
+ {/* If user owns only 1 business with 1 branch, display clean text with no redundant dropdowns */}
+ {hasSingleStoreAndBranch ? (
+ <div className="space-y-0.5 min-w-0 pt-0.5">
+ <div className="flex items-center gap-2 flex-wrap">
+ <h4 className="text-sm sm:text-base font-black text-[#2d2a26] truncate">
+ {selectedBusiness?.name || currentPrimaryBiz?.name}
+ </h4>
+ <span className="text-[10px] font-black bg-stone-100 text-stone-600 border border-stone-200 px-2 py-0.5 rounded-full shrink-0">
+ الفرع الرئيسي
+ </span>
+ </div>
+ <p className="text-xs text-stone-500 font-bold truncate">
+ {selectedBusiness?.category} {selectedBusiness?.district ? `• ${selectedBusiness.district}` : ''}
+ </p>
+ </div>
+ ) : (
  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 w-full">
  {/* 1. Business Dropdown */}
  <div className="relative">
@@ -2531,6 +2626,7 @@ export function Profile() {
  </div>
  </div>
  </div>
+ )}
  </div>
  </div>
  <button
@@ -2549,7 +2645,7 @@ export function Profile() {
  const vipInfo = getBusinessVipStatus(selectedBusiness);
  const isFoodAndDrink = isFoodAndDrinkBusiness(selectedBusiness);
  return (
- <div className="border-0 sm:border border-stone-200/80 rounded-xl sm:rounded-2xl bg-white overflow-hidden shadow-none sm:shadow-2xs">
+ <div id="store-workspace" className="border-0 sm:border border-stone-200/80 rounded-xl sm:rounded-2xl bg-white overflow-hidden shadow-none sm:shadow-2xs">
  {/* Shop Info Header Banner */}
  <div className="bg-[#1a4d2e]/5 p-3.5 sm:p-5 border-b border-stone-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
  <div className="w-full sm:w-auto min-w-0">
@@ -2595,7 +2691,7 @@ export function Profile() {
  </div>
 
  {/* Dashboard Workspace Tab Navigation - Grid Layout for Mobile Friendliness */}
- <div className={`grid grid-cols-3 ${isFoodAndDrink ? 'sm:grid-cols-7 lg:grid-flow-col' : 'sm:grid-cols-6'} gap-1.5 sm:gap-3 p-1.5 sm:p-4 bg-stone-50 border-b border-stone-200 shadow-inner`}>
+ <div id="merchant-main-tabs-nav" className={`grid grid-cols-3 ${isFoodAndDrink ? 'sm:grid-cols-7 lg:grid-flow-col' : 'sm:grid-cols-6'} gap-1.5 sm:gap-3 p-1.5 sm:p-4 bg-stone-50 border-b border-stone-200 shadow-inner scroll-mt-24`}>
  <button
  type="button"
  onClick={() => { setActiveSectionTab('overview'); setIsAddingOffer(false); }}
@@ -2679,15 +2775,15 @@ export function Profile() {
  
  <button
  type="button"
- onClick={() => { setActiveSectionTab('homepage_banner'); setIsAddingOffer(false); }}
- className={`flex flex-col items-center justify-center p-2 sm:p-3 rounded-2xl transition-all cursor-pointer border ${
- activeSectionTab === 'homepage_banner' 
+ onClick={() => { setActiveSectionTab('marketing'); setIsAddingOffer(false); }}
+ className={`relative flex flex-col items-center justify-center p-2 sm:p-3 rounded-2xl transition-all cursor-pointer border ${
+ activeSectionTab === 'marketing' || activeSectionTab === 'homepage_banner'
  ? 'bg-[#1a4d2e] border-[#1a4d2e] text-white shadow-md scale-105 transform z-10' 
- : 'bg-white border-stone-200/80 text-stone-600 hover:bg-stone-100 hover:border-stone-300 shadow-2xs'
+ : 'bg-gradient-to-br from-amber-50/50 to-white border-amber-200/80 text-stone-700 hover:bg-amber-100/50 shadow-2xs'
  }`}
  >
- <Megaphone className={`h-5 w-5 sm:h-7 sm:w-7 mb-1 sm:mb-2 ${activeSectionTab === 'homepage_banner' ? 'text-emerald-300' : 'text-stone-400'}`} />
- <span className="text-[10px] sm:text-xs font-black text-center leading-tight truncate w-full">طلب<br className="hidden sm:block" /> بانر</span>
+ <Rocket className={`h-5 w-5 sm:h-7 sm:w-7 mb-1 sm:mb-2 ${activeSectionTab === 'marketing' || activeSectionTab === 'homepage_banner' ? 'text-amber-300' : 'text-amber-600'}`} />
+ <span className="text-[10px] sm:text-xs font-black text-center leading-tight truncate w-full">خدمات<br className="hidden sm:block" /> التسويق</span>
  </button>
  
  <button
@@ -2701,6 +2797,19 @@ export function Profile() {
  >
  <Users className={`h-5 w-5 sm:h-7 sm:w-7 mb-1 sm:mb-2 ${activeSectionTab === 'shared_accounts' ? 'text-emerald-300' : 'text-stone-400'}`} />
  <span className="text-[10px] sm:text-xs font-black text-center leading-tight truncate w-full">إدارة<br className="hidden sm:block" /> المشرفين</span>
+ </button>
+
+ <button
+ type="button"
+ onClick={() => { setActiveSectionTab('settings'); setIsAddingOffer(false); }}
+ className={`flex flex-col items-center justify-center p-2 sm:p-3 rounded-2xl transition-all cursor-pointer border ${
+ activeSectionTab === 'settings' 
+ ? 'bg-[#1a4d2e] border-[#1a4d2e] text-white shadow-md scale-105 transform z-10' 
+ : 'bg-white border-stone-200/80 text-stone-600 hover:bg-stone-100 hover:border-stone-300 shadow-2xs'
+ }`}
+ >
+ <Settings className={`h-5 w-5 sm:h-7 sm:w-7 mb-1 sm:mb-2 ${activeSectionTab === 'settings' ? 'text-emerald-300' : 'text-stone-400'}`} />
+ <span className="text-[10px] sm:text-xs font-black text-center leading-tight truncate w-full">الإعدادات<br className="hidden sm:block" /> والخصوصية</span>
  </button>
  </div>
  {/* Active Panel Content */}
@@ -2834,8 +2943,41 @@ export function Profile() {
  <StoreEditForm
  business={selectedBusiness}
  onSave={handleSaveStoreData}
+ isSaving={isSavingBusiness}
+ hideSettings={true}
+ />
+ </div>
+ )}
+
+ {/* SETTINGS & PRIVACY PANEL */}
+ {activeSectionTab === 'settings' && (
+ <div className="space-y-4 sm:space-y-6">
+ <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 sm:pb-4 border-b border-stone-100">
+ <div>
+ <h3 className="text-base font-black text-[#2d2a26] flex items-center gap-2">
+ <Settings className="h-5 w-5 text-[#1a4d2e]" />
+ <span>إعدادات الخصوصية والظهور وإلغاء المحل ({selectedBusiness.name})</span>
+ </h3>
+ <p className="text-xs text-stone-500 mt-0.5">
+ تحكم بإعدادات ظهور المحل وتقييمات العملاء، أو منطقة إلغاء وحذف صفحة المحل نهائياً
+ </p>
+ </div>
+ <Link 
+ to={`/business/${selectedBusiness.id}`}
+ target="_blank"
+ className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl text-xs font-bold transition-colors"
+ >
+ <span>معاينة صفحة المحل</span>
+ <ExternalLink className="h-3.5 w-3.5" />
+ </Link>
+ </div>
+
+ <StoreEditForm
+ business={selectedBusiness}
+ onSave={handleSaveStoreData}
  onDelete={handleDeleteBusiness}
  isSaving={isSavingBusiness}
+ onlySettings={true}
  />
  </div>
  )}
@@ -2843,6 +2985,7 @@ export function Profile() {
  {/* MENU & QR CODE CUSTOMIZER PANEL */}
  {activeSectionTab === 'menu_qr' && isFoodAndDrink && (
  <MenuQrTab
+ key={`${selectedBusiness.id}_${menuQrKey}`}
  business={selectedBusiness}
  onSave={handleSaveStoreData}
  isSaving={isSavingBusiness}
@@ -3268,7 +3411,7 @@ export function Profile() {
  });
  setEditingOfferId(offer.id);
  setIsAddingOffer(true);
- window.scrollTo({ top: 300, behavior: 'smooth' });
+ window.scrollTo({ top: 0, behavior: 'smooth' });
  }}
  className="text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1.5 sm:px-2 sm:py-1 rounded-lg text-[11px] sm:text-[10px] font-bold flex items-center gap-1 transition-colors cursor-pointer min-h-[36px]"
  title="تعديل معلومات العرض"
@@ -3356,7 +3499,7 @@ export function Profile() {
 
  {/* 4. REVIEWS PANEL */}
  {activeSectionTab === 'reviews' && (
- <div className="space-y-6">
+ <div id="reviews-section-header" className="space-y-6 scroll-mt-24">
  <div className="space-y-4 pb-4 border-b border-stone-200/80">
  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
  <div>
@@ -3511,99 +3654,14 @@ export function Profile() {
 
  {/* SUB-TAB 2: REWARDS PROGRAM */}
  {reviewsSubTab === 'rewards' && selectedBusiness && (
- <div className="p-5 bg-emerald-50/60 rounded-2xl border border-emerald-100 space-y-3.5 shadow-2xs text-right" dir="rtl">
- <div className="flex items-center justify-between border-b border-emerald-100 pb-2.5">
- <div className="flex items-center gap-2 font-black text-emerald-900 text-sm">
- <Gift className="h-5 w-5 text-emerald-700" />
- <span>برنامج مكافآت تقييمات الزوار</span>
- </div>
- 
- {/* Toggle switch */}
- <button
- type="button"
- onClick={async () => {
- if (!db) return;
- const newVal = !selectedBusiness.giftCodeEnabled;
- // Update Firestore
- await updateDoc(doc(db, 'businesses', selectedBusiness.id), {
- giftCodeEnabled: newVal
- });
- invalidateCache();
- // Update local states
- const updatedBiz = { ...selectedBusiness, giftCodeEnabled: newVal };
- setBusinesses(prev => prev.map(b => b.id === selectedBusiness.id ? updatedBiz : b));
- setSelectedBusiness(updatedBiz);
- }}
- className={cn(
- "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
- selectedBusiness.giftCodeEnabled ? "bg-emerald-600" : "bg-stone-200"
- )}
- >
- <span
- className={cn(
- "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-xs ring-0 transition duration-200 ease-in-out",
- selectedBusiness.giftCodeEnabled ? "translate-x-[-20px]" : "translate-x-0"
- )}
- />
- </button>
- </div>
-
- <p className="text-xs text-stone-600 leading-relaxed font-medium">
- عند تفعيل هذا البرنامج، سيحصل الزوار الذين يكتبون تقييماً مستوفياً للشروط لنشاطك على كود خصم فوري ومميز كهدية تقديراً لهم! يساعدك هذا البرنامج في مضاعفة أعداد المراجعات والتقييمات الإيجابية وبناء سمعة ممتازة لمحلك.
- </p>
-
- {selectedBusiness.giftCodeEnabled && (
- <div className="flex flex-wrap items-center gap-3 pt-2">
- <button
- type="button"
- onClick={() => {
- setGiftForm({
- giftCodeEnabled: selectedBusiness.giftCodeEnabled,
- giftCodeMinStars: selectedBusiness.giftCodeMinStars || 1,
- giftCodeLimitType: selectedBusiness.giftCodeLimitType || 'unlimited',
- giftCodeTotalLimit: selectedBusiness.giftCodeTotalLimit || 100,
- giftCodeDiscountPercent: selectedBusiness.giftCodeDiscountPercent || 10,
- giftCodeValidityDays: selectedBusiness.giftCodeValidityDays || 30,
- giftCodeStartDate: selectedBusiness.giftCodeStartDate || '',
- giftCodeEndDate: selectedBusiness.giftCodeEndDate || '',
- giftCodeGrantedCount: selectedBusiness.giftCodeGrantedCount || 0,
- giftCodeUserLimit: selectedBusiness.giftCodeUserLimit || 'once',
- giftCodeMaxPerUser: selectedBusiness.giftCodeMaxPerUser || 1,
- });
- setIsGiftCodeCustomizationOpen(true);
- }}
- className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 transition-colors shadow-xs cursor-pointer"
- >
- <Settings2 className="h-4 w-4" />
- <span>تخصيص شروط وأكواد الخصم</span>
- </button>
- 
- <button
- type="button"
- onClick={() => {
- setGiftForm({
- giftCodeEnabled: selectedBusiness.giftCodeEnabled,
- giftCodeMinStars: selectedBusiness.giftCodeMinStars || 1,
- giftCodeLimitType: selectedBusiness.giftCodeLimitType || 'unlimited',
- giftCodeTotalLimit: selectedBusiness.giftCodeTotalLimit || 100,
- giftCodeDiscountPercent: selectedBusiness.giftCodeDiscountPercent || 10,
- giftCodeValidityDays: selectedBusiness.giftCodeValidityDays || 30,
- giftCodeStartDate: selectedBusiness.giftCodeStartDate || '',
- giftCodeEndDate: selectedBusiness.giftCodeEndDate || '',
- giftCodeGrantedCount: selectedBusiness.giftCodeGrantedCount || 0,
- giftCodeUserLimit: selectedBusiness.giftCodeUserLimit || 'once',
- giftCodeMaxPerUser: selectedBusiness.giftCodeMaxPerUser || 1,
- });
- setIsGiftCodeStatsOpen(true);
- }}
- className="flex items-center gap-1.5 px-4 py-2 bg-white text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold hover:bg-emerald-50 transition-colors cursor-pointer"
- >
- <BarChart3 className="h-4 w-4" />
- <span>عرض إحصائيات الأكواد</span>
- </button>
- </div>
- )}
- </div>
+   <ReviewsRewardsTab
+     business={selectedBusiness}
+     onUpdateBusiness={(updatedBiz) => {
+       setBusinesses(prev => prev.map(b => b.id === updatedBiz.id ? updatedBiz : b));
+       setSelectedBusiness(updatedBiz);
+     }}
+     showToast={showToast}
+   />
  )}
 
  {/* SUB-TAB 3: REVIEWS QR POSTER */}
@@ -3614,14 +3672,290 @@ export function Profile() {
  </div>
  )}
 
- {/* 5. HOMEPAGE BANNER PANEL */}
- {activeSectionTab === 'homepage_banner' && (
- <div className="space-y-6">
- <div className="flex justify-between items-center pb-4 border-b border-stone-100">
+ {/* 5. MARKETING & BUSINESS DEVELOPMENT SERVICES PANEL */}
+ {(activeSectionTab === 'marketing' || activeSectionTab === 'homepage_banner') && (
+ <div className="space-y-8 animate-in fade-in duration-300">
+ {/* Marketing Services Cards */}
+ <div className="bg-white p-4 sm:p-8 rounded-2xl sm:rounded-[32px] border border-stone-200/80 shadow-xs space-y-6">
+ <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-stone-100">
+ <div className="flex items-center gap-3">
+ <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#ff9f1c]/20 to-amber-500/10 text-[#ff9f1c] flex items-center justify-center font-bold shadow-xs">
+ <Rocket className="h-6 w-6 text-[#ff9f1c]" />
+ </div>
+ <div>
+ <h2 className="text-xl sm:text-2xl font-black text-stone-900">
+ خدمات التسويق وتطوير الأعمال 
+ </h2>
+ <p className="text-xs text-stone-500 mt-1 leading-relaxed">
+ ضاعف وصولك لآلاف الزوار الجدد في إربد عبر طلب خدمات الإشعار والترويج المباشرة.
+ </p>
+ </div>
+ </div>
+
+ {businesses.length > 1 && (
+ <div className="bg-stone-50 p-2 rounded-2xl border border-stone-200/80 flex items-center gap-2 self-start sm:self-center">
+ <Store className="h-4 w-4 text-[#1a4d2e] shrink-0" />
+ <select
+ value={selectedBusinessIdForService}
+ onChange={(e) => setSelectedBusinessIdForService(e.target.value)}
+ className="bg-transparent text-xs font-black text-stone-800 focus:outline-none cursor-pointer py-1.5 px-1"
+ >
+ {businesses.map(b => (
+ <option key={b.id} value={b.id}>المحل: {b.name || 'محل تجاري'}</option>
+ ))}
+ </select>
+ </div>
+ )}
+ </div>
+
+ {serviceRequestSuccess && (
+ <div className="p-4 bg-emerald-50 text-emerald-900 rounded-2xl border border-emerald-200/80 flex items-center gap-2.5 text-xs font-black animate-in fade-in">
+ <CheckCircle className="h-5 w-5 text-emerald-600 shrink-0" />
+ <span>{serviceRequestSuccess}</span>
+ </div>
+ )}
+
+ <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-5">
+ {/* 1. Sponsored Listing */}
+ <div className="bg-gradient-to-b from-emerald-50/40 via-white to-white border border-emerald-200/80 rounded-[24px] p-6 hover:shadow-lg hover:border-emerald-400 transition-all flex flex-col justify-between relative overflow-hidden group">
+ <div className="absolute top-3 left-3 bg-gradient-to-r from-amber-500 to-[#ff9f1c] text-stone-950 text-[10px] font-black px-3 py-1 rounded-full shadow-xs flex items-center gap-1">
+ <Flame className="h-3 w-3 fill-stone-950" />
+ <span>الأكثر طلباً </span>
+ </div>
+
+ <div>
+ <div className="w-12 h-12 rounded-2xl bg-emerald-100/80 text-[#1a4d2e] flex items-center justify-center mb-4">
+ <TrendingUp className="h-6 w-6" />
+ </div>
+
+ <h3 className="font-black text-lg text-stone-900 mb-1">صدارة البحث (Sponsored)</h3>
+ <p className="text-stone-500 text-xs mb-5 leading-relaxed">
+ ظهور محلك أول النتائج بكلمات مفتاحية مخصصة للوصول لأول زبون يبحث عن خدمتك.
+ </p>
+
+ <div className="space-y-2 mb-6">
+ <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
+ <div className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+ <Check className="h-3 w-3 stroke-[3]" />
+ </div>
+ <span>ظهور أعلى المنافسين في نتائج البحث</span>
+ </div>
+ <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
+ <div className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+ <Check className="h-3 w-3 stroke-[3]" />
+ </div>
+ <span>شارة "ممول" بارزة</span>
+ </div>
+ </div>
+ </div>
+
+ <div className="pt-4 border-t border-stone-100 space-y-3 mt-auto">
+ <div className="flex items-baseline justify-between">
+ <span className="text-xs font-bold text-stone-400">التكلفة الإجمالية:</span>
+ <div className="text-base font-black text-[#1a4d2e]">
+ {appConfigState?.priceSponsored ?? 15} دينار <span className="text-[10px] text-stone-400 font-normal">/ أسبوع</span>
+ </div>
+ </div>
+
+ <button 
+ onClick={() => handleOpenMarketingModal('sponsored', 'صدارة البحث (Sponsored)', 'تم استلام طلبك لخدمة "صدارة البحث". سيتواصل معك فريقنا قريباً لإتمام الدفع وتفعيل الخدمة.')}
+ className="w-full bg-[#1a4d2e] hover:bg-[#133b22] text-white py-3 rounded-xl text-xs font-black shadow-xs hover:shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 min-h-[44px]"
+ >
+ <Sparkles className="h-4 w-4 text-[#ff9f1c]" />
+ <span>اطلب صدارة البحث الآن</span>
+ </button>
+ </div>
+ </div>
+
+ {/* 2. Push Notifications */}
+ <div className="bg-gradient-to-b from-sky-50/40 via-white to-white border border-sky-200/80 rounded-[24px] p-6 hover:shadow-lg hover:border-sky-400 transition-all flex flex-col justify-between relative overflow-hidden group">
+ <div className="absolute top-3 left-3 bg-sky-100 text-sky-800 text-[10px] font-black px-3 py-1 rounded-full border border-sky-200">
+ <span>وصول فوري </span>
+ </div>
+
+ <div>
+ <div className="w-12 h-12 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center mb-4">
+ <Bell className="h-6 w-6" />
+ </div>
+
+ <h3 className="font-black text-lg text-stone-900 mb-1">إشعارات جماعية لكافة المستخدمين</h3>
+ <p className="text-stone-500 text-xs mb-5 leading-relaxed">
+ إرسال إشعار فوري لجميع هواتف الآلاف من مستخدمي المنصة للترويج لعروضك الجديدة.
+ </p>
+
+ <div className="space-y-2 mb-6">
+ <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
+ <div className="w-4 h-4 rounded-full bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
+ <Check className="h-3 w-3 stroke-[3]" />
+ </div>
+ <span>رسالة مخصصة تصل لشاشات الأجهزة</span>
+ </div>
+ <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
+ <div className="w-4 h-4 rounded-full bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
+ <Check className="h-3 w-3 stroke-[3]" />
+ </div>
+ <span>تحويل مباشر لصفحة منشأتك عند النقر</span>
+ </div>
+ </div>
+ </div>
+
+ <div className="pt-4 border-t border-stone-100 space-y-3 mt-auto">
+ <div className="flex items-baseline justify-between">
+ <span className="text-xs font-bold text-stone-400">التكلفة الإجمالية:</span>
+ <div className="text-base font-black text-sky-800">
+ {appConfigState?.pricePushNotifications ?? 10} دنانير <span className="text-[10px] text-stone-400 font-normal">/ إشعار</span>
+ </div>
+ </div>
+
+ <button 
+ onClick={() => handleOpenMarketingModal('push_notifications', 'إشعارات جماعية', 'تم استلام طلبك لخدمة "إشعارات جماعية". سيتواصل معك فريقنا قريباً.')}
+ className="w-full bg-sky-700 hover:bg-sky-800 text-white py-3 rounded-xl text-xs font-black shadow-xs hover:shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 min-h-[44px]"
+ >
+ <Bell className="h-4 w-4" />
+ <span>اطلب الإشعار الجماعي</span>
+ </button>
+ </div>
+ </div>
+
+ {/* 3. Homepage Banner */}
+ <div className="bg-gradient-to-b from-purple-50/40 via-white to-white border border-purple-200/80 rounded-[24px] p-6 hover:shadow-lg hover:border-purple-400 transition-all flex flex-col justify-between relative overflow-hidden group">
+ <div className="absolute top-3 left-3 bg-purple-100 text-purple-800 text-[10px] font-black px-3 py-1 rounded-full border border-purple-200">
+ <span>واجهة الموقع </span>
+ </div>
+
+ <div>
+ <div className="w-12 h-12 rounded-2xl bg-purple-100 text-purple-700 flex items-center justify-center mb-4">
+ <ImageIcon className="h-6 w-6" />
+ </div>
+
+ <h3 className="font-black text-lg text-stone-900 mb-1">بانر إعلاني مميز في الأعلى</h3>
+ <p className="text-stone-500 text-xs mb-5 leading-relaxed">
+ احجز البانر الرئيسي في أعلى الصفحة الأولى لموقع "شو في بإربد" بانتشار واجهة كاملة.
+ </p>
+
+ <div className="space-y-2 mb-6">
+ <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
+ <div className="w-4 h-4 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
+ <Check className="h-3 w-3 stroke-[3]" />
+ </div>
+ <span>تصميم احترافي مجاني مرفق من الفريق</span>
+ </div>
+ <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
+ <div className="w-4 h-4 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
+ <Check className="h-3 w-3 stroke-[3]" />
+ </div>
+ <span>رابط توجيه داخلي أو خارجي مخصص</span>
+ </div>
+ </div>
+ </div>
+
+ <div className="pt-4 border-t border-stone-100 space-y-3 mt-auto">
+ <div className="flex items-baseline justify-between">
+ <span className="text-xs font-bold text-stone-400">التكلفة الإجمالية:</span>
+ <div className="text-base font-black text-purple-800">
+ {appConfigState?.priceHomepageBanner ?? 25} دينار <span className="text-[10px] text-stone-400 font-normal">/ أسبوع</span>
+ </div>
+ </div>
+
+ <button 
+ onClick={() => handleOpenMarketingModal('homepage_banner', 'بانر إعلاني مميز', 'تم استلام طلبك لخدمة "بانر إعلاني مميز". سيتواصل معك فريقنا قريباً.')}
+ className="w-full bg-purple-700 hover:bg-purple-800 text-white py-3 rounded-xl text-xs font-black shadow-xs hover:shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 min-h-[44px]"
+ >
+ <Megaphone className="h-4 w-4" />
+ <span>حجز البانر الإعلاني</span>
+ </button>
+ </div>
+ </div>
+
+ {/* 4. Premium Messaging Add-on Card */}
+ <div className="bg-gradient-to-b from-amber-50/60 via-white to-white border-2 border-amber-300 rounded-[24px] p-6 hover:shadow-lg hover:border-amber-500 transition-all flex flex-col justify-between relative overflow-hidden group">
+ <div className="absolute top-0 right-0 bg-amber-400 text-amber-950 text-[10px] font-black px-3 py-1 rounded-bl-xl flex items-center gap-1 shadow-2xs">
+ <Crown className="h-3 w-3 fill-amber-950" />
+ <span>باقة رسائل مطورة </span>
+ </div>
+
+ <div>
+ <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center mb-4 mt-2">
+ <MessageSquare className="h-6 w-6" />
+ </div>
+
+ <h3 className="font-black text-lg text-stone-900 mb-1">ترقية نظام الرسائل والوسائط</h3>
+ <p className="text-stone-500 text-xs mb-4 leading-relaxed">
+ تمكين استقبال صور المنتجات والمستندات من الزبائن وزيادة حفظ أرشيف المراسلة.
+ </p>
+
+ {selectedBusinessIdForService && (() => {
+ const b = businesses.find(x => x.id === selectedBusinessIdForService);
+ if (!b) return null;
+ const isUpgraded = b.premiumMessagingEnabled;
+ return (
+ <div className="mb-4 bg-amber-50/80 p-2.5 rounded-xl border border-amber-200 text-[11px] font-bold text-stone-700">
+ <div className="flex items-center justify-between">
+ <span>حالة المحل الحالي:</span>
+ {isUpgraded ? (
+ <span className="text-emerald-700 font-black bg-emerald-100 px-2 py-0.5 rounded-md">مفعلة ({b.premiumMessagingPlan === '1_month' ? 'شهر' : b.premiumMessagingPlan === '3_months' ? '3 أشهر' : b.premiumMessagingPlan === '6_months' ? '6 أشهر' : 'سنة'})</span>
+ ) : (
+ <span className="text-amber-800 font-bold bg-amber-100 px-2 py-0.5 rounded-md">باقة أساسية (7 أيام)</span>
+ )}
+ </div>
+ </div>
+ );
+ })()}
+
+ <div className="space-y-2 mb-4">
+ <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
+ <div className="w-4 h-4 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+ <Check className="h-3 w-3 stroke-[3]" />
+ </div>
+ <span>استقبال صور وطلبات الزبائن مباشرة</span>
+ </div>
+ <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
+ <div className="w-4 h-4 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+ <Check className="h-3 w-3 stroke-[3]" />
+ </div>
+ <span>الاحتفاظ بأرشيف المحادثات لفترة أطول</span>
+ </div>
+ </div>
+
+ <div className="mb-4">
+ <label className="block text-[10px] font-bold text-stone-500 mb-1">اختر باقة الترقية:</label>
+ <select
+ id="messaging-plan-select"
+ className="w-full p-2.5 rounded-xl border border-amber-200 bg-white text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-400"
+ defaultValue="1_month"
+ >
+ <option value="1_month">شهري: {appConfigState?.priceMessaging1Month ?? 5} دنانير (وسائط | الاحتفاظ 1 شهر)</option>
+ <option value="3_months">3 أشهر: {appConfigState?.priceMessaging3Months ?? 12} دينار (الاحتفاظ 3 أشهر)</option>
+ <option value="6_months">6 أشهر: {appConfigState?.priceMessaging6Months ?? 20} دينار (الاحتفاظ 6 أشهر)</option>
+ <option value="1_year">سنوي: {appConfigState?.priceMessaging1Year ?? 35} دينار (الاحتفاظ 1 سنة)</option>
+ </select>
+ </div>
+ </div>
+
+ <div className="pt-3 border-t border-amber-100 space-y-2 mt-auto">
+ <button 
+ onClick={() => {
+ const selectEl = document.getElementById('messaging-plan-select') as HTMLSelectElement;
+ const plan = (selectEl?.value || '1_month') as '1_month' | '3_months' | '6_months' | '1_year';
+ handlePremiumMessagingUpgrade(plan);
+ }}
+ className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white py-3 rounded-xl text-xs font-black shadow-xs hover:shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 min-h-[44px]"
+ >
+ <Crown className="h-4 w-4 fill-white" />
+ <span>تفعيل وترقية نظام الرسائل</span>
+ </button>
+ </div>
+ </div>
+ </div>
+ </div>
+
+ {/* Banner Manager Sub-Panel */}
+ <div className="bg-stone-50/60 p-4 sm:p-8 rounded-2xl sm:rounded-[32px] border border-stone-200/80 space-y-6">
+ <div className="flex justify-between items-center pb-4 border-b border-stone-200/80">
  <div>
  <h3 className="text-base font-black text-[#2d2a26] flex items-center gap-2">
  <Megaphone className="h-5 w-5 text-[#1a4d2e]" />
- إدارة إعلان البانر على الصفحة الرئيسية
+ إدارة وحجز إعلان البانر على الصفحة الرئيسية
  </h3>
  <p className="text-xs text-stone-500 mt-0.5">
  احجز مساحة إعلانية بارزة في أعلى صفحة الموقع الرئيسية لزيادة تفاعل وزيادة زوار محلك التجاري.
@@ -3977,6 +4311,7 @@ export function Profile() {
  </form>
  )}
  </div>
+ </div>
  )}
 
  {/* 6. SHARED ACCOUNTS PANEL */}
@@ -4292,282 +4627,7 @@ export function Profile() {
  </div>
  )}
 
- {/* Marketing Services Section */}
- {businesses.length > 0 && (
- <div className="bg-white p-6 sm:p-8 rounded-[32px] border border-stone-200/80 shadow-xs space-y-6">
- <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-stone-100">
- <div className="flex items-center gap-3">
- <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#ff9f1c]/20 to-amber-500/10 text-[#ff9f1c] flex items-center justify-center font-bold shadow-xs">
- <Rocket className="h-6 w-6 text-[#ff9f1c]" />
- </div>
- <div>
- <h2 className="text-xl sm:text-2xl font-black text-stone-900">
- خدمات التسويق وتطوير الأعمال 
- </h2>
- <p className="text-xs text-stone-500 mt-1 leading-relaxed">
- ضاعف وصولك لآلاف الزوار الجدد في إربد عبر طلب خدمات الإشعار والترويج المباشرة.
- </p>
- </div>
- </div>
-
- {businesses.length > 1 && (
- <div className="bg-stone-50 p-2 rounded-2xl border border-stone-200/80 flex items-center gap-2 self-start sm:self-center">
- <Store className="h-4 w-4 text-[#1a4d2e] shrink-0" />
- <select
- value={selectedBusinessIdForService}
- onChange={(e) => setSelectedBusinessIdForService(e.target.value)}
- className="bg-transparent text-xs font-black text-stone-800 focus:outline-none cursor-pointer py-1.5 px-1"
- >
- {businesses.map(b => (
- <option key={b.id} value={b.id}>المحل: {b.name || 'محل تجاري'}</option>
- ))}
- </select>
- </div>
- )}
- </div>
-
- {serviceRequestSuccess && (
- <div className="p-4 bg-emerald-50 text-emerald-900 rounded-2xl border border-emerald-200/80 flex items-center gap-2.5 text-xs font-black animate-in fade-in">
- <CheckCircle className="h-5 w-5 text-emerald-600 shrink-0" />
- <span>{serviceRequestSuccess}</span>
- </div>
- )}
-
- <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
- {/* 1. Sponsored Listing */}
- <div className="bg-gradient-to-b from-emerald-50/40 via-white to-white border border-emerald-200/80 rounded-[24px] p-6 hover:shadow-lg hover:border-emerald-400 transition-all flex flex-col justify-between relative overflow-hidden group">
- <div className="absolute top-3 left-3 bg-gradient-to-r from-amber-500 to-[#ff9f1c] text-stone-950 text-[10px] font-black px-3 py-1 rounded-full shadow-xs flex items-center gap-1">
- <Flame className="h-3 w-3 fill-stone-950" />
- <span>الأكثر طلباً </span>
- </div>
-
- <div>
- <div className="w-12 h-12 rounded-2xl bg-emerald-100/80 text-[#1a4d2e] flex items-center justify-center mb-4">
- <TrendingUp className="h-6 w-6" />
- </div>
-
- <h3 className="font-black text-lg text-stone-900 mb-1">صدارة البحث (Sponsored)</h3>
- <p className="text-stone-500 text-xs mb-5 leading-relaxed">
- ظهور محلك أول النتائج بكلمات مفتاحية مخصصة للوصول لأول زبون يبحث عن خدمتك.
- </p>
-
- <div className="space-y-2 mb-6">
- <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
- <div className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
- <Check className="h-3 w-3 stroke-[3]" />
- </div>
- <span>ظهور أعلى المنافسين في نتائج البحث</span>
- </div>
- <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
- <div className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
- <Check className="h-3 w-3 stroke-[3]" />
- </div>
- <span>شارة "ممول" بارزة</span>
- </div>
- </div>
- </div>
-
- <div className="pt-4 border-t border-stone-100 space-y-3 mt-auto">
- <div className="flex items-baseline justify-between">
- <span className="text-xs font-bold text-stone-400">التكلفة الإجمالية:</span>
- <div className="text-base font-black text-[#1a4d2e]">
- {appConfigState?.priceSponsored ?? 15} دينار <span className="text-[10px] text-stone-400 font-normal">/ أسبوع</span>
- </div>
- </div>
-
- <button 
- onClick={() => handleOpenMarketingModal('sponsored', 'صدارة البحث (Sponsored)', 'تم استلام طلبك لخدمة "صدارة البحث". سيتواصل معك فريقنا قريباً لإتمام الدفع وتفعيل الخدمة.')}
- className="w-full bg-[#1a4d2e] hover:bg-[#133b22] text-white py-3 rounded-xl text-xs font-black shadow-xs hover:shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 min-h-[44px]"
- >
- <Sparkles className="h-4 w-4 text-[#ff9f1c]" />
- <span>اطلب صدارة البحث الآن</span>
- </button>
- </div>
- </div>
-
- {/* 2. Push Notifications */}
- <div className="bg-gradient-to-b from-sky-50/40 via-white to-white border border-sky-200/80 rounded-[24px] p-6 hover:shadow-lg hover:border-sky-400 transition-all flex flex-col justify-between relative overflow-hidden group">
- <div className="absolute top-3 left-3 bg-sky-100 text-sky-800 text-[10px] font-black px-3 py-1 rounded-full border border-sky-200">
- <span>وصول فوري </span>
- </div>
-
- <div>
- <div className="w-12 h-12 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center mb-4">
- <Bell className="h-6 w-6" />
- </div>
-
- <h3 className="font-black text-lg text-stone-900 mb-1">إشعارات جماعية لكافة المستخدمين</h3>
- <p className="text-stone-500 text-xs mb-5 leading-relaxed">
- إرسال إشعار فوري لجميع هواتف الآلاف من مستخدمي المنصة للترويج لعروضك الجديدة.
- </p>
-
- <div className="space-y-2 mb-6">
- <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
- <div className="w-4 h-4 rounded-full bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
- <Check className="h-3 w-3 stroke-[3]" />
- </div>
- <span>رسالة مخصصة تصل لشاشات الأجهزة</span>
- </div>
- <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
- <div className="w-4 h-4 rounded-full bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
- <Check className="h-3 w-3 stroke-[3]" />
- </div>
- <span>تحويل مباشر لصفحة منشأتك عند النقر</span>
- </div>
- </div>
- </div>
-
- <div className="pt-4 border-t border-stone-100 space-y-3 mt-auto">
- <div className="flex items-baseline justify-between">
- <span className="text-xs font-bold text-stone-400">التكلفة الإجمالية:</span>
- <div className="text-base font-black text-sky-800">
- {appConfigState?.pricePushNotifications ?? 10} دنانير <span className="text-[10px] text-stone-400 font-normal">/ إشعار</span>
- </div>
- </div>
-
- <button 
- onClick={() => handleOpenMarketingModal('push_notifications', 'إشعارات جماعية', 'تم استلام طلبك لخدمة "إشعارات جماعية". سيتواصل معك فريقنا قريباً.')}
- className="w-full bg-sky-700 hover:bg-sky-800 text-white py-3 rounded-xl text-xs font-black shadow-xs hover:shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 min-h-[44px]"
- >
- <Bell className="h-4 w-4" />
- <span>اطلب الإشعار الجماعي</span>
- </button>
- </div>
- </div>
-
- {/* 3. Homepage Banner */}
- <div className="bg-gradient-to-b from-purple-50/40 via-white to-white border border-purple-200/80 rounded-[24px] p-6 hover:shadow-lg hover:border-purple-400 transition-all flex flex-col justify-between relative overflow-hidden group">
- <div className="absolute top-3 left-3 bg-purple-100 text-purple-800 text-[10px] font-black px-3 py-1 rounded-full border border-purple-200">
- <span>واجهة الموقع </span>
- </div>
-
- <div>
- <div className="w-12 h-12 rounded-2xl bg-purple-100 text-purple-700 flex items-center justify-center mb-4">
- <ImageIcon className="h-6 w-6" />
- </div>
-
- <h3 className="font-black text-lg text-stone-900 mb-1">بانر إعلاني مميز في الأعلى</h3>
- <p className="text-stone-500 text-xs mb-5 leading-relaxed">
- احجز البانر الرئيسي في أعلى الصفحة الأولى لموقع "شو في بإربد" بانتشار واجهة كاملة.
- </p>
-
- <div className="space-y-2 mb-6">
- <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
- <div className="w-4 h-4 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
- <Check className="h-3 w-3 stroke-[3]" />
- </div>
- <span>تصميم احترافي مجاني مرفق من الفريق</span>
- </div>
- <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
- <div className="w-4 h-4 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
- <Check className="h-3 w-3 stroke-[3]" />
- </div>
- <span>رابط توجيه داخلي أو خارجي مخصص</span>
- </div>
- </div>
- </div>
-
- <div className="pt-4 border-t border-stone-100 space-y-3 mt-auto">
- <div className="flex items-baseline justify-between">
- <span className="text-xs font-bold text-stone-400">التكلفة الإجمالية:</span>
- <div className="text-base font-black text-purple-800">
- {appConfigState?.priceHomepageBanner ?? 25} دينار <span className="text-[10px] text-stone-400 font-normal">/ أسبوع</span>
- </div>
- </div>
-
- <button 
- onClick={() => handleOpenMarketingModal('homepage_banner', 'بانر إعلاني مميز', 'تم استلام طلبك لخدمة "بانر إعلاني مميز". سيتواصل معك فريقنا قريباً.')}
- className="w-full bg-purple-700 hover:bg-purple-800 text-white py-3 rounded-xl text-xs font-black shadow-xs hover:shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 min-h-[44px]"
- >
- <Megaphone className="h-4 w-4" />
- <span>حجز البانر الإعلاني</span>
- </button>
- </div>
- </div>
-
- {/* 5. Premium Messaging Add-on Card */}
- <div className="bg-gradient-to-b from-amber-50/60 via-white to-white border-2 border-amber-300 rounded-[24px] p-6 hover:shadow-lg hover:border-amber-500 transition-all flex flex-col justify-between relative overflow-hidden group">
- <div className="absolute top-0 right-0 bg-amber-400 text-amber-950 text-[10px] font-black px-3 py-1 rounded-bl-xl flex items-center gap-1 shadow-2xs">
- <Crown className="h-3 w-3 fill-amber-950" />
- <span>باقة رسائل مطورة </span>
- </div>
-
- <div>
- <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center mb-4 mt-2">
- <MessageSquare className="h-6 w-6" />
- </div>
-
- <h3 className="font-black text-lg text-stone-900 mb-1">ترقية نظام الرسائل والوسائط</h3>
- <p className="text-stone-500 text-xs mb-4 leading-relaxed">
- تمكين استقبال صور المنتجات والمستندات من الزبائن وزيادة حفظ أرشيف المراسلة.
- </p>
-
- {/* Selected Business Status */}
- {selectedBusinessIdForService && (() => {
- const b = businesses.find(x => x.id === selectedBusinessIdForService);
- if (!b) return null;
- const isUpgraded = b.premiumMessagingEnabled;
- return (
- <div className="mb-4 bg-amber-50/80 p-2.5 rounded-xl border border-amber-200 text-[11px] font-bold text-stone-700">
- <div className="flex items-center justify-between">
- <span>حالة المحل الحالي:</span>
- {isUpgraded ? (
- <span className="text-emerald-700 font-black bg-emerald-100 px-2 py-0.5 rounded-md">مفعلة ({b.premiumMessagingPlan === '1_month' ? 'شهر' : b.premiumMessagingPlan === '3_months' ? '3 أشهر' : b.premiumMessagingPlan === '6_months' ? '6 أشهر' : 'سنة'})</span>
- ) : (
- <span className="text-amber-800 font-bold bg-amber-100 px-2 py-0.5 rounded-md">باقة أساسية (7 أيام)</span>
- )}
- </div>
- </div>
- );
- })()}
-
- <div className="space-y-2 mb-4">
- <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
- <div className="w-4 h-4 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
- <Check className="h-3 w-3 stroke-[3]" />
- </div>
- <span>استقبال صور وطلبات الزبائن مباشرة</span>
- </div>
- <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
- <div className="w-4 h-4 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
- <Check className="h-3 w-3 stroke-[3]" />
- </div>
- <span>الاحتفاظ بأرشيف المحادثات لفترة أطول</span>
- </div>
- </div>
-
- <div className="mb-4">
- <label className="block text-[10px] font-bold text-stone-500 mb-1">اختر باقة الترقية:</label>
- <select
- id="messaging-plan-select"
- className="w-full p-2.5 rounded-xl border border-amber-200 bg-white text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-400"
- defaultValue="1_month"
- >
- <option value="1_month">شهري: {appConfigState?.priceMessaging1Month ?? 5} دنانير (وسائط | الاحتفاظ 1 شهر)</option>
- <option value="3_months">3 أشهر: {appConfigState?.priceMessaging3Months ?? 12} دينار (الاحتفاظ 3 أشهر)</option>
- <option value="6_months">6 أشهر: {appConfigState?.priceMessaging6Months ?? 20} دينار (الاحتفاظ 6 أشهر)</option>
- <option value="1_year">سنوي: {appConfigState?.priceMessaging1Year ?? 35} دينار (الاحتفاظ 1 سنة)</option>
- </select>
- </div>
- </div>
-
- <div className="pt-3 border-t border-amber-100 space-y-2 mt-auto">
- <button 
- onClick={() => {
- const selectEl = document.getElementById('messaging-plan-select') as HTMLSelectElement;
- const plan = (selectEl?.value || '1_month') as '1_month' | '3_months' | '6_months' | '1_year';
- handlePremiumMessagingUpgrade(plan);
- }}
- className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white py-3 rounded-xl text-xs font-black shadow-xs hover:shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 min-h-[44px]"
- >
- <Crown className="h-4 w-4 fill-white" />
- <span>تفعيل وترقية نظام الرسائل</span>
- </button>
- </div>
- </div>
- </div>
- </div>
- )}
+ {/* Empty State for Dashboard when user has no businesses registered */}
  </div>
  </div>
  )}
@@ -4824,18 +4884,41 @@ export function Profile() {
  )}
 
  {/* Quick Actions: QR Poster Selection Modal for Restaurants */}
- {selectedBusiness && (
+ {(selectedBusiness || selectedBusinessForMenu) && (
  <QrPosterSelectionModal
  isOpen={isQrPosterSelectionModalOpen}
  onClose={() => setIsQrPosterSelectionModalOpen(false)}
- businessName={selectedBusiness.name}
+ businessName={(selectedBusiness || selectedBusinessForMenu)?.name}
  onSelectMenuPoster={() => {
- setMenuQrInitialSubTab('poster_customizer');
+ const target = selectedBusiness || selectedBusinessForMenu;
+ if (target) {
+ setSelectedBusiness(target);
+ }
+ setProfileMainTab('dashboard');
+ setDashboardSubTab('commercial');
+ setMerchantSubTab('businesses');
  setActiveSectionTab('menu_qr');
+ setMenuQrInitialSubTab('poster_customizer');
+ setMenuQrKey(prev => prev + 1);
+ setIsAddingOffer(false);
+ setTimeout(() => {
+   window.scrollTo({ top: 0, behavior: 'smooth' });
+ }, 50);
  }}
  onSelectReviewsPoster={() => {
- setReviewsSubTab('qr');
+ const target = selectedBusiness || selectedBusinessForMenu;
+ if (target) {
+ setSelectedBusiness(target);
+ }
+ setProfileMainTab('dashboard');
+ setDashboardSubTab('commercial');
+ setMerchantSubTab('businesses');
  setActiveSectionTab('reviews');
+ setReviewsSubTab('qr');
+ setIsAddingOffer(false);
+ setTimeout(() => {
+   window.scrollTo({ top: 0, behavior: 'smooth' });
+ }, 50);
  }}
  />
  )}

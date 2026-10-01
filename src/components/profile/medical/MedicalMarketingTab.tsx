@@ -43,7 +43,7 @@ export function MedicalMarketingTab({
           </div>
           <div>
             <h2 className="text-xl sm:text-2xl font-black text-stone-900">
-              الخدمات التسويقية والترويجية 🚀
+              الخدمات التسويقية والترويجية
             </h2>
             <p className="text-xs text-stone-500 mt-1 leading-relaxed">
               عزز حضور منشأتك في إربد بخدمات ترويجية مستهدفة للوصول لآلاف الزوار والمراجعين.

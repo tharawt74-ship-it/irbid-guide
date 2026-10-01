@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router';
 import { useAuth } from '../contexts/AuthContext';
-import { db } from '../lib/firebase';
+import { db, auth } from '../lib/firebase';
 import { 
   collection, 
   query, 
@@ -12,48 +12,463 @@ import {
   deleteDoc 
 } from 'firebase/firestore';
 import { getLocalOrders, saveLocalOrder, subscribeToLocalOrders, broadcastOrderUpdate } from '../lib/ordersSyncHelper';
+import { updateBusinessMenuItemsInCache } from '../lib/dataCache';
 import { Business } from '../types';
-import { isFoodAndDrinkBusiness } from './Profile';
+import { isFoodAndDrinkBusiness } from '../lib/categories';
 import { 
   ArrowRight, 
   Clock, 
-  CheckCircle, 
+  CheckCircle2, 
   X, 
   AlertTriangle,
   Trash2, 
   Volume2, 
   VolumeX, 
+  BellRing,
   ChevronDown, 
   Utensils, 
   MessageCircle,
-  ExternalLink,
-  Store,
-  Phone,
-  Search,
-  Check,
-  CookingPot,
-  MapPin,
-  FileText,
-  User,
-  ShoppingBag,
-  Sparkles,
-  QrCode,
-  Printer
+  ExternalLink, 
+  Store, 
+  Phone, 
+  Search, 
+  Check, 
+  CookingPot, 
+  MapPin, 
+  FileText, 
+  User, 
+  ShoppingBag, 
+  QrCode, 
+  Printer,
+  SlidersHorizontal,
+  ArrowUpDown,
+  Layers,
+  Banknote,
+  Receipt
 } from 'lucide-react';
+import { 
+  playOrderNotificationSound, 
+  playUrgentOrderChime, 
+  unlockOrderAudio, 
+  isAudioAllowed, 
+  onAudioStatusChange, 
+  requestOrderNotificationPermission, 
+  showOrderDesktopNotification 
+} from '../utils/orderSound';
+
+function getElapsedTime(timestamp?: number): string {
+  if (!timestamp) return '';
+  const diffSec = Math.floor((Date.now() - timestamp) / 1000);
+  if (diffSec < 60) return 'الآن';
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `منذ ${diffMin} دقيقة`;
+  const diffHours = Math.floor(diffMin / 60);
+  return `منذ ${diffHours} ساعة`;
+}
+
+function getOrderTypeBadge(orderType?: string, tableNumber?: string) {
+  switch (orderType) {
+    case 'dine_in':
+      return {
+        label: tableNumber ? `طاولة رقم ${tableNumber}` : 'صالة داخلية',
+        className: 'bg-purple-50 text-purple-900 border-purple-200'
+      };
+    case 'takeaway':
+      return {
+        label: 'طلب سفري',
+        className: 'bg-blue-50 text-blue-900 border-blue-200'
+      };
+    case 'delivery':
+      return {
+        label: 'طلب توصيل',
+        className: 'bg-amber-50 text-amber-900 border-amber-200'
+      };
+    default:
+      return {
+        label: 'طلب مباشر',
+        className: 'bg-stone-50 text-stone-800 border-stone-200'
+      };
+  }
+}
+
+function getPaymentMethodLabel(paymentMethod?: string): string {
+  if (paymentMethod === 'cliq') return 'دفع فوري CliQ';
+  if (paymentMethod === 'wallet') return 'محفظة إلكترونية';
+  return 'نقداً عند الاستلام';
+}
 
 export default function LiveOrdersPage() {
   const { currentUser, ownedBusinesses, isAdmin } = useAuth();
   const navigate = useNavigate();
 
-  // Sub-view Toggles (Live Orders vs Quick Out-of-Stock Toggle)
+  // Primary view toggle: 'orders' (Live Orders) vs 'stock' (Item Availability)
   const [activeView, setActiveView] = useState<'orders' | 'stock'>('orders');
   const [updatingStockId, setUpdatingStockId] = useState<string | null>(null);
+
+  // Filter & Search states
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'processing' | 'completed' | 'cancelled'>('all');
+  const [orderTypeFilter, setOrderTypeFilter] = useState<'all' | 'dine_in' | 'takeaway' | 'delivery'>('all');
+  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'highest'>('newest');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Delete confirmation modal state
+  const [deleteConfirmOrderId, setDeleteConfirmOrderId] = useState<string | null>(null);
+  const [isDeletingOrder, setIsDeletingOrder] = useState(false);
+
+  // Available food businesses
+  const [availableBusinesses, setAvailableBusinesses] = useState<Business[]>(
+    (ownedBusinesses || []).filter(isFoodAndDrinkBusiness)
+  );
+  const [selectedBiz, setSelectedBusiness] = useState<Business | null>(null);
+
+  // Orders State
+  const [orders, setOrders] = useState<any[]>([]);
+  const [loadingOrders, setLoadingOrders] = useState(true);
+
+  // Audio chime settings & browser autoplay state
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    return localStorage.getItem('live_orders_sound_enabled') !== 'false';
+  });
+  const [isAudioActive, setIsAudioActive] = useState<boolean>(() => isAudioAllowed());
+  const [soundTesting, setSoundTesting] = useState(false);
+
+  // Tracking known orders to trigger ring only on truly new incoming orders
+  const isInitialLoadRef = useRef(true);
+  const knownOrderIdsRef = useRef<Set<string>>(new Set());
+  const ordersRef = useRef<any[]>([]);
+  ordersRef.current = orders;
+
+  // Monitor audio unlocked status
+  useEffect(() => {
+    const unsub = onAudioStatusChange((unlocked) => {
+      setIsAudioActive(unlocked);
+    });
+    return unsub;
+  }, []);
+
+  const toggleSound = () => {
+    const nextVal = !soundEnabled;
+    setSoundEnabled(nextVal);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('live_orders_sound_enabled', String(nextVal));
+    }
+    if (nextVal) {
+      unlockOrderAudio().then(() => {
+        playOrderNotificationSound(0.7);
+      });
+    }
+  };
+
+  const handleTestSound = async () => {
+    setSoundTesting(true);
+    await unlockOrderAudio();
+    playUrgentOrderChime();
+    await requestOrderNotificationPermission();
+    setTimeout(() => setSoundTesting(false), 1200);
+  };
+
+  const handleEnableAudio = async () => {
+    await unlockOrderAudio();
+    playUrgentOrderChime();
+    await requestOrderNotificationPermission();
+  };
+
+  // Load owned businesses for merchant
+  useEffect(() => {
+    const foodBusinesses = (ownedBusinesses || []).filter(isFoodAndDrinkBusiness);
+    setAvailableBusinesses(foodBusinesses);
+    if (foodBusinesses.length > 0 && !selectedBiz) {
+      setSelectedBusiness(foodBusinesses[0]);
+    }
+  }, [ownedBusinesses]);
+
+  // Real-time Business Document & Menu Items Listener
+  useEffect(() => {
+    if (!selectedBiz?.id || !db) return;
+    const bizDocRef = doc(db, 'businesses', selectedBiz.id);
+    const unsubBizDoc = onSnapshot(bizDocRef, (snap) => {
+      if (snap.exists()) {
+        const snapData = snap.data();
+        if (snapData && Array.isArray(snapData.menuItems)) {
+          setSelectedBusiness(prev => {
+            if (!prev) return null;
+            return { ...prev, ...snapData, id: snap.id };
+          });
+          setAvailableBusinesses(prev => {
+            return prev.map(b => b.id === snap.id ? { ...b, ...snapData } : b);
+          });
+          updateBusinessMenuItemsInCache(snap.id, snapData.menuItems);
+        }
+      }
+    }, (err) => {
+      console.warn("Real-time business sync notice:", err);
+    });
+
+    return () => unsubBizDoc();
+  }, [selectedBiz?.id]);
+
+  // Real-time Orders Listener for selected business
+  useEffect(() => {
+    if (!selectedBiz?.id) {
+      setOrders([]);
+      setLoadingOrders(false);
+      return;
+    }
+
+    setLoadingOrders(true);
+    let unsubscribeFirestore = () => {};
+
+    const mergeAndSetOrders = (firestoreOrders: any[]) => {
+      const local = getLocalOrders(selectedBiz.id);
+      const orderMap = new Map<string, any>();
+
+      // 1. Add local orders
+      local.forEach(o => {
+        if (o.id) orderMap.set(o.id, o);
+      });
+
+      // 2. Add Firestore orders (source of truth)
+      firestoreOrders.forEach(o => {
+        if (o.id) orderMap.set(o.id, { ...orderMap.get(o.id), ...o });
+      });
+
+      const merged = Array.from(orderMap.values());
+      merged.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+      // Audio chime sound & notification when a NEW 'pending' order arrives
+      if (!isInitialLoadRef.current && soundEnabled) {
+        const newPendingOrders = merged.filter(
+          fo => fo.status === 'pending' && !knownOrderIdsRef.current.has(fo.id)
+        );
+        if (newPendingOrders.length > 0) {
+          playUrgentOrderChime();
+          newPendingOrders.forEach(ord => {
+            showOrderDesktopNotification(ord, selectedBiz?.name);
+          });
+        }
+      }
+
+      // Record known IDs
+      merged.forEach(o => {
+        if (o.id) knownOrderIdsRef.current.add(o.id);
+      });
+      isInitialLoadRef.current = false;
+
+      setOrders(merged);
+      setLoadingOrders(false);
+    };
+
+    // Initialize with local storage immediately
+    mergeAndSetOrders([]);
+
+    // Subscribe to cross-tab / local live updates
+    const unsubscribeLocal = subscribeToLocalOrders((updatedOrder) => {
+      if (updatedOrder && (updatedOrder.businessId === selectedBiz.id || String(updatedOrder.businessId) === String(selectedBiz.id))) {
+        if (!isInitialLoadRef.current && soundEnabled && updatedOrder.status === 'pending' && !knownOrderIdsRef.current.has(updatedOrder.id)) {
+          playUrgentOrderChime();
+          showOrderDesktopNotification(updatedOrder, selectedBiz?.name);
+        }
+        if (updatedOrder.id) {
+          knownOrderIdsRef.current.add(updatedOrder.id);
+        }
+        setOrders(prev => {
+          const updated = [...prev];
+          const idx = updated.findIndex(o => o.id === updatedOrder.id);
+          if (idx >= 0) {
+            updated[idx] = { ...updated[idx], ...updatedOrder };
+          } else {
+            updated.unshift(updatedOrder);
+          }
+          updated.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+          return updated;
+        });
+      }
+    });
+
+    const setupOrdersListener = () => {
+      try {
+        const q = query(
+          collection(db, 'orders'),
+          where('businessId', '==', selectedBiz.id)
+        );
+
+        unsubscribeFirestore = onSnapshot(q, (snapshot) => {
+          const fetchedOrders: any[] = [];
+          snapshot.forEach((docSnap) => {
+            fetchedOrders.push({ id: docSnap.id, ...docSnap.data() });
+          });
+          mergeAndSetOrders(fetchedOrders);
+        }, (error) => {
+          console.warn("Firestore order listener notice:", error?.message || error);
+          setLoadingOrders(false);
+          fetch(`/api/orders?businessId=${encodeURIComponent(selectedBiz.id)}`)
+            .then(res => res.json())
+            .then(data => {
+              if (data?.orders) mergeAndSetOrders(data.orders);
+            })
+            .catch(() => {});
+        });
+      } catch (err) {
+        console.warn("Failed to setup orders listener:", err);
+        setLoadingOrders(false);
+      }
+    };
+
+    setupOrdersListener();
+
+    // Background poll safety net every 8 seconds
+    const apiPollInterval = setInterval(() => {
+      fetch(`/api/orders?businessId=${encodeURIComponent(selectedBiz.id)}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data?.orders && data.orders.length > 0) {
+            mergeAndSetOrders(data.orders);
+          }
+        })
+        .catch(() => {});
+    }, 8000);
+
+    // Periodic reminder chime every 25 seconds for unattended pending orders
+    const pendingReminderInterval = setInterval(() => {
+      if (soundEnabled) {
+        const hasUnattendedPending = ordersRef.current.some(o => o.status === 'pending');
+        if (hasUnattendedPending) {
+          playOrderNotificationSound(0.8);
+        }
+      }
+    }, 25000);
+
+    return () => {
+      unsubscribeFirestore();
+      unsubscribeLocal();
+      clearInterval(apiPollInterval);
+      clearInterval(pendingReminderInterval);
+    };
+  }, [selectedBiz?.id, soundEnabled, currentUser?.uid, isAdmin]);
+
+  // Order status updater
+  const handleUpdateOrderStatus = async (orderId: string, newStatus: 'pending' | 'processing' | 'completed' | 'cancelled') => {
+    const targetOrder = orders.find(o => o.id === orderId);
+    if (targetOrder) {
+      const updateData: any = { status: newStatus };
+      if (newStatus === 'completed') {
+        updateData.completedAt = Date.now();
+      }
+      const updated = { ...targetOrder, ...updateData };
+      saveLocalOrder(updated);
+      broadcastOrderUpdate(updated);
+      setOrders(prev => prev.map(o => o.id === orderId ? updated : o));
+
+      try {
+        if (db) {
+          await updateDoc(doc(db, 'orders', orderId), updateData);
+        }
+      } catch (error) {
+        console.warn("Firestore status update notice:", error);
+      }
+    }
+  };
+
+  // Order deletion handler
+  const executeDeleteOrder = async () => {
+    if (!deleteConfirmOrderId) return;
+    setIsDeletingOrder(true);
+    const orderId = deleteConfirmOrderId;
+    try {
+      setOrders(prev => prev.filter(o => o.id !== orderId));
+      if (db) {
+        await deleteDoc(doc(db, 'orders', orderId));
+      }
+      setDeleteConfirmOrderId(null);
+    } catch (error) {
+      console.warn("Order deletion notice:", error);
+    } finally {
+      setIsDeletingOrder(false);
+    }
+  };
+
+  // Toggle dish stock availability
+  const handleToggleItemAvailability = async (itemId: string, currentStatus: boolean) => {
+    if (!selectedBiz) return;
+    setUpdatingStockId(itemId);
+    try {
+      const updatedMenuItems = (selectedBiz.menuItems || []).map((item) => {
+        if (String(item.id) === String(itemId)) {
+          return { ...item, isAvailable: !currentStatus };
+        }
+        return item;
+      });
+
+      const cleanItems = JSON.parse(JSON.stringify(updatedMenuItems));
+
+      // 1. Direct client Firestore update
+      try {
+        const bizDocRef = doc(db, 'businesses', selectedBiz.id);
+        await updateDoc(bizDocRef, {
+          menuItems: cleanItems
+        });
+      } catch (clientErr) {
+        console.warn("Client updateDoc notice, persisting via server sync:", clientErr);
+        const token = await auth.currentUser?.getIdToken();
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        await fetch('/api/business/menu-stock', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            businessId: selectedBiz.id,
+            menuItems: cleanItems
+          })
+        }).catch(() => {});
+      }
+
+      // 2. Guaranteed server-side persistence with merge
+      auth.currentUser?.getIdToken().then(token => {
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        fetch('/api/business/menu-stock', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            businessId: selectedBiz.id,
+            menuItems: cleanItems
+          })
+        }).catch(err => console.warn('Server menu-stock sync notice:', err));
+      }).catch(() => {});
+
+      // 3. Update in all runtime and persistent storage caches
+      updateBusinessMenuItemsInCache(selectedBiz.id, cleanItems);
+
+      // 4. Update local state
+      setSelectedBusiness(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          menuItems: cleanItems
+        };
+      });
+
+      setAvailableBusinesses(prev => {
+        return prev.map(b => {
+          if (b.id === selectedBiz.id) {
+            return { ...b, menuItems: cleanItems };
+          }
+          return b;
+        });
+      });
+
+    } catch (error) {
+      console.error("Error updating item availability:", error);
+    } finally {
+      setUpdatingStockId(null);
+    }
+  };
 
   // Print Thermal Receipt ESC/POS Layout
   const printOrderReceipt = (order: any, business: Business | null) => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
-      alert('عذراً، يرجى تفعيل السماح بالنوافذ المنبثقة لطباعة الإيصال.');
       return;
     }
 
@@ -76,7 +491,7 @@ export default function LiveOrdersPage() {
     if (order.paymentMethod === 'cliq') paymentMethodAr = 'تحويل فوري عبر CliQ';
     else if (order.paymentMethod === 'wallet') paymentMethodAr = 'تحويل محفظة إلكترونية';
 
-    const footerMessage = business?.receiptFooterMessage || 'شكراً لزيارتكم وصحتين وعافية!';
+    const footerMessage = business?.receiptFooterMessage || 'شكراً لزيارتكم وصحتين وعافية';
 
     const itemsHtml = order.items?.map((item: any) => `
       <tr>
@@ -84,7 +499,7 @@ export default function LiveOrdersPage() {
           <div style="font-weight: bold;">${item.name}</div>
           ${item.selectedVersion ? `<div style="font-size: 10px; color: #555;">- ${item.selectedVersion.name}</div>` : ''}
           ${item.options && item.options.length > 0 ? `<div style="font-size: 10px; color: #555;">- خيارات: ${item.options.join(', ')}</div>` : ''}
-          ${item.prepTimeMinutes ? `<div style="font-size: 10px; color: #666;">⏱️ تحضير: ${item.prepTimeMinutes} دقيقة</div>` : ''}
+          ${item.prepTimeMinutes ? `<div style="font-size: 10px; color: #666;">تحضير: ${item.prepTimeMinutes} دقيقة</div>` : ''}
         </td>
         <td style="padding: 6px 0; text-align: center; font-family: monospace; border-bottom: 1px dashed #eee;">${item.quantity}</td>
         <td style="padding: 6px 0; text-align: left; font-family: monospace; border-bottom: 1px dashed #eee;">${(item.price * item.quantity).toFixed(2)}</td>
@@ -132,94 +547,41 @@ export default function LiveOrdersPage() {
             color: #000;
             background: #fff;
           }
-          .center {
-            text-align: center;
-          }
-          .bold {
-            font-weight: bold;
-          }
-          .header {
-            border-bottom: 2px dashed #000;
-            padding-bottom: 8px;
-            margin-bottom: 8px;
-          }
-          .title {
-            font-size: 16px;
-            font-weight: bold;
-            margin: 4px 0;
-          }
-          .order-info {
-            font-size: 11px;
-            margin-bottom: 8px;
-            border-bottom: 1px dashed #000;
-            padding-bottom: 6px;
-          }
-          table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 8px 0;
-          }
-          th {
-            border-bottom: 1px solid #000;
-            padding: 4px 0;
-            font-weight: bold;
-          }
-          .totals {
-            border-top: 2px dashed #000;
-            padding-top: 6px;
-            margin-top: 6px;
-          }
-          .totals-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 2px 0;
-          }
-          .grand-total {
-            font-size: 14px;
-            font-weight: bold;
-            border-top: 1px solid #000;
-            border-bottom: 1px solid #000;
-            padding: 4px 0;
-            margin-top: 4px;
-          }
-          .footer {
-            margin-top: 12px;
-            border-top: 2px dashed #000;
-            padding-top: 8px;
-            font-size: 11px;
-          }
-          @media print {
-            body {
-              width: 100%;
-              padding: 4px;
-            }
-          }
+          .center { text-align: center; }
+          .bold { font-weight: bold; }
+          .header { border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 6px; }
+          .order-id { font-size: 15px; font-weight: 900; }
+          table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+          .totals-table { width: 100%; margin-top: 8px; border-top: 1px dashed #000; padding-top: 6px; }
+          .totals-row { display: flex; justify-content: space-between; margin-bottom: 3px; }
+          .grand-total { font-size: 14px; font-weight: bold; border-top: 1px solid #000; padding-top: 4px; margin-top: 4px; }
+          .footer { border-top: 1px dashed #000; margin-top: 12px; padding-top: 8px; }
         </style>
       </head>
       <body>
         <div class="center header">
-          <div class="title">${business?.name || 'شو في بإربد؟'}</div>
-          <div style="font-size: 11px;">${business?.category || 'مطعم ومقهى'}</div>
-          ${business?.whatsapp ? `<div style="font-size: 10px;">هاتف: ${business.whatsapp}</div>` : ''}
+          <h2 style="margin: 0; font-size: 16px;">${business?.name || 'المطعم'}</h2>
+          ${business?.address ? `<p style="margin: 2px 0 0; font-size: 10px; color: #444;">${business.address}</p>` : ''}
+          ${business?.phone ? `<p style="margin: 2px 0 0; font-size: 10px; font-family: monospace;">هاتف: ${business.phone}</p>` : ''}
+          <div class="order-id" style="margin-top: 6px;">طلب #${order.shortCode || order.id}</div>
+          <div style="font-size: 10px; color: #555;">${orderDate}</div>
+          <div style="font-size: 11px; font-weight: bold; margin-top: 4px; padding: 2px 4px; border: 1px solid #000; display: inline-block;">
+            ${orderTypeHtml}
+          </div>
         </div>
 
-        <div class="order-info">
-          <div class="bold" style="font-size: 13px; text-align: center; margin-bottom: 4px;">
-            إيصال طلب ${order.shortCode ? `#${order.shortCode}` : ''}
-          </div>
-          <div>رقم الطلب: ${order.id}</div>
-          <div>تاريخ الطلب: ${orderDate}</div>
-          <div>الزبون: ${order.customerName || 'غير محدد'}</div>
-          ${order.customerPhone ? `<div>الهاتف: ${order.customerPhone}</div>` : ''}
-          <div class="bold" style="margin-top: 4px; font-size: 12px;">الحالة: ${orderTypeHtml}</div>
+        <div style="margin-bottom: 6px; font-size: 11px;">
+          <div>الزبون: <strong>${order.customerName || 'زبون محترم'}</strong></div>
+          ${order.customerPhone ? `<div>الهاتف: <span style="font-family: monospace;">${order.customerPhone}</span></div>` : ''}
+          ${order.notes ? `<div style="margin-top: 4px; padding: 4px; background: #eee; font-size: 10px;"><strong>ملاحظات:</strong> ${order.notes}</div>` : ''}
         </div>
 
         <table>
           <thead>
-            <tr>
-              <th style="text-align: right; width: 60%;">الصنف</th>
-              <th style="text-align: center; width: 15%;">الكمية</th>
-              <th style="text-align: left; width: 25%;">المجموع</th>
+            <tr style="border-bottom: 1px solid #000; font-size: 11px;">
+              <th style="text-align: right; padding-bottom: 4px;">الصنف</th>
+              <th style="text-align: center; padding-bottom: 4px; width: 30px;">العدد</th>
+              <th style="text-align: left; padding-bottom: 4px; width: 50px;">السعر</th>
             </tr>
           </thead>
           <tbody>
@@ -227,9 +589,9 @@ export default function LiveOrdersPage() {
           </tbody>
         </table>
 
-        <div class="totals">
+        <div class="totals-table">
           <div class="totals-row">
-            <span>المجموع الفرعي:</span>
+            <span>المجموع:</span>
             <span style="font-family: monospace;">${subtotal.toFixed(2)} د.أ</span>
           </div>
           ${serviceFee > 0 ? `
@@ -240,13 +602,13 @@ export default function LiveOrdersPage() {
           ` : ''}
           ${taxFee > 0 ? `
           <div class="totals-row">
-            <span>الضريبة المضافة (${taxRateVal}%):</span>
+            <span>الضريبة:</span>
             <span style="font-family: monospace;">${taxFee.toFixed(2)} د.أ</span>
           </div>
           ` : ''}
           ${tipAmount > 0 ? `
           <div class="totals-row">
-            <span>الإكرامية (Tip):</span>
+            <span>الإكرامية:</span>
             <span style="font-family: monospace;">${tipAmount.toFixed(2)} د.أ</span>
           </div>
           ` : ''}
@@ -264,7 +626,7 @@ export default function LiveOrdersPage() {
 
         <div class="center footer">
           <p style="margin: 0;">${footerMessage}</p>
-          <p style="margin: 4px 0 0; font-size: 9px; color: #666;">تم التوليد عبر منصة شو في بإربد؟</p>
+          <p style="margin: 4px 0 0; font-size: 9px; color: #666;">منصة شو في بإربد</p>
         </div>
 
         <script>
@@ -281,269 +643,21 @@ export default function LiveOrdersPage() {
     printWindow.document.close();
   };
 
-  // Instant dish stock availability modifier
-  const handleToggleItemAvailability = async (itemId: string, currentStatus: boolean) => {
-    if (!selectedBiz) return;
-    setUpdatingStockId(itemId);
-    try {
-      const updatedMenuItems = (selectedBiz.menuItems || []).map((item) => {
-        if (item.id === itemId) {
-          return { ...item, isAvailable: !currentStatus };
-        }
-        return item;
-      });
-
-      const bizDocRef = doc(db, 'businesses', selectedBiz.id);
-      await updateDoc(bizDocRef, {
-        menuItems: updatedMenuItems
-      });
-
-      setSelectedBusiness(prev => {
-        if (!prev) return null;
-        return {
-          ...prev,
-          menuItems: updatedMenuItems
-        };
-      });
-
-      setAvailableBusinesses(prev => {
-        return prev.map(b => {
-          if (b.id === selectedBiz.id) {
-            return { ...b, menuItems: updatedMenuItems };
-          }
-          return b;
-        });
-      });
-
-    } catch (error) {
-      console.error("Error updating item availability:", error);
-      alert("عذراً، فشل تحديث حالة الطبق. يرجى التحقق من اتصال الإنترنت والمحاولة لاحقاً.");
-    } finally {
-      setUpdatingStockId(null);
-    }
-  };
-
-  // Available businesses state for selecting in LiveOrdersPage
-  const [availableBusinesses, setAvailableBusinesses] = useState<Business[]>(
-    (ownedBusinesses || []).filter(isFoodAndDrinkBusiness)
-  );
-  const [selectedBiz, setSelectedBusiness] = useState<Business | null>(null);
-
-  // Dynamically calculate unique menu categories for selected business
-  const menuCategoriesCalculated = useMemo(() => {
-    if (!selectedBiz?.menuItems) return [];
-    const cats = new Set<string>();
-    selectedBiz.menuItems.forEach(item => {
-      if (item.category) cats.add(item.category);
-    });
-    return Array.from(cats);
-  }, [selectedBiz?.menuItems]);
-
-  // Filter & Search states
-  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'processing' | 'completed' | 'cancelled'>('all');
-  const [searchQuery, setSearchQuery] = useState('');
-
-  // Audio chime settings
-  const [soundEnabled, setSoundEnabled] = useState(true);
-
-  // Orders State
-  const [orders, setOrders] = useState<any[]>([]);
-  const [loadingOrders, setLoadingOrders] = useState(true);
-
-  // Previous orders ref to detect new arrivals and trigger chime
-  const prevOrdersRef = useRef<any[]>([]);
-
-  // Load owned businesses for merchant / admin
-  useEffect(() => {
-    const loadBusinesses = () => {
-      const foodBusinesses = (ownedBusinesses || []).filter(isFoodAndDrinkBusiness);
-      setAvailableBusinesses(foodBusinesses);
-      if (foodBusinesses.length > 0 && !selectedBiz) {
-        setSelectedBusiness(foodBusinesses[0]);
-      }
-    };
-
-    loadBusinesses();
-  }, [ownedBusinesses]);
-
-  // Real-time Orders Listener for selected business
-  useEffect(() => {
-    if (!selectedBiz?.id) {
-      setOrders([]);
-      setLoadingOrders(false);
-      return;
-    }
-
-    setLoadingOrders(true);
-    let unsubscribeFirestore = () => {};
-
-    // Helper to merge Firestore orders & local orders cleanly
-    const mergeAndSetOrders = (firestoreOrders: any[]) => {
-      const local = getLocalOrders(selectedBiz.id);
-      const orderMap = new Map<string, any>();
-
-      // 1. Add local orders
-      local.forEach(o => {
-        if (o.id) orderMap.set(o.id, o);
-      });
-
-      // 2. Override/add with Firestore orders (source of truth when available)
-      firestoreOrders.forEach(o => {
-        if (o.id) orderMap.set(o.id, { ...orderMap.get(o.id), ...o });
-      });
-
-      const merged = Array.from(orderMap.values());
-      merged.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-
-      // Audio chime sound & Haptic vibration when a NEW 'pending' order arrives
-      const prevOrders = prevOrdersRef.current;
-      if (soundEnabled && prevOrders.length > 0 && merged.length > prevOrders.length) {
-        const hasNewPending = merged.some(
-          fo => fo.status === 'pending' && !prevOrders.some(po => po.id === fo.id)
-        );
-        if (hasNewPending) {
-          try {
-            const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-84.wav');
-            audio.play();
-          } catch (e) {
-            console.log("Audio play blocked by browser policy:", e);
-          }
-          if (typeof window !== 'undefined' && 'vibrate' in navigator) {
-            try {
-              navigator.vibrate([150, 80, 150]);
-            } catch (e) {}
-          }
-        }
-      }
-
-      prevOrdersRef.current = merged;
-      setOrders(merged);
-      setLoadingOrders(false);
-    };
-
-    // Initialize with local storage immediately so UI is instant
-    mergeAndSetOrders([]);
-
-    // Subscribe to cross-tab / local storage live broadcasts
-    const unsubscribeLocal = subscribeToLocalOrders((updatedOrder) => {
-      if (updatedOrder && (updatedOrder.businessId === selectedBiz.id || String(updatedOrder.businessId) === String(selectedBiz.id))) {
-        setOrders(prev => {
-          const updated = [...prev];
-          const idx = updated.findIndex(o => o.id === updatedOrder.id);
-          if (idx >= 0) {
-            updated[idx] = { ...updated[idx], ...updatedOrder };
-          } else {
-            updated.unshift(updatedOrder);
-          }
-          updated.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-          return updated;
-        });
-      }
-    });
-
-    const setupOrdersListener = () => {
-      try {
-        const q = query(
-          collection(db, 'orders'),
-          where('businessId', '==', selectedBiz.id)
-        );
-
-        unsubscribeFirestore = onSnapshot(q, (snapshot) => {
-          const fetchedOrders: any[] = [];
-          snapshot.forEach((doc) => {
-            fetchedOrders.push({ id: doc.id, ...doc.data() });
-          });
-          mergeAndSetOrders(fetchedOrders);
-        }, (error) => {
-          console.warn("Firestore order listener notice (activating API fallback):", error?.message || error);
-          setLoadingOrders(false);
-          // Immediate API fallback fetch
-          fetch(`/api/orders?businessId=${encodeURIComponent(selectedBiz.id)}`)
-            .then(res => res.json())
-            .then(data => {
-              if (data?.orders) mergeAndSetOrders(data.orders);
-            })
-            .catch(() => {});
-        });
-      } catch (err) {
-        console.warn("Failed to setup orders listener:", err);
-        setLoadingOrders(false);
-      }
-    };
-
-    setupOrdersListener();
-
-    // Background safety net poll every 8 seconds
-    const apiPollInterval = setInterval(() => {
-      fetch(`/api/orders?businessId=${encodeURIComponent(selectedBiz.id)}`)
-        .then(res => res.json())
-        .then(data => {
-          if (data?.orders && data.orders.length > 0) {
-            mergeAndSetOrders(data.orders);
-          }
-        })
-        .catch(() => {});
-    }, 8000);
-
-    return () => {
-      unsubscribeFirestore();
-      unsubscribeLocal();
-      clearInterval(apiPollInterval);
-    };
-  }, [selectedBiz?.id, soundEnabled, currentUser?.uid, isAdmin]);
-
-  const handleUpdateOrderStatus = async (orderId: string, newStatus: 'pending' | 'processing' | 'completed' | 'cancelled') => {
-    // 1. Update local state immediately & broadcast locally
-    const targetOrder = orders.find(o => o.id === orderId);
-    if (targetOrder) {
-      const updateData: any = { status: newStatus };
-      if (newStatus === 'completed') {
-        updateData.completedAt = Date.now();
-      }
-      const updated = { ...targetOrder, ...updateData };
-      saveLocalOrder(updated);
-      broadcastOrderUpdate(updated);
-      setOrders(prev => prev.map(o => o.id === orderId ? updated : o));
-
-      // 2. Persist to Firestore
-      try {
-        if (db) {
-          await updateDoc(doc(db, 'orders', orderId), updateData);
-        }
-      } catch (error) {
-        console.warn("Firestore status update warning (updated locally):", error);
-      }
-    }
-  };
-
-  const handleDeleteOrder = async (orderId: string) => {
-    if (!window.confirm("هل أنت متأكد من حذف هذا الطلب نهائياً من الأرشيف؟")) return;
-    
-    // Remove locally
-    setOrders(prev => prev.filter(o => o.id !== orderId));
-    try {
-      if (db) {
-        await deleteDoc(doc(db, 'orders', orderId));
-      }
-    } catch (error) {
-      console.warn("Firestore order delete warning:", error);
-    }
-  };
-
   // Stats calculation
   const pendingCount = orders.filter(o => o.status === 'pending').length;
   const processingCount = orders.filter(o => o.status === 'processing').length;
   const completedCount = orders.filter(o => o.status === 'completed').length;
   const cancelledCount = orders.filter(o => o.status === 'cancelled').length;
 
-  // Filtered orders list based on status and search query
+  // Filtered & Sorted orders list
   const filteredOrders = useMemo(() => {
-    return orders.filter(order => {
-      // Status filter
+    let result = orders.filter(order => {
       if (statusFilter !== 'all' && order.status !== statusFilter) {
         return false;
       }
-      // Search query filter
+      if (orderTypeFilter !== 'all' && order.orderType !== orderTypeFilter) {
+        return false;
+      }
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const idMatch = (order.id || '').toLowerCase().includes(q);
@@ -558,95 +672,127 @@ export default function LiveOrdersPage() {
       }
       return true;
     });
-  }, [orders, statusFilter, searchQuery]);
 
-  // Render if no businesses are registered or available in platform
+    if (sortBy === 'oldest') {
+      result.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+    } else if (sortBy === 'highest') {
+      result.sort((a, b) => (b.totalPrice || 0) - (a.totalPrice || 0));
+    } else {
+      result.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    }
+
+    return result;
+  }, [orders, statusFilter, orderTypeFilter, searchQuery, sortBy]);
+
+  // Unique menu categories for stock manager
+  const menuCategories = useMemo(() => {
+    if (!selectedBiz?.menuItems) return [];
+    const cats = new Set<string>();
+    selectedBiz.menuItems.forEach(item => {
+      if (item.category) cats.add(item.category);
+    });
+    return Array.from(cats);
+  }, [selectedBiz?.menuItems]);
+
   if (availableBusinesses.length === 0) {
     return (
       <div className="min-h-screen bg-stone-50 flex flex-col items-center justify-center p-4 text-center" dir="rtl">
-        <div className="p-5 bg-amber-50 border border-amber-100 rounded-3xl text-amber-600 mb-5 max-w-sm">
-          <AlertTriangle className="h-12 w-12 mx-auto animate-bounce mb-2" />
-          <h3 className="text-base font-black text-stone-800">أنت لا تملك منشأة مسجلة حالياً!</h3>
-          <p className="text-xs text-stone-500 mt-1 leading-relaxed">
-            هذه الصفحة مخصصة حصرياً لأصحاب المطاعم، المقاهي، ومحلات المأكولات والمشروبات لاستقبال طلبات الزبائن والمنيو الحية في إربد.
+        <div className="p-6 bg-amber-50 border border-amber-200 rounded-3xl text-amber-800 mb-5 max-w-md">
+          <AlertTriangle className="h-10 w-10 mx-auto text-amber-600 mb-3" />
+          <h3 className="text-base font-black text-stone-900">لا توجد منشأة طعام ومشروبات مسجلة</h3>
+          <p className="text-xs text-stone-600 mt-1.5 leading-relaxed font-bold">
+            هذه الشاشة مخصصة لأصحاب المطاعم، المقاهي، ومحلات المأكولات والمشروبات لإدارة الطلبات المباشرة وقائمة الطعام.
           </p>
         </div>
         <Link 
           to="/profile" 
-          className="px-6 py-3.5 bg-[#1a4d2e] hover:bg-[#123a24] text-white text-xs font-black rounded-2xl transition-all shadow-md inline-flex items-center gap-2 cursor-pointer active:scale-95"
+          className="px-6 py-3 bg-[#1a4d2e] hover:bg-[#123a24] text-white text-xs font-black rounded-xl transition-all shadow-sm inline-flex items-center gap-2 cursor-pointer"
         >
           <ArrowRight className="h-4 w-4" />
-          <span>العودة لملفي الشخصي</span>
+          <span>العودة للملف الشخصي</span>
         </Link>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#fafaf8] pb-28 text-stone-800 font-sans selection:bg-emerald-100" dir="rtl">
+    <div className="min-h-screen bg-[#f8f9fa] pb-24 text-stone-800 font-sans selection:bg-emerald-100" dir="rtl">
       
-      {/* Top Mobile-Friendly Sticky Header */}
-      <header className="bg-white/95 backdrop-blur-md border-b border-stone-200 sticky top-0 z-40 shadow-xs">
-        <div className="max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 py-2.5 sm:py-3.5 flex items-center justify-between gap-2.5">
+      {/* Top Header */}
+      <header className="bg-white border-b border-stone-200 sticky top-0 z-40 shadow-2xs">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-3">
           
-          {/* Back button & Page Title */}
-          <div className="flex items-center gap-2.5 min-w-0">
+          {/* Back button & Title */}
+          <div className="flex items-center gap-3 min-w-0">
             <Link 
               to="/profile"
-              className="p-2 sm:p-2.5 bg-stone-100 hover:bg-stone-200 active:bg-stone-300 text-stone-700 rounded-xl transition-all shrink-0 cursor-pointer"
+              className="p-2 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl transition-all shrink-0 cursor-pointer"
               title="العودة للملف الشخصي"
-              aria-label="الرجوع"
             >
-              <ArrowRight className="h-4.5 w-4.5 sm:h-5 sm:w-5" />
+              <ArrowRight className="h-4 w-4" />
             </Link>
             
             <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-sm sm:text-lg font-black text-stone-900 truncate tracking-tight">
+              <div className="flex items-center gap-2">
+                <h1 className="text-base sm:text-lg font-black text-stone-900 truncate">
                   لوحة استقبال الطلبات الحية
                 </h1>
-                <span className="inline-flex items-center gap-1 bg-emerald-600 text-white text-[9px] sm:text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider shadow-2xs">
-                  <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span>
-                  مباشر
+                <span className="inline-flex items-center gap-1.5 bg-emerald-600 text-white text-[10px] font-black px-2.5 py-0.5 rounded-full">
+                  <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
+                  <span>اتصال حي</span>
                 </span>
               </div>
-              <p className="text-[10px] text-stone-400 font-bold hidden sm:block truncate">
-                إدارة واستقبال طلبات الزبائن والمنيو الرقمي في الوقت الفعلي
+              <p className="text-xs text-stone-500 font-bold hidden sm:block truncate">
+                {selectedBiz?.name ? `الفرع المباشر: ${selectedBiz.name}` : 'متابعة الطلبات المباشرة'}
               </p>
             </div>
           </div>
 
-          {/* Quick Action Buttons */}
-          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+          {/* Action Toolbar */}
+          <div className="flex items-center gap-2 shrink-0">
             
-            {/* Audio Toggle Button */}
-            <button
-              type="button"
-              onClick={() => setSoundEnabled(!soundEnabled)}
-              className={`p-2 sm:px-3 sm:py-2 rounded-xl border transition-all text-xs font-bold flex items-center gap-1.5 cursor-pointer active:scale-95 ${
-                soundEnabled 
-                  ? 'bg-emerald-50 border-emerald-200 text-emerald-800' 
-                  : 'bg-stone-100 border-stone-200 text-stone-500'
-              }`}
-              title={soundEnabled ? "كتم صوت التنبيهات" : "تفعيل صوت التنبيهات"}
-              aria-label="تبديل التنبيهات الصوتية"
-            >
-              {soundEnabled ? (
-                <Volume2 className="h-4 w-4 sm:h-4.5 sm:w-4.5 text-emerald-700" />
-              ) : (
-                <VolumeX className="h-4 w-4 sm:h-4.5 sm:w-4.5 text-stone-400" />
-              )}
-              <span className="hidden md:inline text-[11px] font-black">{soundEnabled ? "الصوت مفعّل" : "الصوت مكتوم"}</span>
-            </button>
+            {/* Audio Toggle & Test Controls */}
+            <div className="flex items-center gap-1 bg-stone-100 p-1 rounded-xl border border-stone-200">
+              <button
+                type="button"
+                onClick={toggleSound}
+                className={`px-2.5 py-1.5 rounded-lg border transition-all text-xs font-black flex items-center gap-1.5 cursor-pointer ${
+                  soundEnabled 
+                    ? 'bg-emerald-700 text-white border-emerald-800 shadow-2xs' 
+                    : 'bg-stone-200 border-stone-300 text-stone-600'
+                }`}
+                title={soundEnabled ? "كتم صوت التنبيهات" : "تفعيل صوت التنبيهات"}
+              >
+                {soundEnabled ? (
+                  <Volume2 className="h-3.5 w-3.5" />
+                ) : (
+                  <VolumeX className="h-3.5 w-3.5" />
+                )}
+                <span className="hidden md:inline text-[11px]">{soundEnabled ? "الرنة مفعّلة" : "مكتوم"}</span>
+              </button>
 
-            {/* Merchant QR Scanner Quick Shortcut */}
+              {soundEnabled && (
+                <button
+                  type="button"
+                  onClick={handleTestSound}
+                  disabled={soundTesting}
+                  className="px-2 py-1.5 rounded-lg bg-white hover:bg-emerald-50 text-emerald-800 text-[11px] font-black transition-all flex items-center gap-1 cursor-pointer border border-stone-200 shadow-2xs disabled:opacity-50"
+                  title="تجربة صوت رنة التنبيه"
+                >
+                  <BellRing className={`h-3.5 w-3.5 text-emerald-700 ${soundTesting ? 'animate-bounce text-emerald-800' : ''}`} />
+                  <span className="hidden sm:inline">{soundTesting ? "جارِ الفحص..." : "تجربة الرنة"}</span>
+                </button>
+              )}
+            </div>
+
+            {/* Merchant QR Scanner Shortcut */}
             <Link
               to="/merchant/scanner"
-              className="p-2 sm:px-3 sm:py-2 bg-stone-900 hover:bg-stone-950 active:bg-black text-white rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer active:scale-95"
-              title="فتح ماسح رمز QR للطلبات والكودات"
+              className="p-2 sm:px-3 sm:py-2 bg-stone-900 hover:bg-black text-white rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer"
+              title="ماسح رمز QR للطلبات"
             >
-              <QrCode className="h-4 w-4 sm:h-4.5 sm:w-4.5 text-cyan-300" />
-              <span className="hidden sm:inline text-[11px]">ماسح QR</span>
+              <QrCode className="h-4 w-4 text-emerald-300" />
+              <span className="hidden sm:inline text-xs">ماسح QR</span>
             </Link>
 
             {/* Public Menu View Button */}
@@ -655,12 +801,12 @@ export default function LiveOrdersPage() {
                 href={`/business/${selectedBiz.id}/menu-offers`}
                 target="_blank"
                 rel="noreferrer"
-                className="p-2 sm:px-3 sm:py-2 bg-stone-100 hover:bg-stone-200 active:bg-stone-300 border border-stone-200 text-stone-700 text-xs font-black rounded-xl transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
-                title="معاينة صفحة المنيو للزبائن"
+                className="p-2 sm:px-3 sm:py-2 bg-stone-100 hover:bg-stone-200 border border-stone-200 text-stone-700 text-xs font-black rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                title="معاينة صفحة المنيو"
               >
-                <Store className="h-4 w-4 sm:h-4.5 sm:w-4.5 text-[#1a4d2e]" />
-                <span className="hidden lg:inline text-[11px]">معاينة المنيو</span>
-                <ExternalLink className="h-3.5 w-3.5 hidden sm:inline text-stone-400" />
+                <Store className="h-4 w-4 text-[#1a4d2e]" />
+                <span className="hidden lg:inline text-xs">صفحة المنيو</span>
+                <ExternalLink className="h-3 w-3 text-stone-400" />
               </a>
             )}
           </div>
@@ -669,15 +815,43 @@ export default function LiveOrdersPage() {
       </header>
 
       {/* Main Container */}
-      <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 mt-4 sm:mt-6 space-y-4 sm:space-y-6">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 space-y-4">
         
-        {/* Store Selector (if multi-store merchant) */}
+        {/* Browser Audio Unlock Banner if Autoplay Blocked */}
+        {soundEnabled && !isAudioActive && (
+          <div 
+            onClick={handleEnableAudio}
+            role="button"
+            tabIndex={0}
+            className="bg-amber-50 border border-amber-300 text-amber-900 p-3 sm:p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs cursor-pointer hover:bg-amber-100/70 transition-all text-right"
+          >
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-amber-500 text-white rounded-xl shadow-2xs shrink-0">
+                <BellRing className="h-4 w-4" />
+              </div>
+              <div>
+                <h4 className="text-xs sm:text-sm font-black text-amber-950">
+                  انقر هنا لتفعيل جرس ورنة التنبيه الصوتي في المتصفح
+                </h4>
+                <p className="text-[11px] text-amber-800 font-bold mt-0.5">
+                  يتطلب المتصفح إذناً تشغيلياً لتشغيل الرنة الصوتية فور وصول أي طلب جديد مباشرة.
+                </p>
+              </div>
+            </div>
+            <span className="px-3.5 py-1.5 bg-amber-700 hover:bg-amber-800 text-white text-xs font-black rounded-xl shadow-2xs transition-all flex items-center gap-1.5 self-end sm:self-center shrink-0">
+              <Volume2 className="h-3.5 w-3.5" />
+              <span>تفعيل التنبيه الصوتي الآن</span>
+            </span>
+          </div>
+        )}
+
+        {/* Multi-Branch Selector if user has multiple food businesses */}
         {availableBusinesses.length > 1 && (
-          <div className="bg-white border border-stone-200/80 p-3 sm:p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-xs text-right">
+          <div className="bg-white border border-stone-200 p-3 sm:p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-2xs text-right">
             <div>
-              <span className="text-[11px] sm:text-xs font-black text-stone-500 block">اختر الفرع / المنشأة:</span>
-              <p className="text-[10px] text-stone-400 font-bold mt-0.5">
-                الفرع الحالي: <strong className="text-emerald-800 font-black">{selectedBiz?.name || 'غير محدد'}</strong>
+              <span className="text-xs font-black text-stone-500 block">اختر الفرع أو المنشأة:</span>
+              <p className="text-xs text-stone-700 font-bold mt-0.5">
+                الفرع النشط حالياً: <strong className="text-emerald-900">{selectedBiz?.name}</strong>
               </p>
             </div>
             <div className="relative w-full sm:w-64">
@@ -687,7 +861,7 @@ export default function LiveOrdersPage() {
                   const target = availableBusinesses.find(b => b.id === e.target.value);
                   if (target) setSelectedBusiness(target);
                 }}
-                className="appearance-none bg-stone-50 hover:bg-stone-100 active:bg-stone-200 border border-stone-200 text-stone-800 text-xs sm:text-sm font-black rounded-xl pl-8 pr-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 cursor-pointer w-full"
+                className="appearance-none bg-stone-50 hover:bg-stone-100 border border-stone-200 text-stone-800 text-xs sm:text-sm font-black rounded-xl pl-8 pr-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 cursor-pointer w-full"
               >
                 {availableBusinesses.map(b => (
                   <option key={b.id} value={b.id}>{b.name}</option>
@@ -700,21 +874,21 @@ export default function LiveOrdersPage() {
           </div>
         )}
 
-        {/* 🧭 VIEW NAVIGATOR */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 p-1.5 bg-stone-100 rounded-2xl border border-stone-200/90 w-full" dir="rtl">
+        {/* Primary View Switch Tabs */}
+        <div className="flex items-center gap-1.5 p-1.5 bg-stone-100 rounded-2xl border border-stone-200 w-full" dir="rtl">
           <button
             type="button"
             onClick={() => {
               setActiveView('orders');
-              setSearchQuery(''); // Clear stock search query
+              setSearchQuery('');
             }}
-            className={`flex-1 flex items-center justify-center gap-2.5 px-4 py-3 rounded-xl font-black text-xs sm:text-sm transition-all cursor-pointer ${
+            className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all cursor-pointer ${
               activeView === 'orders'
-                ? 'bg-white text-emerald-900 shadow-xs border border-stone-200 ring-1 ring-black/5'
-                : 'text-stone-600 hover:text-stone-900 hover:bg-stone-200/60'
+                ? 'bg-white text-emerald-900 shadow-2xs border border-stone-200/80'
+                : 'text-stone-600 hover:text-stone-900'
             }`}
           >
-            <Clock className="h-4 w-4 text-emerald-600" />
+            <Clock className="h-4 w-4 text-emerald-700" />
             <span>لوحة استقبال الطلبات الحية ({orders.length})</span>
           </button>
 
@@ -722,61 +896,59 @@ export default function LiveOrdersPage() {
             type="button"
             onClick={() => {
               setActiveView('stock');
-              setSearchQuery(''); // Clear orders search query
+              setSearchQuery('');
             }}
-            className={`flex-1 flex items-center justify-center gap-2.5 px-4 py-3 rounded-xl font-black text-xs sm:text-sm transition-all cursor-pointer ${
+            className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all cursor-pointer ${
               activeView === 'stock'
-                ? 'bg-white text-amber-900 shadow-xs border border-stone-200 ring-1 ring-black/5'
-                : 'text-stone-600 hover:text-stone-900 hover:bg-stone-200/60'
+                ? 'bg-white text-amber-950 shadow-2xs border border-stone-200/80'
+                : 'text-stone-600 hover:text-stone-900'
             }`}
           >
             <Utensils className="h-4 w-4 text-amber-600" />
-            <span>النفاد السريع للأطباق والمكونات ({selectedBiz?.menuItems?.length || 0})</span>
+            <span>إدارة توفر أطباق المنيو ({selectedBiz?.menuItems?.length || 0})</span>
           </button>
         </div>
 
         {activeView === 'stock' ? (
-          <div className="space-y-6 text-right animate-in fade-in" dir="rtl">
-            {/* Header / Intro Card */}
-            <div className="bg-gradient-to-r from-amber-500/10 via-amber-600/5 to-amber-500/10 border border-amber-200 p-5 rounded-3xl shadow-3xs">
-              <h3 className="font-black text-amber-950 text-xs sm:text-sm flex items-center gap-2">
-                <Utensils className="h-4.5 w-4.5 text-amber-600 animate-pulse" />
-                <span>شاشة التحكم السريع بنفاد الأطباق والمكونات</span>
-              </h3>
-              <p className="text-[11px] text-stone-600 mt-1.5 leading-relaxed font-bold">
-                بضغطة زر واحدة، يمكنك إيقاف استقبال طلبات أي صنف أو وجبة في منيو الزبائن فورياً عند نفاد المكونات من مطبخك، أو إعادة تفعيله بمجرد توفره مجدداً. التعديلات تظهر مباشرةً للزبائن.
-              </p>
+          /* View 2: Dish Stock & Availability Modifier */
+          <div className="space-y-4 text-right animate-in fade-in" dir="rtl">
+            <div className="bg-white border border-stone-200 p-4 rounded-2xl shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="font-black text-stone-900 text-sm flex items-center gap-2">
+                  <Utensils className="h-4 w-4 text-amber-600" />
+                  <span>التحكم السريع بتوفر وجبات وأطباق المنيو</span>
+                </h3>
+                <p className="text-xs text-stone-500 font-bold mt-1">
+                  يمكنك إيقاف استقبال الطلبات لأي صنف فور نفاد مكوناته من المطبخ، وتظهر الحالة مباشرة للزبائن في المنيو.
+                </p>
+              </div>
+
+              {/* Search bar inside stock */}
+              <div className="relative w-full sm:w-64 shrink-0">
+                <input
+                  type="text"
+                  placeholder="ابحث عن طبق بالاسم..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-stone-50 border border-stone-200 focus:border-amber-500 rounded-xl pr-9 pl-3 py-2 text-xs font-bold text-stone-800 placeholder:text-stone-400 outline-none transition-all"
+                />
+                <Search className="h-4 w-4 text-stone-400 absolute top-1/2 -translate-y-1/2 right-3 pointer-events-none" />
+              </div>
             </div>
 
-            {/* Selected Store Status Card */}
             {(!selectedBiz?.menuItems || selectedBiz.menuItems.length === 0) ? (
-              <div className="bg-white rounded-3xl border border-stone-200 p-12 text-center space-y-3 shadow-xs">
-                <div className="w-12 h-12 bg-stone-100 rounded-2xl flex items-center justify-center mx-auto text-stone-400 border border-stone-150">
-                  <Utensils className="h-6 w-6 text-stone-400" />
-                </div>
-                <h4 className="font-black text-stone-800 text-xs sm:text-sm">لا توجد وجبات أو أصناف مدرجة في منيو هذا المحل</h4>
-                <p className="text-[11px] text-stone-500 leading-relaxed max-w-sm mx-auto font-medium">
-                  قم بإضافة وجبات المنيو أولاً من صفحة تعديل المحل في لوحة التحكم لتتمكن من التحكم السريع بمخزونها هنا.
+              <div className="bg-white rounded-2xl border border-stone-200 p-10 text-center space-y-2 shadow-2xs">
+                <Utensils className="h-8 w-8 text-stone-400 mx-auto" />
+                <h4 className="font-black text-stone-800 text-sm">لا توجد أطباق مسجلة في منيو هذا المحل</h4>
+                <p className="text-xs text-stone-500 font-bold max-w-sm mx-auto">
+                  قم بإضافة وجبات المنيو أولاً من صفحة تعديل المحل في لوحة التحكم.
                 </p>
               </div>
             ) : (
-              <div className="space-y-8">
-                {/* Search in stock */}
-                <div className="relative max-w-md">
-                  <input
-                    type="text"
-                    placeholder="ابحث عن طبق أو صنف بالاسم..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full bg-white border border-stone-200 focus:border-amber-500 rounded-2xl pr-10 pl-8 py-2.5 text-xs font-bold text-stone-800 placeholder:text-stone-400 outline-none transition-all shadow-3xs"
-                  />
-                  <Search className="h-4.5 w-4.5 text-stone-400 absolute top-1/2 -translate-y-1/2 right-3.5 pointer-events-none" />
-                </div>
-
-                {/* Group items by categories */}
-                {(menuCategoriesCalculated.length === 0 ? ['أصناف المنيو'] : menuCategoriesCalculated).map(catName => {
+              <div className="space-y-6">
+                {(menuCategories.length === 0 ? ['أصناف المنيو'] : menuCategories).map(catName => {
                   const catItems = (selectedBiz?.menuItems || []).filter(item => {
-                    const matchesCategory = menuCategoriesCalculated.length === 0 || item.category === catName;
+                    const matchesCategory = menuCategories.length === 0 || item.category === catName;
                     const matchesSearch = !searchQuery || item.name.toLowerCase().includes(searchQuery.toLowerCase());
                     return matchesCategory && matchesSearch;
                   });
@@ -785,49 +957,50 @@ export default function LiveOrdersPage() {
 
                   return (
                     <div key={catName} className="space-y-3">
-                      <div className="flex items-center gap-2 border-r-4 border-amber-500 pr-3">
-                        <h4 className="font-black text-xs sm:text-sm text-stone-900">{catName}</h4>
-                        <span className="text-[11px] text-stone-400 font-bold">({catItems.length} صنف)</span>
+                      <div className="flex items-center gap-2 border-r-3 border-amber-500 pr-2.5">
+                        <h4 className="font-black text-sm text-stone-900">{catName}</h4>
+                        <span className="text-xs text-stone-400 font-bold">({catItems.length})</span>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-5">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                         {catItems.map((item) => {
-                          const isAvailable = item.isAvailable !== false; // defaults to true
+                          const isAvailable = item.isAvailable !== false;
                           const isUpdating = updatingStockId === item.id;
                           return (
                             <div 
                               key={item.id} 
-                              className={`bg-white rounded-2xl border p-4 flex items-center justify-between gap-4 transition-all hover:shadow-xs ${
-                                isAvailable ? 'border-stone-200' : 'border-rose-200 bg-rose-50/10'
+                              className={`bg-white rounded-xl border p-3 flex items-center justify-between gap-3 transition-all shadow-2xs ${
+                                isAvailable ? 'border-stone-200' : 'border-rose-200 bg-rose-50/20'
                               }`}
                             >
-                              <div className="flex items-center gap-3 min-w-0">
+                              <div className="flex items-center gap-2.5 min-w-0">
                                 {item.imageUrl ? (
                                   <img 
                                     src={item.imageUrl} 
                                     alt={item.name} 
-                                    className={`w-14 h-14 rounded-xl object-cover shrink-0 border border-stone-200 ${!isAvailable && 'grayscale brightness-90'}`} 
+                                    className={`w-12 h-12 rounded-lg object-cover shrink-0 border border-stone-200 ${!isAvailable ? 'grayscale opacity-75' : ''}`} 
                                   />
                                 ) : (
-                                  <div className="w-14 h-14 rounded-xl bg-stone-100 text-stone-400 border border-stone-200 flex items-center justify-center shrink-0 font-bold text-xs">
-                                    🍽️
+                                  <div className="w-12 h-12 rounded-lg bg-stone-100 text-stone-400 border border-stone-200 flex items-center justify-center shrink-0">
+                                    <Utensils className="h-5 w-5 text-stone-400" />
                                   </div>
                                 )}
                                 <div className="min-w-0">
-                                  <h5 className="font-black text-xs sm:text-sm text-stone-900 truncate">{item.name}</h5>
-                                  <span className="text-[11px] font-mono text-emerald-800 font-black block mt-0.5">{parseFloat(item.price).toFixed(2)} د.أ</span>
+                                  <h5 className="font-black text-xs text-stone-900 truncate">{item.name}</h5>
+                                  <span className="text-xs font-mono text-emerald-800 font-bold block mt-0.5">
+                                    {parseFloat(item.price).toFixed(2)} د.أ
+                                  </span>
                                 </div>
                               </div>
 
-                              {/* Toggle stock button */}
                               <button
                                 type="button"
                                 disabled={isUpdating}
                                 onClick={() => handleToggleItemAvailability(item.id, isAvailable)}
-                                className={`px-4 py-2.5 rounded-xl text-[10px] sm:text-xs font-black transition-all cursor-pointer select-none active:scale-95 border flex items-center gap-1.5 min-w-[110px] justify-center ${
+                                className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer border flex items-center gap-1 shrink-0 ${
                                   isAvailable 
-                                    ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-250 shadow-3xs' 
-                                    : 'bg-rose-50 hover:bg-rose-100 text-rose-800 border-rose-250'
+                                    ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-200' 
+                                    : 'bg-rose-50 hover:bg-rose-100 text-rose-800 border-rose-200'
                                 }`}
                               >
                                 {isUpdating ? (
@@ -835,7 +1008,7 @@ export default function LiveOrdersPage() {
                                 ) : (
                                   isAvailable ? <Check className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />
                                 )}
-                                <span>{isAvailable ? 'متوفر حالياً' : 'غير متوفر'}</span>
+                                <span>{isAvailable ? 'متوفر' : 'غير متوفر'}</span>
                               </button>
                             </div>
                           );
@@ -848,484 +1021,594 @@ export default function LiveOrdersPage() {
             )}
           </div>
         ) : (
+          /* View 1: Live Orders Dashboard */
           <>
-            {/* Real-Time Statistics & Quick Filter Buttons */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-4 text-right">
-          
-          {/* Card 1: All Orders */}
-          <button
-            type="button"
-            onClick={() => setStatusFilter('all')}
-            className={`p-3.5 sm:p-4 rounded-2xl border text-right transition-all cursor-pointer active:scale-[0.98] ${
-              statusFilter === 'all'
-                ? 'bg-stone-900 text-white border-stone-900 shadow-md ring-2 ring-stone-900/10'
-                : 'bg-white text-stone-800 border-stone-200/80 shadow-xs hover:border-stone-300'
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <span className={`text-[10px] sm:text-xs font-black ${statusFilter === 'all' ? 'text-stone-300' : 'text-stone-500'}`}>
-                الكل اليوم
-              </span>
-              <ShoppingBag className={`h-4 w-4 ${statusFilter === 'all' ? 'text-stone-300' : 'text-stone-400'}`} />
-            </div>
-            <span className="text-xl sm:text-2xl font-black mt-1 block tracking-tight">{orders.length}</span>
-          </button>
-
-          {/* Card 2: Pending (⏳) */}
-          <button
-            type="button"
-            onClick={() => setStatusFilter('pending')}
-            className={`p-3.5 sm:p-4 rounded-2xl border text-right transition-all cursor-pointer active:scale-[0.98] ${
-              statusFilter === 'pending'
-                ? 'bg-amber-500 text-white border-amber-500 shadow-md ring-2 ring-amber-500/20'
-                : 'bg-amber-50/70 text-amber-950 border-amber-200/80 shadow-xs hover:border-amber-300'
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <span className={`text-[10px] sm:text-xs font-black ${statusFilter === 'pending' ? 'text-amber-100' : 'text-amber-700'}`}>
-                قيد الانتظار
-              </span>
-              <Clock className={`h-4 w-4 ${statusFilter === 'pending' ? 'text-amber-100 animate-spin' : 'text-amber-500'}`} />
-            </div>
-            <div className="flex items-baseline gap-1.5 mt-1">
-              <span className="text-xl sm:text-2xl font-black tracking-tight">{pendingCount}</span>
-              {pendingCount > 0 && (
-                <span className={`text-[9px] font-black px-1.5 py-0.2 rounded-md animate-pulse ${
-                  statusFilter === 'pending' ? 'bg-white text-amber-600' : 'bg-amber-200 text-amber-900'
-                }`}>
-                  جديد
-                </span>
-              )}
-            </div>
-          </button>
-
-          {/* Card 3: Processing (👨‍🍳) */}
-          <button
-            type="button"
-            onClick={() => setStatusFilter('processing')}
-            className={`p-3.5 sm:p-4 rounded-2xl border text-right transition-all cursor-pointer active:scale-[0.98] ${
-              statusFilter === 'processing'
-                ? 'bg-sky-600 text-white border-sky-600 shadow-md ring-2 ring-sky-600/20'
-                : 'bg-sky-50/70 text-sky-950 border-sky-200/80 shadow-xs hover:border-sky-300'
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <span className={`text-[10px] sm:text-xs font-black ${statusFilter === 'processing' ? 'text-sky-100' : 'text-sky-700'}`}>
-                بالمطبخ
-              </span>
-              <CookingPot className={`h-4 w-4 ${statusFilter === 'processing' ? 'text-sky-100' : 'text-sky-600'}`} />
-            </div>
-            <span className="text-xl sm:text-2xl font-black mt-1 block tracking-tight">{processingCount}</span>
-          </button>
-
-          {/* Card 4: Completed (🎉) */}
-          <button
-            type="button"
-            onClick={() => setStatusFilter('completed')}
-            className={`p-3.5 sm:p-4 rounded-2xl border text-right transition-all cursor-pointer active:scale-[0.98] ${
-              statusFilter === 'completed'
-                ? 'bg-emerald-600 text-white border-emerald-600 shadow-md ring-2 ring-emerald-600/20'
-                : 'bg-emerald-50/70 text-emerald-950 border-emerald-200/80 shadow-xs hover:border-emerald-300'
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <span className={`text-[10px] sm:text-xs font-black ${statusFilter === 'completed' ? 'text-emerald-100' : 'text-emerald-700'}`}>
-                مكتملة
-              </span>
-              <CheckCircle className={`h-4 w-4 ${statusFilter === 'completed' ? 'text-emerald-100' : 'text-emerald-600'}`} />
-            </div>
-            <span className="text-xl sm:text-2xl font-black mt-1 block tracking-tight">{completedCount}</span>
-          </button>
-
-        </div>
-
-        {/* Mobile Filter & Search Toolbar */}
-        <div className="bg-white p-2.5 sm:p-3 rounded-2xl border border-stone-200/80 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
-          
-          {/* Search Box */}
-          <div className="relative flex-1">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="ابحث برقم الطلب، اسم الزبون، الهاتف، أو الطاولة..."
-              className="w-full bg-stone-50 border border-stone-200 focus:border-emerald-500 rounded-xl pr-9 pl-8 py-2 text-xs font-bold text-stone-800 placeholder:text-stone-400 outline-none transition-all"
-            />
-            <Search className="h-4 w-4 text-stone-400 absolute top-1/2 -translate-y-1/2 right-3 pointer-events-none" />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery('')}
-                className="absolute top-1/2 -translate-y-1/2 left-2.5 p-1 text-stone-400 hover:text-stone-600 cursor-pointer"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-
-          {/* Quick Segmented Filters for Mobile */}
-          <div className="flex items-center gap-1 overflow-x-auto pb-0.5 scrollbar-none">
-            <button
-              type="button"
-              onClick={() => setStatusFilter('all')}
-              className={`px-3 py-1.5 rounded-xl text-[11px] font-black shrink-0 transition-all cursor-pointer ${
-                statusFilter === 'all'
-                  ? 'bg-stone-900 text-white shadow-2xs'
-                  : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-              }`}
-            >
-              الكل ({orders.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setStatusFilter('pending')}
-              className={`px-3 py-1.5 rounded-xl text-[11px] font-black shrink-0 transition-all cursor-pointer ${
-                statusFilter === 'pending'
-                  ? 'bg-amber-500 text-white shadow-2xs'
-                  : 'bg-amber-50 text-amber-800 hover:bg-amber-100'
-              }`}
-            >
-              انتظار ({pendingCount})
-            </button>
-            <button
-              type="button"
-              onClick={() => setStatusFilter('processing')}
-              className={`px-3 py-1.5 rounded-xl text-[11px] font-black shrink-0 transition-all cursor-pointer ${
-                statusFilter === 'processing'
-                  ? 'bg-sky-600 text-white shadow-2xs'
-                  : 'bg-sky-50 text-sky-800 hover:bg-sky-100'
-              }`}
-            >
-              تحضير ({processingCount})
-            </button>
-            <button
-              type="button"
-              onClick={() => setStatusFilter('completed')}
-              className={`px-3 py-1.5 rounded-xl text-[11px] font-black shrink-0 transition-all cursor-pointer ${
-                statusFilter === 'completed'
-                  ? 'bg-emerald-600 text-white shadow-2xs'
-                  : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
-              }`}
-            >
-              جاهز ({completedCount})
-            </button>
-          </div>
-
-        </div>
-
-        {/* Orders Listing Grid */}
-        {loadingOrders ? (
-          <div className="bg-white rounded-3xl border border-stone-200/80 p-12 text-center space-y-3 shadow-xs">
-            <div className="w-9 h-9 border-3 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-            <p className="text-xs sm:text-sm font-bold text-stone-500">جاري الاتصال وتحديث قائمة الطلبات الحية...</p>
-          </div>
-        ) : filteredOrders.length === 0 ? (
-          <div className="bg-white rounded-3xl border border-stone-200/80 p-8 sm:p-14 text-center space-y-3.5 max-w-lg mx-auto shadow-xs">
-            <div className="w-14 h-14 bg-stone-50 rounded-2xl flex items-center justify-center mx-auto text-stone-400 border border-stone-100">
-              <Utensils className="h-7 w-7 text-stone-400" />
-            </div>
-            <h4 className="font-black text-stone-800 text-sm sm:text-base">
-              {searchQuery || statusFilter !== 'all' ? 'لا توجد نتائج مطابقة للبحث أو التصفية' : 'لا توجد طلبات مسجلة اليوم حتى الآن'}
-            </h4>
-            <p className="text-[11px] sm:text-xs text-stone-500 leading-relaxed max-w-sm mx-auto">
-              {searchQuery || statusFilter !== 'all' 
-                ? 'جرب تغيير نص البحث أو اختيار تصنيف حالة آخر لإظهار بقية الطلبات.'
-                : 'عندما يقوم زبائنك بالطلب من المنيو الرقمي أو مسح QR الطاولات، ستصلك التنبيهات وتظهر الطلبات فورياً هنا!'}
-            </p>
-            {(searchQuery || statusFilter !== 'all') && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSearchQuery('');
-                  setStatusFilter('all');
-                }}
-                className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-black rounded-xl transition-all cursor-pointer"
-              >
-                إعادة ضبط التصفية
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-5 text-right">
-            {filteredOrders.map((order) => {
-              const orderDate = new Date(order.createdAt).toLocaleTimeString('ar-JO', { hour: '2-digit', minute: '2-digit' });
+            {/* KPI Status Summary Cards (Interactive Filters) */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 text-right">
               
-              // Direct WhatsApp and Phone call sanitized links
-              const rawPhone = String(order.customerPhone || '').replace(/\D/g, '');
-              const waPhone = rawPhone.startsWith('0') ? `962${rawPhone.substring(1)}` : rawPhone;
-              const waLink = `https://wa.me/${waPhone}?text=${encodeURIComponent(`مرحباً ${order.customerName || 'عزيزي الزبون'}، بخصوص طلبك رقم (${order.shortCode || order.id}) من ${selectedBiz?.name || 'المطعم'}`)}`;
-              const telLink = `tel:${order.customerPhone}`;
+              {/* Card 1: All Orders */}
+              <button
+                type="button"
+                onClick={() => setStatusFilter('all')}
+                className={`p-3.5 rounded-2xl border text-right transition-all cursor-pointer ${
+                  statusFilter === 'all'
+                    ? 'bg-stone-900 text-white border-stone-900 shadow-sm'
+                    : 'bg-white text-stone-800 border-stone-200 shadow-2xs hover:border-stone-300'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className={`text-xs font-black ${statusFilter === 'all' ? 'text-stone-300' : 'text-stone-500'}`}>
+                    إجمالي اليوم
+                  </span>
+                  <ShoppingBag className={`h-4 w-4 ${statusFilter === 'all' ? 'text-stone-300' : 'text-stone-400'}`} />
+                </div>
+                <div className="mt-1 flex items-baseline justify-between">
+                  <span className="text-xl sm:text-2xl font-black font-mono">{orders.length}</span>
+                  <span className={`text-[10px] font-bold ${statusFilter === 'all' ? 'text-stone-300' : 'text-stone-400'}`}>
+                    طلب
+                  </span>
+                </div>
+              </button>
 
-              const isPending = order.status === 'pending';
-              const isProcessing = order.status === 'processing';
-              const isCompleted = order.status === 'completed';
-              const isCancelled = order.status === 'cancelled';
+              {/* Card 2: Pending (New) */}
+              <button
+                type="button"
+                onClick={() => setStatusFilter('pending')}
+                className={`p-3.5 rounded-2xl border text-right transition-all cursor-pointer ${
+                  statusFilter === 'pending'
+                    ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
+                    : 'bg-amber-50/60 text-amber-950 border-amber-200 shadow-2xs hover:border-amber-300'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className={`text-xs font-black ${statusFilter === 'pending' ? 'text-amber-100' : 'text-amber-800'}`}>
+                    بانتظار الموافقة
+                  </span>
+                  <Clock className={`h-4 w-4 ${statusFilter === 'pending' ? 'text-amber-100' : 'text-amber-600'}`} />
+                </div>
+                <div className="mt-1 flex items-baseline justify-between">
+                  <span className="text-xl sm:text-2xl font-black font-mono">{pendingCount}</span>
+                  {pendingCount > 0 && (
+                    <span className="text-[10px] font-black bg-amber-500 text-white px-2 py-0.5 rounded-md animate-pulse">
+                      جديد
+                    </span>
+                  )}
+                </div>
+              </button>
 
-              return (
-                <div 
-                  key={order.id} 
-                  className={`rounded-2xl border p-3.5 sm:p-5 flex flex-col justify-between gap-3.5 transition-all relative overflow-hidden bg-white shadow-xs hover:shadow-md ${
-                    isPending
-                      ? 'border-amber-300 ring-2 ring-amber-300/20'
-                      : isProcessing
-                      ? 'border-sky-300 ring-2 ring-sky-300/10'
-                      : isCompleted
-                      ? 'border-emerald-200'
-                      : 'border-stone-200 opacity-75'
-                  }`}
-                >
+              {/* Card 3: In Kitchen (Processing) */}
+              <button
+                type="button"
+                onClick={() => setStatusFilter('processing')}
+                className={`p-3.5 rounded-2xl border text-right transition-all cursor-pointer ${
+                  statusFilter === 'processing'
+                    ? 'bg-sky-700 text-white border-sky-700 shadow-sm'
+                    : 'bg-sky-50/60 text-sky-950 border-sky-200 shadow-2xs hover:border-sky-300'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className={`text-xs font-black ${statusFilter === 'processing' ? 'text-sky-100' : 'text-sky-800'}`}>
+                    قيد التحضير
+                  </span>
+                  <CookingPot className={`h-4 w-4 ${statusFilter === 'processing' ? 'text-sky-100' : 'text-sky-600'}`} />
+                </div>
+                <div className="mt-1 flex items-baseline justify-between">
+                  <span className="text-xl sm:text-2xl font-black font-mono">{processingCount}</span>
+                  <span className={`text-[10px] font-bold ${statusFilter === 'processing' ? 'text-sky-200' : 'text-sky-600'}`}>
+                    بالمطبخ
+                  </span>
+                </div>
+              </button>
+
+              {/* Card 4: Completed (Ready) */}
+              <button
+                type="button"
+                onClick={() => setStatusFilter('completed')}
+                className={`p-3.5 rounded-2xl border text-right transition-all cursor-pointer ${
+                  statusFilter === 'completed'
+                    ? 'bg-emerald-700 text-white border-emerald-700 shadow-sm'
+                    : 'bg-emerald-50/60 text-emerald-950 border-emerald-200 shadow-2xs hover:border-emerald-300'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className={`text-xs font-black ${statusFilter === 'completed' ? 'text-emerald-100' : 'text-emerald-800'}`}>
+                    مكتملة وجاهزة
+                  </span>
+                  <CheckCircle2 className={`h-4 w-4 ${statusFilter === 'completed' ? 'text-emerald-100' : 'text-emerald-600'}`} />
+                </div>
+                <div className="mt-1 flex items-baseline justify-between">
+                  <span className="text-xl sm:text-2xl font-black font-mono">{completedCount}</span>
+                  <span className={`text-[10px] font-bold ${statusFilter === 'completed' ? 'text-emerald-200' : 'text-emerald-600'}`}>
+                    منجز
+                  </span>
+                </div>
+              </button>
+
+            </div>
+
+            {/* Structured Search, Filter & Sort Toolbar */}
+            <div className="bg-white p-3 rounded-2xl border border-stone-200 shadow-2xs space-y-3">
+              <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2.5">
+                
+                {/* Search Bar */}
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="ابحث برقم الطلب، اسم الزبون، الهاتف، أو الطاولة..."
+                    className="w-full bg-stone-50 border border-stone-200 focus:border-emerald-600 rounded-xl pr-9 pl-8 py-2.5 text-xs font-bold text-stone-800 placeholder:text-stone-400 outline-none transition-all"
+                  />
+                  <Search className="h-4 w-4 text-stone-400 absolute top-1/2 -translate-y-1/2 right-3 pointer-events-none" />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery('')}
+                      className="absolute top-1/2 -translate-y-1/2 left-2.5 p-1 text-stone-400 hover:text-stone-600 cursor-pointer"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Secondary Selectors (Order Type & Sorting) */}
+                <div className="flex items-center gap-2">
                   
-                  {/* Status Banner Top Accent Line */}
-                  {isPending && <div className="absolute top-0 inset-x-0 h-1.5 bg-amber-500" />}
-                  {isProcessing && <div className="absolute top-0 inset-x-0 h-1.5 bg-sky-500" />}
-                  {isCompleted && <div className="absolute top-0 inset-x-0 h-1.5 bg-emerald-500" />}
-                  {isCancelled && <div className="absolute top-0 inset-x-0 h-1.5 bg-rose-500" />}
-
-                  {/* Header Row: Order ID, Type Badge, Time & Status */}
-                  <div className="flex items-start justify-between gap-2 pt-0.5">
-                    <div className="space-y-1 min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        {/* 4-digit code or short code */}
-                        {order.shortCode ? (
-                          <span className="bg-stone-900 text-white font-mono font-black text-xs px-2 py-0.5 rounded-lg tracking-wider shadow-2xs">
-                            #{order.shortCode}
-                          </span>
-                        ) : null}
-
-                        <span className="font-mono text-stone-700 font-bold text-[11px] truncate max-w-[120px]">
-                          {order.id}
-                        </span>
-
-                        {/* Order Type Badge */}
-                        {order.orderType === 'dine_in' && (
-                          <span className="text-[10px] font-black bg-purple-50 text-purple-800 border border-purple-200 px-2 py-0.5 rounded-lg inline-flex items-center gap-1">
-                            🍽️ طاولة {order.tableNumber || 'غير محدد'}
-                          </span>
-                        )}
-                        {order.orderType === 'takeaway' && (
-                          <span className="text-[10px] font-black bg-blue-50 text-blue-800 border border-blue-200 px-2 py-0.5 rounded-lg inline-flex items-center gap-1">
-                            🥡 سفري
-                          </span>
-                        )}
-                        {order.orderType === 'delivery' && (
-                          <span className="text-[10px] font-black bg-rose-50 text-rose-800 border border-rose-200 px-2 py-0.5 rounded-lg inline-flex items-center gap-1">
-                            🚗 توصيل
-                          </span>
-                        )}
-                      </div>
-
-                      <span className="text-[10px] text-stone-400 font-bold block">
-                        {orderDate} • الدفع عند الاستلام
-                      </span>
-                    </div>
-
-                    {/* Status Pill Badge */}
-                    <div className="shrink-0">
-                      {isPending && (
-                        <span className="text-[10px] font-black bg-amber-500 text-white px-2.5 py-1 rounded-full flex items-center gap-1 shadow-2xs animate-pulse">
-                          <span className="w-1.5 h-1.5 rounded-full bg-white"></span>
-                          بانتظار الموافقة
-                        </span>
-                      )}
-                      {isProcessing && (
-                        <span className="text-[10px] font-black bg-sky-600 text-white px-2.5 py-1 rounded-full shadow-2xs flex items-center gap-1">
-                          <CookingPot className="h-3 w-3" />
-                          قيد التحضير
-                        </span>
-                      )}
-                      {isCompleted && (
-                        <span className="text-[10px] font-black bg-emerald-600 text-white px-2.5 py-1 rounded-full shadow-2xs flex items-center gap-1">
-                          <Check className="h-3 w-3" />
-                          جاهز ومكتمل
-                        </span>
-                      )}
-                      {isCancelled && (
-                        <span className="text-[10px] font-black bg-rose-600 text-white px-2.5 py-1 rounded-full shadow-2xs">
-                          ملغي
-                        </span>
-                      )}
-                    </div>
+                  {/* Order Type Filter */}
+                  <div className="relative">
+                    <select
+                      value={orderTypeFilter}
+                      onChange={(e) => setOrderTypeFilter(e.target.value as any)}
+                      className="appearance-none bg-stone-50 hover:bg-stone-100 border border-stone-200 text-stone-800 text-xs font-bold rounded-xl pr-3 pl-8 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 cursor-pointer"
+                    >
+                      <option value="all">كافة أنواع الطلبات</option>
+                      <option value="dine_in">صالة وطاولات</option>
+                      <option value="takeaway">طلب سفري</option>
+                      <option value="delivery">طلب توصيل</option>
+                    </select>
+                    <ChevronDown className="h-3.5 w-3.5 text-stone-400 absolute top-1/2 -translate-y-1/2 left-2.5 pointer-events-none" />
                   </div>
 
-                  {/* Customer Information Block + Quick Call / WhatsApp Buttons */}
-                  <div className="bg-stone-50/90 p-2.5 sm:p-3 rounded-xl border border-stone-200/60 space-y-2">
-                    <div className="flex items-center justify-between gap-2 flex-wrap">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <User className="h-3.5 w-3.5 text-stone-400 shrink-0" />
-                        <span className="text-xs font-black text-stone-900 truncate">{order.customerName}</span>
-                      </div>
-
-                      {/* Direct Phone & WhatsApp Instant Action Buttons for Mobile */}
-                      {order.customerPhone && (
-                        <div className="flex items-center gap-1.5">
-                          <a
-                            href={telLink}
-                            className="p-1.5 bg-white hover:bg-emerald-50 active:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all shadow-3xs cursor-pointer"
-                            title="اتصال هاتفي بالزبون"
-                          >
-                            <Phone className="h-3 w-3 text-emerald-600" />
-                            <span className="font-mono">{order.customerPhone}</span>
-                          </a>
-
-                          <a
-                            href={waLink}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="p-1.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-lg transition-all shadow-3xs flex items-center justify-center cursor-pointer"
-                            title="مراسلة عبر واتساب"
-                          >
-                            <MessageCircle className="h-3 w-3" />
-                          </a>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Delivery Address if any */}
-                    {order.orderType === 'delivery' && order.tableNumber && (
-                      <div className="text-[11px] font-bold text-stone-600 flex items-center gap-1 pt-0.5">
-                        <MapPin className="h-3 w-3 text-rose-500 shrink-0" />
-                        <span>العنوان: <strong className="text-stone-900">{order.tableNumber}</strong></span>
-                      </div>
-                    )}
-
-                    {/* Notes Callout */}
-                    {order.notes && (
-                      <div className="text-[11px] font-bold text-amber-900 bg-amber-50/80 p-2 rounded-lg border border-amber-200/60 flex items-start gap-1.5 leading-snug">
-                        <FileText className="h-3.5 w-3.5 text-amber-600 shrink-0 mt-0.5" />
-                        <span>ملاحظات الزبون: <strong>"{order.notes}"</strong></span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Food Items Ordered List */}
-                  <div className="space-y-1.5 pb-2 border-b border-stone-100">
-                    <span className="text-[10px] font-black text-stone-400 block">الوجبات المطلوبة:</span>
-                    <div className="space-y-1 max-h-36 overflow-y-auto pr-0.5">
-                      {order.items?.map((item: any, idx: number) => (
-                        <div key={idx} className="flex justify-between items-center text-xs font-bold text-stone-800 bg-stone-50/50 p-1.5 rounded-lg">
-                          <span className="flex items-center gap-1.5 min-w-0 flex-1">
-                            <span className="bg-white text-emerald-800 font-black min-w-[20px] h-5 rounded-md flex items-center justify-center text-[10px] border border-stone-200 shadow-3xs shrink-0">
-                              {item.quantity}×
-                            </span>
-                            <span className="truncate">{item.name}</span>
-                            {item.prepTimeMinutes ? (
-                              <span className="text-[9px] font-bold text-amber-800 bg-amber-50 border border-amber-200/60 px-1.5 py-0.2 rounded-md shrink-0 mr-1">
-                                ⏱️ {item.prepTimeMinutes} دقيقة
-                              </span>
-                            ) : null}
-                          </span>
-                          <span className="font-mono text-stone-700 text-xs font-black shrink-0 mr-2">
-                            {(item.price * item.quantity).toFixed(2)} د.أ
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Total Price & Large Mobile-Friendly Actions */}
-                  <div className="space-y-2.5 pt-1">
-                    {(() => {
-                      const maxPrep = order.items?.reduce((m: number, it: any) => Math.max(m, it.prepTimeMinutes || 0), 0) || 0;
-                      if (maxPrep === 0) return null;
-                      return (
-                        <div className="flex justify-between items-center text-[11px] font-bold text-amber-900 bg-amber-50/90 px-2.5 py-1 rounded-lg border border-amber-200/60">
-                          <span className="flex items-center gap-1">
-                            <Clock className="h-3.5 w-3.5 text-amber-600" />
-                            <span>زمن التحضير المتوقع للطلب:</span>
-                          </span>
-                          <span className="font-black text-amber-950">~{maxPrep} دقيقة</span>
-                        </div>
-                      );
-                    })()}
-
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs font-black text-stone-500">الحساب الإجمالي:</span>
-                      <span className="text-base sm:text-lg font-black text-emerald-800 font-mono">
-                        {(order.totalPrice || 0).toFixed(2)} د.أ
-                      </span>
-                    </div>
-
-                    {/* Action Buttons Matrix */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      
-                      {/* Thermal Receipt Print Button */}
-                      <button
-                        type="button"
-                        onClick={() => printOrderReceipt(order, selectedBiz)}
-                        className="w-full py-2.5 px-3 bg-stone-100 hover:bg-stone-200 active:bg-stone-300 text-stone-800 hover:text-black border border-stone-200 rounded-xl text-xs font-bold cursor-pointer active:scale-95 transition-all flex items-center justify-center gap-1.5 sm:col-span-2"
-                      >
-                        <Printer className="h-4 w-4 text-stone-600 shrink-0" />
-                        <span>طباعة إيصال حراري للطلب 🖨️</span>
-                      </button>
-                      
-                      {/* State: Pending -> Accept or Cancel */}
-                      {isPending && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => handleUpdateOrderStatus(order.id, 'processing')}
-                            className="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl text-xs font-black shadow-xs cursor-pointer active:scale-95 transition-all flex items-center justify-center gap-1.5"
-                          >
-                            <CookingPot className="h-4 w-4" />
-                            <span>قبول وإرسال للمطبخ 👨‍🍳</span>
-                          </button>
-                          
-                          <button
-                            type="button"
-                            onClick={() => handleUpdateOrderStatus(order.id, 'cancelled')}
-                            className="w-full py-2.5 px-3 bg-rose-50 hover:bg-rose-100 active:bg-rose-200 text-rose-700 border border-rose-200 rounded-xl text-xs font-black cursor-pointer active:scale-95 transition-all"
-                          >
-                            <span>إلغاء الطلب</span>
-                          </button>
-                        </>
-                      )}
-
-                      {/* State: Processing -> Mark Ready or Cancel */}
-                      {isProcessing && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => handleUpdateOrderStatus(order.id, 'completed')}
-                            className="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl text-xs font-black shadow-xs cursor-pointer active:scale-95 transition-all flex items-center justify-center gap-1.5"
-                          >
-                            <Check className="h-4 w-4 stroke-[3]" />
-                            <span>جاهز ومكتمل 🎉</span>
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => handleUpdateOrderStatus(order.id, 'cancelled')}
-                            className="w-full py-2.5 px-3 bg-stone-100 hover:bg-rose-50 text-stone-600 hover:text-rose-700 rounded-xl text-xs font-bold cursor-pointer active:scale-95 transition-all"
-                          >
-                            <span>إلغاء</span>
-                          </button>
-                        </>
-                      )}
-
-                      {/* State: Completed or Cancelled -> Delete / Archive */}
-                      {(isCompleted || isCancelled) && (
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteOrder(order.id)}
-                          className="w-full py-2.5 px-3 bg-stone-100 hover:bg-rose-50 active:bg-rose-100 text-stone-600 hover:text-rose-700 rounded-xl text-xs font-bold cursor-pointer active:scale-95 transition-all flex items-center justify-center gap-1.5 sm:col-span-2"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                          <span>أرشفة وحذف من اللوحة</span>
-                        </button>
-                      )}
-
-                    </div>
+                  {/* Sorting Filter */}
+                  <div className="relative">
+                    <select
+                      value={sortBy}
+                      onChange={(e) => setSortBy(e.target.value as any)}
+                      className="appearance-none bg-stone-50 hover:bg-stone-100 border border-stone-200 text-stone-800 text-xs font-bold rounded-xl pr-3 pl-8 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 cursor-pointer"
+                    >
+                      <option value="newest">الأحدث أولاً</option>
+                      <option value="oldest">الأقدم أولاً (الأطول انتظاراً)</option>
+                      <option value="highest">الأعلى سعراً</option>
+                    </select>
+                    <ArrowUpDown className="h-3.5 w-3.5 text-stone-400 absolute top-1/2 -translate-y-1/2 left-2.5 pointer-events-none" />
                   </div>
 
                 </div>
-              );
-            })}
-          </div>
-        )}
+
+              </div>
+
+              {/* Status Segmented Buttons Bar */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none pt-1 border-t border-stone-100">
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('all')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black shrink-0 transition-all cursor-pointer ${
+                    statusFilter === 'all'
+                      ? 'bg-stone-900 text-white shadow-2xs'
+                      : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                  }`}
+                >
+                  الكل ({orders.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('pending')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black shrink-0 transition-all cursor-pointer ${
+                    statusFilter === 'pending'
+                      ? 'bg-amber-600 text-white shadow-2xs'
+                      : 'bg-amber-50 text-amber-800 hover:bg-amber-100'
+                  }`}
+                >
+                  بانتظار الموافقة ({pendingCount})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('processing')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black shrink-0 transition-all cursor-pointer ${
+                    statusFilter === 'processing'
+                      ? 'bg-sky-700 text-white shadow-2xs'
+                      : 'bg-sky-50 text-sky-800 hover:bg-sky-100'
+                  }`}
+                >
+                  قيد التحضير ({processingCount})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('completed')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black shrink-0 transition-all cursor-pointer ${
+                    statusFilter === 'completed'
+                      ? 'bg-emerald-700 text-white shadow-2xs'
+                      : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+                  }`}
+                >
+                  مكتملة ({completedCount})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('cancelled')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black shrink-0 transition-all cursor-pointer ${
+                    statusFilter === 'cancelled'
+                      ? 'bg-rose-700 text-white shadow-2xs'
+                      : 'bg-rose-50 text-rose-800 hover:bg-rose-100'
+                  }`}
+                >
+                  ملغاة ({cancelledCount})
+                </button>
+
+                {(searchQuery || statusFilter !== 'all' || orderTypeFilter !== 'all') && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery('');
+                      setStatusFilter('all');
+                      setOrderTypeFilter('all');
+                      setSortBy('newest');
+                    }}
+                    className="px-2.5 py-1 text-[11px] font-bold text-stone-500 hover:text-stone-800 mr-auto shrink-0 cursor-pointer"
+                  >
+                    إعادة ضبط الفلاتر
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Orders Listing Grid */}
+            {loadingOrders ? (
+              <div className="bg-white rounded-2xl border border-stone-200 p-12 text-center space-y-3 shadow-2xs">
+                <div className="w-8 h-8 border-3 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                <p className="text-xs font-bold text-stone-500">جاري الاتصال وتحديث قائمة الطلبات الحية...</p>
+              </div>
+            ) : filteredOrders.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-stone-200 p-10 sm:p-14 text-center space-y-3 max-w-md mx-auto shadow-2xs">
+                <div className="w-12 h-12 bg-stone-50 rounded-2xl flex items-center justify-center mx-auto text-stone-400 border border-stone-100">
+                  <Utensils className="h-6 w-6 text-stone-400" />
+                </div>
+                <h4 className="font-black text-stone-900 text-sm">
+                  {searchQuery || statusFilter !== 'all' || orderTypeFilter !== 'all' 
+                    ? 'لا توجد طلبات مطابقة لمعايير البحث' 
+                    : 'لا توجد طلبات واردة اليوم حتى الآن'}
+                </h4>
+                <p className="text-xs text-stone-500 font-bold leading-relaxed max-w-sm mx-auto">
+                  {searchQuery || statusFilter !== 'all' || orderTypeFilter !== 'all' 
+                    ? 'يمكنك تغيير نص البحث أو خيارات التصفية لعرض بقية الطلبات.' 
+                    : 'تصل الطلبات الجديدة فورياً إلى هذه الشاشة مع رنة تنبيه صوتية عند قيام الزبائن بالطلب عبر المنيو الرقمي.'}
+                </p>
+                {(searchQuery || statusFilter !== 'all' || orderTypeFilter !== 'all') && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery('');
+                      setStatusFilter('all');
+                      setOrderTypeFilter('all');
+                    }}
+                    className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-bold rounded-xl transition-all cursor-pointer"
+                  >
+                    عرض كافة الطلبات
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-right">
+                {filteredOrders.map((order) => {
+                  const orderDate = new Date(order.createdAt).toLocaleTimeString('ar-JO', { hour: '2-digit', minute: '2-digit' });
+                  const elapsedText = getElapsedTime(order.createdAt);
+                  const typeBadge = getOrderTypeBadge(order.orderType, order.tableNumber);
+                  
+                  // Phone & WhatsApp action links
+                  const rawPhone = String(order.customerPhone || '').replace(/\D/g, '');
+                  const waPhone = rawPhone.startsWith('0') ? `962${rawPhone.substring(1)}` : rawPhone;
+                  const waLink = `https://wa.me/${waPhone}?text=${encodeURIComponent(`مرحباً ${order.customerName || 'عزيزي الزبون'}، بخصوص طلبك رقم (${order.shortCode || order.id}) من ${selectedBiz?.name || 'المطعم'}`)}`;
+                  const telLink = `tel:${order.customerPhone}`;
+
+                  const isPending = order.status === 'pending';
+                  const isProcessing = order.status === 'processing';
+                  const isCompleted = order.status === 'completed';
+                  const isCancelled = order.status === 'cancelled';
+
+                  const maxPrep = order.items?.reduce((m: number, it: any) => Math.max(m, it.prepTimeMinutes || 0), 0) || 0;
+
+                  return (
+                    <div 
+                      key={order.id} 
+                      className={`rounded-2xl border p-4 flex flex-col justify-between gap-3.5 transition-all relative overflow-hidden bg-white shadow-2xs ${
+                        isPending
+                          ? 'border-amber-300 ring-2 ring-amber-300/20'
+                          : isProcessing
+                          ? 'border-sky-300 ring-2 ring-sky-300/10'
+                          : isCompleted
+                          ? 'border-emerald-200'
+                          : 'border-stone-200 opacity-80'
+                      }`}
+                    >
+                      {/* Top Accent Strip */}
+                      {isPending && <div className="absolute top-0 inset-x-0 h-1.5 bg-amber-500" />}
+                      {isProcessing && <div className="absolute top-0 inset-x-0 h-1.5 bg-sky-600" />}
+                      {isCompleted && <div className="absolute top-0 inset-x-0 h-1.5 bg-emerald-600" />}
+                      {isCancelled && <div className="absolute top-0 inset-x-0 h-1.5 bg-rose-500" />}
+
+                      {/* Header Row: ID, Time, Elapsed & Type */}
+                      <div className="flex items-start justify-between gap-2 pt-1">
+                        <div className="space-y-1 min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="bg-stone-900 text-white font-mono font-black text-xs px-2.5 py-0.5 rounded-lg shadow-2xs">
+                              #{order.shortCode || order.id?.slice(0, 6)}
+                            </span>
+                            <span className={`text-[11px] font-black border px-2 py-0.5 rounded-lg ${typeBadge.className}`}>
+                              {typeBadge.label}
+                            </span>
+                          </div>
+
+                          <div className="text-[11px] text-stone-500 font-bold flex items-center gap-2">
+                            <span>{orderDate}</span>
+                            {elapsedText && (
+                              <span className="text-stone-400">({elapsedText})</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Status Badge */}
+                        <div className="shrink-0">
+                          {isPending && (
+                            <span className="text-[11px] font-black bg-amber-500 text-white px-2.5 py-1 rounded-full flex items-center gap-1 shadow-2xs animate-pulse">
+                              <span className="w-1.5 h-1.5 rounded-full bg-white"></span>
+                              <span>بانتظار الموافقة</span>
+                            </span>
+                          )}
+                          {isProcessing && (
+                            <span className="text-[11px] font-black bg-sky-700 text-white px-2.5 py-1 rounded-full shadow-2xs flex items-center gap-1">
+                              <CookingPot className="h-3.5 w-3.5" />
+                              <span>قيد التحضير</span>
+                            </span>
+                          )}
+                          {isCompleted && (
+                            <span className="text-[11px] font-black bg-emerald-700 text-white px-2.5 py-1 rounded-full shadow-2xs flex items-center gap-1">
+                              <Check className="h-3.5 w-3.5" />
+                              <span>جاهز ومكتمل</span>
+                            </span>
+                          )}
+                          {isCancelled && (
+                            <span className="text-[11px] font-black bg-rose-600 text-white px-2.5 py-1 rounded-full shadow-2xs">
+                              <span>ملغي</span>
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Customer Row */}
+                      <div className="bg-stone-50 p-2.5 rounded-xl border border-stone-200/80 space-y-1.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <User className="h-3.5 w-3.5 text-stone-400 shrink-0" />
+                            <span className="text-xs font-black text-stone-900 truncate">
+                              {order.customerName || 'زبون'}
+                            </span>
+                          </div>
+
+                          {order.customerPhone && (
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <a
+                                href={telLink}
+                                className="px-2 py-1 bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg text-[10px] font-black flex items-center gap-1 transition-all shadow-2xs cursor-pointer"
+                                title="اتصال هاتفي"
+                              >
+                                <Phone className="h-3 w-3 text-emerald-700" />
+                                <span className="font-mono">{order.customerPhone}</span>
+                              </a>
+
+                              <a
+                                href={waLink}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="p-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-all shadow-2xs flex items-center justify-center cursor-pointer"
+                                title="مراسلة عبر واتساب"
+                              >
+                                <MessageCircle className="h-3 w-3" />
+                              </a>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Delivery address if delivery type */}
+                        {order.orderType === 'delivery' && order.tableNumber && (
+                          <div className="text-[11px] font-bold text-stone-600 flex items-center gap-1 pt-0.5">
+                            <MapPin className="h-3 w-3 text-rose-500 shrink-0" />
+                            <span>العنوان: <strong className="text-stone-900">{order.tableNumber}</strong></span>
+                          </div>
+                        )}
+
+                        {/* Customer Notes */}
+                        {order.notes && (
+                          <div className="text-[11px] font-bold text-amber-950 bg-amber-50/90 p-2 rounded-lg border border-amber-200 flex items-start gap-1.5 leading-snug">
+                            <FileText className="h-3.5 w-3.5 text-amber-700 shrink-0 mt-0.5" />
+                            <span>ملاحظة: <strong>{order.notes}</strong></span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Items Ordered List */}
+                      <div className="space-y-1.5">
+                        <span className="text-[11px] font-black text-stone-400 block">تفاصيل الأصناف المطلوبة:</span>
+                        <div className="space-y-1 max-h-36 overflow-y-auto pr-0.5">
+                          {order.items?.map((item: any, idx: number) => (
+                            <div key={idx} className="flex justify-between items-center text-xs font-bold text-stone-800 bg-stone-50 p-2 rounded-lg border border-stone-100">
+                              <span className="flex items-center gap-1.5 min-w-0 flex-1">
+                                <span className="bg-white text-emerald-900 font-black min-w-[22px] h-5 rounded-md flex items-center justify-center text-[11px] border border-stone-200 shadow-2xs shrink-0 font-mono">
+                                  {item.quantity}×
+                                </span>
+                                <span className="truncate">{item.name}</span>
+                                {item.prepTimeMinutes ? (
+                                  <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded-md shrink-0">
+                                    {item.prepTimeMinutes} دقيقة
+                                  </span>
+                                ) : null}
+                              </span>
+                              <span className="font-mono text-stone-800 text-xs font-black shrink-0 mr-2">
+                                {(item.price * item.quantity).toFixed(2)} د.أ
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Prep Time & Total Calculation */}
+                      <div className="space-y-2 pt-1 border-t border-stone-100">
+                        {maxPrep > 0 && (
+                          <div className="flex justify-between items-center text-[11px] font-bold text-amber-950 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200">
+                            <span className="flex items-center gap-1">
+                              <Clock className="h-3.5 w-3.5 text-amber-700" />
+                              <span>وقت التحضير المقدر:</span>
+                            </span>
+                            <span className="font-black text-amber-950">~{maxPrep} دقيقة</span>
+                          </div>
+                        )}
+
+                        <div className="flex justify-between items-center bg-stone-50 px-3 py-2 rounded-xl border border-stone-200">
+                          <div>
+                            <span className="text-xs font-black text-stone-500 block">الحساب الإجمالي</span>
+                            <span className="text-[10px] font-bold text-stone-400">
+                              {getPaymentMethodLabel(order.paymentMethod)}
+                            </span>
+                          </div>
+                          <span className="text-base font-black text-emerald-900 font-mono">
+                            {(order.totalPrice || 0).toFixed(2)} د.أ
+                          </span>
+                        </div>
+
+                        {/* Action Buttons Matrix */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                          
+                          {/* Print Receipt Button */}
+                          <button
+                            type="button"
+                            onClick={() => printOrderReceipt(order, selectedBiz)}
+                            className="w-full py-2 px-3 bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-200 rounded-xl text-xs font-bold cursor-pointer transition-all flex items-center justify-center gap-1.5 sm:col-span-2"
+                          >
+                            <Printer className="h-3.5 w-3.5 text-stone-600 shrink-0" />
+                            <span>طباعة إيصال حراري للطلب</span>
+                          </button>
+                          
+                          {/* State: Pending -> Accept or Cancel */}
+                          {isPending && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateOrderStatus(order.id, 'processing')}
+                                className="w-full py-2.5 px-3 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-black shadow-2xs cursor-pointer transition-all flex items-center justify-center gap-1.5"
+                              >
+                                <CookingPot className="h-4 w-4" />
+                                <span>قبول وبدء التحضير</span>
+                              </button>
+                              
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateOrderStatus(order.id, 'cancelled')}
+                                className="w-full py-2.5 px-3 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 rounded-xl text-xs font-black cursor-pointer transition-all"
+                              >
+                                <span>رفض الطلب</span>
+                              </button>
+                            </>
+                          )}
+
+                          {/* State: Processing -> Mark Ready or Cancel */}
+                          {isProcessing && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateOrderStatus(order.id, 'completed')}
+                                className="w-full py-2.5 px-3 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-black shadow-2xs cursor-pointer transition-all flex items-center justify-center gap-1.5"
+                              >
+                                <Check className="h-4 w-4" />
+                                <span>تأكيد الجاهزية والاستلام</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateOrderStatus(order.id, 'cancelled')}
+                                className="w-full py-2.5 px-3 bg-stone-100 hover:bg-rose-50 text-stone-600 hover:text-rose-700 rounded-xl text-xs font-bold cursor-pointer transition-all"
+                              >
+                                <span>إلغاء</span>
+                              </button>
+                            </>
+                          )}
+
+                          {/* State: Completed or Cancelled -> Delete / Archive */}
+                          {(isCompleted || isCancelled) && (
+                            <button
+                              type="button"
+                              onClick={() => setDeleteConfirmOrderId(order.id)}
+                              className="w-full py-2 px-3 bg-stone-100 hover:bg-rose-50 text-stone-600 hover:text-rose-700 rounded-xl text-xs font-bold cursor-pointer transition-all flex items-center justify-center gap-1.5 sm:col-span-2"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              <span>أرشفة وحذف من اللوحة</span>
+                            </button>
+                          )}
+
+                        </div>
+                      </div>
+
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </>
         )}
 
       </main>
+
+      {/* In-app Order Deletion Confirmation Modal */}
+      {deleteConfirmOrderId && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-200" dir="rtl">
+          <div className="bg-white rounded-2xl border border-stone-200 shadow-2xl max-w-sm w-full p-5 space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="w-11 h-11 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+              <Trash2 className="h-5 w-5" />
+            </div>
+
+            <div className="text-center space-y-1">
+              <h3 className="text-base font-black text-stone-900">أرشفة وحذف الطلب</h3>
+              <p className="text-xs text-stone-600 font-bold leading-relaxed">
+                هل أنت متأكد من حذف هذا الطلب نهائياً من لوحة المتابعة المباشرة؟
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-stone-100">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmOrderId(null)}
+                disabled={isDeletingOrder}
+                className="flex-1 px-4 py-2.5 rounded-xl border border-stone-200 text-stone-700 text-xs font-bold hover:bg-stone-50 cursor-pointer disabled:opacity-50"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                onClick={executeDeleteOrder}
+                disabled={isDeletingOrder}
+                className="flex-1 px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black disabled:opacity-50 transition-colors shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                {isDeletingOrder ? (
+                  <>
+                    <div className="h-3.5 w-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                    <span>جارٍ الحذف...</span>
+                  </>
+                ) : (
+                  <span>تأكيد الحذف</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

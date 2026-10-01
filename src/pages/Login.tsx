@@ -96,6 +96,20 @@ export function Login() {
 
       if (db) {
         await linkUserToMatchedBusinesses(user.uid, authRes.phoneDigits, cleanEmail);
+
+        // Check if this account was deleted by admin
+        try {
+          const deletedDoc = await getDoc(doc(db, 'deleted_emails', cleanEmail));
+          const userDoc = await getDoc(doc(db, 'users', user.uid));
+          if (deletedDoc.exists() && (!userDoc.exists() || userDoc.data()?.deletedAt)) {
+            await firebaseSignOut(auth);
+            setError("هذا الحساب تم حذفه من قِبل إدارة الموقع. لا يمكن تسجيل الدخول به. يمكنك إنشاء حساب جديد كلياً.");
+            setLoading(false);
+            return;
+          }
+        } catch (e) {
+          console.warn("Deleted email check notice:", e);
+        }
       }
 
       // Reload user status to get freshest emailVerified flag
@@ -105,7 +119,7 @@ export function Login() {
         console.warn("User reload warning:", rErr);
       }
 
-      const isBootstrapAdmin = ['princessofx2344@gmail.com', 'd42902672@gmail.com', 'admin@shoofiirbid.com', 'irbid.admin@gmail.com', 'tharawt74@gmail.com'].includes(cleanEmail);
+      const isBootstrapAdmin = ['princessofx2344@gmail.com'].includes(cleanEmail);
       let isEmailVerified = user.emailVerified || isBootstrapAdmin || isPhoneOwner;
 
       if (!isEmailVerified && db) {
@@ -229,7 +243,7 @@ export function Login() {
       
       if (db) {
         const cleanEmail = user.email ? user.email.toLowerCase() : '';
-        const isBootstrapAdmin = ['princessofx2344@gmail.com', 'd42902672@gmail.com', 'admin@shoofiirbid.com', 'irbid.admin@gmail.com'].includes(cleanEmail);
+        const isBootstrapAdmin = ['princessofx2344@gmail.com'].includes(cleanEmail);
         const userRole = isBootstrapAdmin ? 'super_admin' : 'user';
         
         await setDoc(doc(db, 'users', user.uid), {
@@ -285,29 +299,31 @@ export function Login() {
     }
 
     try {
-      // Direct Firebase Client-Side Password Reset (works 100% on Vercel without serverless dependencies)
-      try {
-        await sendPasswordResetEmail(auth, targetEmail, {
-          url: `${window.location.origin}/reset-password`,
-          handleCodeInApp: true,
-        });
-      } catch (actionErr: any) {
-        // If custom domain isn't added to Firebase action URL whitelist, send standard reset
-        await sendPasswordResetEmail(auth, targetEmail);
+      // 1. Call server API which validates that user is registered before sending reset email
+      const response = await fetch('/api/auth/send-password-reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: targetEmail })
+      });
+
+      const resData = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        if (response.status === 404 || resData?.error?.includes('غير مسجل')) {
+          setResetError('هذا الحساب غير مسجل في الموقع');
+          return;
+        }
+        throw new Error(resData?.error || 'فشل إرسال رابط إعادة ضبط كلمة المرور');
       }
+
       setResetSuccess(true);
     } catch (err: any) {
-      console.error("Firebase reset email failed:", err);
-      const code = err?.code || '';
+      console.error("Reset password error:", err);
       const msg = err?.message || '';
-      if (code === 'auth/user-not-found' || msg.includes('user-not-found') || msg.includes('USER_NOT_FOUND')) {
-        setResetError('لم نجد حساباً مسجلاً بهذا البريد الإلكتروني في المنصة');
-      } else if (code === 'auth/invalid-email' || msg.includes('invalid-email')) {
-        setResetError('البريد الإلكتروني المدخل غير صالح');
-      } else if (code === 'auth/too-many-requests') {
-        setResetError('تم إرسال طلبات كثيرة مؤخراً. يرجى الانتظار بضع دقائق ثم المحاولة');
+      if (msg.includes('غير مسجل') || msg.includes('user-not-found') || msg.includes('USER_NOT_FOUND')) {
+        setResetError('هذا الحساب غير مسجل في الموقع');
       } else {
-        setResetError('حدث خطأ أثناء إرسال رابط إعادة ضبط كلمة المرور. يرجى التأكد من صحة البريد المدخل والمحاولة مجدداً');
+        setResetError(msg || 'حدث خطأ أثناء إرسال رابط إعادة ضبط كلمة المرور. يرجى المحاولة مجدداً');
       }
     } finally {
       setResetLoading(false);

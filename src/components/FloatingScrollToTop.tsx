@@ -33,7 +33,7 @@ export function FloatingScrollToTop() {
     <button
       type="button"
       onClick={scrollToTop}
-      className="fixed bottom-28 md:bottom-8 left-4 z-50 p-3 rounded-2xl bg-[#1a4d2e] text-white shadow-xl hover:bg-[#143d24] active:scale-90 transition-all duration-300 animate-in fade-in slide-in-from-bottom-3 border border-emerald-500/30 flex items-center justify-center cursor-pointer group"
+      className="fixed bottom-20 md:bottom-8 left-4 z-50 p-2.5 sm:p-3 rounded-2xl bg-[#1a4d2e] text-white shadow-xl hover:bg-[#143d24] active:scale-90 transition-all duration-300 animate-in fade-in slide-in-from-bottom-3 border border-emerald-500/30 flex items-center justify-center cursor-pointer group"
       title="العودة لأعلى الصفحة"
       aria-label="العودة لأعلى الصفحة"
     >

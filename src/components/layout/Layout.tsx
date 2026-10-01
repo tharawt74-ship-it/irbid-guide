@@ -118,15 +118,30 @@ export function Layout() {
   const [showHeader, setShowHeader] = useState(true);
 
   useEffect(() => {
+    const handleCustomVisibility = (e: Event) => {
+      const customEvent = e as CustomEvent<{ visible: boolean }>;
+      if (customEvent.detail && typeof customEvent.detail.visible === 'boolean') {
+        setShowHeader(customEvent.detail.visible);
+      }
+    };
+
+    window.addEventListener('app-header-visibility', handleCustomVisibility);
+    return () => window.removeEventListener('app-header-visibility', handleCustomVisibility);
+  }, []);
+
+  useEffect(() => {
     let lastScrollY = window.scrollY;
     let ticking = false;
 
     const handleScroll = () => {
       if (mobileMenuOpen) return;
 
-      // Header is fixed/always visible on Homepage and Search page, skip scroll calculations
-      const isAlwaysVisible = location.pathname === '/' || location.pathname.startsWith('/search');
-      if (isAlwaysVisible) return;
+      // Header on Search page is fixed
+      const isSearchPage = location.pathname.startsWith('/search');
+      if (isSearchPage) return;
+
+      // Homepage has its own sticky header coordinator
+      if (location.pathname === '/') return;
 
       if (!ticking) {
         window.requestAnimationFrame(() => {
@@ -136,7 +151,7 @@ export function Layout() {
             if (currentScrollY > lastScrollY && currentScrollY > 80) {
               setShowHeader(false);
               window.dispatchEvent(new CustomEvent('app-header-visibility', { detail: { visible: false } }));
-            } else if (currentScrollY < lastScrollY) {
+            } else if (currentScrollY < lastScrollY || currentScrollY <= 40) {
               setShowHeader(true);
               window.dispatchEvent(new CustomEvent('app-header-visibility', { detail: { visible: true } }));
             }
@@ -157,7 +172,7 @@ export function Layout() {
   }, [mobileMenuOpen, location.pathname]);
 
   useEffect(() => {
-    if (location.pathname === '/' || location.pathname.startsWith('/search')) {
+    if (location.pathname.startsWith('/search')) {
       setShowHeader(true);
       window.dispatchEvent(new CustomEvent('app-header-visibility', { detail: { visible: true } }));
     }
@@ -165,7 +180,7 @@ export function Layout() {
 
   const [showMenuTooltip, setShowMenuTooltip] = useState(false);
   const [showDesktopMoreTooltip, setShowDesktopMoreTooltip] = useState(false);
-  const isBootstrapAdmin = currentUser && ['princessofx2344@gmail.com', 'd42902672@gmail.com', 'admin@shoofiirbid.com', 'irbid.admin@gmail.com', 'tharawt74@gmail.com'].includes(currentUser.email?.toLowerCase().trim() || '');
+  const isBootstrapAdmin = currentUser && ['princessofx2344@gmail.com'].includes(currentUser.email?.toLowerCase().trim() || '');
   const isEmailVerified = Boolean(
     currentUser?.emailVerified || 
     userProfile?.customEmailVerified || 
@@ -372,21 +387,28 @@ export function Layout() {
 
     let unsubUser = () => {};
     let unsubOwner = () => {};
+    let userHasUnread = false;
+    let ownerHasUnread = false;
+
+    const updateCombined = () => {
+      setHasUnreadMessages(userHasUnread || ownerHasUnread);
+    };
 
     try {
       const qUser = query(collection(db, 'chatRooms'), where('userId', '==', currentUser.uid));
       unsubUser = onSnapshot(qUser, (snapUser) => {
-        const userUnreads = snapUser.docs.some(docSnap => docSnap.data().unreadByUser === true);
-        
-        const qOwner = query(collection(db, 'chatRooms'), where('businessOwnerId', '==', currentUser.uid));
-        unsubOwner = onSnapshot(qOwner, (snapOwner) => {
-          const ownerUnreads = snapOwner.docs.some(docSnap => docSnap.data().unreadByBusiness === true);
-          setHasUnreadMessages(userUnreads || ownerUnreads);
-        }, (err) => {
-          console.warn("Could not read owner unreads (requires Firestore rules update):", err);
-        });
+        userHasUnread = snapUser.docs.some(docSnap => docSnap.data().unreadByUser === true);
+        updateCombined();
       }, (err) => {
-        console.warn("Could not read user unreads (requires Firestore rules update):", err);
+        console.warn("Could not read user unreads:", err);
+      });
+
+      const qOwner = query(collection(db, 'chatRooms'), where('businessOwnerId', '==', currentUser.uid));
+      unsubOwner = onSnapshot(qOwner, (snapOwner) => {
+        ownerHasUnread = snapOwner.docs.some(docSnap => docSnap.data().unreadByBusiness === true);
+        updateCombined();
+      }, (err) => {
+        console.warn("Could not read owner unreads:", err);
       });
     } catch (e) {
       console.warn("Error setting up unreads listener:", e);
@@ -401,12 +423,13 @@ export function Layout() {
   const navItems = [
     { path: '/', label: 'الرئيسية', icon: HomeIcon },
     { path: '/offers', label: 'عروض وخصومات', icon: Flame, isSpecial: true },
+    { path: '/products', label: 'المنتجات والخدمات', icon: ShoppingBag },
     { path: '/jobs', label: 'الوظائف', icon: Briefcase, isHot: true },
     { path: '/housing', label: 'سكنات وعقارات', icon: Building },
-    { path: '/packages', label: 'الباقات', icon: Sparkles },
   ];
 
   const moreItems = [
+    { path: '/packages', label: 'الباقات والاشتراكات', icon: Sparkles },
     { path: '/medical', label: 'الرعاية الطبية والصحة', icon: Stethoscope },
     { path: '/transportation', label: 'دليل المواصلات والمجمعات', icon: Bus },
     { path: '/news', label: 'أخبار إربد', icon: Newspaper },
@@ -422,7 +445,7 @@ export function Layout() {
       {/* Top Navigation Bar - Sticky at all scroll depths */}
       <header className={cn(
         "h-[62px] sm:h-[68px] md:h-[72px] px-2.5 sm:px-4 lg:px-6 2xl:px-8 border-b border-stone-200/90 bg-white/95 backdrop-blur-md sticky z-[70] transition-all duration-300 shadow-2xs w-full max-w-full flex items-center",
-        (showHeader || mobileMenuOpen) ? "top-0" : "-top-[62px] sm:-top-[68px] md:-top-[72px]"
+        (showHeader || mobileMenuOpen) ? "top-0" : "-top-[62px] sm:-top-[68px] md:-top-[72px] lg:top-0"
       )}>
         {/* Desktop Header Layout */}
         <div className="hidden lg:flex w-full max-w-7xl mx-auto h-full items-center justify-between gap-1.5 sm:gap-2 lg:gap-3 flex-nowrap min-w-0 py-1">
@@ -487,6 +510,19 @@ export function Layout() {
               </Link>
 
               <Link
+                to="/products"
+                className={cn(
+                  "flex items-center gap-1 px-2 xl:px-2.5 py-1.5 rounded-xl transition-all duration-200 relative shrink-0",
+                  (location.pathname === '/products' || location.pathname.startsWith('/products/') || location.pathname.startsWith('/product/'))
+                    ? "bg-[#1a4d2e] text-white shadow-xs font-black"
+                    : "text-stone-600 hover:text-[#1a4d2e] hover:bg-stone-100/90"
+                )}
+              >
+                <ShoppingBag className={cn("h-3.5 w-3.5 shrink-0", (location.pathname === '/products' || location.pathname.startsWith('/products/')) ? "text-white" : "text-stone-400 group-hover:text-[#1a4d2e]")} />
+                <span className="whitespace-nowrap">المنتجات والخدمات</span>
+              </Link>
+
+              <Link
                 to="/jobs"
                 className={cn(
                   "flex items-center gap-1 px-2 xl:px-2.5 py-1.5 rounded-xl transition-all duration-200 relative shrink-0",
@@ -497,9 +533,6 @@ export function Layout() {
               >
                 <Briefcase className={cn("h-3.5 w-3.5 shrink-0", location.pathname === '/jobs' ? "text-white" : "text-stone-400 group-hover:text-[#1a4d2e]")} />
                 <span className="whitespace-nowrap">الوظائف</span>
-                {location.pathname !== '/jobs' && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-                )}
               </Link>
 
               <Link
@@ -515,19 +548,6 @@ export function Layout() {
                 <span className="whitespace-nowrap">سكنات وعقارات</span>
               </Link>
 
-              <Link
-                to="/packages"
-                className={cn(
-                  "flex items-center gap-1 px-2.5 py-1.5 rounded-xl transition-all duration-200 relative shrink-0",
-                  (location.pathname === '/packages' || location.pathname === '/pricing')
-                    ? "bg-[#1a4d2e] text-white shadow-xs font-black"
-                    : "text-stone-600 hover:text-[#1a4d2e] hover:bg-stone-100/90"
-                )}
-              >
-                <Sparkles className={cn("h-3.5 w-3.5 shrink-0", (location.pathname === '/packages' || location.pathname === '/pricing') ? "text-white" : "text-stone-400 group-hover:text-[#1a4d2e]")} />
-                <span className="whitespace-nowrap">الباقات</span>
-              </Link>
-
               {/* More Dropdown */}
               <div className="relative" ref={moreMenuRef}>
                 <button
@@ -538,7 +558,7 @@ export function Layout() {
                   }}
                   className={cn(
                     "flex items-center gap-1 px-2 xl:px-2.5 py-1.5 rounded-xl transition-all font-bold cursor-pointer shrink-0 border whitespace-nowrap",
-                    (location.pathname === '/transportation' || location.pathname === '/news' || location.pathname === '/tourism' || location.pathname === '/prayer-times')
+                    (location.pathname === '/packages' || location.pathname === '/pricing' || location.pathname === '/medical' || location.pathname === '/transportation' || location.pathname === '/news' || location.pathname === '/tourism' || location.pathname === '/prayer-times')
                       ? "bg-[#1a4d2e] text-white border-[#1a4d2e]"
                       : "bg-stone-100 text-stone-700 border-stone-200 hover:bg-stone-200"
                   )}
@@ -1083,6 +1103,28 @@ export function Layout() {
                   </Link>
 
                   <Link
+                    to="/products"
+                    onClick={closeMenu}
+                    className="p-3.5 rounded-2xl bg-white border border-stone-200/90 text-stone-800 hover:border-emerald-300 flex items-center gap-2.5 font-bold text-xs transition-all shadow-2xs active:scale-95 group"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
+                      <ShoppingBag className="h-4 w-4" />
+                    </div>
+                    <span className="font-black">المنتجات والخدمات</span>
+                  </Link>
+
+                  <Link
+                    to="/medical"
+                    onClick={closeMenu}
+                    className="p-3.5 rounded-2xl bg-white border border-stone-200/90 text-stone-800 hover:border-emerald-300 flex items-center gap-2.5 font-bold text-xs transition-all shadow-2xs active:scale-95 group"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-red-50 text-red-500 flex items-center justify-center shrink-0">
+                      <Stethoscope className="h-4 w-4" />
+                    </div>
+                    <span className="font-black">الرعاية الطبية</span>
+                  </Link>
+
+                  <Link
                     to="/jobs"
                     onClick={closeMenu}
                     className="p-3.5 rounded-2xl bg-white border border-stone-200/90 text-stone-800 hover:border-emerald-300 flex items-center gap-2.5 font-bold text-xs transition-all shadow-2xs active:scale-95 group"
@@ -1129,19 +1171,6 @@ export function Layout() {
                   </Link>
 
                   <Link
-                    to="/medical"
-                    onClick={closeMenu}
-                    className="p-3.5 rounded-2xl bg-white border border-stone-200/90 text-stone-800 hover:border-red-300 flex items-center justify-between font-bold text-xs transition-all shadow-2xs active:scale-95 group"
-                  >
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-lg bg-red-50 text-red-500 flex items-center justify-center shrink-0">
-                        <Stethoscope className="h-4 w-4" />
-                      </div>
-                      <span className="font-black">الرعاية الطبية</span>
-                    </div>
-                  </Link>
-
-                  <Link
                     to="/news"
                     onClick={closeMenu}
                     className="p-3.5 rounded-2xl bg-white border border-stone-200/90 text-stone-800 hover:border-purple-300 flex items-center justify-between font-bold text-xs transition-all shadow-2xs active:scale-95 group"
@@ -1177,6 +1206,19 @@ export function Layout() {
                         <Clock className="h-4 w-4" />
                       </div>
                       <span className="font-black">مواقيت الصلاة</span>
+                    </div>
+                  </Link>
+
+                  <Link
+                    to="/packages"
+                    onClick={closeMenu}
+                    className="p-3.5 rounded-2xl bg-white border border-stone-200/90 text-stone-800 hover:border-amber-300 flex items-center justify-between font-bold text-xs transition-all shadow-2xs active:scale-95 group"
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                        <Sparkles className="h-4 w-4" />
+                      </div>
+                      <span className="font-black">الباقات والاشتراكات</span>
                     </div>
                   </Link>
                 </nav>
@@ -1257,6 +1299,8 @@ export function Layout() {
           ? "max-w-[1440px] mx-auto p-2 sm:p-3 md:p-4 h-[calc(100dvh-62px)] sm:h-[calc(100dvh-68px)] md:h-[calc(100dvh-72px)] overflow-hidden"
           : location.pathname.startsWith('/profile')
           ? "max-w-[1200px] mx-auto px-2 sm:px-6 lg:px-8 py-4 sm:py-8 pb-20 md:py-12"
+          : location.pathname.startsWith('/products') || location.pathname === '/search'
+          ? "max-w-[1200px] mx-auto px-0 lg:px-8 pt-0 lg:pt-[10px] pb-20 sm:pb-12"
           : "max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 pt-5 pb-20 sm:pt-[10px] sm:pb-12 md:pt-[10px] md:pb-12 lg:pt-[10px] lg:pb-12"
       )}>
         {currentUser && !isEmailVerified && !['/login', '/register', '/verify', '/terms', '/privacy', '/about', '/contact'].includes(location.pathname) ? (
@@ -1480,7 +1524,7 @@ export function Layout() {
       )}
 
       {/* Mobile Fixed Bottom Navigation Bar */}
-      {!location.pathname.includes('/menu-offers') && (
+      {!location.pathname.includes('/menu-offers') && !(location.pathname.startsWith('/products/') && location.pathname !== '/products') && (
         <BottomNavigation 
           onOpenSearch={() => navigate('/search')} 
           hasUnreadMessages={hasUnreadMessages} 

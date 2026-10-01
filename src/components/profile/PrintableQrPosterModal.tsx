@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Business } from '../../types';
 import { useSystemSettings } from '../../contexts/SystemSettingsContext';
 import { isMedicalBusiness } from '../../lib/medicalHelper';
+import { downloadQrCodeAsPng } from '../admin/qr-designer/designerUtils';
 import { 
   Printer, 
   X, 
@@ -20,7 +21,8 @@ import {
   Layers, 
   Award,
   CheckCircle2,
-  Share2
+  Share2,
+  Download
 } from 'lucide-react';
 
 interface PrintableQrPosterModalProps {
@@ -65,6 +67,7 @@ export function PrintableQrPosterModal({ business, isOpen, onClose }: PrintableQ
   const [showContactDetails, setShowContactDetails] = useState(true);
   const [showEnglishText, setShowEnglishText] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [isDownloadingQr, setIsDownloadingQr] = useState(false);
   
   // Mobile Tab Switcher: 'preview' (Live A4 Preview) or 'customizer' (Design & Settings)
   const [mobileTab, setMobileTab] = useState<'preview' | 'customizer'>('preview');
@@ -108,6 +111,18 @@ export function PrintableQrPosterModal({ business, isOpen, onClose }: PrintableQ
     navigator.clipboard.writeText(storeUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleDownloadQrOnly = async () => {
+    setIsDownloadingQr(true);
+    try {
+      const filename = `QR_${business.name.replace(/\s+/g, '_')}.png`;
+      await downloadQrCodeAsPng(storeUrl, filename, `#${qrColorHex}`, '#ffffff');
+    } catch (err) {
+      console.error('Error downloading QR code:', err);
+    } finally {
+      setIsDownloadingQr(false);
+    }
   };
 
   // Quick preset CTA phrases
@@ -542,14 +557,26 @@ export function PrintableQrPosterModal({ business, isOpen, onClose }: PrintableQ
         {/* Modal Footer Actions */}
         <div className="px-3.5 py-3 sm:px-6 sm:py-4 bg-stone-950 border-t border-stone-800 flex flex-col sm:flex-row items-center justify-between gap-2.5 sm:gap-3 shrink-0">
           
-          <button
-            type="button"
-            onClick={handleCopyUrl}
-            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-stone-800 hover:bg-stone-700 text-stone-200 px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all cursor-pointer min-h-[38px] sm:min-h-[42px]"
-          >
-            {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
-            <span>{copied ? 'تم نسخ الرابط المباشر' : 'نسخ رابط المنشأة المباشر'}</span>
-          </button>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <button
+              type="button"
+              onClick={handleCopyUrl}
+              className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 sm:gap-2 bg-stone-800 hover:bg-stone-700 text-stone-200 px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all cursor-pointer min-h-[38px] sm:min-h-[42px]"
+            >
+              {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+              <span>{copied ? 'تم نسخ الرابط' : 'نسخ الرابط'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleDownloadQrOnly}
+              disabled={isDownloadingQr}
+              className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-700/60 text-emerald-300 px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all cursor-pointer min-h-[38px] sm:min-h-[42px] disabled:opacity-50"
+            >
+              <QrCode className="h-3.5 w-3.5 text-emerald-400" />
+              <span>{isDownloadingQr ? 'جاري التحميل...' : 'تحميل الـ QR كصورة'}</span>
+            </button>
+          </div>
 
           <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
             <button

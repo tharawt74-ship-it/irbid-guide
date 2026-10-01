@@ -48,7 +48,7 @@ import { Business } from '../../types';
 import { useSystemSettings } from '../../contexts/SystemSettingsContext';
 import { PosterCanvasPreview } from './PosterCanvasPreview';
 import { PRESET_TEMPLATES } from '../admin/qr-designer/designerTemplates';
-import { printPosterTemplate, printBulkPosterTemplates, exportPosterAsPng, readAndCompressImageFile } from '../admin/qr-designer/designerUtils';
+import { printPosterTemplate, printBulkPosterTemplates, exportPosterAsPng, downloadQrCodeAsPng, readAndCompressImageFile } from '../admin/qr-designer/designerUtils';
 import { PosterTemplate } from '../../types/posterDesigner';
 
 interface MenuQrTabProps {
@@ -246,6 +246,7 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
   });
   const [showPrices, setShowPrices] = useState(business.menuQrShowPrices ?? true);
   const [isExportingPng, setIsExportingPng] = useState<boolean>(false);
+  const [isDownloadingQr, setIsDownloadingQr] = useState<boolean>(false);
 
   // States for Ordering, Taxes, Fees, local Payments & Bulk QRs
   const [disableDirectOrder, setDisableDirectOrder] = useState<boolean>(business.disableDirectOrder ?? false);
@@ -265,9 +266,15 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
   const [bulkCustomList, setBulkCustomList] = useState<string>('');
   const [bulkType, setBulkType] = useState<'range' | 'custom'>('range');
 
-  // 1. 📱 نصوص بطاقة المسح والباركود (المنطقة الرئيسية) - Cache First
+  const cleanInitialText = (text: string | undefined, defaultVal: string) => {
+    if (!text) return defaultVal;
+    const cleaned = text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{1FA70}-\u{1FAFF}\u{200D}]/gu, '').replace(/\s+/g, ' ').trim();
+    return cleaned || defaultVal;
+  };
+
+  // 1. نصوص بطاقة المسح والباركود (المنطقة الرئيسية) - Cache First
   const [posterTitle, setPosterTitle] = useState(
-    initialPosterCache?.posterTitle ?? 'قائمتنا الرقمية وعروضنا الحصرية 🍽️✨'
+    cleanInitialText(initialPosterCache?.posterTitle, 'قائمتنا الرقمية وعروضنا الحصرية')
   );
   const [posterSubtitle, setPosterSubtitle] = useState(
     initialPosterCache?.posterSubtitle ?? 'امسح الرمز للاطلاع على قائمة المنيو، العروض الحصرية، والطلب المباشر'
@@ -276,10 +283,10 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
     initialPosterCache?.posterEnglishText ?? 'Scan QR Code for Digital Menu & Offers'
   );
   const [posterDigitalBadge, setPosterDigitalBadge] = useState(
-    initialPosterCache?.posterDigitalBadge ?? '✨ منيو إلكتروني ذكي'
+    cleanInitialText(initialPosterCache?.posterDigitalBadge, 'منيو إلكتروني ذكي')
   );
   const [posterInstructions, setPosterInstructions] = useState(
-    initialPosterCache?.posterInstructions ?? '📷 افتح كاميرا هاتفك ووجّهها نحو الرمز مباشرة'
+    cleanInitialText(initialPosterCache?.posterInstructions, 'افتح كاميرا هاتفك ووجّهها نحو الرمز مباشرة')
   );
   const [includeContact, setIncludeContact] = useState(
     initialPosterCache?.includeContact ?? true
@@ -296,7 +303,7 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
     initialPosterCache?.tableNumber ?? ''
   );
   const [welcomeBadgeText, setWelcomeBadgeText] = useState(
-    initialPosterCache?.welcomeBadgeText ?? '🍽️ نتشرف بخدمتكم • أهلاً وسهلاً بكم'
+    cleanInitialText(initialPosterCache?.welcomeBadgeText, 'نتشرف بخدمتكم • أهلاً وسهلاً بكم')
   );
 
   // 3. 🌊 نصوص القسم السفلي (التموجي / الترويجي) - Cache First
@@ -620,14 +627,14 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
     // Reset badge
     setTableBadgeMode('table');
     setTableNumber('');
-    setWelcomeBadgeText('🍽️ نتشرف بخدمتكم • أهلاً وسهلاً بكم');
+    setWelcomeBadgeText('نتشرف بخدمتكم • أهلاً وسهلاً بكم');
 
     // Reset scan texts
-    setPosterTitle('قائمتنا الرقمية وعروضنا الحصرية 🍽️✨');
+    setPosterTitle('قائمتنا الرقمية وعروضنا الحصرية');
     setPosterSubtitle('امسح الرمز للاطلاع على قائمة المنيو، العروض الحصرية، والطلب المباشر');
     setPosterEnglishText('Scan QR Code for Digital Menu & Offers');
-    setPosterDigitalBadge('✨ منيو إلكتروني ذكي');
-    setPosterInstructions('📷 افتح كاميرا هاتفك ووجّهها نحو الرمز مباشرة');
+    setPosterDigitalBadge('منيو إلكتروني ذكي');
+    setPosterInstructions('افتح كاميرا هاتفك ووجّهها نحو الرمز مباشرة');
     setIncludeEnglish(true);
     setIncludeContact(true);
 
@@ -704,6 +711,22 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
     }
   };
 
+  const handleDownloadQrOnly = async () => {
+    setIsDownloadingQr(true);
+    try {
+      const targetUrl = tableBadgeMode === 'table' && tableNumber.trim()
+        ? `${menuOffersUrl}?table=${encodeURIComponent(tableNumber.trim())}`
+        : menuOffersUrl;
+      const qrColor = posterQrColor || themeColor || '#1a4d2e';
+      const filename = `QR_منيو_${business.name.replace(/\s+/g, '_')}${tableNumber.trim() ? `_طاولة_${tableNumber.trim()}` : ''}.png`;
+      await downloadQrCodeAsPng(targetUrl, filename, qrColor, '#ffffff');
+    } catch (err) {
+      console.error('Error downloading QR code:', err);
+    } finally {
+      setIsDownloadingQr(false);
+    }
+  };
+
   return (
     <div className="space-y-6 sm:space-y-8 animate-in fade-in">
       
@@ -712,11 +735,8 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
         <div>
           <h3 className="text-base font-black text-[#2d2a26] flex items-center gap-2">
             <QrCode className="h-6 w-6 text-[#1a4d2e]" />
-            <span>نظام المنيو الذكي والـ QR المطور للمطاعم والمقاهي 🍽️✨</span>
+            <span>نظام المنيو الذكي والـ QR المطور للمطاعم والمقاهي</span>
           </h3>
-          <p className="text-xs text-stone-500 mt-1">
-            خصص صفحة المنيو التفاعلية الخاصة بمحلك، تحكم بألوان الثيم، وصمّم واطبع بوستر الباركود (QR code) لتقديمه لزبائنك على الطاولات.
-          </p>
         </div>
         
         {/* Toggle Activate / Deactivate */}
@@ -758,7 +778,6 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
           </div>
           <div className="text-right min-w-0">
             <span className="block font-black truncate">1. مظهر صفحة المنيو</span>
-            <span className="block text-[10px] font-normal text-stone-500 truncate">تنسيق وتصميم المنيو والألوان والغلاف</span>
           </div>
         </button>
 
@@ -777,7 +796,6 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
           </div>
           <div className="text-right min-w-0">
             <span className="block font-black truncate">2. بوسترات QR وطباعة الملصقات</span>
-            <span className="block text-[10px] font-normal text-stone-500 truncate">بوسترات الطاولات A4 وتخصيص الباركود</span>
           </div>
         </button>
 
@@ -797,9 +815,6 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
                   <Palette className="h-4 w-4 text-purple-600" />
                   <span>1. إعدادات تصميم ومظهر صفحة المنيو الرقمي (الموبايل والويب)</span>
                 </h4>
-                <p className="text-[11px] text-stone-500 mt-0.5">
-                  هذه الإعدادات تتحكم مباشرة في شكل الصفحة التفاعلية التي تفتح في هاتف الزبون عند مسح الكود أو تصفح الرابط.
-                </p>
               </div>
 
               {/* Theme Colors */}
@@ -877,9 +892,8 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
                 <div className="space-y-2">
                   <label className="block text-xs font-black text-stone-800">خيارات عرض التفاصيل:</label>
                   <div className="p-3 bg-stone-50 rounded-xl border border-stone-100 flex items-center justify-between">
-                    <div className="space-y-0.5">
+                    <div>
                       <span className="text-[11px] font-black text-stone-800 block">عرض أسعار الوجبات</span>
-                      <span className="text-[9px] text-stone-400 block">إظهار السعر بجانب اسم الوجبة</span>
                     </div>
                     <button
                       type="button"
@@ -983,9 +997,6 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
                   <Settings className="h-4 w-4 text-emerald-600" />
                   <span>2. خيارات الطلب المباشر وتذييل الفاتورة</span>
                 </h4>
-                <p className="text-[11px] text-stone-500 mt-0.5">
-                  تحكم بتمكين أو تعطيل تلقي الطلبات المباشرة، وحدد رسائل الفواتير الورقية.
-                </p>
               </div>
 
               {/* Disable Direct Order Toggle */}
@@ -994,11 +1005,8 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
                 onClick={() => setDisableDirectOrder(!disableDirectOrder)}
                 className="w-full p-4 bg-stone-50 hover:bg-stone-100 rounded-2xl border border-stone-200 text-right transition-all cursor-pointer flex items-center justify-between"
               >
-                <div className="space-y-0.5 max-w-[80%]">
+                <div>
                   <span className="text-xs font-black text-stone-800 block">تعطيل الطلب المباشر للزبائن</span>
-                  <span className="text-[10px] text-stone-400 block leading-normal">
-                    عند التفعيل، يتحول المنيو إلى منيو رقمي "للعرض فقط" (يمنع الزبائن من الإضافة للسلة أو تأكيد طلباتهم وإرسالها).
-                  </span>
                 </div>
                 <div className={`w-5 h-5 rounded-md flex items-center justify-center border transition-all shrink-0 ${
                   disableDirectOrder ? 'bg-amber-600 border-amber-600 text-white' : 'bg-white border-stone-300 text-transparent'
@@ -1027,9 +1035,6 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
                   <FileText className="h-4 w-4 text-amber-600" />
                   <span>3. إعدادات الضرائب، رسوم الخدمة، والإكراميات</span>
                 </h4>
-                <p className="text-[11px] text-stone-500 mt-0.5">
-                  حدد قيم الضريبة، رسوم الخدمة والبدلات المضافة تلقائياً للفاتورة مع إتاحة دعم الطاقم بتبس (إكرامية).
-                </p>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -1077,9 +1082,8 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
                 onClick={() => setTippingEnabled(!tippingEnabled)}
                 className="w-full p-3 bg-stone-50 hover:bg-stone-100 rounded-2xl border border-stone-200 text-right transition-all cursor-pointer flex items-center justify-between"
               >
-                <div className="space-y-0.5">
+                <div>
                   <span className="text-xs font-black text-stone-800 block">تفعيل خيار الإكرامية ولدعم الطاقم (Tip)</span>
-                  <span className="text-[10px] text-stone-400 block">إظهار مقترحات إكرامية سريعة للزبائن عند مراجعة السلة</span>
                 </div>
                 <div className={`w-5 h-5 rounded-md flex items-center justify-center border transition-all shrink-0 ${
                   tippingEnabled ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-white border-stone-300 text-transparent'
@@ -1096,9 +1100,6 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
                   <Languages className="h-4 w-4 text-blue-600" />
                   <span>4. تيسير الدفع الإلكتروني والمحافظ المحلية (CliQ / المحافظ)</span>
                 </h4>
-                <p className="text-[11px] text-stone-500 mt-0.5">
-                  أدخل بيانات حسابك لتلقي التحويلات السريعة والمحافظ في الأردن لمشاركتها مع الزبون أثناء الطلب.
-                </p>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1161,12 +1162,12 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
                 className="flex-1 py-3.5 rounded-2xl bg-gradient-to-r from-purple-700 to-indigo-800 hover:from-purple-800 hover:to-indigo-900 text-white font-black text-xs transition-all shadow-md cursor-pointer disabled:opacity-50 inline-flex items-center justify-center gap-2"
               >
                 <CheckCircle2 className="h-4.5 w-4.5" />
-                <span>{isSaving ? 'جاري حفظ التعديلات...' : 'حفظ وتطبيق تصميم صفحة المنيو 💾'}</span>
+                <span>{isSaving ? 'جاري حفظ التعديلات...' : 'حفظ وتطبيق تصميم صفحة المنيو'}</span>
               </button>
 
               {saveSuccess && (
                 <span className="text-xs font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-4 py-3 rounded-2xl animate-in fade-in">
-                  تم الحفظ بنجاح! 🎉
+                  تم الحفظ بنجاح!
                 </span>
               )}
             </div>
@@ -1224,7 +1225,7 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
                   {/* Category Pills Simulated */}
                   <div className="px-3 py-2 flex gap-1.5 overflow-x-auto no-scrollbar">
                     <span className="px-2.5 py-1 rounded-full text-[9px] font-black text-white shrink-0 shadow-xs" style={{ backgroundColor: themeColor }}>
-                      🔥 الأكثر طلباً
+                      الأكثر طلباً
                     </span>
                     <span className="px-2.5 py-1 rounded-full text-[9px] font-bold bg-stone-200 text-stone-700 shrink-0">
                       وجبات رئيسية
@@ -1280,24 +1281,36 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
                 <Link
                   to={`/business/${business.id}/menu-offers`}
                   target="_blank"
-                  className="w-full py-2.5 px-4 bg-purple-600 hover:bg-purple-700 text-white font-black text-xs rounded-xl transition-all text-center flex items-center justify-center gap-2 shadow-sm"
+                  className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-2xl transition-all text-center flex items-center justify-center gap-2 shadow-sm"
                 >
-                  <ExternalLink className="h-4 w-4" />
-                  <span>فتح وتجربة صفحة المنيو في نافذة جديدة 🌐</span>
+                  <Sparkles className="h-4 w-4" />
+                  <span>معاينة وتجربة شكل المنيو الرقمي والعروض لمشروعك</span>
                 </Link>
 
-                <button
-                  type="button"
-                  onClick={handleCopyLink}
-                  className={`w-full py-2 px-3 border font-black text-xs rounded-xl transition-all cursor-pointer inline-flex items-center justify-center gap-1.5 ${
-                    copied 
-                      ? 'bg-emerald-900/60 text-emerald-300 border-emerald-600' 
-                      : 'bg-stone-800 border-stone-700 text-stone-300 hover:bg-stone-750'
-                  }`}
-                >
-                  {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5 text-stone-400" />}
-                  <span>{copied ? 'تم النسخ بنجاح!' : 'نسخ رابط صفحة المنيو للزبائن 🔗'}</span>
-                </button>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={handleCopyLink}
+                    className={`w-full py-2.5 px-3 border font-black text-xs rounded-2xl transition-all cursor-pointer inline-flex items-center justify-center gap-1.5 ${
+                      copied 
+                        ? 'bg-emerald-900/60 text-emerald-300 border-emerald-600' 
+                        : 'bg-stone-800 border-stone-700 text-stone-300 hover:bg-stone-750'
+                    }`}
+                  >
+                    {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5 text-stone-400" />}
+                    <span>{copied ? 'تم النسخ بنجاح!' : 'نسخ رابط صفحة المنيو'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleDownloadQrOnly}
+                    disabled={isDownloadingQr}
+                    className="w-full py-2.5 px-3 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-950 font-black text-xs rounded-2xl transition-all cursor-pointer inline-flex items-center justify-center gap-1.5 shadow-2xs active:scale-95 disabled:opacity-50"
+                  >
+                    <QrCode className="h-3.5 w-3.5 text-emerald-700 shrink-0" />
+                    <span>{isDownloadingQr ? 'جاري التحميل...' : 'تحميل الـ QR كصورة'}</span>
+                  </button>
+                </div>
               </div>
 
             </div>
@@ -1323,24 +1336,47 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
                     <Printer className="h-4 w-4 text-[#1a4d2e]" />
                     <span>2. تخصيص بوستر الـ QR وقالب التصميم المعتمد</span>
                   </h4>
-                  <p className="text-[11px] text-stone-500 mt-0.5">
-                    اختر ثيم البوستر المطبوع، خصص عبارات الترحيب ورقم الطاولة، ثم اطبعه أو حمله بدقة عالية A4.
-                  </p>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap shrink-0">
                   <button
                     type="button"
                     onClick={handleResetAllPosterSettings}
-                    className="px-3.5 py-1.5 text-xs font-black text-stone-700 hover:text-rose-700 bg-stone-100 hover:bg-rose-50 border border-stone-200/90 hover:border-rose-200 rounded-xl transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-2xs active:scale-95"
+                    className="px-3 py-1.5 text-xs font-black text-stone-700 hover:text-rose-700 bg-stone-100 hover:bg-rose-50 border border-stone-200/90 hover:border-rose-200 rounded-xl transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-2xs active:scale-95"
                     title="استعادة كافة نصوص وألوان وهوية البوستر الافتراضية"
                   >
                     <RotateCcw className="h-3.5 w-3.5 text-stone-500 hover:text-rose-600" />
                     <span>استعادة الافتراضيات</span>
                   </button>
-                  <span className="text-[10px] font-black bg-emerald-50 text-emerald-800 border border-emerald-200/80 px-2.5 py-1.5 rounded-xl flex items-center gap-1">
-                    <Award className="h-3 w-3 text-emerald-600" />
-                    <span>متصل بالقالب المعتمد</span>
-                  </span>
+
+                  <button
+                    type="button"
+                    onClick={handleDownloadQrOnly}
+                    disabled={isDownloadingQr}
+                    className="px-3 py-1.5 text-xs font-black text-emerald-950 bg-emerald-100/90 hover:bg-emerald-200 border border-emerald-300 rounded-xl transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-2xs active:scale-95 disabled:opacity-50"
+                    title="تحميل رمز الـ QR فقط كصورة PNG عالية الدقة"
+                  >
+                    <QrCode className="h-3.5 w-3.5 text-emerald-800" />
+                    <span>{isDownloadingQr ? 'جاري التحميل...' : 'تحميل الـ QR كصورة'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleExportPng}
+                    disabled={isExportingPng}
+                    className="px-3 py-1.5 text-xs font-black text-amber-950 bg-amber-100/90 hover:bg-amber-200 border border-amber-200/90 rounded-xl transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-2xs active:scale-95 disabled:opacity-50"
+                  >
+                    <Download className="h-3.5 w-3.5 text-amber-800" />
+                    <span>{isExportingPng ? 'جاري التصدير...' : 'تحميل البوستر PNG'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handlePrint}
+                    className="px-3.5 py-1.5 text-xs font-black text-white bg-[#1a4d2e] hover:bg-emerald-900 border border-[#1a4d2e] rounded-xl transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-sm active:scale-95"
+                  >
+                    <Printer className="h-3.5 w-3.5 text-emerald-300" />
+                    <span>طباعة A4</span>
+                  </button>
                 </div>
               </div>
 
@@ -1351,7 +1387,7 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
                 </div>
               )}
 
-              {/* 🎨 Quick Theme Palettes for Poster */}
+              {/* Quick Theme Palettes for Poster */}
               <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200/80 space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
@@ -1360,7 +1396,6 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
                     </div>
                     <div>
                       <h5 className="text-xs font-black text-stone-900">تخصيص ثيم وألوان البوستر المطبوع لمحلك</h5>
-                      <p className="text-[10px] text-stone-500">اختر الثيم المتناسق مع هوية محلك ليتم تطبيقه على البوستر والباركود</p>
                     </div>
                   </div>
 
@@ -1424,9 +1459,6 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
                           {isPosterTextsOpen ? 'مفتوح' : 'مطوي'}
                         </span>
                       </h5>
-                      <p className="text-[10px] text-stone-500 mt-0.5">
-                        شارة الطاولة أو العبارة الترحيبية، نصوص بطاقة المسح والباركود، ونصوص القسم التموجي السفلي
-                      </p>
                     </div>
                   </div>
 
@@ -1452,9 +1484,6 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
                             <Sparkles className="h-3.5 w-3.5 text-amber-500" />
                             <span>1. شارة الطاولة أو العبارة الترحيبية (أعلى كارت الباركود):</span>
                           </span>
-                          <span className="text-[10px] text-stone-500 block">
-                            اختر بين تخصيص رقم الطاولة أو وضع عبارة ترحيبية راقية لضيوفك
-                          </span>
                         </div>
 
                         {/* Mode Toggle Buttons */}
@@ -1468,7 +1497,7 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
                                 : 'text-stone-600 hover:text-stone-900'
                             }`}
                           >
-                            🏷️ رقم الطاولة / الجلسة
+                            رقم الطاولة / الجلسة
                           </button>
                           <button
                             type="button"
@@ -1479,7 +1508,7 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
                                 : 'text-stone-600 hover:text-stone-900'
                             }`}
                           >
-                            ✨ عبارة ترحيبية بالضيوف
+                            عبارة ترحيبية بالضيوف
                           </button>
                         </div>
                       </div>
@@ -1494,9 +1523,6 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
                             placeholder="مثال: 5، أو طاولة 12، أو الجلسة الخارجية (اتركها فارغة لبوستر عام)"
                             className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3.5 py-2 text-xs font-bold text-stone-800 focus:outline-none focus:bg-white focus:border-stone-400"
                           />
-                          <span className="text-[10px] text-stone-400 block">
-                            💡 سيتم عرضها بالبوستر بشكل: طاولة رقم {tableNumber || 'X'}. وإذا تركتها فارغة سيتم إصدار بوستر عام.
-                          </span>
                         </div>
                       ) : (
                         <div className="space-y-1.5 pt-1">
@@ -1505,12 +1531,9 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
                             type="text"
                             value={welcomeBadgeText}
                             onChange={(e) => setWelcomeBadgeText(e.target.value)}
-                            placeholder="مثال: 🍽️ نتشرف بخدمتكم • أهلاً وسهلاً بكم"
+                            placeholder="مثال: نتشرف بخدمتكم • أهلاً وسهلاً بكم"
                             className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3.5 py-2 text-xs font-bold text-stone-800 focus:outline-none focus:bg-white focus:border-stone-400"
                           />
-                          <span className="text-[10px] text-stone-400 block">
-                            💡 تظهر هذه العبارة الراقية في شارة أعلى بطاقة الباركود مباشرة بدلاً من رقم الطاولة.
-                          </span>
                         </div>
                       )}
                     </div>
@@ -1521,9 +1544,6 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
                         <span className="text-xs font-black text-stone-900 block">
                           2. نصوص بطاقة المسح والباركود (المنطقة الرئيسية):
                         </span>
-                        <span className="text-[10px] text-stone-500 block">
-                          تحكم بالعناوين والإرشادات التوجيهية للزبائن أثناء مسح الكود
-                        </span>
                       </div>
 
                       {/* Scan Title */}
@@ -1533,7 +1553,7 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
                           type="text"
                           value={posterTitle}
                           onChange={(e) => setPosterTitle(e.target.value)}
-                          placeholder="مثال: قائمتنا الرقمية وعروضنا الحصرية 🍽️✨"
+                          placeholder="مثال: قائمتنا الرقمية وعروضنا الحصرية"
                           className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3.5 py-2 text-xs font-bold text-stone-800 focus:outline-none focus:bg-white focus:border-stone-400"
                         />
                       </div>
@@ -1558,7 +1578,7 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
                             type="text"
                             value={posterDigitalBadge}
                             onChange={(e) => setPosterDigitalBadge(e.target.value)}
-                            placeholder="✨ منيو إلكتروني ذكي"
+                            placeholder="منيو إلكتروني ذكي"
                             className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-1.5 text-xs font-bold text-stone-800 focus:outline-none focus:bg-white focus:border-stone-400"
                           />
                         </div>
@@ -1569,7 +1589,7 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
                             type="text"
                             value={posterInstructions}
                             onChange={(e) => setPosterInstructions(e.target.value)}
-                            placeholder="📷 افتح كاميرا هاتفك ووجّهها نحو الرمز مباشرة"
+                            placeholder="افتح كاميرا هاتفك ووجّهها نحو الرمز مباشرة"
                             className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-1.5 text-xs font-bold text-stone-800 focus:outline-none focus:bg-white focus:border-stone-400"
                           />
                         </div>
@@ -1595,9 +1615,6 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
                       <div className="space-y-0.5">
                         <span className="text-xs font-black text-stone-900 block">
                           3. نصوص القسم السفلي (التموجي / الترويجي):
-                        </span>
-                        <span className="text-[10px] text-stone-500 block">
-                          تخصيص عبارات الترحيب والترويج بجوار صورة الوجبة الدائرية في أسفل البوستر
                         </span>
                       </div>
 
@@ -1647,9 +1664,6 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
                           {isPosterImagesOpen ? 'مفتوح' : 'مطوي'}
                         </span>
                       </h5>
-                      <p className="text-[10px] text-stone-500 mt-0.5">
-                        شعار المحل، صورة الوجبة الترويجية، إضافة الإطارات، وضبط الحجم والموضع
-                      </p>
                     </div>
                   </div>
 
@@ -1755,8 +1769,7 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
                                 </button>
                               )}
                             </div>
-                            <div className="flex items-center justify-between text-[10px] text-stone-400">
-                              <span>PNG أو JPG مفرّغ</span>
+                            <div className="flex items-center justify-end text-[10px] text-stone-400">
                               <span className="font-mono text-stone-600 bg-stone-100 px-1.5 py-0.5 rounded">
                                 {Math.round(sessionLogoTransform.scale * 100)}%
                               </span>
@@ -1874,8 +1887,7 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
                                 </button>
                               )}
                             </div>
-                            <div className="flex items-center justify-between text-[10px] text-stone-400">
-                              <span>تظهر في القسم الترويجي للبوستر</span>
+                            <div className="flex items-center justify-end text-[10px] text-stone-400">
                               <span className="font-mono text-stone-600 bg-stone-100 px-1.5 py-0.5 rounded">
                                 {Math.round(sessionDishTransform.scale * 100)}%
                               </span>
@@ -1922,8 +1934,8 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
                               onChange={(e) => setCoverImage(e.target.value)}
                               className="flex-1 bg-stone-50 border border-stone-200 rounded-lg px-2 py-1 text-[11px] font-bold text-stone-700 outline-none truncate"
                             >
-                              {defaultShopCover && (
-                                <option value={defaultShopCover}>صورة غلاف المحل (الافتراضي الدائم) ⭐</option>
+                               {defaultShopCover && (
+                                <option value={defaultShopCover}>صورة غلاف المحل (الافتراضي الدائم)</option>
                               )}
                               {COVER_PRESETS.filter(p => p.url !== defaultShopCover).map((p, idx) => (
                                 <option key={idx} value={p.url}>{p.name}</option>
@@ -1946,9 +1958,6 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
                           <div>
                             <span className="text-xs font-black text-stone-900 block">
                               ضبط الحجم والموضع
-                            </span>
-                            <span className="text-[10px] text-stone-500 font-medium">
-                              تكبير أو تصغير وتحريك الصورة المحددة لتناسب تصميم البوستر
                             </span>
                           </div>
                         </div>
@@ -2109,9 +2118,6 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
                               <span>•</span>
                               <span>رأسي: <strong className="text-stone-800">{currentTf.dy > 0 ? `+${currentTf.dy}px` : `${currentTf.dy}px`}</strong></span>
                             </div>
-                            <span className="text-[10px] text-stone-400">
-                              تنعكس التعديلات مباشرة على المعاينة المباشرة والطباعة
-                            </span>
                           </div>
                         );
                       })()}
@@ -2132,7 +2138,6 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
                 >
                   <div className="space-y-0.5">
                     <span className="text-[11px] font-black text-stone-800 block">ترجمة ثنائية اللغة (عربي/إنجليزي)</span>
-                    <span className="text-[9px] text-stone-400 block">إضافة إرشادات بالإنجليزية في البوستر</span>
                   </div>
                   <div className={`w-5 h-5 rounded-md flex items-center justify-center border transition-all ${
                     includeEnglish ? 'bg-[#1a4d2e] border-[#1a4d2e] text-white' : 'bg-white border-stone-300 text-transparent'
@@ -2148,7 +2153,6 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
                 >
                   <div className="space-y-0.5">
                     <span className="text-[11px] font-black text-stone-800 block">إدراج معلومات الاتصال</span>
-                    <span className="text-[9px] text-stone-400 block">إظهار رقم هاتف المحل في ذيل البوستر</span>
                   </div>
                   <div className={`w-5 h-5 rounded-md flex items-center justify-center border transition-all ${
                     includeContact ? 'bg-[#1a4d2e] border-[#1a4d2e] text-white' : 'bg-white border-stone-300 text-transparent'
@@ -2168,9 +2172,6 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
                   <QrCode className="h-4 w-4 text-emerald-600" />
                   <span>التوليد الجماعي لرموز QR الطاولات (Bulk QR Generation)</span>
                 </h4>
-                <p className="text-[11px] text-stone-500 mt-0.5">
-                  أصدر واطبع بوسترات QR متعددة لطاولاتك دفعة واحدة وبضغطة زر، بتنسيق منظم وتوزيع تلقائي على الصفحات.
-                </p>
               </div>
 
               <div className="space-y-4">
@@ -2228,9 +2229,6 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
                       placeholder="مثال: 1, 2, 3, VIP-1, VIP-2, الطابق الثاني"
                       className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs font-bold text-stone-800"
                     />
-                    <span className="text-[10px] text-stone-400 block leading-normal">
-                      سيتم إنشاء بوستر منفصل بدقة عالية لكل اسم تدخله هنا.
-                    </span>
                   </div>
                 )}
 
@@ -2258,7 +2256,7 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
                   className="w-full py-3 bg-emerald-650 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <Printer className="h-4 w-4" />
-                  <span>توليد وطباعة بوسترات الطاولات جماعياً ({bulkType === 'range' ? bulkEnd - bulkStart + 1 : bulkCustomList.split(',').filter(x => x.trim()).length} بوسترات) 🖨️</span>
+                  <span>توليد وطباعة بوسترات الطاولات جماعياً ({bulkType === 'range' ? bulkEnd - bulkStart + 1 : bulkCustomList.split(',').filter(x => x.trim()).length} بوسترات)</span>
                 </button>
               </div>
             </div>
@@ -2272,12 +2270,12 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
                 className="flex-1 py-3.5 rounded-2xl bg-gradient-to-r from-[#1a4d2e] to-emerald-800 hover:from-emerald-800 hover:to-emerald-900 text-white font-black text-xs transition-all shadow-md cursor-pointer disabled:opacity-50 inline-flex items-center justify-center gap-2"
               >
                 <CheckCircle2 className="h-4.5 w-4.5" />
-                <span>{isSaving ? 'جاري حفظ الإعدادات...' : 'حفظ وتثبيت إعدادات بوستر الـ QR 💾'}</span>
+                <span>{isSaving ? 'جاري حفظ الإعدادات...' : 'حفظ وتثبيت إعدادات بوستر الـ QR'}</span>
               </button>
 
               {saveSuccess && (
                 <span className="text-xs font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-4 py-3 rounded-2xl animate-in fade-in">
-                  تم حفظ التعديلات بنجاح! 🎉
+                  تم حفظ التعديلات بنجاح!
                 </span>
               )}
             </div>
@@ -2293,10 +2291,6 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
                   <Eye className="h-4 w-4 text-[#1a4d2e]" />
                   <span>معاينة حية لبوستر الطاولة (A4)</span>
                 </span>
-                <span className="text-[10px] font-black bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded-full border border-emerald-200 flex items-center gap-1">
-                  <Award className="h-3 w-3" />
-                  <span>{activeTemplate.title}</span>
-                </span>
               </div>
 
               {/* Live Canvas Poster Frame */}
@@ -2310,50 +2304,38 @@ export function MenuQrTab({ business, onSave, isSaving, initialSubTab }: MenuQrT
               </div>
 
               {/* Poster Operations Actions */}
-              <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-2 mt-4">
+              <div className="w-full mt-4 space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={handleExportPng}
+                    disabled={isExportingPng}
+                    className="py-3 px-3 bg-amber-100/90 hover:bg-amber-200 border border-amber-300 text-amber-950 font-black text-xs rounded-2xl transition-all shadow-2xs cursor-pointer inline-flex items-center justify-center gap-1.5 active:scale-95 disabled:opacity-50"
+                  >
+                    <Download className="h-4 w-4 text-amber-800 shrink-0" />
+                    <span>{isExportingPng ? 'جاري التحميل...' : 'تحميل البوستر PNG'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleDownloadQrOnly}
+                    disabled={isDownloadingQr}
+                    className="py-3 px-3 bg-emerald-100/90 hover:bg-emerald-200 border border-emerald-300 text-emerald-950 font-black text-xs rounded-2xl transition-all shadow-2xs cursor-pointer inline-flex items-center justify-center gap-1.5 active:scale-95 disabled:opacity-50"
+                  >
+                    <QrCode className="h-4 w-4 text-emerald-800 shrink-0" />
+                    <span>{isDownloadingQr ? 'جاري التحميل...' : 'تحميل الـ QR كصورة'}</span>
+                  </button>
+                </div>
+
                 <button
                   type="button"
                   onClick={handlePrint}
-                  className="py-3 px-3 bg-gradient-to-r from-stone-900 to-stone-800 hover:from-stone-950 hover:to-black text-white font-black text-xs rounded-2xl transition-all shadow-sm cursor-pointer inline-flex items-center justify-center gap-1.5"
+                  className="w-full py-3.5 px-4 bg-gradient-to-r from-stone-900 to-stone-800 hover:from-stone-950 hover:to-black text-white font-black text-xs rounded-2xl transition-all shadow-sm cursor-pointer inline-flex items-center justify-center gap-2 active:scale-95"
                 >
-                  <Printer className="h-4 w-4 text-emerald-300" />
-                  <span>طباعة بوستر A4 🖨️</span>
-                </button>
-
-                <button
-                  type="button"
-                  disabled={isExportingPng}
-                  onClick={handleExportPng}
-                  className="py-3 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-2xl transition-all shadow-sm cursor-pointer inline-flex items-center justify-center gap-1.5 disabled:opacity-50"
-                >
-                  <Download className="h-4 w-4 text-white" />
-                  <span>{isExportingPng ? 'جاري التصدير...' : 'تحميل كصورة (PNG) 🖼️'}</span>
+                  <Printer className="h-4 w-4 text-emerald-300 shrink-0" />
+                  <span>طباعة بوستر A4</span>
                 </button>
               </div>
-
-              <div className="w-full mt-2">
-                <button
-                  type="button"
-                  onClick={handleCopyLink}
-                  className={`w-full py-2.5 px-3 border font-black text-xs rounded-2xl transition-all cursor-pointer inline-flex items-center justify-center gap-1.5 ${
-                    copied 
-                      ? 'bg-emerald-50 text-emerald-700 border-emerald-300' 
-                      : 'bg-white border-stone-300 text-stone-700 hover:bg-stone-50'
-                  }`}
-                >
-                  {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4 text-stone-400" />}
-                  <span>{copied ? 'تم النسخ!' : 'نسخ رابط صفحة المنيو والعروض 🔗'}</span>
-                </button>
-              </div>
-
-              {/* Live Web Preview Button */}
-              <Link
-                to={`/business/${business.id}/menu-offers`}
-                className="mt-3 w-full py-3 px-4 bg-emerald-50 hover:bg-emerald-100 text-[#1a4d2e] font-black text-xs rounded-2xl transition-all text-center flex items-center justify-center gap-2 border border-emerald-200/80 shadow-xs"
-              >
-                <Sparkles className="h-4 w-4 text-emerald-600 animate-pulse" />
-                <span>معاينة وتجربة شكل المنيو الرقمي والعروض لمشروعك 🍽️✨</span>
-              </Link>
 
             </div>
           </div>

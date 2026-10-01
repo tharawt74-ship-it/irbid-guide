@@ -38,7 +38,9 @@ import {
   Briefcase, 
   ExternalLink, 
   ChevronDown, 
-  ChevronUp 
+  ChevronUp,
+  BookOpen,
+  Layers
 } from 'lucide-react';
 
 interface BusinessNewsTabProps {
@@ -525,6 +527,8 @@ export function BusinessNewsTab({
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
                 {attachedItem.type === 'menu' && <Utensils className="h-4 w-4" />}
+                {attachedItem.type === 'menu_category' && <Layers className="h-4 w-4" />}
+                {attachedItem.type === 'full_menu' && <BookOpen className="h-4 w-4" />}
                 {attachedItem.type === 'offer' && <Tag className="h-4 w-4" />}
                 {attachedItem.type === 'job' && <Briefcase className="h-4 w-4" />}
               </div>
@@ -532,7 +536,7 @@ export function BusinessNewsTab({
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-black text-stone-900">{attachedItem.title}</span>
                   <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.2 rounded-full font-bold">
-                    {attachedItem.type === 'menu' ? 'من المنيو' : attachedItem.type === 'offer' ? 'عرض خاص' : 'وظيفة شاغرة'}
+                    {attachedItem.type === 'menu' ? 'من المنيو' : attachedItem.type === 'menu_category' ? 'قسم من المنيو' : attachedItem.type === 'full_menu' ? 'المنيو كاملاً' : attachedItem.type === 'offer' ? 'عرض خاص' : 'وظيفة شاغرة'}
                   </span>
                 </div>
                 {attachedItem.price && (
@@ -596,37 +600,103 @@ export function BusinessNewsTab({
                 menuItems.length === 0 ? (
                   <p className="text-center py-4 text-xs text-stone-400">لا توجد عناصر مضافة في المنيو حالياً</p>
                 ) : (
-                  menuItems.map((item) => (
+                  <>
+                    {/* Full Menu Option */}
                     <div
-                      key={item.id}
                       onClick={() => {
                         setAttachedItem({
-                          type: 'menu',
-                          id: item.id,
-                          title: item.name,
-                          subtitle: item.description,
-                          price: item.price,
-                          originalPrice: item.originalPrice,
-                          imageUrl: item.imageUrl,
-                          category: item.category,
-                          actionText: 'طلب من المنيو'
+                          type: 'full_menu',
+                          id: 'full_menu',
+                          title: 'المنيو والكتالوج الرقمي الكامل',
+                          subtitle: `تصفح كافة الأصناف والأسعار (${menuItems.length} صنف)`,
+                          actionText: 'فتح المنيو'
                         });
                         setShowAttachmentPicker(false);
                       }}
-                      className="p-2 rounded-lg hover:bg-amber-50 flex items-center justify-between gap-2 cursor-pointer transition-colors border border-transparent hover:border-amber-200"
+                      className="p-2 rounded-lg bg-amber-50 hover:bg-amber-100 flex items-center justify-between gap-2 cursor-pointer transition-colors border border-amber-200"
                     >
                       <div className="flex items-center gap-2">
-                        {item.imageUrl && (
-                          <img src={item.imageUrl} alt={item.name} className="w-8 h-8 rounded-lg object-cover" />
-                        )}
+                        <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-amber-500 to-amber-600 text-white flex items-center justify-center font-bold shadow-2xs">
+                          <BookOpen className="h-3.5 w-3.5" />
+                        </div>
                         <div>
-                          <p className="text-xs font-bold text-stone-800">{item.name}</p>
-                          {item.category && <p className="text-[10px] text-stone-400">{item.category}</p>}
+                          <p className="text-xs font-black text-amber-950">إرفاق المنيو والكتالوج بالكامل</p>
+                          <p className="text-[10px] text-stone-500">{menuItems.length} صنف متاح</p>
                         </div>
                       </div>
-                      <span className="text-xs font-mono font-bold text-emerald-700">{item.price} د.أ</span>
+                      <span className="text-[10px] font-bold bg-white text-amber-900 px-2 py-0.5 rounded-md border border-amber-200">
+                        المنيو كاملاً
+                      </span>
                     </div>
-                  ))
+
+                    {/* Category Options */}
+                    {Array.from(new Set(menuItems.map(i => i.category?.trim() || 'عام'))).map((catName) => {
+                      const count = menuItems.filter(i => (i.category?.trim() || 'عام') === catName).length;
+                      return (
+                        <div
+                          key={catName}
+                          onClick={() => {
+                            setAttachedItem({
+                              type: 'menu_category',
+                              id: `cat_${catName}`,
+                              title: `قسم: ${catName}`,
+                              subtitle: `تصفح أصناف قسم ${catName} (${count} أصناف)`,
+                              category: catName,
+                              actionText: 'تصفح القسم'
+                            });
+                            setShowAttachmentPicker(false);
+                          }}
+                          className="p-2 rounded-lg hover:bg-amber-50 flex items-center justify-between gap-2 cursor-pointer transition-colors border border-transparent hover:border-amber-200"
+                        >
+                          <div className="flex items-center gap-2">
+                            <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center font-bold">
+                              <Layers className="h-3.5 w-3.5" />
+                            </div>
+                            <div>
+                              <p className="text-xs font-bold text-stone-800">قسم: {catName}</p>
+                              <p className="text-[10px] text-stone-400">{count} أصناف في هذا القسم</p>
+                            </div>
+                          </div>
+                          <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                            قسم كامل
+                          </span>
+                        </div>
+                      );
+                    })}
+
+                    {/* Individual Items List */}
+                    {menuItems.map((item) => (
+                      <div
+                        key={item.id}
+                        onClick={() => {
+                          setAttachedItem({
+                            type: 'menu',
+                            id: item.id,
+                            title: item.name,
+                            subtitle: item.description,
+                            price: item.price,
+                            originalPrice: item.originalPrice,
+                            imageUrl: item.imageUrl,
+                            category: item.category,
+                            actionText: 'طلب من المنيو'
+                          });
+                          setShowAttachmentPicker(false);
+                        }}
+                        className="p-2 rounded-lg hover:bg-amber-50 flex items-center justify-between gap-2 cursor-pointer transition-colors border border-transparent hover:border-amber-200"
+                      >
+                        <div className="flex items-center gap-2">
+                          {item.imageUrl && (
+                            <img src={item.imageUrl} alt={item.name} className="w-8 h-8 rounded-lg object-cover" />
+                          )}
+                          <div>
+                            <p className="text-xs font-bold text-stone-800">{item.name}</p>
+                            {item.category && <p className="text-[10px] text-stone-400">{item.category}</p>}
+                          </div>
+                        </div>
+                        <span className="text-xs font-mono font-bold text-emerald-700">{item.price} د.أ</span>
+                      </div>
+                    ))}
+                  </>
                 )
               )}
 
@@ -939,6 +1009,8 @@ export function BusinessNewsTab({
                       ) : (
                         <div className="w-12 h-12 rounded-xl bg-amber-200 text-amber-900 flex items-center justify-center shrink-0">
                           {post.attachedItem.type === 'menu' && <Utensils className="h-6 w-6" />}
+                          {post.attachedItem.type === 'menu_category' && <Layers className="h-6 w-6" />}
+                          {post.attachedItem.type === 'full_menu' && <BookOpen className="h-6 w-6" />}
                           {post.attachedItem.type === 'offer' && <Tag className="h-6 w-6" />}
                           {post.attachedItem.type === 'job' && <Briefcase className="h-6 w-6" />}
                         </div>
@@ -948,7 +1020,7 @@ export function BusinessNewsTab({
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-xs sm:text-sm font-black text-stone-900">{post.attachedItem.title}</span>
                           <span className="text-[10px] bg-amber-200/80 text-amber-950 px-2 py-0.5 rounded-full font-bold">
-                            {post.attachedItem.type === 'menu' ? '🍔 من قائمة الطعام' : post.attachedItem.type === 'offer' ? '🏷️ عرض خاص' : '💼 وظيفة شاغرة'}
+                            {post.attachedItem.type === 'menu' ? 'من قائمة الطعام' : post.attachedItem.type === 'menu_category' ? 'قسم من المنيو' : post.attachedItem.type === 'full_menu' ? 'المنيو كاملاً' : post.attachedItem.type === 'offer' ? 'عرض خاص' : 'وظيفة شاغرة'}
                           </span>
                         </div>
 
@@ -971,7 +1043,7 @@ export function BusinessNewsTab({
                       <button
                         type="button"
                         onClick={() => {
-                          if (post.attachedItem?.type === 'menu') onSelectTab('menu');
+                          if (post.attachedItem?.type === 'menu' || post.attachedItem?.type === 'menu_category' || post.attachedItem?.type === 'full_menu') onSelectTab('menu');
                           else if (post.attachedItem?.type === 'offer') onSelectTab('offers');
                           else if (post.attachedItem?.type === 'job') onSelectTab('jobs');
                         }}

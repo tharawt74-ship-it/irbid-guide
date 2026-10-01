@@ -74,8 +74,8 @@ export function QrPosterSelectionModal({
             <button
               type="button"
               onClick={() => {
-                onClose();
                 onSelectMenuPoster();
+                onClose();
               }}
               className="bg-stone-50 hover:bg-emerald-50/70 border-2 border-stone-200/90 hover:border-[#1a4d2e] rounded-2xl p-4 sm:p-5 text-right flex flex-col justify-between transition-all group cursor-pointer shadow-2xs hover:shadow-md"
             >
@@ -101,8 +101,8 @@ export function QrPosterSelectionModal({
             <button
               type="button"
               onClick={() => {
-                onClose();
                 onSelectReviewsPoster();
+                onClose();
               }}
               className="bg-stone-50 hover:bg-amber-50/70 border-2 border-stone-200/90 hover:border-amber-600 rounded-2xl p-4 sm:p-5 text-right flex flex-col justify-between transition-all group cursor-pointer shadow-2xs hover:shadow-md"
             >

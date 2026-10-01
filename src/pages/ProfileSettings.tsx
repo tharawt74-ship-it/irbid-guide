@@ -3,8 +3,8 @@ import { Link, useNavigate } from 'react-router';
 import { 
   User, Lock, Shield, Bell, Key, Mail, Phone, MapPin, 
   CheckCircle2, AlertCircle, ArrowRight, Save, RefreshCw, 
-  Eye, EyeOff, LogOut, Trash2, Check, Sparkles, MessageSquare, 
-  HelpCircle, ShieldCheck, Heart, Store
+  Eye, EyeOff, LogOut, Trash2, Check, MessageSquare, 
+  HelpCircle, ShieldCheck
 } from 'lucide-react';
 import { 
   updateProfile, 
@@ -81,16 +81,15 @@ export function ProfileSettings() {
     }
   }, [currentUser, userProfile]);
 
-  // If user is not logged in, redirect to login
+  // If user is not logged in
   if (!currentUser) {
     return (
       <div className="max-w-xl mx-auto py-16 px-4 text-center space-y-6" dir="rtl">
-        <div className="w-16 h-16 bg-[#1a4d2e]/10 text-[#1a4d2e] rounded-3xl flex items-center justify-center mx-auto shadow-sm">
+        <div className="w-16 h-16 bg-[#1a4d2e]/10 text-[#1a4d2e] rounded-3xl flex items-center justify-center mx-auto shadow-xs">
           <Lock className="h-8 w-8 text-[#1a4d2e]" />
         </div>
-        <div className="space-y-2">
-          <h2 className="text-2xl font-black text-stone-900">يرجى تسجيل الدخول أولاً</h2>
-          <p className="text-sm text-stone-500">تحتاج لتسجيل الدخول إلى حسابك لتتمكن من تعديل الإعدادات والخصوصية.</p>
+        <div className="space-y-1">
+          <h2 className="text-2xl font-black text-stone-900">تسجيل الدخول مطلوب</h2>
         </div>
         <Link
           to="/login"
@@ -111,14 +110,12 @@ export function ProfileSettings() {
     setGeneralError('');
 
     try {
-      // 1. Update Firebase Auth Profile (Display Name)
       if (auth.currentUser && displayName.trim()) {
         await updateProfile(auth.currentUser, {
           displayName: displayName.trim()
         });
       }
 
-      // 2. Update Firestore User Document
       if (db && currentUser.uid) {
         const userRef = doc(db, 'users', currentUser.uid);
         await setDoc(userRef, {
@@ -131,11 +128,11 @@ export function ProfileSettings() {
       }
 
       await refreshUserData();
-      setGeneralSuccess('تم تحديث معلوماتك الشخصية بنجاح!');
+      setGeneralSuccess('تم تحديث معلوماتك الشخصية بنجاح');
       setTimeout(() => setGeneralSuccess(''), 4000);
     } catch (err: any) {
       console.error('Error updating profile:', err);
-      setGeneralError(err.message || 'حدث خطأ أثناء حفظ المعلومات. يرجى المحاولة مرة أخرى.');
+      setGeneralError(err.message || 'حدث خطأ أثناء حفظ المعلومات');
     } finally {
       setSavingGeneral(false);
     }
@@ -149,30 +146,27 @@ export function ProfileSettings() {
     setPasswordError('');
 
     if (newPassword.length < 6) {
-      setPasswordError('يجب أن تتكون كلمة المرور الجديدة من 6 خانات أو أكثر.');
+      setPasswordError('كلمة المرور يجب أن لا تقل عن 6 خانات');
       setSavingPassword(false);
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      setPasswordError('كلمتا المرور غير متطابقتين.');
+      setPasswordError('كلمتا المرور غير متطابقتين');
       setSavingPassword(false);
       return;
     }
 
     try {
       if (!auth.currentUser || !currentUser.email) {
-        throw new Error('المستخدم غير متصل حالياً.');
+        throw new Error('المستخدم غير متصل حالياً');
       }
 
-      // Re-authenticate user before sensitive action
       const credential = EmailAuthProvider.credential(currentUser.email, currentPassword);
       await reauthenticateWithCredential(auth.currentUser, credential);
-
-      // Update password
       await updatePassword(auth.currentUser, newPassword);
 
-      setPasswordSuccess('تم تغيير كلمة المرور بنجاح! احتفظ بها في مكان آمن.');
+      setPasswordSuccess('تم تغيير كلمة المرور بنجاح');
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
@@ -180,11 +174,11 @@ export function ProfileSettings() {
     } catch (err: any) {
       console.error('Password change error:', err);
       if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
-        setPasswordError('كلمة المرور الحالية غير صحيحة.');
+        setPasswordError('كلمة المرور الحالية غير صحيحة');
       } else if (err.code === 'auth/requires-recent-login') {
-        setPasswordError('يرجى إعادة تسجيل الدخول لتتمكن من تغيير كلمة المرور لأسباب أمنية.');
+        setPasswordError('يرجى إعادة تسجيل الدخول لتغيير كلمة المرور');
       } else {
-        setPasswordError(err.message || 'حدث خطأ أثناء تغيير كلمة المرور.');
+        setPasswordError(err.message || 'حدث خطأ أثناء تغيير كلمة المرور');
       }
     } finally {
       setSavingPassword(false);
@@ -202,9 +196,9 @@ export function ProfileSettings() {
     } catch (err: any) {
       console.warn('Error sending reset email:', err);
       if (err?.code === 'auth/too-many-requests' || err?.message?.includes('too-many-requests')) {
-        setPasswordError('تم إرسال عدة طلبات مؤخراً. يرجى الانتظار دقيقة كاملة قبل المحاولة مجدداً.');
+        setPasswordError('تم إرسال عدة طلبات مؤخراً. يرجى الانتظار قليلاً');
       } else {
-        setPasswordError('تعذر إرسال رابط إعادة التعيين. يرجى المحاولة لاحقاً.');
+        setPasswordError('تعذر إرسال رابط إعادة التعيين');
       }
     } finally {
       setSendingResetEmail(false);
@@ -249,7 +243,7 @@ export function ProfileSettings() {
   };
 
   return (
-    <div className="w-full max-w-4xl mx-auto space-y-6 sm:space-y-8 pb-16" dir="rtl">
+    <div className="w-full max-w-4xl mx-auto space-y-6 pb-16" dir="rtl">
       
       {/* Top Header & Breadcrumb */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-stone-200/80 pb-4">
@@ -265,16 +259,12 @@ export function ProfileSettings() {
             <span className="text-stone-300">/</span>
             <span className="text-xs font-bold text-stone-500">إعدادات الحساب</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-black text-stone-900 flex items-center gap-2.5">
-            <span>إعدادات الحساب والخصوصية</span>
-            <Sparkles className="h-5 w-5 text-[#ff9f1c]" />
+          <h1 className="text-2xl sm:text-3xl font-black text-stone-900">
+            إعدادات الحساب والخصوصية
           </h1>
-          <p className="text-xs sm:text-sm text-stone-500">
-            تحكم في معلوماتك الشخصية، كلمة المرور، تفضيلات الإشعارات، والخصوصية.
-          </p>
         </div>
 
-        {/* Quick User Badge */}
+        {/* User Card */}
         <div className="flex items-center gap-3 bg-white p-2.5 px-4 rounded-2xl border border-stone-200 shadow-2xs self-start sm:self-auto">
           <div className="w-10 h-10 rounded-xl bg-[#1a4d2e]/10 text-[#1a4d2e] flex items-center justify-center font-black text-sm">
             {currentUser.displayName ? currentUser.displayName[0].toUpperCase() : 'U'}
@@ -291,13 +281,13 @@ export function ProfileSettings() {
       </div>
 
       {/* Main Settings Navigation Tabs */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-stone-100/80 p-1.5 rounded-2xl border border-stone-200/80">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-stone-100 p-1.5 rounded-2xl border border-stone-200/80">
         <button
           type="button"
           onClick={() => setActiveTab('general')}
           className={`py-3 px-3 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer ${
             activeTab === 'general'
-              ? 'bg-white text-[#1a4d2e] shadow-xs font-black'
+              ? 'bg-white text-[#1a4d2e] shadow-2xs font-black'
               : 'text-stone-600 hover:text-stone-900 hover:bg-white/60'
           }`}
         >
@@ -310,7 +300,7 @@ export function ProfileSettings() {
           onClick={() => setActiveTab('security')}
           className={`py-3 px-3 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer ${
             activeTab === 'security'
-              ? 'bg-white text-[#1a4d2e] shadow-xs font-black'
+              ? 'bg-white text-[#1a4d2e] shadow-2xs font-black'
               : 'text-stone-600 hover:text-stone-900 hover:bg-white/60'
           }`}
         >
@@ -323,7 +313,7 @@ export function ProfileSettings() {
           onClick={() => setActiveTab('privacy')}
           className={`py-3 px-3 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer ${
             activeTab === 'privacy'
-              ? 'bg-white text-[#1a4d2e] shadow-xs font-black'
+              ? 'bg-white text-[#1a4d2e] shadow-2xs font-black'
               : 'text-stone-600 hover:text-stone-900 hover:bg-white/60'
           }`}
         >
@@ -336,8 +326,8 @@ export function ProfileSettings() {
           onClick={() => setActiveTab('account')}
           className={`py-3 px-3 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer ${
             activeTab === 'account'
-              ? 'bg-white text-red-600 shadow-xs font-black'
-              : 'text-stone-600 hover:text-red-700 hover:bg-white/60'
+              ? 'bg-white text-rose-600 shadow-2xs font-black'
+              : 'text-stone-600 hover:text-rose-700 hover:bg-white/60'
           }`}
         >
           <AlertCircle className="h-4 w-4 shrink-0" />
@@ -347,104 +337,82 @@ export function ProfileSettings() {
 
       {/* Tab 1: General Personal Information */}
       {activeTab === 'general' && (
-        <form onSubmit={handleSaveGeneral} className="bg-white rounded-3xl border border-[#e5e1da] p-6 sm:p-8 shadow-xs space-y-6 animate-in fade-in duration-200">
+        <form onSubmit={handleSaveGeneral} className="bg-white rounded-2xl border border-stone-200 p-6 sm:p-8 shadow-2xs space-y-6 animate-in fade-in duration-200">
           <div className="flex items-center justify-between border-b border-stone-100 pb-4">
-            <div>
-              <h2 className="text-lg font-black text-stone-900 flex items-center gap-2">
-                <User className="h-5 w-5 text-[#1a4d2e]" />
-                <span>البيانات الأساسية للمستخدم</span>
-              </h2>
-              <p className="text-xs text-stone-500 mt-0.5">تظهر هذه المعلومات في تفاعلاتك ومراجعاتك داخل المنصة.</p>
-            </div>
-            {isAdmin ? (
-              <span className="bg-amber-100 text-amber-900 text-xs font-black px-3 py-1 rounded-xl border border-amber-200">
-                مدير عام المنصة
-              </span>
-            ) : isSupervisor ? (
-              <span className="bg-blue-100 text-blue-900 text-xs font-black px-3 py-1 rounded-xl border border-blue-200">
-                مشرف معتمد
-              </span>
-            ) : null}
+            <h2 className="text-lg font-black text-stone-900 flex items-center gap-2">
+              <User className="h-5 w-5 text-[#1a4d2e]" />
+              <span>البيانات الأساسية للمستخدم</span>
+            </h2>
           </div>
 
           {generalSuccess && (
-            <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-4 rounded-2xl flex items-center gap-3 text-xs sm:text-sm font-bold animate-in fade-in">
+            <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-4 rounded-xl flex items-center gap-3 text-xs sm:text-sm font-bold">
               <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
               <span>{generalSuccess}</span>
             </div>
           )}
 
           {generalError && (
-            <div className="bg-red-50 border border-red-200 text-red-800 p-4 rounded-2xl flex items-center gap-3 text-xs sm:text-sm font-bold animate-in fade-in">
-              <AlertCircle className="h-5 w-5 text-red-600 shrink-0" />
+            <div className="bg-rose-50 border border-rose-200 text-rose-800 p-4 rounded-xl flex items-center gap-3 text-xs sm:text-sm font-bold">
+              <AlertCircle className="h-5 w-5 text-rose-600 shrink-0" />
               <span>{generalError}</span>
             </div>
           )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             {/* Display Name */}
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <label className="block text-xs font-black text-stone-700">
-                الاسم المعروض (الاسم الكامل) *
+                الاسم المعروض
               </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  required
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                  placeholder="مثال: أحمد الشمالي"
-                  className="w-full bg-stone-50 border border-stone-200 rounded-2xl py-3 px-4 text-sm font-bold text-stone-900 focus:bg-white focus:border-[#1a4d2e] focus:ring-2 focus:ring-[#1a4d2e]/10 outline-none transition-all"
-                />
-              </div>
+              <input
+                type="text"
+                required
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder="الاسم الكامل"
+                className="w-full bg-stone-50 border border-stone-200 rounded-xl py-3 px-4 text-sm font-bold text-stone-900 focus:bg-white focus:border-[#1a4d2e] focus:ring-2 focus:ring-[#1a4d2e]/10 outline-none transition-all"
+              />
             </div>
 
-            {/* Email (Read only) */}
-            <div className="space-y-2">
+            {/* Email */}
+            <div className="space-y-1.5">
               <label className="block text-xs font-black text-stone-700">
                 البريد الإلكتروني المسجل
               </label>
-              <div className="relative">
-                <input
-                  type="email"
-                  disabled
-                  value={currentUser.email || ''}
-                  className="w-full bg-stone-100 border border-stone-200 text-stone-500 rounded-2xl py-3 px-4 text-sm font-mono cursor-not-allowed"
-                  dir="ltr"
-                />
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-bold bg-stone-200 text-stone-600 px-2 py-0.5 rounded-md">
-                  غير قابل للتعديل المباشر
-                </span>
-              </div>
+              <input
+                type="email"
+                disabled
+                value={currentUser.email || ''}
+                className="w-full bg-stone-100 border border-stone-200 text-stone-500 rounded-xl py-3 px-4 text-sm font-mono cursor-not-allowed"
+                dir="ltr"
+              />
             </div>
 
             {/* Phone Number */}
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <label className="block text-xs font-black text-stone-700">
-                رقم الهاتف الشخصي (اختياري)
+                رقم الهاتف الشخصي
               </label>
-              <div className="relative">
-                <input
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="079XXXXXXXX"
-                  className="w-full bg-stone-50 border border-stone-200 rounded-2xl py-3 px-4 text-sm font-mono text-stone-900 focus:bg-white focus:border-[#1a4d2e] focus:ring-2 focus:ring-[#1a4d2e]/10 outline-none transition-all"
-                  dir="ltr"
-                />
-              </div>
-              <p className="text-[11px] text-stone-400">يستخدم للتواصل في حال إضافة وظائف أو طلب خدمات الترويج.</p>
+              <input
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="079XXXXXXXX"
+                className="w-full bg-stone-50 border border-stone-200 rounded-xl py-3 px-4 text-sm font-mono text-stone-900 focus:bg-white focus:border-[#1a4d2e] focus:ring-2 focus:ring-[#1a4d2e]/10 outline-none transition-all"
+                dir="ltr"
+              />
             </div>
 
-            {/* Preferred Irbid District / Area */}
-            <div className="space-y-2">
+            {/* Preferred District */}
+            <div className="space-y-1.5">
               <label className="block text-xs font-black text-stone-700">
-                الحي / المنطقة المفضلة في إربد
+                الحي أو المنطقة المفضلة في إربد
               </label>
               <select
                 value={district}
                 onChange={(e) => setDistrict(e.target.value)}
-                className="w-full bg-stone-50 border border-stone-200 rounded-2xl py-3 px-4 text-sm font-bold text-stone-900 focus:bg-white focus:border-[#1a4d2e] focus:ring-2 focus:ring-[#1a4d2e]/10 outline-none transition-all cursor-pointer"
+                className="w-full bg-stone-50 border border-stone-200 rounded-xl py-3 px-4 text-sm font-bold text-stone-900 focus:bg-white focus:border-[#1a4d2e] focus:ring-2 focus:ring-[#1a4d2e]/10 outline-none transition-all cursor-pointer"
               >
                 {IRBID_REGIONS_CATEGORIZED.map((group) => (
                   <optgroup key={group.groupName} label={group.groupName}>
@@ -460,24 +428,24 @@ export function ProfileSettings() {
           </div>
 
           {/* Bio / About */}
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <label className="block text-xs font-black text-stone-700">
-              نبذة قصيرة عنك (Bio)
+              نبذة شخصية
             </label>
             <textarea
               rows={3}
               value={bio}
               onChange={(e) => setBio(e.target.value)}
-              placeholder="اكتب نبذة موجزة عن اهتماماتك أو مجالك..."
-              className="w-full bg-stone-50 border border-stone-200 rounded-2xl p-4 text-sm text-stone-900 focus:bg-white focus:border-[#1a4d2e] focus:ring-2 focus:ring-[#1a4d2e]/10 outline-none transition-all resize-none"
+              placeholder="اكتب نبذة موجزة..."
+              className="w-full bg-stone-50 border border-stone-200 rounded-xl p-4 text-sm text-stone-900 focus:bg-white focus:border-[#1a4d2e] focus:ring-2 focus:ring-[#1a4d2e]/10 outline-none transition-all resize-none"
             />
           </div>
 
-          <div className="flex items-center justify-end gap-3 pt-3 border-t border-stone-100">
+          <div className="flex items-center justify-end pt-3 border-t border-stone-100">
             <button
               type="submit"
               disabled={savingGeneral}
-              className="inline-flex items-center gap-2 bg-[#1a4d2e] hover:bg-[#143d24] text-white px-6 py-3 rounded-2xl font-bold text-sm shadow-md shadow-[#1a4d2e]/20 transition-all cursor-pointer disabled:opacity-50 active:scale-98"
+              className="inline-flex items-center gap-2 bg-[#1a4d2e] hover:bg-[#143d24] text-white px-6 py-3 rounded-xl font-bold text-sm shadow-md transition-all cursor-pointer disabled:opacity-50 active:scale-98"
             >
               <Save className="h-4 w-4" />
               <span>{savingGeneral ? 'جاري الحفظ...' : 'حفظ التعديلات'}</span>
@@ -489,29 +457,24 @@ export function ProfileSettings() {
       {/* Tab 2: Security & Password */}
       {activeTab === 'security' && (
         <div className="space-y-6 animate-in fade-in duration-200">
-          
-          {/* Change Password Form */}
-          <form onSubmit={handleSavePassword} className="bg-white rounded-3xl border border-[#e5e1da] p-6 sm:p-8 shadow-xs space-y-6">
+          <form onSubmit={handleSavePassword} className="bg-white rounded-2xl border border-stone-200 p-6 sm:p-8 shadow-2xs space-y-6">
             <div className="border-b border-stone-100 pb-4">
               <h2 className="text-lg font-black text-stone-900 flex items-center gap-2">
                 <Key className="h-5 w-5 text-[#1a4d2e]" />
                 <span>تغيير كلمة المرور</span>
               </h2>
-              <p className="text-xs text-stone-500 mt-0.5">
-                تأكد من اختيار كلمة مرور قوية تحتوي على أحرف وأرقام لضمان حماية حسابك.
-              </p>
             </div>
 
             {passwordSuccess && (
-              <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-4 rounded-2xl flex items-center gap-3 text-xs sm:text-sm font-bold animate-in fade-in">
+              <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-4 rounded-xl flex items-center gap-3 text-xs sm:text-sm font-bold">
                 <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
                 <span>{passwordSuccess}</span>
               </div>
             )}
 
             {passwordError && (
-              <div className="bg-red-50 border border-red-200 text-red-800 p-4 rounded-2xl flex items-center gap-3 text-xs sm:text-sm font-bold animate-in fade-in">
-                <AlertCircle className="h-5 w-5 text-red-600 shrink-0" />
+              <div className="bg-rose-50 border border-rose-200 text-rose-800 p-4 rounded-xl flex items-center gap-3 text-xs sm:text-sm font-bold">
+                <AlertCircle className="h-5 w-5 text-rose-600 shrink-0" />
                 <span>{passwordError}</span>
               </div>
             )}
@@ -520,7 +483,7 @@ export function ProfileSettings() {
               {/* Current Password */}
               <div className="space-y-1.5">
                 <label className="block text-xs font-black text-stone-700">
-                  كلمة المرور الحالية *
+                  كلمة المرور الحالية
                 </label>
                 <div className="relative">
                   <input
@@ -529,13 +492,13 @@ export function ProfileSettings() {
                     value={currentPassword}
                     onChange={(e) => setCurrentPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full bg-stone-50 border border-stone-200 rounded-2xl py-3 px-4 pl-11 text-sm font-mono text-stone-900 focus:bg-white focus:border-[#1a4d2e] focus:ring-2 focus:ring-[#1a4d2e]/10 outline-none transition-all"
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl py-3 px-4 pl-11 text-sm font-mono text-stone-900 focus:bg-white focus:border-[#1a4d2e] focus:ring-2 focus:ring-[#1a4d2e]/10 outline-none transition-all"
                     dir="ltr"
                   />
                   <button
                     type="button"
                     onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 p-1"
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 p-1 cursor-pointer"
                   >
                     {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
@@ -545,7 +508,7 @@ export function ProfileSettings() {
               {/* New Password */}
               <div className="space-y-1.5">
                 <label className="block text-xs font-black text-stone-700">
-                  كلمة المرور الجديدة *
+                  كلمة المرور الجديدة
                 </label>
                 <div className="relative">
                   <input
@@ -554,24 +517,23 @@ export function ProfileSettings() {
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full bg-stone-50 border border-stone-200 rounded-2xl py-3 px-4 pl-11 text-sm font-mono text-stone-900 focus:bg-white focus:border-[#1a4d2e] focus:ring-2 focus:ring-[#1a4d2e]/10 outline-none transition-all"
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl py-3 px-4 pl-11 text-sm font-mono text-stone-900 focus:bg-white focus:border-[#1a4d2e] focus:ring-2 focus:ring-[#1a4d2e]/10 outline-none transition-all"
                     dir="ltr"
                   />
                   <button
                     type="button"
                     onClick={() => setShowNewPassword(!showNewPassword)}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 p-1"
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 p-1 cursor-pointer"
                   >
                     {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
-                <p className="text-[11px] text-stone-400">يجب ألا تقل عن 6 خانات.</p>
               </div>
 
               {/* Confirm Password */}
               <div className="space-y-1.5">
                 <label className="block text-xs font-black text-stone-700">
-                  تأكيد كلمة المرور الجديدة *
+                  تأكيد كلمة المرور الجديدة
                 </label>
                 <div className="relative">
                   <input
@@ -580,7 +542,7 @@ export function ProfileSettings() {
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full bg-stone-50 border border-stone-200 rounded-2xl py-3 px-4 pl-11 text-sm font-mono text-stone-900 focus:bg-white focus:border-[#1a4d2e] focus:ring-2 focus:ring-[#1a4d2e]/10 outline-none transition-all"
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl py-3 px-4 pl-11 text-sm font-mono text-stone-900 focus:bg-white focus:border-[#1a4d2e] focus:ring-2 focus:ring-[#1a4d2e]/10 outline-none transition-all"
                     dir="ltr"
                   />
                   <button
@@ -601,13 +563,13 @@ export function ProfileSettings() {
                 disabled={sendingResetEmail}
                 className="text-xs font-bold text-stone-500 hover:text-[#1a4d2e] underline cursor-pointer"
               >
-                {sendingResetEmail ? 'جاري إرسال الرابط...' : 'نسيت كلمة المرور؟ أرسل رابط إعادة التعيين لبريدي'}
+                {sendingResetEmail ? 'جاري إرسال الرابط...' : 'نسيت كلمة المرور؟ أرسل رابط إعادة التعيين'}
               </button>
 
               <button
                 type="submit"
                 disabled={savingPassword}
-                className="inline-flex items-center gap-2 bg-[#1a4d2e] hover:bg-[#143d24] text-white px-6 py-3 rounded-2xl font-bold text-sm shadow-md shadow-[#1a4d2e]/20 transition-all cursor-pointer disabled:opacity-50 active:scale-98"
+                className="inline-flex items-center gap-2 bg-[#1a4d2e] hover:bg-[#143d24] text-white px-6 py-3 rounded-xl font-bold text-sm shadow-md transition-all cursor-pointer disabled:opacity-50 active:scale-98"
               >
                 <Key className="h-4 w-4" />
                 <span>{savingPassword ? 'جاري التحديث...' : 'تحديث كلمة المرور'}</span>
@@ -615,35 +577,35 @@ export function ProfileSettings() {
             </div>
 
             {resetEmailSent && (
-              <div className="bg-blue-50 border border-blue-200 text-blue-800 p-3.5 rounded-2xl text-xs font-bold flex items-center gap-2">
+              <div className="bg-blue-50 border border-blue-200 text-blue-800 p-3.5 rounded-xl text-xs font-bold flex items-center gap-2">
                 <Mail className="h-4 w-4 text-blue-600 shrink-0" />
-                <span>تم إرسال رابط إعادة تعيين كلمة المرور إلى {currentUser.email}. يرجى تفقد صندوق الوارد.</span>
+                <span>تم إرسال رابط إعادة تعيين كلمة المرور إلى البريد الإلكتروني</span>
               </div>
             )}
           </form>
 
-          {/* Account Security Information Card */}
-          <div className="bg-stone-50 rounded-3xl border border-stone-200/80 p-6 space-y-4">
+          {/* Account Security Info */}
+          <div className="bg-stone-50 rounded-2xl border border-stone-200 p-6 space-y-4">
             <h3 className="text-sm font-black text-stone-800 flex items-center gap-2">
               <ShieldCheck className="h-4 w-4 text-emerald-600" />
-              <span>معلومات الأمان وتسجيل الدخول</span>
+              <span>معلومات الحساب</span>
             </h3>
             
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-              <div className="bg-white p-3.5 rounded-2xl border border-stone-200 shadow-3xs space-y-1">
-                <span className="text-stone-400 font-medium">البريد الإلكتروني:</span>
+              <div className="bg-white p-3.5 rounded-xl border border-stone-200 space-y-1">
+                <span className="text-stone-400 font-medium block">البريد الإلكتروني:</span>
                 <p className="font-bold text-stone-800 font-mono break-all">{currentUser.email}</p>
               </div>
 
-              <div className="bg-white p-3.5 rounded-2xl border border-stone-200 shadow-3xs space-y-1">
-                <span className="text-stone-400 font-medium">تاريخ الإنشاء:</span>
+              <div className="bg-white p-3.5 rounded-xl border border-stone-200 space-y-1">
+                <span className="text-stone-400 font-medium block">تاريخ الانضمام:</span>
                 <p className="font-bold text-stone-800">
                   {currentUser.metadata.creationTime ? new Date(currentUser.metadata.creationTime).toLocaleDateString('ar-JO') : 'غير متوفر'}
                 </p>
               </div>
 
-              <div className="bg-white p-3.5 rounded-2xl border border-stone-200 shadow-3xs space-y-1">
-                <span className="text-stone-400 font-medium">آخر تسجيل دخول:</span>
+              <div className="bg-white p-3.5 rounded-xl border border-stone-200 space-y-1">
+                <span className="text-stone-400 font-medium block">آخر تسجيل دخول:</span>
                 <p className="font-bold text-stone-800">
                   {currentUser.metadata.lastSignInTime ? new Date(currentUser.metadata.lastSignInTime).toLocaleDateString('ar-JO') : 'الآن'}
                 </p>
@@ -655,19 +617,16 @@ export function ProfileSettings() {
 
       {/* Tab 3: Privacy & Communication */}
       {activeTab === 'privacy' && (
-        <div className="bg-white rounded-3xl border border-[#e5e1da] p-6 sm:p-8 shadow-xs space-y-6 animate-in fade-in duration-200">
+        <div className="bg-white rounded-2xl border border-stone-200 p-6 sm:p-8 shadow-2xs space-y-6 animate-in fade-in duration-200">
           <div className="border-b border-stone-100 pb-4">
             <h2 className="text-lg font-black text-stone-900 flex items-center gap-2">
               <Shield className="h-5 w-5 text-[#1a4d2e]" />
-              <span>الخصوصية والتواصل والإشعارات</span>
+              <span>الخصوصية والإشعارات</span>
             </h2>
-            <p className="text-xs text-stone-500 mt-0.5">
-              تحكم في كيفية ظهور نشاطك واستقبال الرسائل والإشعارات في منصة "شو في بإربد؟".
-            </p>
           </div>
 
           {preferencesSuccess && (
-            <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-3.5 rounded-2xl flex items-center gap-2.5 text-xs font-bold animate-in fade-in">
+            <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-3.5 rounded-xl flex items-center gap-2.5 text-xs font-bold">
               <Check className="h-4 w-4 text-emerald-600" />
               <span>{preferencesSuccess}</span>
             </div>
@@ -676,14 +635,9 @@ export function ProfileSettings() {
           <div className="space-y-4 divide-y divide-stone-100">
             {/* Toggle: Direct Messages */}
             <div className="flex items-center justify-between pt-4 first:pt-0 gap-4">
-              <div className="space-y-1 text-right">
-                <span className="text-sm font-bold text-stone-800 block">
-                  استقبال الرسائل والمحادثات المباشرة
-                </span>
-                <p className="text-xs text-stone-500">
-                  السماح لأصحاب المحلات التجارية والزوار بالتواصل معك عبر الرسائل الفورية داخل المنصة.
-                </p>
-              </div>
+              <span className="text-sm font-bold text-stone-800 block">
+                استقبال الرسائل المباشرة
+              </span>
               <button
                 type="button"
                 onClick={() => handleTogglePreference('allowDirectMessages')}
@@ -701,14 +655,9 @@ export function ProfileSettings() {
 
             {/* Toggle: Hide Public Activity */}
             <div className="flex items-center justify-between pt-4 gap-4">
-              <div className="space-y-1 text-right">
-                <span className="text-sm font-bold text-stone-800 block">
-                  إخفاء المراجعات والتقييمات من الملف العام
-                </span>
-                <p className="text-xs text-stone-500">
-                  إخفاء تعليقاتك وتقييماتك للمحلات من صفحة ملفك الشخصي العامة (تبقى ظاهرة على صفحة المحل فقط).
-                </p>
-              </div>
+              <span className="text-sm font-bold text-stone-800 block">
+                إخفاء المراجعات والتقييمات من الملف العام
+              </span>
               <button
                 type="button"
                 onClick={() => handleTogglePreference('hidePublicActivity')}
@@ -726,14 +675,9 @@ export function ProfileSettings() {
 
             {/* Toggle: Offer Notifications */}
             <div className="flex items-center justify-between pt-4 gap-4">
-              <div className="space-y-1 text-right">
-                <span className="text-sm font-bold text-stone-800 block">
-                  إشعارات العروض والخصومات الكبرى
-                </span>
-                <p className="text-xs text-stone-500">
-                  تلقي إشعارات فورية عند إطلاق محلات إربد لعروض وخصومات مميزة.
-                </p>
-              </div>
+              <span className="text-sm font-bold text-stone-800 block">
+                إشعارات العروض والخصومات
+              </span>
               <button
                 type="button"
                 onClick={() => handleTogglePreference('notifyOffers')}
@@ -751,14 +695,9 @@ export function ProfileSettings() {
 
             {/* Toggle: Job Alerts */}
             <div className="flex items-center justify-between pt-4 gap-4">
-              <div className="space-y-1 text-right">
-                <span className="text-sm font-bold text-stone-800 block">
-                  إشعارات الشواغر والوظائف الجديدة
-                </span>
-                <p className="text-xs text-stone-500">
-                  تلقي تنبيهات عند نشر فرص عمل جديدة في محافظة إربد.
-                </p>
-              </div>
+              <span className="text-sm font-bold text-stone-800 block">
+                إشعارات الوظائف والشواغر
+              </span>
               <button
                 type="button"
                 onClick={() => handleTogglePreference('notifyJobs')}
@@ -777,53 +716,45 @@ export function ProfileSettings() {
         </div>
       )}
 
-      {/* Tab 4: Account Management & Danger Zone */}
+      {/* Tab 4: Account Management */}
       {activeTab === 'account' && (
         <div className="space-y-6 animate-in fade-in duration-200">
           
-          {/* Logout & Session Card */}
-          <div className="bg-white rounded-3xl border border-[#e5e1da] p-6 sm:p-8 shadow-xs space-y-4">
+          {/* Logout */}
+          <div className="bg-white rounded-2xl border border-stone-200 p-6 sm:p-8 shadow-2xs space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="space-y-1">
-                <h3 className="text-base font-black text-stone-900 flex items-center gap-2">
-                  <LogOut className="h-5 w-5 text-stone-700" />
-                  <span>تسجيل الخروج من الحساب</span>
-                </h3>
-                <p className="text-xs text-stone-500">
-                  إنهاء الجلسة الحالية والعودة للصفحة الرئيسية.
-                </p>
-              </div>
+              <h3 className="text-base font-black text-stone-900 flex items-center gap-2">
+                <LogOut className="h-5 w-5 text-stone-700" />
+                <span>تسجيل الخروج</span>
+              </h3>
               <button
                 type="button"
                 onClick={handleLogout}
                 className="inline-flex items-center justify-center gap-2 bg-stone-100 hover:bg-stone-200 text-stone-800 font-bold text-xs sm:text-sm px-5 py-2.5 rounded-xl border border-stone-200 transition-all cursor-pointer active:scale-95"
               >
                 <LogOut className="h-4 w-4" />
-                <span>تسجيل الخروج</span>
+                <span>تسجيل الخروج الآن</span>
               </button>
             </div>
           </div>
 
-          {/* Danger Zone: Account Deletion */}
-          <div className="bg-red-50/50 rounded-3xl border border-red-200/80 p-6 sm:p-8 space-y-4">
-            <div className="border-b border-red-100 pb-3">
-              <h3 className="text-base font-black text-red-900 flex items-center gap-2">
-                <Trash2 className="h-5 w-5 text-red-600" />
-                <span>منطقة الخطر - حذف الحساب</span>
+          {/* Delete Account */}
+          <div className="bg-rose-50/50 rounded-2xl border border-rose-200 p-6 sm:p-8 space-y-4">
+            <div className="border-b border-rose-100 pb-3">
+              <h3 className="text-base font-black text-rose-900 flex items-center gap-2">
+                <Trash2 className="h-5 w-5 text-rose-600" />
+                <span>حذف الحساب</span>
               </h3>
-              <p className="text-xs text-red-700 mt-1">
-                حذف حسابك نهائياً سيؤدي إلى إزالة تفضيلاتك وسجل نشاطك. هذا الإجراء لا يمكن التراجع عنه.
-              </p>
             </div>
 
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2">
-              <p className="text-xs text-stone-600 leading-relaxed max-w-md">
-                إذا كنت ترغب في حذف بياناتك بالكامل من "شو في بإربد؟"، يرجى تأكيد رغبتك. لن تتمكن من استعادة الحساب بعد الحذف.
+              <p className="text-xs text-stone-600 font-bold">
+                تأكيد حذف حسابك نهائياً من المنصة.
               </p>
               <button
                 type="button"
                 onClick={() => setShowDeleteModal(true)}
-                className="inline-flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold text-xs sm:text-sm px-5 py-2.5 rounded-xl transition-all cursor-pointer active:scale-95 shadow-sm self-start sm:self-auto"
+                className="inline-flex items-center justify-center gap-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs sm:text-sm px-5 py-2.5 rounded-xl transition-all cursor-pointer active:scale-95 shadow-xs self-start sm:self-auto"
               >
                 <Trash2 className="h-4 w-4" />
                 <span>طلب حذف الحساب</span>
@@ -833,21 +764,16 @@ export function ProfileSettings() {
         </div>
       )}
 
-      {/* Delete Account Confirmation Modal */}
+      {/* Delete Account Modal */}
       {showDeleteModal && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-t-[32px] sm:rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-stone-200 space-y-5 text-right animate-in slide-in-from-bottom-8 sm:zoom-in-95">
-            <div className="w-12 h-1.5 bg-stone-200 rounded-full mx-auto -mt-2 mb-2 sm:hidden" />
-            
-            <div className="w-12 h-12 bg-red-100 text-red-600 rounded-2xl flex items-center justify-center mx-auto">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-stone-200 space-y-5 text-right animate-in zoom-in-95">
+            <div className="w-12 h-12 bg-rose-100 text-rose-600 rounded-xl flex items-center justify-center mx-auto">
               <Trash2 className="h-6 w-6" />
             </div>
 
             <div className="text-center space-y-1.5">
               <h3 className="text-lg font-black text-stone-900">تأكيد حذف الحساب</h3>
-              <p className="text-xs text-stone-500 leading-relaxed">
-                هل أنت متأكد تماماً من رغبتك في حذف حسابك؟ اكتب <span className="font-bold text-red-600 font-mono">حذف</span> في الحقل أدناه للمتابعة.
-              </p>
             </div>
 
             <div className="space-y-2">
@@ -856,7 +782,7 @@ export function ProfileSettings() {
                 value={deleteConfirmationText}
                 onChange={(e) => setDeleteConfirmationText(e.target.value)}
                 placeholder="اكتب كلمة: حذف"
-                className="w-full bg-stone-50 border border-stone-200 rounded-2xl py-3 px-4 text-center font-bold text-sm text-stone-900 outline-none focus:border-red-500 focus:ring-2 focus:ring-red-500/10"
+                className="w-full bg-stone-50 border border-stone-200 rounded-xl py-3 px-4 text-center font-bold text-sm text-stone-900 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/10"
               />
             </div>
 
@@ -881,12 +807,12 @@ export function ProfileSettings() {
                       navigate('/');
                     }
                   } catch (e: any) {
-                    alert(e.message || 'يتطلب حذف الحساب إعادة تسجيل الدخول الحديثة لأسباب أمنية.');
+                    alert(e.message || 'يتطلب حذف الحساب إعادة تسجيل الدخول لتأكيد الأمان');
                   }
                 }}
-                className="flex-1 py-3 bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white rounded-xl font-bold text-xs transition-colors cursor-pointer"
+                className="flex-1 py-3 bg-rose-600 hover:bg-rose-700 disabled:opacity-40 text-white rounded-xl font-bold text-xs transition-colors cursor-pointer"
               >
-                تأكيد الحذف النهائي
+                تأكيد الحذف
               </button>
             </div>
           </div>

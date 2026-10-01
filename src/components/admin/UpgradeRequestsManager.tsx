@@ -19,14 +19,21 @@ export function UpgradeRequestsManager({ showToast }: UpgradeRequestsManagerProp
       orderBy('createdAt', 'desc')
     );
     
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data: UpgradeRequest[] = [];
-      snapshot.forEach(doc => {
-        data.push({ id: doc.id, ...doc.data() } as UpgradeRequest);
-      });
-      setRequests(data);
-      setLoading(false);
-    });
+    const unsubscribe = onSnapshot(
+      q, 
+      (snapshot) => {
+        const data: UpgradeRequest[] = [];
+        snapshot.forEach(doc => {
+          data.push({ id: doc.id, ...doc.data() } as UpgradeRequest);
+        });
+        setRequests(data);
+        setLoading(false);
+      },
+      (err) => {
+        console.warn("Upgrade requests onSnapshot warning:", err?.message || err);
+        setLoading(false);
+      }
+    );
 
     return () => unsubscribe();
   }, []);

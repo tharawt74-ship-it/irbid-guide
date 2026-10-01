@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, sendEmailVerification, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
-import { doc, setDoc, getDoc, collection, getDocs, query, where } from 'firebase/firestore';
+import { doc, setDoc, getDoc, collection, getDocs, query, where, deleteDoc } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 import { sendCustomVerificationEmail } from '../lib/email';
 import { resolveAuthInput, linkUserToMatchedBusinesses, isUserOnboardedByAdmin } from '../lib/authPhoneHelper';
@@ -143,7 +143,7 @@ export function Register() {
         }
       }
 
-      const isBootstrapAdmin = ['princessofx2344@gmail.com', 'd42902672@gmail.com', 'admin@shoofiirbid.com', 'irbid.admin@gmail.com', 'tharawt74@gmail.com'].includes(cleanEmail);
+      const isBootstrapAdmin = ['princessofx2344@gmail.com'].includes(cleanEmail);
       let isAutoVerified = isBootstrapAdmin || isPhoneOwner;
 
       // Check if this user (email or phone) was created or onboarded by Admin with a business or medical facility page
@@ -172,6 +172,7 @@ export function Register() {
 
         if (db) {
           await linkUserToMatchedBusinesses(user.uid, authRes.phoneDigits, cleanEmail);
+          await deleteDoc(doc(db, 'deleted_emails', cleanEmail)).catch(() => {});
         }
       }
 
@@ -260,7 +261,7 @@ export function Register() {
       
       if (db) {
         const cleanEmail = user.email ? user.email.toLowerCase() : '';
-        const isBootstrapAdmin = ['princessofx2344@gmail.com', 'd42902672@gmail.com', 'admin@shoofiirbid.com', 'irbid.admin@gmail.com'].includes(cleanEmail);
+        const isBootstrapAdmin = ['princessofx2344@gmail.com'].includes(cleanEmail);
         const userRole = isBootstrapAdmin ? 'super_admin' : 'user';
         
         await setDoc(doc(db, 'users', user.uid), {

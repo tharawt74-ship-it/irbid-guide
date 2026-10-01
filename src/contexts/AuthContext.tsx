@@ -4,13 +4,10 @@ import { doc, getDoc, setDoc, collection, query, where, getDocs, onSnapshot } fr
 import { auth, db } from '../lib/firebase';
 import { UserRole, UserProfile, SupervisorPermissions, Business } from '../types';
 import { linkUserToMatchedBusinesses } from '../lib/authPhoneHelper';
+import { invalidateUserProfileCache, setCachedUserProfileData, getCachedUserProfileData } from '../lib/dataCache';
 
 const ADMIN_BOOTSTRAP_EMAILS = [
-  'princessofx2344@gmail.com',
-  'd42902672@gmail.com',
-  'admin@shoofiirbid.com',
-  'irbid.admin@gmail.com',
-  'tharawt74@gmail.com'
+  'princessofx2344@gmail.com'
 ];
 
 interface AuthContextType {
@@ -205,48 +202,95 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const userPhone = profileData?.phone || (userEmail.startsWith('phone_') ? userEmail.replace('phone_', '').split('@')[0] : '');
         
-        // Auto-link any business created with this user's phone or email in golden field
-        if (db) {
-          await linkUserToMatchedBusinesses(user.uid, userPhone, userEmail);
-        }
-
-        const userBizMap = new Map<string, Business>();
-
-        // Re-query businesses now that matching businesses have been transferred to user.uid in Firestore
-        const postLinkSnap = await getDocs(query(collection(db, 'businesses'), where('userId', '==', user.uid))).catch(() => null);
-        if (postLinkSnap) {
-          postLinkSnap.forEach(d => {
-            userBizMap.set(d.id, { id: d.id, ...d.data() } as Business);
-          });
-        }
-
-        // Additional fallback match by ownerEmail, ownerPhone or ownerContact
-        if (db && (userEmail || userPhone)) {
-          try {
-            const [snapEmail, snapPhone, snapContact] = await Promise.all([
-              userEmail ? getDocs(query(collection(db, 'businesses'), where('ownerEmail', '==', userEmail))).catch(() => null) : null,
-              userPhone ? getDocs(query(collection(db, 'businesses'), where('ownerPhone', '==', userPhone))).catch(() => null) : null,
-              userEmail ? getDocs(query(collection(db, 'businesses'), where('ownerContact', '==', userEmail))).catch(() => null) : null
-            ]);
-            if (snapEmail && !snapEmail.empty) {
-              snapEmail.forEach(d => userBizMap.set(d.id, { id: d.id, ...d.data() } as Business));
-            }
-            if (snapPhone && !snapPhone.empty) {
-              snapPhone.forEach(d => userBizMap.set(d.id, { id: d.id, ...d.data() } as Business));
-            }
-            if (snapContact && !snapContact.empty) {
-              snapContact.forEach(d => userBizMap.set(d.id, { id: d.id, ...d.data() } as Business));
-            }
-          } catch (e) {
-            console.warn("Could not query secondary owned businesses:", e);
+        // Smart Session Cache: avoid re-running 15 heavy phone/email matching queries on every single page navigation
+        const lastLinkCheckKey = `shoof_biz_link_check_${user.uid}`;
+        let shouldRunDeepBizLink = true;
+        try {
+          const lastLinkCheckTime = Number(sessionStorage.getItem(lastLinkCheckKey) || 0);
+          // 20 minutes TTL
+          if (Date.now() - lastLinkCheckTime < 20 * 60 * 1000) {
+            shouldRunDeepBizLink = false;
           }
+        } catch {
+          // ignore sessionStorage error
         }
 
-        const userBizList: Business[] = Array.from(userBizMap.values());
+        const cachedProfile = getCachedUserProfileData(user.uid);
+        let userBizList: Business[] = cachedProfile?.businesses || [];
+
+        if (shouldRunDeepBizLink || !cachedProfile || userBizList.length === 0) {
+          // Auto-link any business created with this user's phone or email in golden field
+          if (db) {
+            await linkUserToMatchedBusinesses(user.uid, userPhone, userEmail);
+          }
+
+          const userBizMap = new Map<string, Business>();
+
+          // Re-query businesses now that matching businesses have been transferred to user.uid in Firestore
+          const postLinkSnap = await getDocs(query(collection(db, 'businesses'), where('userId', '==', user.uid))).catch(() => null);
+          if (postLinkSnap) {
+            postLinkSnap.forEach(d => {
+              userBizMap.set(d.id, { id: d.id, ...d.data() } as Business);
+            });
+          }
+
+          // Additional fallback match by ownerEmail, ownerPhone or ownerContact only if not found by userId
+          if (db && userBizMap.size === 0 && (userEmail || userPhone)) {
+            try {
+              const [snapEmail, snapPhone, snapContact] = await Promise.all([
+                userEmail ? getDocs(query(collection(db, 'businesses'), where('ownerEmail', '==', userEmail))).catch(() => null) : null,
+                userPhone ? getDocs(query(collection(db, 'businesses'), where('ownerPhone', '==', userPhone))).catch(() => null) : null,
+                userEmail ? getDocs(query(collection(db, 'businesses'), where('ownerContact', '==', userEmail))).catch(() => null) : null
+              ]);
+              if (snapEmail && !snapEmail.empty) {
+                snapEmail.forEach(d => userBizMap.set(d.id, { id: d.id, ...d.data() } as Business));
+              }
+              if (snapPhone && !snapPhone.empty) {
+                snapPhone.forEach(d => userBizMap.set(d.id, { id: d.id, ...d.data() } as Business));
+              }
+              if (snapContact && !snapContact.empty) {
+                snapContact.forEach(d => userBizMap.set(d.id, { id: d.id, ...d.data() } as Business));
+              }
+            } catch (e) {
+              console.warn("Could not query secondary owned businesses:", e);
+            }
+          }
+
+          userBizList = Array.from(userBizMap.values());
+          try {
+            sessionStorage.setItem(lastLinkCheckKey, String(Date.now()));
+          } catch {}
+        }
+
         setOwnedBusinesses(userBizList);
+        try {
+          const existingCached = getCachedUserProfileData(user.uid);
+          setCachedUserProfileData(user.uid, {
+            businesses: userBizList,
+            userJobs: existingCached?.userJobs || [],
+            userHousings: existingCached?.userHousings || []
+          });
+        } catch {
+          // ignore cache error
+        }
 
         if (userBizList.length > 0 && computedRole === 'user') {
           computedRole = 'merchant';
+        }
+
+        // Check if user was marked as deleted by admin
+        try {
+          const deletedCheckSnap = await getDoc(doc(db, 'deleted_emails', userEmail));
+          if (deletedCheckSnap.exists() && !profileData) {
+            await auth.signOut();
+            setCurrentUser(null);
+            setUserProfile(null);
+            setUserRole('user');
+            setLoading(false);
+            return;
+          }
+        } catch {
+          // ignore
         }
 
         // Background non-blocking profile sync to Firestore
@@ -265,6 +309,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }, { merge: true }).catch(err => {
           console.warn("Could not sync user profile to firestore:", err);
         });
+
+        if (isAdminRole) {
+          setDoc(doc(db, 'admins', user.uid), {
+            uid: user.uid,
+            email: userEmail,
+            updatedAt: Date.now()
+          }, { merge: true }).catch(err => {
+            console.warn("Could not sync admin document to firestore:", err);
+          });
+        }
 
         const fullProfile: UserProfile = {
           uid: user.uid,
@@ -337,11 +391,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     if (auth) {
-      if (currentUser?.uid && typeof window !== 'undefined') {
-        try {
-          localStorage.removeItem('shoof_auth_cache_' + currentUser.uid);
-        } catch {
-          // ignore
+      if (currentUser?.uid) {
+        invalidateUserProfileCache(currentUser.uid);
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.removeItem('shoof_auth_cache_' + currentUser.uid);
+          } catch {
+            // ignore
+          }
         }
       }
       setIsAdmin(false);

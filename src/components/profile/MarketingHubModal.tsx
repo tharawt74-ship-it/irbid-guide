@@ -71,7 +71,7 @@ export function MarketingHubModal({
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-lg sm:text-xl font-black text-stone-900">
-                  مركز الخدمات التسويقية والترويج 🚀
+                  مركز الخدمات التسويقية والترويج
                 </h2>
                 <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-orange-50 text-orange-700 border border-orange-200/80 hidden sm:inline-block">
                   إشهار فوري

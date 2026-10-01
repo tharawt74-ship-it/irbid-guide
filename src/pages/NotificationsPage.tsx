@@ -35,8 +35,11 @@ import { getJordanNow } from '../lib/jordanTime';
 import { cn } from '../lib/utils';
 import { formatArabicTimeAgo, NotificationAvatar } from '../components/notifications/NotificationDropdown';
 import { requestPushPermission, getNotificationPermission, showNativeNotification } from '../lib/pushNotifications';
+import { Pagination } from '../components/common/Pagination';
 
 type CategoryFilter = 'all' | 'unread' | 'offer' | 'job' | 'marketing' | 'news' | 'system';
+
+const NOTIFICATIONS_PER_PAGE = 30;
 
 export function NotificationsPage() {
   const { confirm } = useConfirm();
@@ -49,7 +52,12 @@ export function NotificationsPage() {
   const [isActivatingPush, setIsActivatingPush] = useState(false);
   const [isPushBannerCollapsed, setIsPushBannerCollapsed] = useState(true);
   const [activeActionMenuId, setActiveActionMenuId] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeCategory, searchTerm]);
 
   useEffect(() => {
     setPushPermission(getNotificationPermission());
@@ -81,7 +89,7 @@ export function NotificationsPage() {
     { key: 'offer', label: 'عروض 🔥', count: notifications.filter(n => n.type === 'offer').length },
     { key: 'job', label: 'وظائف 💼', count: notifications.filter(n => n.type === 'job').length },
     { key: 'news', label: 'أخبار وتنبيهات 📢', count: notifications.filter(n => n.type === 'news' || n.type === 'system' || n.type === 'business').length },
-    { key: 'marketing', label: 'تسويق 🚀', count: notifications.filter(n => n.type === 'marketing').length },
+    { key: 'marketing', label: 'تسويق', count: notifications.filter(n => n.type === 'marketing').length },
   ];
 
   const filteredNotifications = useMemo(() => {
@@ -106,6 +114,13 @@ export function NotificationsPage() {
     });
   }, [notifications, activeCategory, searchTerm]);
 
+  const totalPages = Math.ceil(filteredNotifications.length / NOTIFICATIONS_PER_PAGE);
+
+  const paginatedNotifications = useMemo(() => {
+    const startIndex = (currentPage - 1) * NOTIFICATIONS_PER_PAGE;
+    return filteredNotifications.slice(startIndex, startIndex + NOTIFICATIONS_PER_PAGE);
+  }, [filteredNotifications, currentPage]);
+
   // Group notifications by date for native app feel
   const groupedNotifications = useMemo(() => {
     const today: AppNotification[] = [];
@@ -118,7 +133,7 @@ export function NotificationsPage() {
     const yesterdayStart = todayStart - 86400000;
     const weekStart = todayStart - 86400000 * 6;
 
-    filteredNotifications.forEach(n => {
+    paginatedNotifications.forEach(n => {
       const time = n.createdAt;
       if (time >= todayStart) {
         today.push(n);
@@ -138,7 +153,7 @@ export function NotificationsPage() {
     if (earlier.length > 0) groups.push({ label: 'سابقاً', items: earlier });
 
     return groups;
-  }, [filteredNotifications]);
+  }, [paginatedNotifications]);
 
   const getIconConfig = (type: AppNotification['type']) => {
     switch (type) {
@@ -519,6 +534,19 @@ export function NotificationsPage() {
               </div>
             </div>
           ))}
+
+          {totalPages > 1 && (
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={(p) => {
+                setCurrentPage(p);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              totalItems={filteredNotifications.length}
+              itemsPerPage={NOTIFICATIONS_PER_PAGE}
+            />
+          )}
         </div>
       )}
     </div>

@@ -1,8 +1,8 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router';
 import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { getCachedBusinesses, setCachedBusinesses, getCachedOffers, setCachedOffers, getCachedJobs, setCachedJobs, getCachedHousings, setCachedHousings } from '../lib/dataCache';
+import { getCachedBusinesses, setCachedBusinesses, getCachedOffers, setCachedOffers, getCachedJobs, setCachedJobs, getCachedHousings, setCachedHousings, isBusinessesCacheFresh } from '../lib/dataCache';
 import { 
   Search as SearchIcon, X, Store, Briefcase, Building, Newspaper, 
   MapPin, Star, Clock, ChevronRight, Loader2, Flame, MenuSquare, 
@@ -17,6 +17,7 @@ import { normalizeArabic } from '../lib/arabicSearch';
 import { getBusinessVipStatus, compareBusinessesByTier } from '../lib/vipHelper';
 import { getLiveWorkingStatus } from '../lib/businessHoursHelper';
 import { SEO } from '../components/common/SEO';
+import { VerifiedBadge } from '../components/vip/VerifiedBadge';
 import { BUSINESS_CATEGORIES, ALL_IRBID_DISTRICTS } from '../lib/categories';
 import { Pagination } from '../components/common/Pagination';
 import { cn } from '../lib/utils';
@@ -24,6 +25,7 @@ import { cn } from '../lib/utils';
 // Matches OfferItem type structure from Offers.tsx
 interface OfferItem {
   id: string;
+  businessId?: string;
   title: string;
   businessName: string;
   category: string;
@@ -84,10 +86,27 @@ export function Search() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const initialQuery = searchParams.get('q') || '';
+  const initialTabParam = searchParams.get('tab') as FilterTab;
+  const initialTab: FilterTab = (initialTabParam && ['all', 'businesses', 'products', 'offers', 'medical', 'housing', 'jobs', 'transportation', 'tourism', 'news'].includes(initialTabParam)) ? initialTabParam : 'all';
   
   const [inputVal, setInputVal] = useState(initialQuery);
-  const [activeTab, setActiveTab] = useState<FilterTab>('all');
+  const [activeTab, setActiveTab] = useState<FilterTab>(initialTab);
   const [isHeaderExpanded, setIsHeaderExpanded] = useState(true);
+  const activeTabRef = useRef<HTMLButtonElement | null>(null);
+
+  // Auto-scroll active tab button into center view in mobile tabs carousel
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (activeTabRef.current) {
+        activeTabRef.current.scrollIntoView({
+          behavior: 'smooth',
+          block: 'nearest',
+          inline: 'center'
+        });
+      }
+    }, 80);
+    return () => clearTimeout(timer);
+  }, [activeTab]);
 
   // Auto-collapse header on scroll down (Mobile)
   useEffect(() => {
@@ -127,6 +146,7 @@ export function Search() {
   const [selectedMainCategory, setSelectedMainCategory] = useState<string>('الكل');
   const [selectedSubCategory, setSelectedSubCategory] = useState<string>('الكل');
   const [showFiltersDropdown, setShowFiltersDropdown] = useState(false);
+  const [showTabletFilters, setShowTabletFilters] = useState(false);
   const [businessPage, setBusinessPage] = useState(1);
   const [medicalPage, setMedicalPage] = useState(1);
 
@@ -180,8 +200,11 @@ export function Search() {
         setBusinesses(cachedB);
         if (cachedO) setOffers(cachedO);
         if (cachedJ) setJobs(cachedJ);
-        if (cachedH) setHousings(cachedH);
+        if (cachedH) setHousings(cachedH.filter(h => !h.isDemo && !h.isDeleted && (h.status === 'approved' || !h.status)));
         setLoading(false);
+        if (isBusinessesCacheFresh()) {
+          return;
+        }
       } else {
         setLoading(true);
       }
@@ -207,7 +230,7 @@ export function Search() {
 
         const offersList = offersSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as OfferItem)).filter((o: any) => appConfig.showDemoData !== false || !o.isDemo);
         const jobsList = jobsSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as JobOffer)).filter((j: any) => appConfig.showDemoData !== false || !j.isDemo);
-        const housingsList = housingsSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as HousingItem)).filter((h: any) => appConfig.showDemoData !== false || !h.isDemo);
+        const housingsList = housingsSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as HousingItem)).filter((h: any) => !h.isDemo && !h.isDeleted && (h.status === 'approved' || !h.status));
         const newsList = newsSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as NewsArticle));
 
         setBusinesses(bizDocs);
@@ -230,10 +253,14 @@ export function Search() {
     loadSearchData();
   }, []);
 
-  // Update input text when search params change externally
+  // Update input text and tab when search params change externally
   useEffect(() => {
     const qParam = searchParams.get('q') || '';
+    const tabParam = searchParams.get('tab') as FilterTab;
     setInputVal(qParam);
+    if (tabParam && ['all', 'businesses', 'products', 'offers', 'medical', 'housing', 'jobs', 'transportation', 'tourism', 'news'].includes(tabParam)) {
+      setActiveTab(tabParam);
+    }
   }, [searchParams]);
 
   // Submit search
@@ -417,6 +444,7 @@ export function Search() {
       }
 
       if (!isLocMatch || !isCatMatch) return;
+      if (!getBusinessVipStatus(b).isVip) return;
 
       if (b.menuItems && Array.isArray(b.menuItems)) {
         b.menuItems.forEach((item: MenuItem) => {
@@ -441,7 +469,21 @@ export function Search() {
 
   // 3. FILTERED OFFERS
   const filteredOffers = useMemo(() => {
+    const bizMap = new Map<string, Business>();
+    businesses.forEach(b => {
+      if (b.id) bizMap.set(b.id, b);
+      if (b.name) bizMap.set(b.name.trim().toLowerCase(), b);
+    });
+
     return offers.filter(o => {
+      const parentBiz = (o.businessId && bizMap.get(o.businessId)) ||
+                        (o.businessName && bizMap.get(String(o.businessName).trim().toLowerCase()));
+      if (parentBiz) {
+        if (!getBusinessVipStatus(parentBiz).isVip) return false;
+      } else if (o.businessId || !(o as any).isDemo) {
+        return false;
+      }
+
       const isSearchMatch = queryTokens.length === 0 || queryTokens.every(token =>
         normalizeArabic(o.title || '').includes(token) ||
         normalizeArabic(o.description || '').includes(token) ||
@@ -463,7 +505,7 @@ export function Search() {
 
       return isSearchMatch && isLocMatch && isCatMatch;
     });
-  }, [offers, queryTokens, selectedLocation, selectedMainCategory, selectedSubCategory]);
+  }, [offers, businesses, queryTokens, selectedLocation, selectedMainCategory, selectedSubCategory]);
 
   // 4. FILTERED HOUSING
   const filteredHousings = useMemo(() => {
@@ -617,6 +659,19 @@ export function Search() {
     </>
   );
 
+  const tabsList = [
+    { id: 'all', label: 'الكل', count: (filteredBusinesses.length + filteredProducts.length + filteredOffers.length + filteredMedical.length + filteredHousings.length + filteredJobs.length + filteredTerminals.length + filteredRoutes.length + filteredTaxis.length + filteredTourism.length + filteredNews.length) },
+    { id: 'businesses', label: 'محلات وشركات', count: filteredBusinesses.length, icon: Store, color: 'text-emerald-500' },
+    { id: 'products', label: 'المنتجات والخدمات', count: filteredProducts.length, icon: MenuSquare, color: 'text-amber-500' },
+    { id: 'offers', label: 'عروض', count: filteredOffers.length, icon: Percent, color: 'text-red-500' },
+    { id: 'medical', label: 'الصحة والطب', count: filteredMedical.length, icon: Stethoscope, color: 'text-rose-500' },
+    { id: 'housing', label: 'عقارات', count: filteredHousings.length, icon: Building, color: 'text-blue-500' },
+    { id: 'jobs', label: 'وظائف', count: filteredJobs.length, icon: Briefcase, color: 'text-teal-500' },
+    { id: 'transportation', label: 'المواصلات', count: (filteredTerminals.length + filteredRoutes.length + filteredTaxis.length), icon: Bus, color: 'text-indigo-500' },
+    { id: 'tourism', label: 'الأماكن السياحية', count: filteredTourism.length, icon: Compass, color: 'text-[#ff9f1c]' },
+    { id: 'news', label: 'أخبار', count: filteredNews.length, icon: Newspaper, color: 'text-sky-500' },
+  ];
+
   return (
     <div className="w-full bg-[#fdfcfb] min-h-screen pb-28 font-sans" dir="rtl">
       <SEO 
@@ -624,25 +679,131 @@ export function Search() {
         description="استخدم المحرك الذكي للبحث والفلترة الفورية لكافة المحلات، المطاعم، المقاهي، السكنات، الوظائف الشاغرة، العروض ونبض الأخبار في مدينة إربد."
       />
 
-      {/* SEARCH HEADER & TABS (Sticky to Layout Header) */}
-      <div className="sticky top-[62px] sm:top-[68px] md:top-[72px] z-30 bg-[#fdfcfb]/95 backdrop-blur-md sm:bg-white border-b border-transparent sm:border-stone-200/80 sm:shadow-xs flex flex-col pt-0 pb-0 transition-all duration-300">
+      {/* MOBILE & TABLET STICKY HEADER & TABS BAR */}
+      <div className="lg:hidden sticky top-[62px] sm:top-[68px] z-30 bg-[#fdfcfb]/95 backdrop-blur-md border-b border-stone-200/80 shadow-2xs w-full transition-all duration-300">
         
-        {/* Full Header Content (Desktop Search Bar) */}
-        <div className="hidden sm:flex flex-col transition-all duration-300 overflow-visible pt-0">
-          {/* Search Input Row - Rounded Design with Filter Button */}
-          <div className="w-full px-3 sm:px-6 max-w-4xl mx-auto mt-3 sm:mt-4 mb-3 sm:mb-4">
-            <div className="flex items-center gap-2">
+        {/* TABLET ONLY SEARCH BAR & FILTER BUTTON (فوق تبويبات الأقسام حصراً للتابلت) */}
+        <div className="hidden sm:block lg:hidden px-4 sm:px-6 pt-3 pb-2.5 border-b border-stone-200/60">
+          <div className="max-w-[800px] mx-auto flex items-center gap-3 relative">
+            
+            {/* Search Input Form */}
+            <form onSubmit={handleFormSubmit} className="flex-1 relative h-11">
+              <SearchIcon className="h-4.5 w-4.5 text-stone-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="search"
+                value={inputVal}
+                onChange={(e) => {
+                  setInputVal(e.target.value);
+                  triggerSearch(e.target.value, true);
+                }}
+                placeholder="ابحث عن أي شيء في إربد..."
+                className="w-full h-full bg-white border border-stone-200/90 rounded-2xl pr-10 pl-9 text-xs sm:text-sm font-bold text-stone-800 shadow-2xs focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all [&::-webkit-search-cancel-button]:appearance-none"
+              />
+              {inputVal && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setInputVal('');
+                    triggerSearch('', true);
+                  }}
+                  className="absolute left-2.5 top-1/2 -translate-y-1/2 p-1 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-full transition-colors cursor-pointer"
+                  title="مسح البحث"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </form>
+
+            {/* Filter Toggle Button */}
+            <div className="relative">
               <button
                 type="button"
-                onClick={() => navigate('/')}
-                className="w-12 h-12 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-600 flex items-center justify-center shrink-0 border border-stone-200/50 transition-colors cursor-pointer"
-                title="العودة للصفحة الرئيسية"
+                onClick={() => setShowTabletFilters(!showTabletFilters)}
+                className={`h-11 px-4 rounded-2xl font-black text-xs flex items-center gap-2 border transition-all cursor-pointer shadow-2xs ${
+                  showTabletFilters || filtersActive
+                    ? 'bg-emerald-700 text-white border-emerald-800 shadow-xs'
+                    : 'bg-white hover:bg-stone-50 text-stone-700 border-stone-200/90'
+                }`}
+                title="تصفية النتائج"
               >
-                <ChevronRight className="h-6 w-6" />
+                <SlidersHorizontal className="h-4 w-4 shrink-0" />
+                <span>فلترة</span>
+                {filtersActive && (
+                  <span className="w-2 h-2 rounded-full bg-amber-400 ring-2 ring-emerald-700" />
+                )}
               </button>
-              
-              <form onSubmit={handleFormSubmit} className="flex-1 relative h-12">
-                <SearchIcon className="h-5 w-5 text-stone-400 absolute right-4 top-1/2 -translate-y-1/2" />
+
+              {/* Tablet Filter Dropdown Popover */}
+              {showTabletFilters && (
+                <>
+                  <div 
+                    className="fixed inset-0 z-40" 
+                    onClick={() => setShowTabletFilters(false)} 
+                  />
+                  <div className="absolute top-12.5 left-0 w-72 bg-white rounded-3xl p-4 shadow-xl border border-stone-200/90 z-50 space-y-3 origin-top-left animate-in fade-in slide-in-from-top-2 duration-150">
+                    {renderFiltersContent()}
+                  </div>
+                </>
+              )}
+            </div>
+
+          </div>
+        </div>
+
+        {/* Tabs Bar */}
+        <div className="w-full pt-2 pb-1.5">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none snap-x px-3 sm:px-4">
+            {tabsList.map(tab => {
+              const isActive = activeTab === tab.id;
+              const Icon = tab.icon;
+              return (
+                <button
+                  key={tab.id}
+                  ref={isActive ? activeTabRef : null}
+                  onClick={() => handleTabChange(tab.id as FilterTab)}
+                  className={`relative px-3.5 py-2 rounded-full text-xs font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 shrink-0 snap-center ${
+                    isActive
+                      ? 'bg-stone-900 text-white shadow-md'
+                      : 'bg-white hover:bg-stone-50 text-stone-600 border border-stone-200/80 shadow-2xs'
+                  }`}
+                >
+                  {Icon && <Icon className={`h-3.5 w-3.5 ${isActive ? 'text-white' : tab.color}`} />}
+                  <span>{tab.label}</span>
+                  {(activeTab === 'all' || tab.id !== 'all') && (
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ml-0.5 ${isActive ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-500'}`}>
+                      {tab.count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* MAIN CONTAINER WITH DESKTOP SIDEBAR NAVIGATION */}
+      <div className="max-w-[1440px] mx-auto px-3 sm:px-6 lg:px-8 py-6">
+        <div className="lg:grid lg:grid-cols-12 lg:gap-8 items-start">
+
+          {/* DESKTOP EXCLUSIVE SIDEBAR HEADER NAVIGATION */}
+          <aside className="hidden lg:block lg:col-span-4 xl:col-span-3 space-y-4 sticky top-20 xl:top-24 self-start max-h-[calc(100vh-5.5rem)] xl:max-h-[calc(100vh-6.5rem)] overflow-y-auto overscroll-contain pb-6 pl-1.5 pr-0.5 [scrollbar-width:thin] [scrollbar-color:#d6d3d1_transparent]">
+            
+            {/* 1. Search Box */}
+            <div className="bg-white rounded-3xl p-4 border border-stone-200/80 shadow-2xs space-y-3">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => navigate('/')}
+                  className="w-9 h-9 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-600 flex items-center justify-center shrink-0 border border-stone-200/50 transition-colors cursor-pointer"
+                  title="العودة للصفحة الرئيسية"
+                >
+                  <ChevronRight className="h-5 w-5" />
+                </button>
+                <h3 className="font-black text-stone-900 text-base">محرك البحث الذكي</h3>
+              </div>
+
+              <form onSubmit={handleFormSubmit} className="relative w-full h-11">
+                <SearchIcon className="h-4 w-4 text-stone-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   type="search"
                   value={inputVal}
@@ -651,8 +812,7 @@ export function Search() {
                     triggerSearch(e.target.value, true);
                   }}
                   placeholder="ابحث عن أي شيء في إربد..."
-                  className="w-full h-full bg-white border border-stone-200 rounded-full pr-11 pl-12 text-sm sm:text-base font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/50 shadow-sm transition-all [&::-webkit-search-cancel-button]:appearance-none"
-                  autoFocus
+                  className="w-full h-full bg-stone-50 border border-stone-200/90 rounded-2xl pr-10 pl-9 text-xs font-bold text-stone-800 focus:outline-none focus:bg-white focus:border-emerald-500 transition-all [&::-webkit-search-cancel-button]:appearance-none"
                 />
                 {inputVal && (
                   <button
@@ -661,84 +821,64 @@ export function Search() {
                       setInputVal('');
                       triggerSearch('', true);
                     }}
-                    className="absolute left-1 top-1/2 -translate-y-1/2 p-2.5 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-full transition-colors cursor-pointer"
+                    className="absolute left-2 top-1/2 -translate-y-1/2 p-1 text-stone-400 hover:text-stone-700 hover:bg-stone-200/60 rounded-full transition-colors cursor-pointer"
                   >
-                    <X className="h-4.5 w-4.5" />
+                    <X className="h-3.5 w-3.5" />
                   </button>
                 )}
               </form>
+            </div>
 
-              <div className="relative">
-                <button 
-                  type="button"
-                  onClick={() => setShowFiltersDropdown(!showFiltersDropdown)}
-                  className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 border transition-all cursor-pointer shadow-sm ${showFiltersDropdown ? 'bg-emerald-500 border-emerald-600 text-white' : 'bg-white border-stone-200 text-stone-600 hover:bg-stone-50'} ${(selectedLocation !== 'الكل' || selectedMainCategory !== 'الكل' || selectedSubCategory !== 'الكل') ? 'ring-2 ring-emerald-500/50' : ''}`}
-                  title="تصفية النتائج"
-                >
-                  <SlidersHorizontal className="h-5 w-5" />
-                </button>
-                
-                {/* Filters Dropdown */}
-                {showFiltersDropdown && (
-                  <div className="absolute top-14 left-0 w-[280px] sm:w-[320px] bg-white rounded-2xl shadow-xl border border-stone-100 p-4 z-50 flex flex-col gap-3 origin-top-left">
-                    {renderFiltersContent()}
-                  </div>
-                )}
+            {/* 2. Embedded Filter Options (تصفية حسب:) */}
+            <div className="bg-white rounded-3xl p-4 border border-stone-200/80 shadow-2xs space-y-3">
+              {renderFiltersContent()}
+            </div>
+
+            {/* 3. Header Navigation Tabs (Desktop Side Menu - أقسام وتصنيفات البحث:) */}
+            <div className="bg-white rounded-3xl p-4 border border-stone-200/80 shadow-2xs space-y-2">
+              <h4 className="text-[11px] font-black text-stone-400 uppercase tracking-wider px-1">أقسام وتصنيفات البحث:</h4>
+              <div className="space-y-1">
+                {tabsList.map(tab => {
+                  const isActive = activeTab === tab.id;
+                  const Icon = tab.icon;
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => handleTabChange(tab.id as FilterTab)}
+                      className={`w-full px-3.5 py-2.5 rounded-2xl text-xs font-black transition-all cursor-pointer flex items-center justify-between group ${
+                        isActive
+                          ? 'bg-stone-900 text-white shadow-sm'
+                          : 'bg-white hover:bg-stone-50 text-stone-700 hover:text-stone-900 border border-transparent hover:border-stone-150'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        {Icon && <Icon className={`h-4 w-4 ${isActive ? 'text-white' : tab.color}`} />}
+                        <span>{tab.label}</span>
+                      </div>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                        isActive ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-500 group-hover:bg-stone-200/70'
+                      }`}>
+                        {tab.count}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
-          </div>
-        </div> {/* Close Desktop Search Bar */}
 
-        {/* Tabs Row (Visible on all devices) */}
-        <div className="px-1 sm:px-4 w-full max-w-7xl mx-auto sm:mt-0 pt-2 sm:pt-0">
-          <div className="flex items-center gap-1 overflow-x-auto pb-2 scrollbar-none snap-x px-2">
-            {[
-              { id: 'all', label: 'الكل', count: (filteredBusinesses.length + filteredProducts.length + filteredOffers.length + filteredMedical.length + filteredHousings.length + filteredJobs.length + filteredTerminals.length + filteredRoutes.length + filteredTaxis.length + filteredTourism.length + filteredNews.length) },
-              { id: 'businesses', label: 'محلات وشركات', count: filteredBusinesses.length, icon: Store, color: 'text-emerald-500' },
-              { id: 'products', label: 'المنيو والمنتجات', count: filteredProducts.length, icon: MenuSquare, color: 'text-amber-500' },
-              { id: 'offers', label: 'عروض', count: filteredOffers.length, icon: Percent, color: 'text-red-500' },
-              { id: 'medical', label: 'الصحة والطب', count: filteredMedical.length, icon: Stethoscope, color: 'text-rose-500' },
-              { id: 'housing', label: 'عقارات', count: filteredHousings.length, icon: Building, color: 'text-blue-500' },
-              { id: 'jobs', label: 'وظائف', count: filteredJobs.length, icon: Briefcase, color: 'text-teal-500' },
-              { id: 'transportation', label: 'المواصلات', count: (filteredTerminals.length + filteredRoutes.length + filteredTaxis.length), icon: Bus, color: 'text-indigo-500' },
-              { id: 'tourism', label: 'الأماكن السياحية', count: filteredTourism.length, icon: Compass, color: 'text-[#ff9f1c]' },
-              { id: 'news', label: 'أخبار', count: filteredNews.length, icon: Newspaper, color: 'text-sky-500' },
-            ].map(tab => {
-              const isActive = activeTab === tab.id;
-              const Icon = tab.icon;
-              return (
-                <button
-                   key={tab.id}
-                   onClick={() => handleTabChange(tab.id as FilterTab)}
-                   className={`relative px-4 py-2.5 rounded-full text-xs sm:text-sm font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 shrink-0 snap-center ${
-                     isActive
-                       ? 'bg-stone-900 text-white shadow-md'
-                       : 'bg-white hover:bg-stone-50 text-stone-600 border border-stone-200/80 shadow-2xs'
-                   }`}
-                >
-                  {Icon && <Icon className={`h-4 w-4 ${isActive ? 'text-white' : tab.color}`} />}
-                  <span>{tab.label}</span>
-                  {(activeTab === 'all' || tab.id !== 'all') && (
-                     <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ml-0.5 ${isActive ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-500'}`}>
-                       {tab.count}
-                     </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
+          </aside>
 
-      </div>
+          {/* RESULTS AREA */}
+          <main className="col-span-1 lg:col-span-8 xl:col-span-9 space-y-10">
 
-      {/* Loading State */}
-      {loading ? (
-        <div className="min-h-[40vh] flex flex-col items-center justify-center py-12">
-          <Loader2 className="h-10 w-10 text-emerald-600 animate-spin mb-4" />
-          <p className="text-sm font-black text-stone-600">جاري جلب النتائج بذكاء...</p>
-        </div>
-      ) : (
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 py-6 space-y-10">
+            {/* Loading State */}
+            {loading ? (
+              <div className="min-h-[40vh] flex flex-col items-center justify-center py-12">
+                <Loader2 className="h-10 w-10 text-emerald-600 animate-spin mb-4" />
+                <p className="text-sm font-black text-stone-600">جاري جلب النتائج بذكاء...</p>
+              </div>
+            ) : (
+              <>
           
           {/* Zero Results State */}
           {totalCount === 0 && (
@@ -773,7 +913,7 @@ export function Search() {
                 <span className="text-xs font-bold text-stone-400 bg-stone-100 px-2 py-0.5 rounded-md">{filteredBusinesses.length}</span>
               </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
                 {filteredBusinesses
                   .slice((businessPage - 1) * 15, businessPage * 15)
                   .map(b => {
@@ -917,11 +1057,11 @@ export function Search() {
             <div className="space-y-4">
               <div className="flex items-center gap-2 border-b border-stone-200/60 pb-2">
                 <div className="p-1.5 bg-amber-100 text-amber-700 rounded-lg"><MenuSquare className="h-5 w-5" /></div>
-                <h3 className="font-black text-lg text-stone-800">المنتجات والمنيو</h3>
+                <h3 className="font-black text-lg text-stone-800">المنتجات والخدمات</h3>
                 <span className="text-xs font-bold text-stone-400 bg-stone-100 px-2 py-0.5 rounded-md">{filteredProducts.length}</span>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
                 {filteredProducts.map((p, idx) => {
                   const storeUrl = p.parentBusiness.username && p.parentBusiness.username.trim() 
                     ? `/@${p.parentBusiness.username.trim()}?tab=menu` 
@@ -945,8 +1085,17 @@ export function Search() {
                         </div>
                       </div>
                       <div className="border-t border-stone-100 mt-3 pt-2.5 flex items-center justify-between text-[10px] font-bold text-stone-500">
-                        <span className="truncate max-w-[70%] text-stone-600"><span className="text-stone-400">من:</span> {p.parentBusiness.name}</span>
-                        <span className="text-amber-600 group-hover:translate-x-1 transition-transform flex items-center">اطلب <ChevronRight className="h-3 w-3 rotate-180" /></span>
+                        <span className="truncate max-w-[70%] text-stone-600 inline-flex items-center gap-1">
+                          <span className="text-stone-400 shrink-0">من:</span> 
+                          <span className="truncate">{p.parentBusiness.name}</span>
+                          {(() => {
+                            const pVip = getBusinessVipStatus(p.parentBusiness);
+                            return (pVip.isVip || pVip.isVerified || p.parentBusiness.isVip || p.parentBusiness.isVerified) && (
+                              <VerifiedBadge size="sm" businessName={p.parentBusiness.name} className="shrink-0 scale-90" />
+                            );
+                          })()}
+                        </span>
+                        <span className="text-amber-600 group-hover:translate-x-1 transition-transform flex items-center shrink-0">اطلب <ChevronRight className="h-3 w-3 rotate-180" /></span>
                       </div>
                     </Link>
                   );
@@ -964,7 +1113,7 @@ export function Search() {
                 <span className="text-xs font-bold text-stone-400 bg-stone-100 px-2 py-0.5 rounded-md">{filteredOffers.length}</span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
                 {filteredOffers.map(o => (
                   <Link key={o.id} to="/offers" className="bg-white rounded-2xl overflow-hidden border border-stone-200 hover:border-red-500/50 hover:shadow-md transition-all flex flex-col group">
                     <div className="relative aspect-[16/9] w-full bg-stone-100 overflow-hidden shrink-0">
@@ -1003,7 +1152,7 @@ export function Search() {
                 <span className="text-xs font-bold text-stone-400 bg-stone-100 px-2 py-0.5 rounded-md">{filteredMedical.length}</span>
               </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
                 {filteredMedical
                   .slice((medicalPage - 1) * 15, medicalPage * 15)
                   .map(b => {
@@ -1427,9 +1576,11 @@ export function Search() {
               </div>
             </div>
           )}
-
-        </div>
+        </>
       )}
+    </main>
+  </div>
+</div>
 
       {/* Mobile Bottom Search Bar */}
       <div 

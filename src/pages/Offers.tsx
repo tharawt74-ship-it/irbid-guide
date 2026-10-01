@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   Tag, 
@@ -19,15 +19,19 @@ import {
   X,
   MessageSquare,
   SlidersHorizontal,
-  ChevronDown
+  ChevronDown,
+  LayoutGrid,
+  List
 } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { Link } from 'react-router';
+import { useHeaderVisibility } from '../lib/useHeaderVisibility';
+import { Link, useNavigate } from 'react-router';
 import { CategoryButtonLabel } from '../components/CategoryButtonLabel';
 import { collection, getDocs, query, orderBy, addDoc, limit } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { getCachedOffers, setCachedOffers } from '../lib/dataCache';
+import { getCachedOffers, setCachedOffers, getCachedBusinesses, setCachedBusinesses } from '../lib/dataCache';
 import { getAppConfig } from '../lib/demoDataHelper';
+import { getBusinessVipStatus } from '../lib/vipHelper';
 import { ShareButton } from '../components/ShareButton';
 import { getWhatsAppUrl, formatOfferWhatsAppMessage } from '../lib/contactHelper';
 import { WhatsApp3DIcon, Phone3DIcon } from '../components/common/PremiumContactButtons';
@@ -35,7 +39,7 @@ import { SEO } from '../components/common/SEO';
 import { getJordanNow } from '../lib/jordanTime';
 import { useAuth } from '../contexts/AuthContext';
 import { BannerSlideshow } from '../components/BannerSlideshow';
-import { HomepageBanner } from '../types';
+import { HomepageBanner, Business } from '../types';
 import { fetchPageBanners, DEFAULT_OFFERS_BANNERS } from '../lib/pageBanners';
 import { useSystemSettings } from '../contexts/SystemSettingsContext';
 import { getCategoryMeta } from '../lib/categoryMeta';
@@ -72,6 +76,7 @@ interface OfferItem {
 }
 
 export function Offers() {
+  const navigate = useNavigate();
   const { currentUser, isAdmin, isStaff, isMerchant, ownedBusinesses } = useAuth();
   const { categories } = useSystemSettings();
   const mainCategories = categories.map(c => c.name);
@@ -124,15 +129,63 @@ export function Offers() {
   const [selectedCategory, setSelectedCategory] = useState('الكل');
   const [selectedSubCategory, setSelectedSubCategory] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [stickySearchInput, setStickySearchInput] = useState('');
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isCategoriesModalOpen, setIsCategoriesModalOpen] = useState(false);
   const [isSubCategoriesExpanded, setIsSubCategoriesExpanded] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
 
+  // Mobile App States
+  const showHeader = useHeaderVisibility();
+  const [mobileViewMode, setMobileViewMode] = useState<'grid' | 'list'>('grid');
+  const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
+  const [filterType, setFilterType] = useState<'all' | 'hot' | 'student'>('all');
+  const [sortBy, setSortBy] = useState<'default' | 'discount_desc' | 'newest'>('default');
+
+  const activeCategoryRef = useRef<HTMLButtonElement | null>(null);
+  const activeSubCategoryRef = useRef<HTMLButtonElement | null>(null);
+
+  // Auto scroll selected main category into view
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (activeCategoryRef.current) {
+        activeCategoryRef.current.scrollIntoView({
+          behavior: 'smooth',
+          block: 'nearest',
+          inline: 'center'
+        });
+      }
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [selectedCategory]);
+
+  // Auto scroll selected subcategory into view
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (activeSubCategoryRef.current) {
+        activeSubCategoryRef.current.scrollIntoView({
+          behavior: 'smooth',
+          block: 'nearest',
+          inline: 'center'
+        });
+      }
+    }, 120);
+    return () => clearTimeout(timer);
+  }, [selectedSubCategory, selectedCategory]);
+
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedCategory, selectedSubCategory, searchQuery]);
+  }, [selectedCategory, selectedSubCategory, searchQuery, filterType, sortBy]);
+
+  const activeFiltersCount = useMemo(() => {
+    let count = 0;
+    if (selectedCategory && selectedCategory !== 'الكل') count++;
+    if (selectedSubCategory && selectedSubCategory.trim()) count++;
+    if (filterType !== 'all') count++;
+    if (sortBy !== 'default') count++;
+    return count;
+  }, [selectedCategory, selectedSubCategory, filterType, sortBy]);
 
   useEffect(() => {
     async function loadOffersAndBanners() {
@@ -155,6 +208,25 @@ export function Offers() {
           return;
         }
 
+        // Fetch / retrieve businesses to verify VIP tier status
+        let bizList = getCachedBusinesses();
+        if (!bizList || bizList.length === 0) {
+          try {
+            const bizSnap = await getDocs(collection(db, 'businesses'));
+            bizList = bizSnap.docs.map(d => ({ id: d.id, ...d.data() } as Business));
+            setCachedBusinesses(bizList);
+          } catch (e) {
+            console.warn('Could not fetch businesses for offers VIP check:', e);
+            bizList = [];
+          }
+        }
+
+        const bizMap = new Map<string, Business>();
+        (bizList || []).forEach(b => {
+          if (b.id) bizMap.set(b.id, b);
+          if (b.name) bizMap.set(b.name.trim().toLowerCase(), b);
+        });
+
         const appConfig = await getAppConfig();
         const q = query(collection(db, 'offers'), orderBy('createdAt', 'desc'), limit(80));
         const snap = await getDocs(q);
@@ -165,6 +237,22 @@ export function Offers() {
           if (!appConfig.showDemoData && data.isDemo) {
             return;
           }
+
+          // STRICT SECURITY VIP GATE:
+          // Any offer whose parent business is on the basic plan or has an expired VIP subscription is strictly excluded!
+          const parentBiz = (data.businessId && bizMap.get(data.businessId)) ||
+                            (data.businessName && bizMap.get(String(data.businessName).trim().toLowerCase()));
+
+          if (parentBiz) {
+            const vipStatus = getBusinessVipStatus(parentBiz);
+            if (!vipStatus.isVip) {
+              return; // Exclude non-VIP businesses from public offers page
+            }
+          } else if (data.businessId || !data.isDemo) {
+            // Real offer without a verified active VIP business is hidden
+            return;
+          }
+
           loaded.push({ id: d.id, ...data } as OfferItem);
         });
 
@@ -189,24 +277,43 @@ export function Offers() {
     }, 2500);
   };
 
-  const filteredOffers = offers.filter(offer => {
-    let matchesCategory = true;
-    if (selectedCategory && selectedCategory !== 'الكل') {
-      const validSubCats = getSubCats(selectedCategory);
-      if (selectedSubCategory) {
-        matchesCategory = offer.category === selectedSubCategory;
-      } else {
-        matchesCategory = offer.category === selectedCategory || validSubCats.includes(offer.category);
+  const filteredOffers = useMemo(() => {
+    let list = offers.filter(offer => {
+      let matchesCategory = true;
+      if (selectedCategory && selectedCategory !== 'الكل') {
+        const validSubCats = getSubCats(selectedCategory);
+        if (selectedSubCategory) {
+          matchesCategory = offer.category === selectedSubCategory;
+        } else {
+          matchesCategory = offer.category === selectedCategory || validSubCats.includes(offer.category);
+        }
       }
+
+      const matchesSearch = 
+        (offer.title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (offer.businessName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (offer.description || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (offer.location || '').toLowerCase().includes(searchQuery.toLowerCase());
+
+      let matchesFilter = true;
+      if (filterType === 'hot') matchesFilter = Boolean(offer.isHot);
+      if (filterType === 'student') matchesFilter = Boolean(offer.isStudent);
+
+      return matchesCategory && matchesSearch && matchesFilter;
+    });
+
+    if (sortBy === 'discount_desc') {
+      list = [...list].sort((a, b) => {
+        const dA = parseFloat(String(a.discountPercentage).replace(/[^0-9.]/g, '')) || 0;
+        const dB = parseFloat(String(b.discountPercentage).replace(/[^0-9.]/g, '')) || 0;
+        return dB - dA;
+      });
+    } else if (sortBy === 'newest') {
+      list = [...list].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     }
 
-    const matchesSearch = 
-      (offer.title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (offer.businessName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (offer.description || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (offer.location || '').toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
-  });
+    return list;
+  }, [offers, selectedCategory, selectedSubCategory, searchQuery, filterType, sortBy]);
 
   return (
     <div className="w-full space-y-6 sm:space-y-8 pb-16 relative" dir="rtl">
@@ -217,11 +324,323 @@ export function Offers() {
         canonicalUrl="https://shofibirbid.site/offers"
       />
 
+      {/* ========================================================================= */}
+      {/* MOBILE & TABLET STICKY TOP APP BAR (Native Mobile App Feeling)           */}
+      {/* ========================================================================= */}
+      <div className={cn(
+        "lg:hidden sticky z-30 bg-white/95 backdrop-blur-md border-b border-stone-200/80 shadow-2xs -mx-4 sm:-mx-6 px-4 sm:px-6 py-2.5 space-y-2 transition-all duration-300",
+        showHeader ? "top-[62px] sm:top-[68px] md:top-[72px]" : "top-0"
+      )}>
+        {/* Row 1: Search Bar, View Mode Switcher, Filter Sheet Button, Quick Add */}
+        <div className="flex items-center gap-2">
+          {/* Integrated Search Input */}
+          <form 
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (stickySearchInput.trim()) {
+                navigate(`/search?q=${encodeURIComponent(stickySearchInput.trim())}&tab=offers`);
+              }
+            }}
+            className="relative flex-1 min-w-0"
+          >
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-stone-400 pointer-events-none" />
+            <input
+              type="search"
+              enterKeyHint="search"
+              placeholder="عن ماذا تبحث؟"
+              value={stickySearchInput}
+              onChange={(e) => setStickySearchInput(e.target.value)}
+              className="w-full pl-8 pr-8 py-2 bg-stone-100/90 border border-stone-200 rounded-xl text-xs font-bold placeholder:text-stone-400 focus:outline-none focus:bg-white focus:border-red-600 transition-all cursor-text"
+            />
+            {stickySearchInput && (
+              <button
+                type="button"
+                onClick={() => setStickySearchInput('')}
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 p-1 rounded-full cursor-pointer"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </form>
+
+          {/* Grid / List View Toggle */}
+          <div className="flex items-center bg-stone-100 p-1 rounded-xl shrink-0 border border-stone-200/60">
+            <button
+              onClick={() => setMobileViewMode('grid')}
+              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                mobileViewMode === 'grid' ? 'bg-white text-red-600 shadow-xs' : 'text-stone-500 hover:text-stone-800'
+              }`}
+              title="عرض شبكي"
+              aria-label="عرض شبكي"
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setMobileViewMode('list')}
+              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                mobileViewMode === 'list' ? 'bg-white text-red-600 shadow-xs' : 'text-stone-500 hover:text-stone-800'
+              }`}
+              title="عرض قائمة"
+              aria-label="عرض قائمة"
+            >
+              <List className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* Filter Sheet Trigger Button */}
+          <button
+            onClick={() => setIsMobileFilterOpen(true)}
+            className="relative px-3 py-2 bg-red-600 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-xs active:scale-95 transition-all shrink-0 cursor-pointer"
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+            <span>فلترة</span>
+            {activeFiltersCount > 0 && (
+              <span className="w-4 h-4 bg-amber-400 text-stone-900 rounded-full font-black text-[10px] flex items-center justify-center -mr-0.5">
+                {activeFiltersCount}
+              </span>
+            )}
+          </button>
+
+          {/* Quick Add for Shop Owners */}
+          {hasBusiness && (
+            <button
+              onClick={() => setIsAddModalOpen(true)}
+              className="p-2 bg-gradient-to-r from-red-600 to-orange-500 text-white rounded-xl shadow-xs active:scale-95 transition-all shrink-0 cursor-pointer"
+              title="إضافة عرض جديد"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+
+        {/* Row 2: Horizontal Category Pills Carousel (Edge-To-Edge Scroll) */}
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar scroll-smooth pt-0.5 pb-1 -mx-2.5 px-2.5 sm:-mx-4 sm:px-4" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+          {/* All Category Pill */}
+          <button
+            ref={selectedCategory === 'الكل' ? activeCategoryRef : null}
+            onClick={() => {
+              setSelectedCategory('الكل');
+              setSelectedSubCategory('');
+            }}
+            className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1 cursor-pointer border ${
+              selectedCategory === 'الكل'
+                ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white border-transparent shadow-xs font-black'
+                : 'bg-white text-stone-700 border-stone-200 hover:border-red-300'
+            }`}
+          >
+            <span>الكل</span>
+            <span className="text-[10px] opacity-80">({offers.length})</span>
+          </button>
+
+          {/* Main Category Pills */}
+          {mainCategories.map((cat) => {
+            const isSelected = selectedCategory === cat;
+            return (
+              <button
+                key={cat}
+                ref={isSelected ? activeCategoryRef : null}
+                onClick={() => {
+                  setSelectedCategory(isSelected ? 'الكل' : cat);
+                  setSelectedSubCategory('');
+                }}
+                className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1 cursor-pointer border ${
+                  isSelected
+                    ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white border-transparent shadow-xs font-black'
+                    : 'bg-white text-stone-700 border-stone-200 hover:border-red-300'
+                }`}
+              >
+                <span>{cat}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Row 3: Subcategory Pills (If Category Selected - Edge-To-Edge Scroll) */}
+        {selectedCategory && selectedCategory !== 'الكل' && getSubCats(selectedCategory).length > 0 && (
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar scroll-smooth pt-0.5 pb-1 -mx-2.5 px-2.5 sm:-mx-4 sm:px-4 border-t border-stone-100" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+            <button
+              ref={selectedSubCategory === '' ? activeSubCategoryRef : null}
+              onClick={() => setSelectedSubCategory('')}
+              className={`shrink-0 px-2.5 py-1 rounded-full text-[11px] font-bold transition-all cursor-pointer border ${
+                selectedSubCategory === ''
+                  ? 'bg-red-700 text-white border-transparent font-black'
+                  : 'bg-stone-100 text-stone-600 border-stone-200'
+              }`}
+            >
+              الكل الفرعي
+            </button>
+            {getSubCats(selectedCategory).map((subCat) => (
+              <button
+                key={subCat}
+                ref={selectedSubCategory === subCat ? activeSubCategoryRef : null}
+                onClick={() => setSelectedSubCategory(subCat)}
+                className={`shrink-0 px-2.5 py-1 rounded-full text-[11px] font-bold transition-all cursor-pointer border ${
+                  selectedSubCategory === subCat
+                    ? 'bg-red-700 text-white border-transparent font-black'
+                    : 'bg-stone-100 text-stone-600 border-stone-200'
+                }`}
+              >
+                {subCat}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ========================================================================= */}
+      {/* MOBILE FILTER SHEET / DRAWER (App-Style Experience)                      */}
+      {/* ========================================================================= */}
+      {isMobileFilterOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden flex flex-col justify-end bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div 
+            className="absolute inset-0"
+            onClick={() => setIsMobileFilterOpen(false)}
+          />
+          <div className="relative bg-white rounded-t-3xl max-h-[85vh] flex flex-col shadow-2xl border-t border-stone-200 overflow-hidden animate-in slide-in-from-bottom duration-300">
+            {/* Sheet Header */}
+            <div className="p-4 border-b border-stone-100 flex items-center justify-between bg-stone-50/50">
+              <div className="flex items-center gap-2">
+                <SlidersHorizontal className="h-5 w-5 text-red-600" />
+                <h3 className="font-black text-stone-900 text-base">فلترة وتخصيص العروض</h3>
+              </div>
+              <div className="flex items-center gap-3">
+                {activeFiltersCount > 0 && (
+                  <button
+                    onClick={() => {
+                      setSelectedCategory('الكل');
+                      setSelectedSubCategory('');
+                      setFilterType('all');
+                      setSortBy('default');
+                      setSearchQuery('');
+                    }}
+                    className="text-xs font-bold text-red-600 hover:underline cursor-pointer"
+                  >
+                    إعادة ضبط
+                  </button>
+                )}
+                <button
+                  onClick={() => setIsMobileFilterOpen(false)}
+                  className="p-1 text-stone-400 hover:text-stone-700 rounded-full hover:bg-stone-100 cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Sheet Body */}
+            <div className="p-4 overflow-y-auto space-y-5 text-xs">
+              {/* Type Filter */}
+              <div className="space-y-2">
+                <label className="font-black text-stone-800 flex items-center gap-1.5">
+                  <Flame className="h-4 w-4 text-red-600" />
+                  <span>نوع العرض</span>
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: 'all', label: 'كافة العروض' },
+                    { id: 'hot', label: 'عروض ساخنة' },
+                    { id: 'student', label: 'خصم طلابي' }
+                  ].map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => setFilterType(t.id as any)}
+                      className={`p-2.5 rounded-xl font-bold border text-center transition-all cursor-pointer ${
+                        filterType === t.id
+                          ? 'bg-red-600 text-white border-transparent shadow-xs'
+                          : 'bg-stone-50 text-stone-700 border-stone-200'
+                      }`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Sort By */}
+              <div className="space-y-2">
+                <label className="font-black text-stone-800 flex items-center gap-1.5">
+                  <Percent className="h-4 w-4 text-red-600" />
+                  <span>الترتيب حسب</span>
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: 'default', label: 'الافتراضي' },
+                    { id: 'discount_desc', label: 'الأعلى خصماً' },
+                    { id: 'newest', label: 'الأحدث' }
+                  ].map((s) => (
+                    <button
+                      key={s.id}
+                      onClick={() => setSortBy(s.id as any)}
+                      className={`p-2.5 rounded-xl font-bold border text-center transition-all cursor-pointer ${
+                        sortBy === s.id
+                          ? 'bg-red-600 text-white border-transparent shadow-xs'
+                          : 'bg-stone-50 text-stone-700 border-stone-200'
+                      }`}
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Categories */}
+              <div className="space-y-2">
+                <label className="font-black text-stone-800 flex items-center gap-1.5">
+                  <SlidersHorizontal className="h-4 w-4 text-red-600" />
+                  <span>اختر التصنيف</span>
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    onClick={() => {
+                      setSelectedCategory('الكل');
+                      setSelectedSubCategory('');
+                    }}
+                    className={`px-3 py-2 rounded-xl font-bold border transition-all cursor-pointer ${
+                      selectedCategory === 'الكل'
+                        ? 'bg-red-600 text-white border-transparent'
+                        : 'bg-stone-50 text-stone-700 border-stone-200'
+                    }`}
+                  >
+                    الكل
+                  </button>
+                  {mainCategories.map((c) => (
+                    <button
+                      key={c}
+                      onClick={() => {
+                        setSelectedCategory(c);
+                        setSelectedSubCategory('');
+                      }}
+                      className={`px-3 py-2 rounded-xl font-bold border transition-all cursor-pointer ${
+                        selectedCategory === c
+                          ? 'bg-red-600 text-white border-transparent'
+                          : 'bg-stone-50 text-stone-700 border-stone-200'
+                      }`}
+                    >
+                      {c}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Sheet Footer */}
+            <div className="p-4 border-t border-stone-100 bg-stone-50">
+              <button
+                onClick={() => setIsMobileFilterOpen(false)}
+                className="w-full bg-red-600 hover:bg-red-700 text-white py-3 rounded-2xl font-black text-sm shadow-md active:scale-98 transition-all cursor-pointer"
+              >
+                تطبيق الفلترة (عرض {filteredOffers.length} عرض)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Banner Slideshow */}
       <BannerSlideshow banners={banners} />
 
-      {/* Page Header & Search Bar (Compact & Sleek) */}
-      <div className="bg-white rounded-2xl md:rounded-3xl p-3.5 sm:p-5 border border-[#e5e1da] shadow-xs space-y-3 sm:space-y-4">
+      {/* Page Header & Search Bar (DESKTOP ONLY - Hidden on Mobile) */}
+      <div className="hidden lg:block bg-white rounded-2xl md:rounded-3xl p-3.5 sm:p-5 border border-[#e5e1da] shadow-xs space-y-3 sm:space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="space-y-1">
             <div className="flex items-center gap-1.5">
@@ -277,9 +696,9 @@ export function Offers() {
         </div>
       </div>
 
-      {/* Dynamic Main and Sub Categories Section */}
+      {/* Dynamic Main and Sub Categories Section (DESKTOP ONLY - Hidden on Mobile) */}
       {mainCategories.length > 0 && (
-        <div className="flex flex-col space-y-4">
+        <div className="hidden lg:flex flex-col space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <h2 className="text-lg sm:text-xl font-black text-[#2d2a26]">تصفح أقسام العروض الرئيسية</h2>
@@ -470,161 +889,325 @@ export function Offers() {
           )}
         </div>
       ) : (
-        <div>
-          <div id="offers-grid" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
+        <div className="space-y-4">
+          {/* Results Info Bar for Mobile */}
+          <div className="lg:hidden flex items-center justify-between text-xs font-bold text-stone-600 bg-stone-100/80 px-3 py-2 rounded-xl">
+            <span className="flex items-center gap-1.5">
+              <Flame className="h-3.5 w-3.5 text-red-600" />
+              <span>عرض نتائج العروض</span>
+            </span>
+            <span>
+              العدد: <strong className="text-red-700">{filteredOffers.length}</strong>
+            </span>
+          </div>
+
+          <div>
+            <div 
+              id="offers-grid" 
+              className={
+                mobileViewMode === 'list'
+                  ? "flex flex-col gap-2.5 sm:gap-4"
+                  : "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-8"
+              }
+            >
             {filteredOffers
               .slice((currentPage - 1) * 15, currentPage * 15)
-              .map((offer) => (
-              <div 
-                key={offer.id}
-                className="bg-white rounded-3xl border border-stone-200/80 overflow-hidden shadow-xs hover:shadow-xl transition-all duration-300 flex flex-col group relative"
-              >
-              {/* Badges */}
-              <div className="absolute top-3 right-3 z-10 flex flex-col gap-1.5 items-start">
-                {offer.isHot && (
-                  <span className="bg-red-600 text-white font-black text-[11px] px-3 py-1 rounded-full shadow-md flex items-center gap-1">
-                    <Flame className="h-3 w-3 fill-white" />
-                    <span>سوبر هُوت 🔥</span>
-                  </span>
-                )}
-                {offer.isStudent && (
-                  <span className="bg-blue-600 text-white font-black text-[11px] px-3 py-1 rounded-full shadow-md flex items-center gap-1">
-                    <Gift className="h-3 w-3" />
-                    <span>خصم طلابي 🎓</span>
-                  </span>
-                )}
-              </div>
+              .map((offer) => {
+                const durationText = renderOfferDurationText(offer);
+                const isExpired = offer.expiresAt && offer.expiresAt <= Date.now() && offer.durationMode !== 'recurring_weekly';
+                const isUrgent = offer.expiresAt && (offer.expiresAt - Date.now() < 24 * 3600 * 1000) && offer.durationMode !== 'recurring_weekly';
 
-              {/* Discount Badge Left */}
-              <div className="absolute top-3 left-3 z-10">
-                <div className="bg-amber-400 text-stone-900 font-black text-sm px-3.5 py-1.5 rounded-2xl shadow-lg border border-amber-300 flex items-center gap-1">
-                  <span>خصم {offer.discountPercentage}</span>
-                </div>
-              </div>
+                // =========================================================================
+                // MOBILE LIST VIEW CARD (Horizontal App Row Layout)
+                // =========================================================================
+                if (mobileViewMode === 'list') {
+                  return (
+                    <div 
+                      key={offer.id}
+                      className="bg-white rounded-2xl border border-stone-200/80 shadow-2xs hover:shadow-md transition-all p-3 flex flex-col gap-2.5 relative overflow-hidden"
+                    >
+                      <div className="flex items-start gap-3">
+                        {/* Thumbnail Image with Discount Badge */}
+                        <Link 
+                          to={`/offers/${offer.id}`} 
+                          className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-xl overflow-hidden bg-stone-100 shrink-0 block cursor-pointer"
+                        >
+                          <img 
+                            src={offer.image || 'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&q=80&w=800'} 
+                            alt={offer.title}
+                            className="w-full h-full object-cover"
+                          />
+                          <div className="absolute top-1 right-1 bg-amber-400 text-stone-900 font-black text-[10px] px-1.5 py-0.5 rounded-md shadow-xs">
+                            -{offer.discountPercentage}
+                          </div>
+                        </Link>
 
-              {/* Offer Image */}
-              <Link to={`/offers/${offer.id}`} className="relative h-48 sm:h-52 w-full overflow-hidden bg-stone-100 block cursor-pointer">
-                <img 
-                  src={offer.image || 'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&q=80&w=800'} 
-                  alt={offer.title}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-                <div className="absolute bottom-3 right-3 left-3 text-white">
-                  <span className="text-xs font-bold text-orange-300 block mb-0.5">{offer.businessName}</span>
-                  <p className="text-xs text-white/80 flex items-center gap-1">
-                    <MapPin className="h-3 w-3 text-orange-400" />
-                    <span>{offer.location}</span>
-                  </p>
-                </div>
-              </Link>
+                        {/* Middle Info */}
+                        <div className="flex-1 min-w-0 space-y-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[10px] font-black text-red-700 bg-red-50 border border-red-200/80 px-2 py-0.5 rounded-md">
+                              {offer.category}
+                            </span>
+                            {offer.isHot && (
+                              <span className="bg-red-600 text-white font-black text-[9px] px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
+                                <Flame className="h-2.5 w-2.5 fill-white" />
+                                <span>ساخن</span>
+                              </span>
+                            )}
+                            {offer.isStudent && (
+                              <span className="bg-blue-600 text-white font-black text-[9px] px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
+                                <Gift className="h-2.5 w-2.5" />
+                                <span>طلابي</span>
+                              </span>
+                            )}
+                          </div>
 
-              {/* Content */}
-              <div className="p-5 sm:p-6 flex-1 flex flex-col justify-between space-y-4">
-                <Link to={`/offers/${offer.id}`} className="space-y-2 block cursor-pointer">
-                  <h3 className="text-base sm:text-lg font-black text-stone-900 group-hover:text-red-600 transition-colors leading-snug">
-                    {offer.title}
-                  </h3>
-                  <p className="text-xs sm:text-sm text-stone-600 line-clamp-2 leading-relaxed">
-                    {offer.description}
-                  </p>
-                </Link>
+                          <Link to={`/offers/${offer.id}`} className="block">
+                            <h3 className="text-xs sm:text-sm font-black text-stone-900 truncate leading-snug">
+                              {offer.title}
+                            </h3>
+                          </Link>
 
-                {/* Price and Coupon Code Box */}
-                <div className="space-y-3 pt-2">
-                  <div className="flex items-center justify-between bg-stone-50 p-3 rounded-2xl border border-stone-100">
-                    <div className="flex items-baseline gap-2">
-                      {offer.newPrice && (
-                        <span className="text-lg font-black text-emerald-700">{offer.newPrice}</span>
-                      )}
-                      {offer.oldPrice && (
-                        <span className="text-xs text-stone-400 line-through">{offer.oldPrice}</span>
-                      )}
-                    </div>
-                    {(() => {
-                      const durationText = renderOfferDurationText(offer);
-                      const isExpired = offer.expiresAt && offer.expiresAt <= Date.now() && offer.durationMode !== 'recurring_weekly';
-                      const isUrgent = offer.expiresAt && (offer.expiresAt - Date.now() < 24 * 3600 * 1000) && offer.durationMode !== 'recurring_weekly';
-                      
-                      return (
-                        <span className={cn(
-                          "text-[11px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 border",
-                          isExpired 
-                            ? "text-stone-400 bg-stone-50 border-stone-200"
-                            : isUrgent
-                              ? "text-red-600 bg-red-50 border-red-200 animate-pulse"
-                              : "text-orange-600 bg-orange-50 border-orange-200/60"
-                        )}>
-                          <Clock className="h-3 w-3" />
-                          <span>{durationText}</span>
-                        </span>
-                      );
-                    })()}
-                  </div>
+                          <div className="flex items-center gap-1 text-[11px] font-bold text-stone-600 truncate">
+                            <Store className="h-3 w-3 text-stone-400 shrink-0" />
+                            <span className="truncate">{offer.businessName}</span>
+                          </div>
 
-                  {/* Code box */}
-                  {offer.code && (
-                    <div className="flex items-center justify-between bg-red-50/80 border border-red-200/70 p-2.5 rounded-2xl">
-                      <div className="flex items-center gap-2 pr-1">
-                        <Tag className="h-4 w-4 text-red-600" />
-                        <span className="text-xs font-bold text-stone-700">كود الخصم:</span>
-                        <code className="bg-white px-2 py-0.5 rounded-md text-red-600 font-mono font-black text-xs border border-red-200">
-                          {offer.code}
-                        </code>
+                          <p className="text-[10px] text-stone-500 flex items-center gap-1 truncate">
+                            <MapPin className="h-2.5 w-2.5 text-amber-600 shrink-0" />
+                            <span className="truncate">{offer.location}</span>
+                          </p>
+
+                          <div className="flex items-center gap-2 pt-0.5">
+                            {offer.newPrice && (
+                              <span className="text-sm font-black text-emerald-700">{offer.newPrice}</span>
+                            )}
+                            {offer.oldPrice && (
+                              <span className="text-[10px] text-stone-400 font-bold line-through">{offer.oldPrice}</span>
+                            )}
+                            <span className={cn(
+                              "text-[10px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-0.5 border mr-auto",
+                              isExpired 
+                                ? "text-stone-400 bg-stone-50 border-stone-200"
+                                : isUrgent
+                                  ? "text-red-600 bg-red-50 border-red-200"
+                                  : "text-orange-600 bg-orange-50 border-orange-200/60"
+                            )}>
+                              <Clock className="h-2.5 w-2.5" />
+                              <span>{durationText}</span>
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                      <button
-                        onClick={() => handleCopyCode(offer.code!)}
-                        className="bg-white hover:bg-red-600 hover:text-white text-red-600 border border-red-200 px-3 py-1 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer shadow-2xs"
-                      >
-                        {copiedCode === offer.code ? (
-                          <>
-                            <Check className="h-3.5 w-3.5 text-emerald-600" />
-                            <span className="text-emerald-600">تم النسخ</span>
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="h-3.5 w-3.5" />
-                            <span>نسخ</span>
-                          </>
-                        )}
-                      </button>
+
+                      {/* Code Strip in List Mode if available */}
+                      {offer.code && (
+                        <div className="flex items-center justify-between bg-red-50/80 border border-red-200/70 px-2.5 py-1.5 rounded-xl">
+                          <div className="flex items-center gap-1.5">
+                            <Tag className="h-3.5 w-3.5 text-red-600" />
+                            <span className="text-[11px] font-bold text-stone-700">الكود:</span>
+                            <code className="bg-white px-2 py-0.5 rounded-md text-red-600 font-mono font-black text-xs border border-red-200">
+                              {offer.code}
+                            </code>
+                          </div>
+                          <button
+                            onClick={() => handleCopyCode(offer.code!)}
+                            className="bg-white hover:bg-red-600 hover:text-white text-red-600 border border-red-200 px-2.5 py-0.5 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer shadow-2xs"
+                          >
+                            {copiedCode === offer.code ? (
+                              <>
+                                <Check className="h-3 w-3 text-emerald-600" />
+                                <span className="text-emerald-600">تم النسخ</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="h-3 w-3" />
+                                <span>نسخ</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Action Buttons in List Mode */}
+                      <div className="flex items-center gap-2 pt-1 border-t border-stone-100">
+                        <a
+                          href={getWhatsAppUrl(offer.whatsapp || offer.phone, formatOfferWhatsAppMessage(offer.title, offer.businessName))}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex-1 inline-flex items-center justify-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white py-1.5 px-2 rounded-xl text-xs font-bold transition-colors shadow-xs"
+                        >
+                          <WhatsApp3DIcon className="h-3.5 w-3.5 text-white" />
+                          <span>واتساب</span>
+                        </a>
+
+                        <a
+                          href={`tel:${offer.phone}`}
+                          className="inline-flex items-center justify-center gap-1 bg-[#1a4d2e] hover:bg-[#133c23] text-white py-1.5 px-3 rounded-xl text-xs font-bold transition-colors shadow-xs"
+                        >
+                          <Phone3DIcon className="h-3.5 w-3.5 text-white" />
+                          <span>اتصال</span>
+                        </a>
+
+                        <ShareButton
+                          title={`عرض خاص: ${offer.title}`}
+                          text={`شاهد عرض (${offer.title}) لدى ${offer.businessName} بخصم ${offer.discountPercentage}!`}
+                          url={`/offers`}
+                          size="sm"
+                          variant="outline"
+                        />
+                      </div>
                     </div>
-                  )}
-                </div>
-              </div>
+                  );
+                }
 
-              {/* Bottom Actions */}
-              <div className="p-4 sm:p-5 pt-0 border-t border-stone-100 flex items-center gap-2 mt-auto">
-                <a
-                  href={getWhatsAppUrl(offer.whatsapp || offer.phone, formatOfferWhatsAppMessage(offer.title, offer.businessName))}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex-1 inline-flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 px-3 rounded-xl text-xs font-bold transition-colors shadow-xs cursor-pointer"
-                >
-                  <WhatsApp3DIcon className="h-4 w-4 text-white" />
-                  <span>استفسار واتساب</span>
-                </a>
+                // =========================================================================
+                // GRID VIEW CARD (Standard Card Layout)
+                // =========================================================================
+                return (
+                  <div 
+                    key={offer.id}
+                    className="bg-white rounded-3xl border border-stone-200/80 overflow-hidden shadow-xs hover:shadow-xl transition-all duration-300 flex flex-col group relative"
+                  >
+                    {/* Badges */}
+                    <div className="absolute top-3 right-3 z-10 flex flex-col gap-1.5 items-start">
+                      {offer.isHot && (
+                        <span className="bg-red-600 text-white font-black text-[11px] px-3 py-1 rounded-full shadow-md flex items-center gap-1">
+                          <Flame className="h-3 w-3 fill-white" />
+                          <span>سوبر هُوت 🔥</span>
+                        </span>
+                      )}
+                      {offer.isStudent && (
+                        <span className="bg-blue-600 text-white font-black text-[11px] px-3 py-1 rounded-full shadow-md flex items-center gap-1">
+                          <Gift className="h-3 w-3" />
+                          <span>خصم طلابي 🎓</span>
+                        </span>
+                      )}
+                    </div>
 
-                <a
-                  href={`tel:${offer.phone}`}
-                  className="inline-flex items-center justify-center gap-1.5 bg-[#1a4d2e] hover:bg-[#133c23] text-white py-2.5 px-3 rounded-xl text-xs font-bold transition-colors shadow-xs"
-                  title="اتصال بالمنشأة"
-                >
-                  <Phone3DIcon className="h-4 w-4 text-white" />
-                  <span>اتصال</span>
-                </a>
+                    {/* Discount Badge Left */}
+                    <div className="absolute top-3 left-3 z-10">
+                      <div className="bg-amber-400 text-stone-900 font-black text-sm px-3.5 py-1.5 rounded-2xl shadow-lg border border-amber-300 flex items-center gap-1">
+                        <span>خصم {offer.discountPercentage}</span>
+                      </div>
+                    </div>
 
-                <ShareButton
-                  title={`عرض خاص: ${offer.title}`}
-                  text={`شاهد عرض (${offer.title}) لدى ${offer.businessName} بخصم ${offer.discountPercentage}!`}
-                  url={`/offers`}
-                  size="sm"
-                  variant="outline"
-                />
-              </div>
+                    {/* Offer Image */}
+                    <Link to={`/offers/${offer.id}`} className="relative h-48 sm:h-52 w-full overflow-hidden bg-stone-100 block cursor-pointer">
+                      <img 
+                        src={offer.image || 'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&q=80&w=800'} 
+                        alt={offer.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                      <div className="absolute bottom-3 right-3 left-3 text-white">
+                        <span className="text-xs font-bold text-orange-300 block mb-0.5">{offer.businessName}</span>
+                        <p className="text-xs text-white/80 flex items-center gap-1">
+                          <MapPin className="h-3 w-3 text-orange-400" />
+                          <span>{offer.location}</span>
+                        </p>
+                      </div>
+                    </Link>
 
-            </div>
-          ))}
+                    {/* Content */}
+                    <div className="p-5 sm:p-6 flex-1 flex flex-col justify-between space-y-4">
+                      <Link to={`/offers/${offer.id}`} className="space-y-2 block cursor-pointer">
+                        <h3 className="text-base sm:text-lg font-black text-stone-900 group-hover:text-red-600 transition-colors leading-snug">
+                          {offer.title}
+                        </h3>
+                        <p className="text-xs sm:text-sm text-stone-600 line-clamp-2 leading-relaxed">
+                          {offer.description}
+                        </p>
+                      </Link>
+
+                      {/* Price and Coupon Code Box */}
+                      <div className="space-y-3 pt-2">
+                        <div className="flex items-center justify-between bg-stone-50 p-3 rounded-2xl border border-stone-100">
+                          <div className="flex items-baseline gap-2">
+                            {offer.newPrice && (
+                              <span className="text-lg font-black text-emerald-700">{offer.newPrice}</span>
+                            )}
+                            {offer.oldPrice && (
+                              <span className="text-xs text-stone-400 line-through">{offer.oldPrice}</span>
+                            )}
+                          </div>
+                          <span className={cn(
+                            "text-[11px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 border",
+                            isExpired 
+                              ? "text-stone-400 bg-stone-50 border-stone-200"
+                              : isUrgent
+                                ? "text-red-600 bg-red-50 border-red-200 animate-pulse"
+                                : "text-orange-600 bg-orange-50 border-orange-200/60"
+                          )}>
+                            <Clock className="h-3 w-3" />
+                            <span>{durationText}</span>
+                          </span>
+                        </div>
+
+                        {/* Code box */}
+                        {offer.code && (
+                          <div className="flex items-center justify-between bg-red-50/80 border border-red-200/70 p-2.5 rounded-2xl">
+                            <div className="flex items-center gap-2 pr-1">
+                              <Tag className="h-4 w-4 text-red-600" />
+                              <span className="text-xs font-bold text-stone-700">كود الخصم:</span>
+                              <code className="bg-white px-2 py-0.5 rounded-md text-red-600 font-mono font-black text-xs border border-red-200">
+                                {offer.code}
+                              </code>
+                            </div>
+                            <button
+                              onClick={() => handleCopyCode(offer.code!)}
+                              className="bg-white hover:bg-red-600 hover:text-white text-red-600 border border-red-200 px-3 py-1 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer shadow-2xs"
+                            >
+                              {copiedCode === offer.code ? (
+                                <>
+                                  <Check className="h-3.5 w-3.5 text-emerald-600" />
+                                  <span className="text-emerald-600">تم النسخ</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="h-3.5 w-3.5" />
+                                  <span>نسخ</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Bottom Actions */}
+                    <div className="p-4 sm:p-5 pt-0 border-t border-stone-100 flex items-center gap-2 mt-auto">
+                      <a
+                        href={getWhatsAppUrl(offer.whatsapp || offer.phone, formatOfferWhatsAppMessage(offer.title, offer.businessName))}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex-1 inline-flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 px-3 rounded-xl text-xs font-bold transition-colors shadow-xs cursor-pointer"
+                      >
+                        <WhatsApp3DIcon className="h-4 w-4 text-white" />
+                        <span>استفسار واتساب</span>
+                      </a>
+
+                      <a
+                        href={`tel:${offer.phone}`}
+                        className="inline-flex items-center justify-center gap-1.5 bg-[#1a4d2e] hover:bg-[#133c23] text-white py-2.5 px-3 rounded-xl text-xs font-bold transition-colors shadow-xs"
+                        title="اتصال بالمنشأة"
+                      >
+                        <Phone3DIcon className="h-4 w-4 text-white" />
+                        <span>اتصال</span>
+                      </a>
+
+                      <ShareButton
+                        title={`عرض خاص: ${offer.title}`}
+                        text={`شاهد عرض (${offer.title}) لدى ${offer.businessName} بخصم ${offer.discountPercentage}!`}
+                        url={`/offers`}
+                        size="sm"
+                        variant="outline"
+                      />
+                    </div>
+
+                  </div>
+                );
+              })}
           </div>
 
           <Pagination
@@ -638,7 +1221,8 @@ export function Offers() {
             itemsPerPage={15}
           />
         </div>
-      )}
+      </div>
+    )}
 
       {/* Add Offer Modal */}
       {isAddModalOpen && typeof document !== 'undefined' && createPortal(

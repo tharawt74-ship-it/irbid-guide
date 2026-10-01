@@ -1,5 +1,6 @@
 import { initializeApp, getApps, getApp, cert } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
+import { getFirestore } from 'firebase-admin/firestore';
 
 let adminApp: any = null;
 
@@ -117,18 +118,58 @@ export default async function handler(req: any, res: any) {
     let oobCode: string | null = null;
     let authErrorDetails = "";
 
-    // 1. Try using Firebase Admin SDK
     const app = getAdminApp();
-    if (app) {
-      try {
-        const authAdmin = getAuth(app);
-        const oobLink = await authAdmin.generatePasswordResetLink(email);
-        const urlParams = new URL(oobLink).searchParams;
-        oobCode = urlParams.get('oobCode');
-      } catch (err: any) {
-        console.warn("Admin SDK failed to generate reset link in serverless function, trying REST API:", err);
-        authErrorDetails = err.message || "";
+    if (!app) {
+      return res.status(500).json({ error: "Firebase Admin not initialized" });
+    }
+
+    const authAdmin = getAuth(app);
+    const adminDb = getFirestore(app);
+
+    // 1. Verify that user actually exists in the platform
+    let userExists = false;
+    try {
+      const userRec = await authAdmin.getUserByEmail(email);
+      if (userRec && userRec.uid) {
+        userExists = true;
       }
+    } catch (userErr: any) {
+      if (userErr?.code === 'auth/user-not-found') {
+        userExists = false;
+      }
+    }
+
+    if (!userExists) {
+      try {
+        const userSnap = await adminDb.collection('users').where('email', '==', email).limit(1).get();
+        if (!userSnap.empty) {
+          userExists = true;
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    // Also check if account was deleted by admin
+    try {
+      const delSnap = await adminDb.collection('deleted_emails').doc(email).get();
+      if (delSnap.exists) {
+        userExists = false;
+      }
+    } catch {}
+
+    if (!userExists) {
+      return res.status(404).json({ error: "هذا الحساب غير مسجل في الموقع" });
+    }
+
+    // 2. Generate password reset link via Admin SDK
+    try {
+      const oobLink = await authAdmin.generatePasswordResetLink(email);
+      const urlParams = new URL(oobLink).searchParams;
+      oobCode = urlParams.get('oobCode');
+    } catch (err: any) {
+      console.warn("Admin SDK failed to generate reset link in serverless function, trying REST API:", err);
+      authErrorDetails = err.message || "";
     }
 
     // 2. Fall back to REST API

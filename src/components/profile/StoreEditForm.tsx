@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { 
   Store, User, MapPin, Phone, Globe, Image as ImageIcon,
   MessageSquare, EyeOff, Sparkles, Check, Clock, ShieldCheck, 
-  ExternalLink, Info, AtSign, Copy, Trash2, AlertTriangle, Eye,
-  Video, Play, HelpCircle, Crown, Truck, Search, X
+  ExternalLink, AtSign, Copy, Trash2, AlertTriangle, Eye,
+  Video, Play, Crown, Truck, Search, X, LayoutGrid
 } from 'lucide-react';
 import { Business, WorkingHours, SocialLinks, AboutMediaConfig, VipPopupConfig } from '../../types';
 import { BUSINESS_CATEGORIES, IRBID_REGIONS_CATEGORIZED, MainCategory } from '../../lib/categories';
@@ -51,6 +51,8 @@ interface StoreEditFormProps {
   isSaving?: boolean;
   onCancel?: () => void;
   inModal?: boolean;
+  onlySettings?: boolean;
+  hideSettings?: boolean;
 }
 
 export function StoreEditForm({
@@ -59,7 +61,9 @@ export function StoreEditForm({
   onDelete,
   isSaving = false,
   onCancel,
-  inModal = false
+  inModal = false,
+  onlySettings = false,
+  hideSettings = false
 }: StoreEditFormProps) {
   const [name, setName] = useState(business.name || '');
   const [ownerName, setOwnerName] = useState(business.ownerName || '');
@@ -81,7 +85,7 @@ export function StoreEditForm({
     business.paymentMethods || business.medicalProfile?.paymentMethods || ['كاش', 'فيزا', 'كليك']
   );
 
-  // About Media state (Available to all accounts)
+  // About Media state
   const initialAboutType: 'video' | 'image' = 
     business.aboutMedia?.type || 
     (business.aboutVideoUrl ? 'video' : business.aboutImageUrl ? 'image' : 'video');
@@ -93,6 +97,9 @@ export function StoreEditForm({
   const [aboutMediaUrl, setAboutMediaUrl] = useState<string>(initialAboutUrl);
   const [aboutMediaCaption, setAboutMediaCaption] = useState<string>(initialAboutCaption);
   
+  // Active section tab in store edit form
+  const [activeFormTab, setActiveFormTab] = useState<'basic' | 'location' | 'media' | 'hours' | 'all'>('basic');
+
   // VIP Popup Manager Modal State
   const [isVipPopupManagerOpen, setIsVipPopupManagerOpen] = useState(false);
   const vipInfo = getBusinessVipStatus(business);
@@ -123,9 +130,6 @@ export function StoreEditForm({
 
   // Social links
   const [socialLinks, setSocialLinks] = useState<SocialLinks>(business.socialLinks || {});
-
-  // Image load test for preview
-  const [imageError, setImageError] = useState(false);
 
   // Sync state when business prop changes
   useEffect(() => {
@@ -196,10 +200,6 @@ export function StoreEditForm({
     setSocialLinks(business.socialLinks || {});
   }, [business]);
 
-  useEffect(() => {
-    setImageError(false);
-  }, [imageUrl]);
-
   const cleanUsername = (val: string) => {
     if (!val) return '';
     return val
@@ -268,755 +268,707 @@ export function StoreEditForm({
     }
   };
 
-  const displayHandle = username.trim() ? `@${username.trim()}` : `@${cleanUsername(business.name || '') || 'store'}`;
   const displayUrl = `${typeof window !== 'undefined' ? window.location.origin : 'https://shofi-irbid.com'}/${username.trim() ? `@${username.trim()}` : `business/${business.id}`}`;
 
   return (
     <>
       <form onSubmit={handleSubmit} className="space-y-6" dir="rtl">
-        {/* 1. Basic Store Info & Classification */}
-        <div className="bg-white p-3 sm:p-6 rounded-xl sm:rounded-2xl border-0 sm:border border-stone-200/80 shadow-none sm:shadow-2xs space-y-4">
-          <div className="flex items-center gap-2 pb-3 border-b border-stone-100">
-            <Store className="h-5 w-5 text-[#1a4d2e]" />
-            <h4 className="text-sm font-black text-stone-800">المعلومات الأساسية والتصنيف</h4>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-black text-stone-700 mb-1.5">
-                اسم المحل التجاري <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="text"
-                required
-                value={name}
-                onChange={e => setName(e.target.value)}
-                placeholder="مثال: مطعم شاورما الريف"
-                className="w-full bg-[#fdfcfb] border border-stone-200 rounded-xl px-3.5 py-2.5 text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]/20 focus:border-[#1a4d2e] transition-colors"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-black text-stone-700 mb-1.5">
-                اسم المالك أو المسؤول <span className="text-stone-400 font-normal">(اختياري)</span>
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={ownerName}
-                  onChange={e => setOwnerName(e.target.value)}
-                  placeholder="مثال: محمد العمري"
-                  className="w-full bg-[#fdfcfb] border border-stone-200 rounded-xl px-3.5 py-2.5 pr-9 text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]/20 focus:border-[#1a4d2e] transition-colors"
-                />
-                <User className="h-4 w-4 text-stone-400 absolute top-3 right-3" />
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-            <div>
-              <label className="block text-xs font-black text-stone-700 mb-1.5">
-                التصنيف الرئيسي <span className="text-rose-500">*</span>
-              </label>
-              <SearchableSelect
-                options={Object.keys(BUSINESS_CATEGORIES)}
-                value={mainCategory}
-                onChange={(val) => {
-                  const mainCat = val as MainCategory;
-                  setMainCategory(mainCat);
-                  setSubCategory(BUSINESS_CATEGORIES[mainCat]?.[0] || '');
-                }}
-                className="bg-[#fdfcfb] border-stone-200"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-black text-stone-700 mb-1.5">
-                التصنيف الفرعي التخصصي <span className="text-rose-500">*</span>
-              </label>
-              <SearchableSelect
-                options={BUSINESS_CATEGORIES[mainCategory] || []}
-                value={subCategory}
-                onChange={(val) => setSubCategory(val)}
-                className="bg-[#fdfcfb] border-stone-200"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* 🌟 2. Social Media Username & Custom Page URL */}
-        <div className="bg-gradient-to-br from-emerald-50/70 via-white to-stone-50 p-3 sm:p-6 rounded-xl sm:rounded-2xl border-0 sm:border border-emerald-200/80 shadow-none sm:shadow-2xs space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-emerald-100">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-xl bg-[#1a4d2e] flex items-center justify-center text-white shadow-2xs">
-                <AtSign className="h-4 w-4" />
-              </div>
-              <div>
-                <h4 className="text-sm font-black text-stone-900">معرّف الرابط واسم المستخدم (Username)</h4>
-                <p className="text-[11px] text-stone-500">اجعل رابط صفحتك يظهر كأي صفحة سوشيال ميديا مميزة (مثل إنستغرام)</p>
-              </div>
-            </div>
-            {username && (
-              <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-black text-[#1a4d2e] bg-emerald-100/80 px-2.5 py-1 rounded-lg">
-                <Sparkles className="h-3 w-3" />
-                رابط مخصص
-              </span>
-            )}
-          </div>
-
-          <div className="space-y-3">
-            <div>
-              <label className="block text-xs font-black text-stone-700 mb-1.5">
-                اسم المستخدم للمحل (Username Handle)
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  dir="ltr"
-                  value={username}
-                  onChange={handleUsernameChange}
-                  placeholder="alkhiyam_cafe"
-                  className="w-full bg-white border border-stone-300 rounded-xl px-3.5 py-2.5 pl-8 text-xs font-mono font-bold text-stone-900 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]/20 focus:border-[#1a4d2e] transition-colors"
-                />
-                <span className="absolute top-2.5 left-3 text-sm font-black text-[#1a4d2e] pointer-events-none">@</span>
-              </div>
-              <p className="text-[11px] text-stone-500 mt-1">
-                استخدم أحرف إنجليزية وأرقام وشرطة سفلية (_) فقط بدون مسافات.
-              </p>
-            </div>
-
-            {/* Live Social Link Preview Box */}
-            <div className="bg-white p-3.5 rounded-xl border border-stone-200/90 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
-              <div className="flex items-center gap-2.5 overflow-hidden">
-                <div className="w-7 h-7 rounded-lg bg-stone-100 flex items-center justify-center text-stone-600 shrink-0">
-                  <Globe className="h-3.5 w-3.5 text-[#1a4d2e]" />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-[10px] text-stone-400 font-medium">رابط صفحتك المباشر للزبائن والسوشيال ميديا:</div>
-                  <div className="text-xs font-bold text-stone-900 font-mono truncate" dir="ltr">
-                    {displayUrl}
-                  </div>
-                </div>
-              </div>
+        {!onlySettings && (
+          <>
+            {/* Section Navigation Tabs */}
+            <div className="flex items-center gap-1.5 p-1.5 bg-stone-100 rounded-2xl border border-stone-200/80 overflow-x-auto scrollbar-none mb-6">
+              <button
+                type="button"
+                onClick={() => setActiveFormTab('all')}
+                className={cn(
+                  "px-4 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-2",
+                  activeFormTab === 'all' ? "bg-white text-[#1a4d2e] shadow-2xs font-black" : "text-stone-600 hover:text-stone-900"
+                )}
+              >
+                <LayoutGrid className="h-4 w-4 text-[#1a4d2e]" />
+                <span>جميع الأقسام</span>
+              </button>
 
               <button
                 type="button"
-                onClick={handleCopyLink}
-                className="inline-flex items-center justify-center gap-1.5 bg-[#1a4d2e] hover:bg-[#133b22] text-white px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-2xs shrink-0 cursor-pointer"
-              >
-                {copiedLink ? (
-                  <>
-                    <Check className="h-3.5 w-3.5 text-emerald-300" />
-                    <span>تم النسخ!</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="h-3.5 w-3.5" />
-                    <span>نسخ الرابط</span>
-                  </>
+                onClick={() => setActiveFormTab('basic')}
+                className={cn(
+                  "px-4 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-2",
+                  activeFormTab === 'basic' ? "bg-white text-[#1a4d2e] shadow-2xs font-black" : "text-stone-600 hover:text-stone-900"
                 )}
+              >
+                <Store className="h-4 w-4 text-[#1a4d2e]" />
+                <span>البيانات الأساسية</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveFormTab('location')}
+                className={cn(
+                  "px-4 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-2",
+                  activeFormTab === 'location' ? "bg-white text-[#1a4d2e] shadow-2xs font-black" : "text-stone-600 hover:text-stone-900"
+                )}
+              >
+                <MapPin className="h-4 w-4 text-[#1a4d2e]" />
+                <span>العنوان والتوصيل</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveFormTab('media')}
+                className={cn(
+                  "px-4 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-2",
+                  activeFormTab === 'media' ? "bg-white text-[#1a4d2e] shadow-2xs font-black" : "text-stone-600 hover:text-stone-900"
+                )}
+              >
+                <ImageIcon className="h-4 w-4 text-[#1a4d2e]" />
+                <span>الصور والوصف</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveFormTab('hours')}
+                className={cn(
+                  "px-4 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-2",
+                  activeFormTab === 'hours' ? "bg-white text-[#1a4d2e] shadow-2xs font-black" : "text-stone-600 hover:text-stone-900"
+                )}
+              >
+                <Clock className="h-4 w-4 text-[#1a4d2e]" />
+                <span>ساعات العمل والتواصل</span>
               </button>
             </div>
-          </div>
-        </div>
 
-        {/* 3. Location & Address */}
-        <div className="bg-white p-3 sm:p-6 rounded-xl sm:rounded-2xl border-0 sm:border border-stone-200/80 shadow-none sm:shadow-2xs space-y-4">
-          <div className="flex items-center gap-2 pb-3 border-b border-stone-100">
-            <MapPin className="h-5 w-5 text-[#1a4d2e]" />
-            <h4 className="text-sm font-black text-stone-800">الموقع والعنوان في محافظة إربد</h4>
-          </div>
+            {/* SECTION 1: البيانات الأساسية والهوية */}
+            {(activeFormTab === 'basic' || activeFormTab === 'all') && (
+              <div className="space-y-4 animate-in fade-in duration-200">
+                <div className="bg-white p-5 rounded-2xl border border-stone-200 shadow-2xs space-y-4">
+                  <div className="flex items-center gap-2 pb-3 border-b border-stone-100">
+                    <Store className="h-5 w-5 text-[#1a4d2e]" />
+                    <h4 className="text-sm font-black text-stone-900">المعلومات الأساسية والتصنيف</h4>
+                  </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-black text-stone-700 mb-1.5">
-                المنطقة / الحي / القرية <span className="text-rose-500">*</span>
-              </label>
-              <SearchableSelect
-                options={IRBID_REGIONS_CATEGORIZED.flatMap(g => g.areas)}
-                value={district}
-                onChange={val => setDistrict(val)}
-                className="bg-[#fdfcfb] border-stone-200"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-black text-stone-700 mb-1.5">
-                العنوان بالتفصيل في إربد <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="text"
-                required
-                value={address}
-                onChange={e => setAddress(e.target.value)}
-                placeholder="مثال: شارع الجامعة، مقابل مجمع الأندلس، بجانب صيدلية..."
-                className="w-full bg-[#fdfcfb] border border-stone-200 rounded-xl px-3.5 py-2.5 text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]/20 focus:border-[#1a4d2e] transition-colors"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-black text-stone-700 mb-1.5">
-              رابط موقع المحل على خرائط Google Maps <span className="text-stone-400 font-normal">(اختياري ومفيد للاتجاهات)</span>
-            </label>
-            <div className="relative">
-              <input
-                type="url"
-                dir="ltr"
-                value={googlePlaceUrl}
-                onChange={e => setGooglePlaceUrl(e.target.value)}
-                placeholder="https://maps.app.goo.gl/... أو https://goo.gl/maps/..."
-                className="w-full bg-[#fdfcfb] border border-stone-200 rounded-xl px-3.5 py-2.5 pl-9 text-xs text-left text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]/20 focus:border-[#1a4d2e] transition-colors"
-              />
-              <Globe className="h-4 w-4 text-stone-400 absolute top-3 left-3 pointer-events-none" />
-            </div>
-            <p className="text-[11px] text-stone-500 mt-1">
-              يساعد وضع رابط قوقل مابس زوار المنصة في الوصول إلى محلك بنقرة واحدة وتفعيل زر الاتجاهات.
-            </p>
-          </div>
-        </div>
-
-        {/* 4. Contact Phone & Details */}
-        <div className="bg-white p-3 sm:p-6 rounded-xl sm:rounded-2xl border-0 sm:border border-stone-200/80 shadow-none sm:shadow-2xs space-y-4">
-          <div className="flex items-center gap-2 pb-3 border-b border-stone-100">
-            <Phone className="h-5 w-5 text-[#1a4d2e]" />
-            <h4 className="text-sm font-black text-stone-800">أرقام التواصل والطلبات</h4>
-          </div>
-
-          <div>
-            <label className="block text-xs font-black text-stone-700 mb-1.5">
-              رقم هاتف التواصل والاتصال المباشر <span className="text-rose-500">*</span>
-            </label>
-            <div className="relative">
-              <input
-                type="tel"
-                dir="ltr"
-                required
-                value={phone}
-                onChange={e => setPhone(e.target.value.replace(/\s+/g, ''))}
-                placeholder="مثال: 0791234567"
-                className="w-full bg-[#fdfcfb] border border-stone-200 rounded-xl px-3.5 py-2.5 pl-9 text-xs text-left font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]/20 focus:border-[#1a4d2e] transition-colors"
-              />
-              <Phone className="h-4 w-4 text-stone-400 absolute top-3 left-3 pointer-events-none" />
-            </div>
-            <p className="text-[11px] text-stone-500 mt-1">
-              يتم استخدامه في زر "اتصل الآن" وزر "واتساب" المباشر في صفحة محلك وبطاقات العرض.
-            </p>
-          </div>
-
-          {!isMedicalBusiness(business) && (
-            <div className="pt-3 border-t border-stone-100 space-y-3">
-              <label className={cn(
-                "flex items-start gap-3.5 p-4 rounded-xl border cursor-pointer transition-all flex-col sm:flex-row sm:items-center",
-                deliveryAvailable 
-                  ? "bg-blue-50/60 border-blue-200 shadow-3xs" 
-                  : "bg-stone-50/50 border-stone-200 hover:bg-stone-50"
-              )}>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="checkbox"
-                    checked={deliveryAvailable}
-                    onChange={e => setDeliveryAvailable(e.target.checked)}
-                    className="h-5 w-5 rounded text-blue-600 focus:ring-blue-500 border-stone-300 shrink-0 cursor-pointer"
-                  />
-                  <span className="font-black text-stone-900 flex items-center gap-2 text-xs sm:text-sm">
-                    <Truck className="h-4.5 w-4.5 text-blue-600" />
-                    تفعيل خدمة التوصيل في المحل (توفر التوصيل)
-                  </span>
-                </div>
-                <div className="text-xs text-stone-500 sm:mr-auto mt-1 sm:mt-0 leading-relaxed">
-                  سيظهر وسم <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded-md font-bold text-[10px]">توفر التوصيل</span> بوضوح في صفحة المحل وبطاقة العرض لتعريف الزبائن بإمكانية الطلب والتوصيل.
-                </div>
-              </label>
-
-              {deliveryAvailable && (() => {
-                const selectedRegions = deliveryRegions 
-                  ? deliveryRegions.split(',').map(r => r.trim()).filter(Boolean) 
-                  : [];
-
-                const handleToggleRegion = (regionName: string) => {
-                  let updated: string[];
-                  if (selectedRegions.includes(regionName)) {
-                    updated = selectedRegions.filter(r => r !== regionName);
-                  } else {
-                    updated = [...selectedRegions, regionName];
-                  }
-                  setDeliveryRegions(updated.join(', '));
-                };
-
-                const handleToggleAllGroup = (areas: string[], isAllSelected: boolean) => {
-                  let updated: string[];
-                  if (isAllSelected) {
-                    // Deselect all in this group
-                    updated = selectedRegions.filter(r => !areas.includes(r));
-                  } else {
-                    // Select all in this group
-                    const toAdd = areas.filter(r => !selectedRegions.includes(r));
-                    updated = [...selectedRegions, ...toAdd];
-                  }
-                  setDeliveryRegions(updated.join(', '));
-                };
-
-                // Filter categories based on search
-                const filteredRegions = IRBID_REGIONS_CATEGORIZED.map(group => {
-                  const matchedAreas = group.areas.filter(area => 
-                    area.toLowerCase().includes(regionsSearch.trim().toLowerCase())
-                  );
-                  return { ...group, areas: matchedAreas };
-                }).filter(group => group.areas.length > 0);
-
-                return (
-                  <div className="bg-blue-50/30 border border-blue-100/80 rounded-xl p-4 space-y-4 animate-fadeIn">
-                    <div className="flex items-center justify-between gap-2 flex-wrap">
-                      <label className="text-xs font-black text-stone-700 flex items-center gap-1.5">
-                        <MapPin className="h-4 w-4 text-blue-500" />
-                        تحديد المناطق المشمولة بالتوصيل
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-black text-stone-700 mb-1.5">
+                        اسم المحل التجاري *
                       </label>
-                      <span className="text-[10px] font-bold text-blue-600 bg-blue-100/60 px-2 py-0.5 rounded-full">
-                        تم اختيار {selectedRegions.length} منطقة
-                      </span>
-                    </div>
-
-                    {/* Selected Regions Chips */}
-                    {selectedRegions.length > 0 ? (
-                      <div className="flex flex-wrap gap-1.5 p-2 bg-white/75 border border-stone-150 rounded-xl max-h-[120px] overflow-y-auto">
-                        {selectedRegions.map(region => (
-                          <span 
-                            key={region}
-                            className="bg-blue-50 text-blue-700 border border-blue-100/80 pl-1.5 pr-2.5 py-1 rounded-lg text-[10px] font-black flex items-center gap-1 transition-all hover:bg-blue-100"
-                          >
-                            <span>{region}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleToggleRegion(region)}
-                              className="p-0.5 hover:bg-blue-200 rounded-md transition-colors text-blue-500 hover:text-blue-700 shrink-0 cursor-pointer animate-fade-in"
-                            >
-                              <X className="h-3 w-3" />
-                            </button>
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-[10px] text-stone-400 italic">لم يتم اختيار أي منطقة بعد (سيتم اعتبار التوصيل شاملاً لجميع المناطق افتراضياً).</p>
-                    )}
-
-                    {/* Search Field */}
-                    <div className="relative">
-                      <Search className="absolute right-3.5 top-2.5 h-4 w-4 text-stone-400" />
                       <input
                         type="text"
-                        value={regionsSearch}
-                        onChange={e => setRegionsSearch(e.target.value)}
-                        placeholder="ابحث عن منطقة، حي، أو بلدة في إربد..."
-                        className="w-full bg-white border border-stone-200 rounded-xl pr-10 pl-4 py-2 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-hidden placeholder:text-stone-400 placeholder:font-normal text-stone-800"
+                        required
+                        value={name}
+                        onChange={e => setName(e.target.value)}
+                        placeholder="اسم المحل"
+                        className="w-full bg-[#fdfcfb] border border-stone-200 rounded-xl px-3.5 py-2.5 text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]/20 focus:border-[#1a4d2e]"
                       />
-                      {regionsSearch && (
-                        <button
-                          type="button"
-                          onClick={() => setRegionsSearch('')}
-                          className="absolute left-3 top-2.5 text-[10px] font-bold text-stone-400 hover:text-stone-700"
-                        >
-                          مسح
-                        </button>
-                      )}
                     </div>
 
-                    {/* Regions Grid (Categorized) */}
-                    <div className="bg-white border border-stone-150 rounded-xl p-3 max-h-[300px] overflow-y-auto space-y-4">
-                      {filteredRegions.length > 0 ? (
-                        filteredRegions.map(group => {
-                          const groupSelectedCount = group.areas.filter(r => selectedRegions.includes(r)).length;
-                          const isAllSelected = groupSelectedCount === group.areas.length;
+                    <div>
+                      <label className="block text-xs font-black text-stone-700 mb-1.5">
+                        اسم المالك أو المسؤول
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={ownerName}
+                          onChange={e => setOwnerName(e.target.value)}
+                          placeholder="الاسم الكامل"
+                          className="w-full bg-[#fdfcfb] border border-stone-200 rounded-xl px-3.5 py-2.5 pr-9 text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]/20 focus:border-[#1a4d2e]"
+                        />
+                        <User className="h-4 w-4 text-stone-400 absolute top-3 right-3" />
+                      </div>
+                    </div>
+                  </div>
 
-                          return (
-                            <div key={group.groupName} className="space-y-2 border-b border-stone-50 pb-3 last:border-0 last:pb-0">
-                              <div className="flex items-center justify-between gap-2 flex-wrap">
-                                <h5 className="text-[11px] font-black text-[#1a4d2e]">{group.groupName}</h5>
-                                <button
-                                  type="button"
-                                  onClick={() => handleToggleAllGroup(group.areas, isAllSelected)}
-                                  className="text-[10px] font-bold text-blue-600 hover:underline cursor-pointer"
-                                >
-                                  {isAllSelected ? 'إلغاء تحديد الكل' : 'تحديد كل المجموعة'}
-                                </button>
-                              </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                    <div>
+                      <label className="block text-xs font-black text-stone-700 mb-1.5">
+                        التصنيف الرئيسي *
+                      </label>
+                      <SearchableSelect
+                        options={Object.keys(BUSINESS_CATEGORIES)}
+                        value={mainCategory}
+                        onChange={(val) => {
+                          const mainCat = val as MainCategory;
+                          setMainCategory(mainCat);
+                          setSubCategory(BUSINESS_CATEGORIES[mainCat]?.[0] || '');
+                        }}
+                        className="bg-[#fdfcfb] border-stone-200"
+                      />
+                    </div>
 
-                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                                {group.areas.map(area => {
-                                  const isChecked = selectedRegions.includes(area);
-                                  return (
+                    <div>
+                      <label className="block text-xs font-black text-stone-700 mb-1.5">
+                        التصنيف الفرعي *
+                      </label>
+                      <SearchableSelect
+                        options={BUSINESS_CATEGORIES[mainCategory] || []}
+                        value={subCategory}
+                        onChange={(val) => setSubCategory(val)}
+                        className="bg-[#fdfcfb] border-stone-200"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Handle & Page URL */}
+                <div className="bg-white p-5 rounded-2xl border border-stone-200 shadow-2xs space-y-4">
+                  <div className="flex items-center gap-2 pb-3 border-b border-stone-100">
+                    <AtSign className="h-5 w-5 text-[#1a4d2e]" />
+                    <h4 className="text-sm font-black text-stone-900">معرّف الرابط واسم المستخدم</h4>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-black text-stone-700 mb-1.5">
+                        اسم المستخدم للمحل
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          dir="ltr"
+                          value={username}
+                          onChange={handleUsernameChange}
+                          placeholder="alkhiyam_cafe"
+                          className="w-full bg-white border border-stone-300 rounded-xl px-3.5 py-2.5 pl-8 text-xs font-mono font-bold text-stone-900 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]/20 focus:border-[#1a4d2e]"
+                        />
+                        <span className="absolute top-2.5 left-3 text-sm font-black text-[#1a4d2e] pointer-events-none">@</span>
+                      </div>
+                    </div>
+
+                    {/* Social Link Preview */}
+                    <div className="bg-stone-50 p-3.5 rounded-xl border border-stone-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5 overflow-hidden">
+                        <Globe className="h-4 w-4 text-[#1a4d2e] shrink-0" />
+                        <div className="text-xs font-bold text-stone-900 font-mono truncate" dir="ltr">
+                          {displayUrl}
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleCopyLink}
+                        className="inline-flex items-center justify-center gap-1.5 bg-[#1a4d2e] hover:bg-[#133b22] text-white px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer"
+                      >
+                        {copiedLink ? (
+                          <>
+                            <Check className="h-3.5 w-3.5 text-emerald-300" />
+                            <span>تم النسخ</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-3.5 w-3.5" />
+                            <span>نسخ الرابط</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* SECTION 2: العنوان والتواصل والتوصيل */}
+            {(activeFormTab === 'location' || activeFormTab === 'all') && (
+              <div className="space-y-4 animate-in fade-in duration-200">
+                <div className="bg-white p-5 rounded-2xl border border-stone-200 shadow-2xs space-y-4">
+                  <div className="flex items-center gap-2 pb-3 border-b border-stone-100">
+                    <MapPin className="h-5 w-5 text-[#1a4d2e]" />
+                    <h4 className="text-sm font-black text-stone-900">الموقع والعنوان</h4>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-black text-stone-700 mb-1.5">
+                        المنطقة أو الحي *
+                      </label>
+                      <SearchableSelect
+                        options={IRBID_REGIONS_CATEGORIZED.flatMap(g => g.areas)}
+                        value={district}
+                        onChange={val => setDistrict(val)}
+                        className="bg-[#fdfcfb] border-stone-200"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-black text-stone-700 mb-1.5">
+                        العنوان التفصيلي *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={address}
+                        onChange={e => setAddress(e.target.value)}
+                        placeholder="شارع الجامعة"
+                        className="w-full bg-[#fdfcfb] border border-stone-200 rounded-xl px-3.5 py-2.5 text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]/20 focus:border-[#1a4d2e]"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-black text-stone-700 mb-1.5">
+                      رابط موقع المحل على خرائط Google Maps
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="url"
+                        dir="ltr"
+                        value={googlePlaceUrl}
+                        onChange={e => setGooglePlaceUrl(e.target.value)}
+                        placeholder="https://maps.app.goo.gl/..."
+                        className="w-full bg-[#fdfcfb] border border-stone-200 rounded-xl px-3.5 py-2.5 pl-9 text-xs text-left text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]/20 focus:border-[#1a4d2e]"
+                      />
+                      <Globe className="h-4 w-4 text-stone-400 absolute top-3 left-3 pointer-events-none" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Contact Phone & Delivery */}
+                <div className="bg-white p-5 rounded-2xl border border-stone-200 shadow-2xs space-y-4">
+                  <div className="flex items-center gap-2 pb-3 border-b border-stone-100">
+                    <Phone className="h-5 w-5 text-[#1a4d2e]" />
+                    <h4 className="text-sm font-black text-stone-900">أرقام التواصل والتوصيل</h4>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-black text-stone-700 mb-1.5">
+                      رقم هاتف التواصل والاتصال *
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="tel"
+                        dir="ltr"
+                        required
+                        value={phone}
+                        onChange={e => setPhone(e.target.value.replace(/\s+/g, ''))}
+                        placeholder="079XXXXXXXX"
+                        className="w-full bg-[#fdfcfb] border border-stone-200 rounded-xl px-3.5 py-2.5 pl-9 text-xs text-left font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]/20 focus:border-[#1a4d2e]"
+                      />
+                      <Phone className="h-4 w-4 text-stone-400 absolute top-3 left-3 pointer-events-none" />
+                    </div>
+                  </div>
+
+                  {!isMedicalBusiness(business) && (
+                    <div className="pt-3 border-t border-stone-100 space-y-3">
+                      <label className={cn(
+                        "flex items-center justify-between p-4 rounded-xl border cursor-pointer transition-all",
+                        deliveryAvailable ? "bg-blue-50/60 border-blue-200" : "bg-stone-50/50 border-stone-200 hover:bg-stone-50"
+                      )}>
+                        <span className="font-black text-stone-900 flex items-center gap-2 text-xs sm:text-sm">
+                          <Truck className="h-4.5 w-4.5 text-blue-600" />
+                          تفعيل خدمة التوصيل
+                        </span>
+                        <input
+                          type="checkbox"
+                          checked={deliveryAvailable}
+                          onChange={e => setDeliveryAvailable(e.target.checked)}
+                          className="h-5 w-5 rounded text-blue-600 focus:ring-blue-500 border-stone-300 cursor-pointer"
+                        />
+                      </label>
+
+                      {deliveryAvailable && (() => {
+                        const selectedRegions = deliveryRegions 
+                          ? deliveryRegions.split(',').map(r => r.trim()).filter(Boolean) 
+                          : [];
+
+                        const handleToggleRegion = (regionName: string) => {
+                          let updated: string[];
+                          if (selectedRegions.includes(regionName)) {
+                            updated = selectedRegions.filter(r => !regionName);
+                          } else {
+                            updated = [...selectedRegions, regionName];
+                          }
+                          setDeliveryRegions(updated.join(', '));
+                        };
+
+                        const handleToggleAllGroup = (areas: string[], isAllSelected: boolean) => {
+                          let updated: string[];
+                          if (isAllSelected) {
+                            updated = selectedRegions.filter(r => !areas.includes(r));
+                          } else {
+                            const toAdd = areas.filter(r => !selectedRegions.includes(r));
+                            updated = [...selectedRegions, ...toAdd];
+                          }
+                          setDeliveryRegions(updated.join(', '));
+                        };
+
+                        const filteredRegions = IRBID_REGIONS_CATEGORIZED.map(group => {
+                          const matchedAreas = group.areas.filter(area => 
+                            area.toLowerCase().includes(regionsSearch.trim().toLowerCase())
+                          );
+                          return { ...group, areas: matchedAreas };
+                        }).filter(group => group.areas.length > 0);
+
+                        return (
+                          <div className="bg-blue-50/30 border border-blue-100 rounded-xl p-4 space-y-4">
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <label className="text-xs font-black text-stone-700 flex items-center gap-1.5">
+                                <MapPin className="h-4 w-4 text-blue-500" />
+                                مناطق التوصيل المشمولة
+                              </label>
+                            </div>
+
+                            {selectedRegions.length > 0 && (
+                              <div className="flex flex-wrap gap-1.5 p-2 bg-white border border-stone-200 rounded-xl max-h-[120px] overflow-y-auto">
+                                {selectedRegions.map(region => (
+                                  <span 
+                                    key={region}
+                                    className="bg-blue-50 text-blue-700 border border-blue-100 pl-1.5 pr-2.5 py-1 rounded-lg text-[10px] font-black flex items-center gap-1"
+                                  >
+                                    <span>{region}</span>
                                     <button
                                       type="button"
-                                      key={area}
-                                      onClick={() => handleToggleRegion(area)}
-                                      className={cn(
-                                        "p-2 rounded-xl border text-right transition-all flex items-center justify-between gap-1.5 cursor-pointer text-[10px] sm:text-xs font-bold",
-                                        isChecked 
-                                          ? "bg-blue-50 border-blue-200 text-blue-900 shadow-3xs" 
-                                          : "bg-stone-50 hover:bg-stone-100 border-stone-100 text-stone-700"
-                                      )}
+                                      onClick={() => handleToggleRegion(region)}
+                                      className="p-0.5 hover:bg-blue-200 rounded-md transition-colors text-blue-500 shrink-0 cursor-pointer"
                                     >
-                                      <span className="truncate">{area}</span>
-                                      <input
-                                        type="checkbox"
-                                        checked={isChecked}
-                                        readOnly
-                                        className="h-3.5 w-3.5 rounded text-blue-600 border-stone-300 focus:ring-blue-500 shrink-0 pointer-events-none"
-                                      />
+                                      <X className="h-3 w-3" />
                                     </button>
-                                  );
-                                })}
+                                  </span>
+                                ))}
                               </div>
+                            )}
+
+                            <div className="relative">
+                              <Search className="absolute right-3.5 top-2.5 h-4 w-4 text-stone-400" />
+                              <input
+                                type="text"
+                                value={regionsSearch}
+                                onChange={e => setRegionsSearch(e.target.value)}
+                                placeholder="البحث في مناطق إربد..."
+                                className="w-full bg-white border border-stone-200 rounded-xl pr-10 pl-4 py-2 text-xs font-bold focus:ring-2 focus:ring-blue-500 text-stone-800"
+                              />
                             </div>
-                          );
-                        })
-                      ) : (
-                        <p className="text-center py-4 text-xs font-semibold text-stone-400">لا توجد مناطق تطابق بحثك.</p>
-                      )}
+
+                            <div className="bg-white border border-stone-200 rounded-xl p-3 max-h-[260px] overflow-y-auto space-y-4">
+                              {filteredRegions.map(group => {
+                                const groupSelectedCount = group.areas.filter(r => selectedRegions.includes(r)).length;
+                                const isAllSelected = groupSelectedCount === group.areas.length;
+
+                                return (
+                                  <div key={group.groupName} className="space-y-2 border-b border-stone-100 pb-3 last:border-0 last:pb-0">
+                                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                                      <h5 className="text-[11px] font-black text-[#1a4d2e]">{group.groupName}</h5>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleToggleAllGroup(group.areas, isAllSelected)}
+                                        className="text-[10px] font-bold text-blue-600 hover:underline cursor-pointer"
+                                      >
+                                        {isAllSelected ? 'إلغاء تحديد الكل' : 'تحديد المجموعة'}
+                                      </button>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                      {group.areas.map(area => {
+                                        const isChecked = selectedRegions.includes(area);
+                                        return (
+                                          <button
+                                            type="button"
+                                            key={area}
+                                            onClick={() => handleToggleRegion(area)}
+                                            className={cn(
+                                              "p-2 rounded-xl border text-right transition-all flex items-center justify-between gap-1.5 cursor-pointer text-[10px] sm:text-xs font-bold",
+                                              isChecked 
+                                                ? "bg-blue-50 border-blue-200 text-blue-900" 
+                                                : "bg-stone-50 hover:bg-stone-100 border-stone-100 text-stone-700"
+                                            )}
+                                          >
+                                            <span className="truncate">{area}</span>
+                                            <input
+                                              type="checkbox"
+                                              checked={isChecked}
+                                              readOnly
+                                              className="h-3.5 w-3.5 rounded text-blue-600 border-stone-300 pointer-events-none"
+                                            />
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* SECTION 3: الصور والوصف والميديا */}
+            {(activeFormTab === 'media' || activeFormTab === 'all') && (
+              <div className="space-y-4 animate-in fade-in duration-200">
+                <div className="bg-white p-5 rounded-2xl border border-stone-200 shadow-2xs space-y-4">
+                  <div className="flex items-center gap-2 pb-3 border-b border-stone-100">
+                    <ImageIcon className="h-5 w-5 text-[#1a4d2e]" />
+                    <h4 className="text-sm font-black text-stone-900">شعار وصور المحل</h4>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-start">
+                    {/* Logo */}
+                    <div className="space-y-1">
+                      <ImageUploader
+                        label="شعار المحل / اللوجو"
+                        folder="logos"
+                        value={logoUrl}
+                        onChange={(url) => setLogoUrl(url)}
+                        aspectRatio="square"
+                        placeholder="اختر ملف اللوجو"
+                      />
                     </div>
 
-                    {selectedRegions.length > 0 && (
-                      <div className="flex justify-between items-center pt-1 border-t border-blue-50">
-                        <span className="text-[10px] text-stone-500 font-medium">سيتم عرض هذه المناطق بوضوح للمستخدمين.</span>
-                        <button
-                          type="button"
-                          onClick={() => setDeliveryRegions('')}
-                          className="text-[10px] font-black text-red-600 hover:underline cursor-pointer"
-                        >
-                          إلغاء تحديد جميع المناطق
-                        </button>
-                      </div>
-                    )}
+                    {/* Cover Image */}
+                    <div className="space-y-1">
+                      <ImageUploader
+                        label="صورة الغلاف الرئيسية"
+                        folder="businesses"
+                        value={imageUrl}
+                        onChange={(url) => setImageUrl(url)}
+                        aspectRatio="cover"
+                        placeholder="اختر صورة غلاف المحل"
+                      />
+                    </div>
+
+                    {/* Cover Video */}
+                    <div className="space-y-1 md:col-span-2">
+                      <VideoUploader
+                        value={coverVideoUrl}
+                        onChange={(url) => setCoverVideoUrl(url)}
+                        label="فيديو الغلاف التفاعلي"
+                      />
+                    </div>
                   </div>
-                );
-              })()}
-            </div>
-          )}
-        </div>
 
-        {/* 5. Visuals & Bio Description */}
-        <div className="bg-white p-3 sm:p-6 rounded-xl sm:rounded-2xl border-0 sm:border border-stone-200/80 shadow-none sm:shadow-2xs space-y-4">
-          <div className="flex items-center gap-2 pb-3 border-b border-stone-100">
-            <ImageIcon className="h-5 w-5 text-[#1a4d2e]" />
-            <h4 className="text-sm font-black text-stone-800">هوية المحل والشعار والصور</h4>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-start">
-            {/* Store Logo / Owner Profile Picture */}
-            <div className="space-y-1">
-              <ImageUploader
-                label="شعار المحل / اللوجو / الصورة الشخصية (رفع مباشر)"
-                folder="logos"
-                value={logoUrl}
-                onChange={(url) => setLogoUrl(url)}
-                aspectRatio="square"
-                placeholder="اختر ملف اللوجو أو الصورة الشخصية من جهازك"
-              />
-              <p className="text-[11px] text-stone-500 font-medium">
-                الصورة الدائرية الممثلة للمحل أو صاحب المنشأة والتي تظهر بجانب الاسم في نتاجات البحث والتقييمات وبطاقة المحل.
-              </p>
-            </div>
-
-            {/* Store Main Cover Image */}
-            <div className="space-y-1">
-              <ImageUploader
-                label="صورة غلاف المحل الرئيسية (رفع مباشر)"
-                folder="businesses"
-                value={imageUrl}
-                onChange={(url) => setImageUrl(url)}
-                aspectRatio="cover"
-                placeholder="اختر صورة الواجهة أو غلاف المحل من جهازك"
-              />
-              <p className="text-[11px] text-stone-500 font-medium">
-                الصورة العريضة الرئيسية التي تعكس واجهة المحل أو الديكور الداخلي وتظهر كغلاف لصفحة المحل.
-              </p>
-            </div>
-
-            {/* Store Main Cover Video (Optional) */}
-            <div className="space-y-1">
-              <VideoUploader
-                value={coverVideoUrl}
-                onChange={(url) => setCoverVideoUrl(url)}
-                label="فيديو الغلاف التفاعلي (اختياري)"
-              />
-              <p className="text-[11px] text-stone-500 font-medium">
-                💡 عند رفع فيديو هنا، تظل صورة الغلاف تظهر افتراضياً على البطاقة، وعندما يمرر الزائر الماوس فوق بطاقة المحل يشتغل الفيديو تلقائياً!
-              </p>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-black text-stone-700 mb-1.5">
-              نبذة تعريفية ووصف المحل التجاري <span className="text-rose-500">*</span>
-            </label>
-            <RichTextEditor
-              required
-              value={description}
-              onChange={setDescription}
-              placeholder="اكتب وصفاً جذاباً يوضح ما يقدمه محلك، أهم الوجبات أو المنتجات، المزايا التنافسية، وما يجعلك مميزاً في إربد..."
-            />
-          </div>
-        </div>
-
-        {/* 5.5. Media for "About" Section (Video or Image for all accounts) */}
-        <div className="bg-white p-3 sm:p-6 rounded-xl sm:rounded-2xl border-0 sm:border border-stone-200/80 shadow-none sm:shadow-2xs space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-stone-100">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-emerald-50 text-[#1a4d2e]">
-                <Video className="h-4 w-4" />
-              </div>
-              <div>
-                <h4 className="text-sm font-black text-stone-800">ميديا وفيديو / صورة قسم "عن المحل"</h4>
-                <p className="text-[11px] text-stone-500 font-medium">متاحة لجميع الحسابات: اعرض مقطع فيديو تعريفي أو صورة مميزة تظهر مباشرة في قسم "عن المحل"</p>
-              </div>
-            </div>
-            <span className="text-[10px] bg-emerald-100 text-emerald-800 font-black px-2 py-0.5 rounded-full">
-              جديد لجميع المحلات ✨
-            </span>
-          </div>
-
-          {/* Type selector */}
-          <div className="flex flex-col sm:flex-row gap-3">
-            <button
-              type="button"
-              onClick={() => setAboutMediaType('video')}
-              className={cn(
-                "flex-1 p-3 rounded-xl border font-bold text-xs flex flex-col sm:flex-row items-center justify-center gap-2 transition-all cursor-pointer text-center",
-                aboutMediaType === 'video'
-                  ? "border-[#1a4d2e] bg-[#1a4d2e]/10 text-[#1a4d2e] shadow-2xs"
-                  : "border-stone-200 bg-stone-50 text-stone-600 hover:bg-white"
-              )}
-            >
-              <Video className="h-5 w-5 sm:h-4 sm:w-4 shrink-0" />
-              <span>مقطع فيديو (يوتيوب، ريلز، إلخ)</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setAboutMediaType('image')}
-              className={cn(
-                "flex-1 p-3 rounded-xl border font-bold text-xs flex flex-col sm:flex-row items-center justify-center gap-2 transition-all cursor-pointer text-center",
-                aboutMediaType === 'image'
-                  ? "border-[#1a4d2e] bg-[#1a4d2e]/10 text-[#1a4d2e] shadow-2xs"
-                  : "border-stone-200 bg-stone-50 text-stone-600 hover:bg-white"
-              )}
-            >
-              <ImageIcon className="h-5 w-5 sm:h-4 sm:w-4 shrink-0" />
-              <span>صورة تعريفية مميزة</span>
-            </button>
-          </div>
-
-          {/* Video Input */}
-          {aboutMediaType === 'video' && (
-            <div className="space-y-2 bg-stone-50 p-4 rounded-xl border border-stone-200">
-              <VideoUploader
-                value={aboutMediaUrl}
-                onChange={url => setAboutMediaUrl(url)}
-                label="فيديو قسم عن المحل"
-                placeholder="ضع رابط الفيديو أو ارفعه من جهازك..."
-              />
-              <p className="text-[11px] text-stone-500 flex items-center gap-1.5 pt-1">
-                <HelpCircle className="h-3.5 w-3.5 text-[#1a4d2e]" />
-                <span>يمكنك رفع فيديو مباشر من جهازك أو لصق رابط فيديو من يوتيوب، إنستغرام، أو فيسبوك.</span>
-              </p>
-            </div>
-          )}
-
-          {/* Image Uploader */}
-          {aboutMediaType === 'image' && (
-            <div className="space-y-2 bg-stone-50 p-4 rounded-xl border border-stone-200">
-              <ImageUploader
-                label="اختر أو ارفع الصورة من جهازك"
-                folder="about_media"
-                value={aboutMediaUrl}
-                onChange={(url) => setAboutMediaUrl(url)}
-                aspectRatio="cover"
-                placeholder="اضغط لرفع صورة لقسم عن المحل"
-              />
-              {aboutMediaUrl && (
-                <div className="mt-3 pt-3 border-t border-stone-200">
-                  <div className="text-[11px] font-bold text-stone-600 mb-1.5">معاينة الصورة:</div>
-                  <MediaRenderer type="image" url={aboutMediaUrl} aspectRatio="video" />
+                  <div>
+                    <label className="block text-xs font-black text-stone-700 mb-1.5">
+                      وصف المحل والخدمات *
+                    </label>
+                    <RichTextEditor
+                      required
+                      value={description}
+                      onChange={setDescription}
+                      placeholder="اكتب وصفاً للخدمات والمنتجات..."
+                    />
+                  </div>
                 </div>
-              )}
-            </div>
-          )}
 
-          {/* Caption Input */}
-          <div>
-            <label className="block text-xs font-black text-stone-700 mb-1">
-              عنوان أو تعليق مصاحب للميديا <span className="text-stone-400 font-normal">(اختياري)</span>
-            </label>
-            <input
-              type="text"
-              value={aboutMediaCaption}
-              onChange={e => setAboutMediaCaption(e.target.value)}
-              placeholder="مثال: جولة تعريفية داخل أروقة المحل، أو لمحة عن خدماتنا"
-              className="w-full bg-[#fdfcfb] border border-stone-200 rounded-xl px-3.5 py-2 text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]/20"
-            />
-          </div>
+                {/* About Media */}
+                <div className="bg-white p-5 rounded-2xl border border-stone-200 shadow-2xs space-y-4">
+                  <div className="flex items-center gap-2 pb-3 border-b border-stone-100">
+                    <Video className="h-5 w-5 text-[#1a4d2e]" />
+                    <h4 className="text-sm font-black text-stone-900">ميديا قسم عن المحل</h4>
+                  </div>
 
-          {/* Clear Media Option if set */}
-          {aboutMediaUrl && (
-            <div className="flex justify-end pt-1">
-              <button
-                type="button"
-                onClick={() => {
-                  setAboutMediaUrl('');
-                  setAboutMediaCaption('');
-                }}
-                className="text-xs font-bold text-rose-600 hover:text-rose-700 flex items-center gap-1 cursor-pointer"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                <span>إزالة الميديا من قسم عن المحل</span>
-              </button>
-            </div>
-          )}
-        </div>
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setAboutMediaType('video')}
+                      className={cn(
+                        "flex-1 p-3 rounded-xl border font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer text-center",
+                        aboutMediaType === 'video'
+                          ? "border-[#1a4d2e] bg-[#1a4d2e]/10 text-[#1a4d2e]"
+                          : "border-stone-200 bg-stone-50 text-stone-600 hover:bg-white"
+                      )}
+                    >
+                      <Video className="h-4 w-4 shrink-0" />
+                      <span>مقطع فيديو</span>
+                    </button>
 
-        {/* 5.6 VIP Interactive Welcome Popup Shortcut (If VIP) */}
-        {vipInfo.isVip && (
-          <div className="bg-gradient-to-br from-amber-50 to-amber-100/50 border-0 sm:border border-amber-300/80 rounded-xl sm:rounded-2xl p-3 sm:p-5 shadow-none sm:shadow-2xs space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shadow-xs">
-                  <Crown className="h-4 w-4 fill-amber-200" />
+                    <button
+                      type="button"
+                      onClick={() => setAboutMediaType('image')}
+                      className={cn(
+                        "flex-1 p-3 rounded-xl border font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer text-center",
+                        aboutMediaType === 'image'
+                          ? "border-[#1a4d2e] bg-[#1a4d2e]/10 text-[#1a4d2e]"
+                          : "border-stone-200 bg-stone-50 text-stone-600 hover:bg-white"
+                      )}
+                    >
+                      <ImageIcon className="h-4 w-4 shrink-0" />
+                      <span>صورة تعريفية</span>
+                    </button>
+                  </div>
+
+                  {aboutMediaType === 'video' && (
+                    <div className="space-y-2 bg-stone-50 p-4 rounded-xl border border-stone-200">
+                      <VideoUploader
+                        value={aboutMediaUrl}
+                        onChange={url => setAboutMediaUrl(url)}
+                        label="فيديو قسم عن المحل"
+                        placeholder="ضع رابط الفيديو أو ارفعه..."
+                      />
+                    </div>
+                  )}
+
+                  {aboutMediaType === 'image' && (
+                    <div className="space-y-2 bg-stone-50 p-4 rounded-xl border border-stone-200">
+                      <ImageUploader
+                        label="رفع صورة عن المحل"
+                        folder="about_media"
+                        value={aboutMediaUrl}
+                        onChange={(url) => setAboutMediaUrl(url)}
+                        aspectRatio="cover"
+                        placeholder="اختر صورة"
+                      />
+                      {aboutMediaUrl && (
+                        <div className="mt-3 pt-3 border-t border-stone-200">
+                          <MediaRenderer type="image" url={aboutMediaUrl} aspectRatio="video" />
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-xs font-black text-stone-700 mb-1">
+                      عنوان للميديا
+                    </label>
+                    <input
+                      type="text"
+                      value={aboutMediaCaption}
+                      onChange={e => setAboutMediaCaption(e.target.value)}
+                      placeholder="عنوان اختياري"
+                      className="w-full bg-[#fdfcfb] border border-stone-200 rounded-xl px-3.5 py-2 text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]/20"
+                    />
+                  </div>
+
+                  {aboutMediaUrl && (
+                    <div className="flex justify-end pt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAboutMediaUrl('');
+                          setAboutMediaCaption('');
+                        }}
+                        className="text-xs font-bold text-rose-600 hover:text-rose-700 flex items-center gap-1 cursor-pointer"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        <span>إزالة الميديا</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
-                <div>
-                  <h4 className="text-sm font-black text-stone-900">النافذة المنبثقة الترحيبية (VIP)</h4>
-                  <p className="text-xs text-stone-600">اعرض صورة بوستر أو فيديو ترحيبي يظهر تلقائياً للزوار عند فتح صفحة محلك</p>
+
+                {/* VIP Popup Shortcut */}
+                {vipInfo.isVip && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Crown className="h-5 w-5 text-amber-600" />
+                        <h4 className="text-sm font-black text-stone-900">النافذة المنبثقة الترحيبية</h4>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2 border-t border-amber-200/60">
+                      <div className="text-xs font-bold text-stone-700">
+                        الحالة: {business.vipPopup?.enabled ? <span className="text-emerald-700 font-black">مفعلة</span> : <span className="text-stone-500">معطلة</span>}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsVipPopupManagerOpen(true)}
+                        className="inline-flex items-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white font-black text-xs px-4 py-2 rounded-xl shadow-2xs transition-all cursor-pointer"
+                      >
+                        <span>إدارة النافذة المنبثقة</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* SECTION 4: ساعات العمل والتواصل والدفع */}
+            {(activeFormTab === 'hours' || activeFormTab === 'all') && (
+              <div className="space-y-4 animate-in fade-in duration-200">
+                <WorkingHoursEditor
+                  workingHours={workingHours}
+                  onChange={setWorkingHours}
+                  showVacationToggle={true}
+                />
+
+                <SocialLinksEditor
+                  socialLinks={socialLinks}
+                  onChange={setSocialLinks}
+                />
+
+                <div className="bg-white p-5 rounded-2xl border border-stone-200 shadow-2xs">
+                  <PaymentMethodsSelector
+                    value={paymentMethods}
+                    onChange={setPaymentMethods}
+                  />
                 </div>
               </div>
-              <span className="text-[10px] font-black bg-amber-200 text-amber-900 px-2.5 py-1 rounded-full">
-                👑 ميزة VIP
-              </span>
-            </div>
-
-            <div className="flex items-center justify-between pt-2 border-t border-amber-200/60">
-              <div className="text-xs font-bold text-stone-700">
-                حالة النافذة: {business.vipPopup?.enabled ? <span className="text-emerald-700 font-black">مفعلة 🟢</span> : <span className="text-stone-500">معطلة ⚪</span>}
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsVipPopupManagerOpen(true)}
-                className="inline-flex items-center gap-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black text-xs px-4 py-2 rounded-xl shadow-xs transition-all cursor-pointer"
-              >
-                <Sparkles className="h-3.5 w-3.5 text-amber-200" />
-                <span>إدارة وتعديل النافذة المنبثقة</span>
-              </button>
-            </div>
-          </div>
+            )}
+          </>
         )}
 
-        {/* 6. Live Working Hours Editor */}
-        <WorkingHoursEditor
-          workingHours={workingHours}
-          onChange={setWorkingHours}
-          showVacationToggle={true}
-        />
+        {!hideSettings && (
+          <div className="space-y-4">
+            {/* 1. Visibility Settings Card */}
+            <div className="bg-white border border-stone-200 rounded-2xl p-5 space-y-4 shadow-2xs">
+              <div className="flex items-center justify-between pb-3 border-b border-stone-100">
+                <div className="flex items-center gap-2.5">
+                  <EyeOff className="h-5 w-5 text-stone-700" />
+                  <h4 className="text-sm font-black text-stone-900">حالة ظهور المنشأة</h4>
+                </div>
+                <span className={cn(
+                  "text-xs font-black px-3 py-1 rounded-full",
+                  isHidden ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"
+                )}>
+                  {isHidden ? "مخفي عن الزوار" : "ظاهر بالدليل"}
+                </span>
+              </div>
 
-        {/* 7. Official Social Links Editor */}
-        <SocialLinksEditor
-          socialLinks={socialLinks}
-          onChange={setSocialLinks}
-        />
-
-        {/* 7.5 Payment Methods Selector */}
-        <div className="bg-white p-3 sm:p-6 rounded-xl sm:rounded-2xl border-0 sm:border border-stone-200/80 shadow-none sm:shadow-2xs">
-          <PaymentMethodsSelector
-            value={paymentMethods}
-            onChange={setPaymentMethods}
-          />
-        </div>
-
-        {/* 8. Visibility & Privacy Controls (إخفاء المحل والتقييمات) */}
-        <div className="bg-stone-50/80 border-0 sm:border border-stone-200 rounded-xl sm:rounded-2xl p-3 sm:p-5 space-y-4 shadow-none sm:shadow-2xs">
-          <div className="flex items-center gap-2">
-            <EyeOff className="h-5 w-5 sm:h-6 sm:w-6 shrink-0 text-amber-600" />
-            <div>
-              <h4 className="text-sm sm:text-base font-black text-stone-900">إعدادات الظهور والخصوصية للمحل</h4>
-              <p className="text-[11px] sm:text-xs text-stone-500 mt-0.5">تحكم في حالة ظهور صفحة المحل وتقييمات العملاء في الموقع</p>
-            </div>
-          </div>
-
-          <div className="space-y-3 pt-2 border-t border-stone-200/70">
-            {/* Toggle Hide Store Page */}
-            <label className={cn(
-              "flex items-start gap-3 p-4 rounded-xl border cursor-pointer transition-all flex-col sm:flex-row sm:items-center",
-              isHidden 
-                ? "bg-amber-50/80 border-amber-300 shadow-2xs" 
-                : "bg-white border-stone-200 hover:bg-stone-50"
-            )}>
-              <div className="flex items-center gap-3">
+              <label className={cn(
+                "flex items-center justify-between p-4 rounded-xl border cursor-pointer transition-all",
+                isHidden ? "bg-amber-50/70 border-amber-200" : "bg-stone-50/50 border-stone-200 hover:bg-stone-50"
+              )}>
+                <span className="text-xs font-black text-stone-800">إخفاء المنشأة من دليل الموقع والبحث</span>
                 <input
                   type="checkbox"
                   checked={isHidden}
                   onChange={e => setIsHidden(e.target.checked)}
-                  className="mt-0 sm:mt-0.5 h-5 w-5 sm:h-4.5 sm:w-4.5 rounded text-amber-600 focus:ring-amber-500 border-stone-300 shrink-0"
+                  className="h-5 w-5 rounded text-amber-600 focus:ring-amber-500 border-stone-300 cursor-pointer"
                 />
-                <span className="font-black text-stone-900 flex items-center gap-1.5 text-xs sm:text-sm">
-                  <EyeOff className="h-4 w-4 sm:h-5 sm:w-5 text-amber-600 shrink-0" />
-                  إخفاء صفحة المحل من دليل الموقع والبحث
-                </span>
-              </div>
-              <div className="text-xs space-y-1 sm:mr-auto mt-2 sm:mt-0 w-full sm:w-auto">
-                <p className="text-stone-600 text-[11px] sm:text-xs leading-relaxed max-w-sm">
-                  عند تفعيل هذا الخيار، يتم إخفاء المحل مؤقتاً عن زوار الموقع ولن يظهر في نتائج البحث أو القوائم العامة، بينما تظل بياناتك محفوظة بحسابك لإعادة تفعيلها متى تشاء.
-                </p>
-                {isHidden && (
-                  <div className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 bg-amber-200/70 px-2 py-0.5 rounded-md mt-1">
-                    ⚠️ المحل بحالة الإخفاء حالياً
-                  </div>
-                )}
-              </div>
-            </label>
+              </label>
+            </div>
 
-            {/* Reviews Privacy Toggles */}
-            <div className="grid grid-cols-1 gap-3 pt-1">
-              <label className="flex items-start gap-3 p-3.5 sm:p-3 bg-white rounded-xl border border-stone-200 cursor-pointer hover:bg-stone-50 transition-colors">
+            {/* 2. Reviews Privacy Card */}
+            <div className="bg-white border border-stone-200 rounded-2xl p-5 space-y-4 shadow-2xs">
+              <div className="flex items-center gap-2.5 pb-3 border-b border-stone-100">
+                <MessageSquare className="h-5 w-5 text-[#1a4d2e]" />
+                <h4 className="text-sm font-black text-stone-900">خصوصية التقييمات</h4>
+              </div>
+
+              <label className="flex items-center justify-between p-4 bg-stone-50/50 rounded-xl border border-stone-200 cursor-pointer hover:bg-stone-50 transition-colors">
+                <span className="text-xs font-black text-stone-800">إخفاء قسم تقييمات الزوار من الصفحة العامة</span>
                 <input
                   type="checkbox"
                   checked={hideSiteReviews}
                   onChange={e => setHideSiteReviews(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 sm:h-5 sm:w-5 rounded text-[#1a4d2e] focus:ring-[#1a4d2e] border-stone-300 shrink-0"
+                  className="h-5 w-5 rounded text-[#1a4d2e] focus:ring-[#1a4d2e] border-stone-300 cursor-pointer"
                 />
-                <div className="text-xs">
-                  <span className="font-bold text-stone-800 flex items-center gap-1.5">
-                    <MessageSquare className="h-4 w-4 sm:h-3.5 sm:w-3.5 text-[#1a4d2e] shrink-0" />
-                    إخفاء تقييمات المنصة
-                  </span>
-                  <p className="text-stone-500 mt-1 sm:mt-0.5 text-[11px] leading-relaxed">
-                    تعطيل إمكانية كتابة وعرض التقييمات من زوار الموقع المباشرين
-                  </p>
-                </div>
               </label>
             </div>
-          </div>
-        </div>
 
-        {/* 🚨 9. Danger Zone: Delete Store Page (منطقة حذف المحل نهائياً) */}
-        {onDelete && (
-          <div className="bg-rose-50/60 border-0 sm:border border-rose-200 rounded-xl sm:rounded-2xl p-3 sm:p-5 space-y-3 shadow-none sm:shadow-2xs">
-            <div className="flex items-center gap-2 text-rose-800">
-              <AlertTriangle className="h-5 w-5 text-rose-600" />
-              <div>
-                <h4 className="text-sm font-black text-rose-900">منطقة الحذف وإلغاء المحل</h4>
-                <p className="text-xs text-rose-700/80 mt-0.5">إجراءات حساسة لا يمكن التراجع عنها</p>
+            {/* 3. Danger Zone: Delete Store Page */}
+            {onDelete && (
+              <div className="bg-rose-50/50 border border-rose-200 rounded-2xl p-5 space-y-3 shadow-2xs">
+                <div className="flex items-center justify-between flex-wrap gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <AlertTriangle className="h-5 w-5 text-rose-700" />
+                    <h4 className="text-sm font-black text-rose-900">إلغاء وحذف المنشأة</h4>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowDeleteModal(true)}
+                    className="bg-rose-600 hover:bg-rose-700 text-white px-5 py-2.5 rounded-xl text-xs font-black transition-all shadow-2xs cursor-pointer flex items-center gap-2"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    <span>حذف صفحة المحل نهائياً</span>
+                  </button>
+                </div>
               </div>
-            </div>
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-rose-200/70">
-              <p className="text-xs text-rose-700 leading-relaxed">
-                سيؤدي حذف المحل إلى إزالة كامل بياناته، تقييماته، وعروضه من منصة شو في بإربد نهائياً.
-              </p>
-              <button
-                type="button"
-                onClick={() => setShowDeleteModal(true)}
-                className="inline-flex items-center justify-center gap-2 bg-rose-600 hover:bg-rose-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition-all shadow-xs shrink-0 cursor-pointer"
-              >
-                <Trash2 className="h-4 w-4" />
-                <span>حذف صفحة المحل نهائياً</span>
-              </button>
-            </div>
+            )}
           </div>
         )}
 
@@ -1029,7 +981,7 @@ export function StoreEditForm({
               disabled={isSaving}
               className="flex-1 sm:flex-none px-6 py-3.5 bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold rounded-xl text-xs transition-colors cursor-pointer disabled:opacity-50"
             >
-              إلغاء وتراجع
+              إلغاء
             </button>
           )}
           <button
@@ -1040,12 +992,12 @@ export function StoreEditForm({
             {isSaving ? (
               <>
                 <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                <span>جارٍ حفظ التحديثات...</span>
+                <span>جارٍ الحفظ...</span>
               </>
             ) : (
               <>
                 <Check className="h-4 w-4" />
-                <span>حفظ وتحديث معلومات المحل الرسمية</span>
+                <span>{onlySettings ? 'حفظ إعدادات الخصوصية والظهور' : 'حفظ معلومات المحل'}</span>
               </>
             )}
           </button>
@@ -1056,16 +1008,14 @@ export function StoreEditForm({
       {showDeleteModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-200" dir="rtl">
           <div className="bg-white rounded-2xl border border-stone-200 shadow-2xl max-w-md w-full p-6 space-y-4 animate-in zoom-in-95 duration-200">
-            <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+            <div className="w-12 h-12 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
               <Trash2 className="h-6 w-6" />
             </div>
 
             <div className="text-center space-y-1">
               <h3 className="text-lg font-black text-stone-900">تأكيد حذف صفحة المحل</h3>
-              <p className="text-xs text-stone-600 leading-relaxed">
-                هل أنت متأكد تماماً من حذف صفحة المحل <span className="font-bold text-stone-900">"{business.name}"</span>؟
-                <br />
-                <span className="text-rose-600 font-bold">هذا الإجراء نهائي ولا يمكن التراجع عنه!</span>
+              <p className="text-xs text-stone-600 font-bold">
+                هل أنت متأكد من حذف صفحة المحل "{business.name}"؟
               </p>
             </div>
 
@@ -1082,7 +1032,7 @@ export function StoreEditForm({
                 type="button"
                 onClick={handleDeleteConfirm}
                 disabled={isDeleting}
-                className="flex-1 px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black disabled:opacity-50 transition-colors shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                className="flex-1 px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black disabled:opacity-50 transition-colors shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 {isDeleting ? (
                   <>
@@ -1092,7 +1042,7 @@ export function StoreEditForm({
                 ) : (
                   <>
                     <Trash2 className="h-3.5 w-3.5" />
-                    <span>نعم، حذف المحل</span>
+                    <span>تأكيد الحذف</span>
                   </>
                 )}
               </button>
@@ -1100,6 +1050,7 @@ export function StoreEditForm({
           </div>
         </div>
       )}
+
       {/* VIP Popup Manager Modal */}
       {isVipPopupManagerOpen && (
         <VipPopupManagerModal
@@ -1114,4 +1065,3 @@ export function StoreEditForm({
     </>
   );
 }
-

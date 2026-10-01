@@ -2,9 +2,30 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router';
 import { motion } from 'motion/react';
 import { auth, db } from '../lib/firebase';
-import { doc, getDoc, collection, query, where, getDocs, onSnapshot, setDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs, onSnapshot, setDoc, limit } from 'firebase/firestore';
 import { saveLocalOrder, subscribeToLocalOrders } from '../lib/ordersSyncHelper';
+import { updateBusinessMenuItemsInCache } from '../lib/dataCache';
 import { Business, MenuItem, PromoDeal, MenuItemVersion } from '../types';
+import { NotFound } from './NotFound';
+import { VerifiedBadge } from '../components/vip/VerifiedBadge';
+import { getBusinessVipStatus } from '../lib/vipHelper';
+
+export function isFoodAndDrinkBusiness(biz: Business | null | undefined): boolean {
+  if (!biz) return false;
+  const cat = (biz.category || '').toLowerCase();
+  const subcat = ((biz as any).subcategory || '').toLowerCase();
+
+  const foodKeywords = [
+    'مطاعم', 'مطعم', 'مأكولات', 'طعام', 'وجبات', 'كافيه', 'كافيهات', 'مقهى',
+    'مشروبات', 'عصائر', 'حلويات', 'مخابز', 'معجنات', 'شاورما', 'برجر', 'بيتزا',
+    'فلافل', 'كنافة', 'كريب', 'وافل', 'قهوة', 'شاي', 'آيس كريم', 'مأكولات شعبية',
+    'مشاوي', 'أطعمة', 'food', 'cafe', 'restaurant', 'sweets', 'bakery', 'coffee'
+  ];
+
+  return foodKeywords.some(keyword => 
+    cat.includes(keyword) || subcat.includes(keyword)
+  );
+}
 import { 
  Utensils, 
  Flame, 
@@ -419,43 +440,88 @@ export default function BusinessMenuOffers() {
   }, [activeOrder, id]);
 
  useEffect(() => {
- const fetchBusinessAndOffers = async () => {
- if (!id) return;
- try {
- setLoading(true);
- const docRef = doc(db, 'businesses', id);
- const docSnap = await getDoc(docRef);
- 
- if (!docSnap.exists()) {
- setError('المحل غير موجود أو ربما تم حذفه.');
- setLoading(false);
- return;
- }
- 
- const bizData = { id: docSnap.id, ...docSnap.data() } as Business;
- setBusiness(bizData);
- 
- if (bizData.menuQrLayout === 'list') {
- setViewMode('list');
- } else {
- setViewMode('grid');
- }
+    if (!id || !db) return;
+    setLoading(true);
 
- const offersQuery = query(collection(db, 'offers'), where('businessId', '==', id));
- const offersSnap = await getDocs(offersQuery);
- const fetchedOffers = offersSnap.docs.map(d => ({ id: d.id, ...d.data() } as PromoDeal));
- setOffers(fetchedOffers);
- 
- } catch (err) {
- console.error("Error fetching menu & offers:", err);
- setError('حدث خطأ أثناء تحميل البيانات، الرجاء إعادة المحاولة.');
- } finally {
- setLoading(false);
- }
- };
+    let unsubscribeBiz = () => {};
+    let isCancelled = false;
 
- fetchBusinessAndOffers();
- }, [id]);
+    const attachListener = (targetId: string) => {
+      const docRef = doc(db, 'businesses', targetId);
+      unsubscribeBiz = onSnapshot(docRef, (docSnap) => {
+        if (!docSnap.exists()) {
+          setError('المحل غير موجود أو ربما تم حذفه.');
+          setLoading(false);
+          return;
+        }
+
+        const bizData = { id: docSnap.id, ...docSnap.data() } as Business;
+        const vipStatus = getBusinessVipStatus(bizData);
+        if (!vipStatus.isVip) {
+          setError('هذا المحل مشترك في الباقة الأساسية. المنيو الرقمي والعروض متاحة حصراً للمحلات المشتركة في الباقة الذهبية.');
+          setLoading(false);
+          return;
+        }
+        setBusiness(bizData);
+        if (Array.isArray(bizData.menuItems)) {
+          updateBusinessMenuItemsInCache(docSnap.id, bizData.menuItems);
+        }
+
+        if (bizData.menuQrLayout === 'list') {
+          setViewMode('list');
+        } else {
+          setViewMode('grid');
+        }
+        setLoading(false);
+      }, (err) => {
+        console.warn("onSnapshot business listener warning, falling back to getDoc:", err);
+        getDoc(docRef).then((snap) => {
+          if (snap.exists()) {
+            const bData = { id: snap.id, ...snap.data() } as Business;
+            const vipStatus = getBusinessVipStatus(bData);
+            if (!vipStatus.isVip) {
+              setError('هذا المحل مشترك في الباقة الأساسية. المنيو الرقمي والعروض متاحة حصراً للمحلات المشتركة في الباقة الذهبية.');
+              setLoading(false);
+              return;
+            }
+            setBusiness(bData);
+            if (Array.isArray(bData.menuItems)) {
+              updateBusinessMenuItemsInCache(snap.id, bData.menuItems);
+            }
+          }
+        }).catch(() => {});
+        setLoading(false);
+      });
+
+      const offersQuery = query(collection(db, 'offers'), where('businessId', 'in', [targetId, id]));
+      getDocs(offersQuery).then(offersSnap => {
+        const fetchedOffers = offersSnap.docs.map(d => ({ id: d.id, ...d.data() } as PromoDeal));
+        setOffers(fetchedOffers);
+      }).catch(err => {
+        console.warn("Error fetching offers:", err);
+      });
+    };
+
+    const cleanParam = id.startsWith('@') ? id.substring(1).trim().toLowerCase() : id.trim().toLowerCase();
+    if (!id.startsWith('@')) {
+      attachListener(id);
+    } else {
+      const qUsername = query(collection(db, 'businesses'), where('username', '==', cleanParam), limit(1));
+      getDocs(qUsername).then(uSnap => {
+        if (isCancelled) return;
+        if (!uSnap.empty) {
+          attachListener(uSnap.docs[0].id);
+        } else {
+          attachListener(id);
+        }
+      }).catch(() => attachListener(id));
+    }
+
+    return () => {
+      isCancelled = true;
+      unsubscribeBiz();
+    };
+  }, [id]);
 
  // Load cart from localStorage initially
  useEffect(() => {
@@ -481,6 +547,11 @@ export default function BusinessMenuOffers() {
 
  // Add item to cart
  const addToCart = (item: MenuItem | PromoDeal, isOffer: boolean = false, selectedVersion?: MenuItemVersion, quantity: number = 1) => {
+ if (!isOffer && (item as MenuItem).isAvailable === false) {
+ setFormError("عذراً، هذا الصنف غير متوفر حالياً في المطبخ.");
+ setTimeout(() => setFormError(null), 3500);
+ return;
+ }
  const isPromo = isOffer;
  const itemId = !isPromo && selectedVersion ? `${item.id}-${selectedVersion.id}` : item.id;
  let itemName = isPromo ? (item as PromoDeal).title : (item as MenuItem).name;
@@ -560,23 +631,8 @@ export default function BusinessMenuOffers() {
  );
  }
 
- if (error || !business) {
- return (
- <div className="min-h-screen bg-stone-50 flex flex-col items-center justify-center p-4 text-center">
- <div className="p-4 bg-rose-50 border border-rose-100 rounded-full text-rose-500 mb-4">
- <AlertTriangle className="h-10 w-10 animate-bounce" />
- </div>
- <h3 className="text-lg font-black text-stone-800">عذراً، لم نتمكن من العثور على المحل المطلوب</h3>
- <p className="text-xs text-stone-500 mt-2 max-w-sm leading-relaxed">{error || 'قد يكون الرابط الذي اتبعته غير صحيح أو أن المحل لم يفعل قائمته الرقمية بعد.'}</p>
- <Link 
- to="/" 
- className="mt-6 px-6 py-2.5 bg-gradient-to-r from-emerald-700 to-emerald-800 text-white rounded-xl text-xs font-black shadow-md inline-flex items-center gap-2"
- >
- <ArrowRight className="h-4 w-4" />
- <span>العودة للرئيسية</span>
- </Link>
- </div>
- );
+ if (error || !business || !isFoodAndDrinkBusiness(business)) {
+   return <NotFound />;
  }
 
  // Check if feature is enabled by merchant
@@ -626,6 +682,12 @@ export default function BusinessMenuOffers() {
  (item.description || '').toLowerCase().includes(searchQuery.toLowerCase());
  const matchesCategory = selectedCategory === 'all' || (item.category || 'عام') === selectedCategory;
  return matchesSearch && matchesCategory;
+ }).sort((a, b) => {
+ const aUnavailable = a.isAvailable === false || (a.trackStock && a.stockCount === 0);
+ const bUnavailable = b.isAvailable === false || (b.trackStock && b.stockCount === 0);
+ if (aUnavailable && !bUnavailable) return 1;
+ if (!aUnavailable && bUnavailable) return -1;
+ return 0;
  });
 
  const handleShare = () => {
@@ -1037,7 +1099,12 @@ export default function BusinessMenuOffers() {
  )}
 
  <div className="space-y-1 text-right">
+ <div className="flex items-center gap-2">
  <h1 className="text-xl sm:text-3xl font-black drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] text-white leading-tight">{business.name}</h1>
+ {getBusinessVipStatus(business).isVip && (
+ <VerifiedBadge size="md" businessName={business.name} />
+ )}
+ </div>
  <p className="text-xs sm:text-sm text-white/95 max-w-sm sm:max-w-md leading-relaxed font-bold drop-shadow-[0_1px_4px_rgba(0,0,0,0.6)] line-clamp-2">
  {menuWelcome}
  </p>
@@ -1420,7 +1487,7 @@ export default function BusinessMenuOffers() {
  {item.imageUrl ? (
  <img 
  src={item.imageUrl} 
- className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-500" 
+ className={`w-full h-full object-cover group-hover:scale-102 transition-transform duration-500 ${(item.isAvailable === false || (item.trackStock && item.stockCount === 0)) ? 'grayscale opacity-70 contrast-90 brightness-95' : ''}`} 
  alt={item.name} 
  />
  ) : (
@@ -1429,7 +1496,11 @@ export default function BusinessMenuOffers() {
  </div>
  )}
  
- {item.badge && item.badge !== 'none' && (
+ {item.isAvailable === false ? (
+ <span className="absolute top-3 right-3 bg-stone-900/90 text-white font-black text-[9px] px-2.5 py-1 rounded-full shadow-md z-10">
+ غير متوفر حالياً
+ </span>
+ ) : item.badge && item.badge !== 'none' && (
  <span className="absolute top-3 right-3 bg-rose-600 text-white font-black text-[9px] px-2.5 py-1 rounded-full flex items-center gap-1 shadow-md">
  {item.badge === 'popular' && <Flame className="h-3 w-3 fill-white" />}
  {item.badge === 'spicy' && <Flame className="h-3 w-3 text-amber-300 fill-amber-300" />}
@@ -1471,7 +1542,11 @@ export default function BusinessMenuOffers() {
  <div className="pt-3 border-t border-stone-100 flex items-center justify-between gap-2">
  <span className="text-[10px] text-stone-400 font-bold shrink-0">فئة: <strong className="text-stone-700">{item.category || 'عام'}</strong></span>
  
- {item.versions && item.versions.length > 0 ? (
+ {item.isAvailable === false ? (
+ <span className="px-3.5 py-2 bg-stone-100 text-stone-500 rounded-xl text-xs font-black border border-stone-200 select-none">
+ غير متوفر حالياً
+ </span>
+ ) : item.versions && item.versions.length > 0 ? (
 		<button
 			type="button"
 			onClick={() => setSelectedItem(item)}
@@ -1546,7 +1621,7 @@ export default function BusinessMenuOffers() {
  onClick={() => setSelectedItem(item)}
  className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden bg-stone-50 border border-stone-100 cursor-pointer"
  >
- <img src={item.imageUrl} className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-500" alt="" />
+ <img src={item.imageUrl} className={`w-full h-full object-cover group-hover:scale-102 transition-transform duration-500 ${(item.isAvailable === false || (item.trackStock && item.stockCount === 0)) ? 'grayscale opacity-70 contrast-90 brightness-95' : ''}`} alt="" />
  </div>
  ) : (
  <div className="w-12 h-12 rounded-full bg-stone-50 flex items-center justify-center text-stone-400 border border-stone-100">
@@ -1555,7 +1630,11 @@ export default function BusinessMenuOffers() {
  )}
 
  {/* Add button */}
- {item.versions && item.versions.length > 0 ? (
+ {item.isAvailable === false ? (
+ <span className="px-2.5 py-1.5 bg-stone-100 text-stone-500 rounded-xl text-xs font-bold border border-stone-200 select-none">
+ غير متوفر
+ </span>
+ ) : item.versions && item.versions.length > 0 ? (
  <button
  type="button"
  onClick={() => setSelectedItem(item)}
@@ -2285,7 +2364,7 @@ export default function BusinessMenuOffers() {
  {/* Modal Image Header if exists */}
  {selectedItem.imageUrl ? (
  <div className="relative h-56 bg-stone-50 w-full overflow-hidden">
- <img src={selectedItem.imageUrl} className="w-full h-full object-cover" alt="" />
+ <img src={selectedItem.imageUrl} className={`w-full h-full object-cover ${(selectedItem.isAvailable === false || (selectedItem.trackStock && selectedItem.stockCount === 0)) ? 'grayscale opacity-70 contrast-90 brightness-95' : ''}`} alt="" />
  <button
  type="button"
  onClick={() => setSelectedItem(null)}
@@ -2473,6 +2552,11 @@ export default function BusinessMenuOffers() {
  إغلاق
  </button>
 
+ {selectedItem.isAvailable === false ? (
+ <div className="flex-1.5 py-2.5 bg-stone-100 text-stone-500 text-xs font-black rounded-xl text-center border border-stone-200 select-none">
+ هذا الصنف غير متوفر حالياً
+ </div>
+ ) : (
  <button
  type="button"
  onClick={() => {
@@ -2484,6 +2568,7 @@ export default function BusinessMenuOffers() {
  <Plus className="h-4 w-4" />
  <span>إضافة للطلب</span>
  </button>
+ )}
  </div>
 
  </div>

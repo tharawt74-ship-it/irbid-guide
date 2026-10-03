@@ -58,6 +58,7 @@ import { CartConflictModal } from '../cart/CartConflictModal';
 import { AiSiteAssistant } from '../ai/AiSiteAssistant';
 import { ShoppingBag } from 'lucide-react';
 import { WhatsAppIcon } from '../common/WhatsAppIcon';
+import { ensurePushSubscription } from '../../lib/pushNotifications';
 
 export function Layout() {
   const { currentUser, userProfile, refreshUserData, isAdmin, isSupervisor, isStaff, isMerchant, ownedBusinesses, userRole, logout } = useAuth();
@@ -69,6 +70,11 @@ export function Layout() {
   const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const moreMenuRef = useRef<HTMLDivElement>(null);
+
+  // Background Web Push Sync
+  useEffect(() => {
+    ensurePushSubscription(currentUser?.uid, userRole);
+  }, [currentUser?.uid, userRole]);
 
   // Active businesses with gift code promotion enabled (strictly for merchants)
   const activeGiftBusinesses = (ownedBusinesses || []).filter(b => 
@@ -1297,9 +1303,11 @@ export function Layout() {
         "flex-1 w-full flex flex-col min-h-0",
         location.pathname === '/messages'
           ? "max-w-[1440px] mx-auto p-2 sm:p-3 md:p-4 h-[calc(100dvh-62px)] sm:h-[calc(100dvh-68px)] md:h-[calc(100dvh-72px)] overflow-hidden"
+          : location.pathname.startsWith('/admin')
+          ? "w-full max-w-[1440px] mx-auto px-3 sm:px-6 lg:px-8 pt-4 pb-24 sm:pt-6 sm:pb-16 min-w-0 overflow-x-clip"
           : location.pathname.startsWith('/profile')
           ? "max-w-[1200px] mx-auto px-2 sm:px-6 lg:px-8 py-4 sm:py-8 pb-20 md:py-12"
-          : location.pathname.startsWith('/products') || location.pathname === '/search'
+          : location.pathname.startsWith('/products') || location.pathname === '/search' || location.pathname.startsWith('/medical') || location.pathname.startsWith('/offers') || location.pathname.startsWith('/housing') || location.pathname.startsWith('/jobs') || location.pathname.startsWith('/transportation') || location.pathname.startsWith('/tourism')
           ? "max-w-[1200px] mx-auto px-0 lg:px-8 pt-0 lg:pt-[10px] pb-20 sm:pb-12"
           : "max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 pt-5 pb-20 sm:pt-[10px] sm:pb-12 md:pt-[10px] md:pb-12 lg:pt-[10px] lg:pb-12"
       )}>
@@ -1311,7 +1319,7 @@ export function Layout() {
                 <div className="absolute inset-0 rounded-full border-2 border-dashed border-[#1a4d2e] animate-spin opacity-40" />
               </div>
               <div className="space-y-1.5">
-                <h3 className="font-black text-xl text-stone-900">تأكيد البريد الإلكتروني مطلوب ✉️</h3>
+                <h3 className="font-black text-xl text-stone-900">تأكيد البريد الإلكتروني مطلوب</h3>
                 <p className="text-xs text-stone-500 font-medium leading-relaxed">
                   لقد قمت بإنشاء الحساب بنجاح، ولكن يرجى تأكيد ملكية بريدك الإلكتروني أولاً لتتمكن من تصفح واستخدام منصة "شو في بإربد؟".
                 </p>
@@ -1396,114 +1404,234 @@ export function Layout() {
       </main>
       
       {location.pathname !== '/messages' && (
-        <footer className="bg-white border-t border-[#e5e1da] mt-auto pb-28 md:pb-0">
-        <div className="max-w-[1200px] mx-auto px-4 py-12 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
-            <div className="md:col-span-2">
-              <Link to="/" className="text-2xl sm:text-3xl font-black tracking-tighter text-[#1a4d2e] flex items-center gap-2.5 mb-4 group">
-                {(globalSettings.logoUrl || '/logo.png') ? (
-                  <img 
-                    src={globalSettings.logoUrl || '/logo.png'} 
-                    alt={globalSettings.siteName} 
-                    style={{ height: `${Math.min(65, Math.max(44, globalSettings.logoHeight || 55))}px` }}
-                    className="max-h-[65px] max-w-[280px] object-contain group-hover:scale-102 transition-transform" 
-                  />
-                ) : !isSettingsLoaded ? (
-                  <div 
-                    style={{ height: `${Math.min(65, Math.max(44, globalSettings.logoHeight || 55))}px` }}
-                    className="w-32 opacity-0 pointer-events-none"
-                  />
-                ) : (
-                  <>
-                    <div className="w-10 h-10 rounded-2xl bg-[#1a4d2e] flex items-center justify-center text-white shadow-xs overflow-hidden shrink-0 group-hover:scale-105 transition-transform">
-                      <Store className="h-6 w-6 text-[#ff9f1c]" />
-                    </div>
-                    <span>{globalSettings.siteName}</span>
-                  </>
-                )}
-              </Link>
-              <p className="text-stone-500 text-sm leading-relaxed max-w-sm mb-4">
-                {globalSettings.footerDescription || "المنصة الأولى لاكتشاف أفضل المطاعم والمقاهي والمحلات التجارية في عروس الشمال. دليلك الشامل لكل ما تحتاجه في إربد."}
-              </p>
-              <button
-                type="button"
-                onClick={triggerPwaInstallModal}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-stone-900 hover:bg-stone-800 text-emerald-400 font-bold text-xs rounded-xl shadow-xs border border-stone-800 transition-all cursor-pointer active:scale-98"
-              >
-                <Smartphone className="h-4 w-4 text-emerald-400" />
-                <span>تنزيل تطبيق الهاتف</span>
-              </button>
+        <footer className="bg-stone-950 text-stone-300 border-t border-stone-800/80 mt-auto pb-28 md:pb-0" dir="rtl">
+          {/* Main Footer Hub */}
+          <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8 lg:gap-10 mb-12">
+              
+              {/* Column 1: Platform Branding & App */}
+              <div className="lg:col-span-2 space-y-4">
+                <Link to="/" className="inline-flex items-center gap-2.5 text-2xl font-black text-white group">
+                  {(globalSettings.logoUrl || '/logo.png') ? (
+                    <img 
+                      src={globalSettings.logoUrl || '/logo.png'} 
+                      alt={globalSettings.siteName} 
+                      style={{ height: `${Math.min(65, Math.max(44, globalSettings.logoHeight || 55))}px` }}
+                      className="max-h-[65px] max-w-[260px] object-contain group-hover:scale-102 transition-transform brightness-0 invert" 
+                    />
+                  ) : (
+                    <>
+                      <div className="w-10 h-10 rounded-2xl bg-[#1a4d2e] flex items-center justify-center text-white shadow-md shrink-0">
+                        <Store className="h-6 w-6 text-[#ff9f1c]" />
+                      </div>
+                      <span>{globalSettings.siteName}</span>
+                    </>
+                  )}
+                </Link>
+
+                <p className="text-stone-400 text-xs sm:text-sm leading-relaxed font-medium max-w-md">
+                  {globalSettings.footerDescription || "المنصة الشاملة الأولى لاكتشاف المحلات، المنتجات، العروض، الخدمات الطبية، الوظائف والسكنات في إربد."}
+                </p>
+
+                <div className="pt-1 flex flex-wrap items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={triggerPwaInstallModal}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-[#1a4d2e] hover:bg-[#143a23] text-white font-black text-xs rounded-xl shadow-xs border border-emerald-800/60 transition-all cursor-pointer active:scale-98"
+                  >
+                    <Smartphone className="h-4 w-4 text-emerald-400" />
+                    <span>تنزيل تطبيق الهاتف</span>
+                  </button>
+                  <Link
+                    to="/contact"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 font-black text-xs rounded-xl border border-amber-500/30 transition-all cursor-pointer"
+                  >
+                    <PlusCircle className="h-4 w-4 text-amber-400" />
+                    <span>انضم كتاجر أو منشأة</span>
+                  </Link>
+                </div>
+
+                {/* Social Media Links */}
+                <div className="pt-2 flex items-center gap-2.5">
+                  {globalSettings.facebookUrl && (
+                    <a
+                      href={globalSettings.facebookUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="فيسبوك"
+                      aria-label="فيسبوك"
+                      className="w-9 h-9 rounded-xl bg-stone-900 text-stone-300 hover:text-white hover:bg-blue-600 border border-stone-800 flex items-center justify-center transition-all shadow-2xs"
+                    >
+                      <Facebook className="h-4 w-4" />
+                    </a>
+                  )}
+                  {globalSettings.instagramUrl && (
+                    <a
+                      href={globalSettings.instagramUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="إنستغرام"
+                      aria-label="إنستغرام"
+                      className="w-9 h-9 rounded-xl bg-stone-900 text-stone-300 hover:text-white hover:bg-pink-600 border border-stone-800 flex items-center justify-center transition-all shadow-2xs"
+                    >
+                      <Instagram className="h-4 w-4" />
+                    </a>
+                  )}
+                  {globalSettings.whatsappNumber && (
+                    <a
+                      href={`https://wa.me/${globalSettings.whatsappNumber}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="واتساب"
+                      aria-label="واتساب"
+                      className="w-9 h-9 rounded-xl bg-stone-900 text-stone-300 hover:text-white hover:bg-emerald-600 border border-stone-800 flex items-center justify-center transition-all shadow-2xs"
+                    >
+                      <WhatsAppIcon className="h-4 w-4" />
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              {/* Column 2: Commercial Directory & Marketplace */}
+              <div>
+                <h3 className="font-black text-white text-sm sm:text-base mb-5 pb-2.5 border-b border-stone-800/60 flex items-center gap-2">
+                  <Store className="h-4 w-4 text-[#ff9f1c]" />
+                  <span>الدليل والمنتجات</span>
+                </h3>
+                <ul className="space-y-3 text-xs sm:text-sm font-bold text-stone-400">
+                  <li>
+                    <Link to="/" className="hover:text-emerald-400 transition-colors flex items-center gap-2 group">
+                      <ChevronLeft className="h-3.5 w-3.5 text-stone-600 group-hover:text-emerald-400 shrink-0 transition-colors" />
+                      <span>دليل المحلات والأنشطة التجارية</span>
+                    </Link>
+                  </li>
+                  <li>
+                    <Link to="/products" className="hover:text-emerald-400 transition-colors flex items-center gap-2 group">
+                      <ChevronLeft className="h-3.5 w-3.5 text-stone-600 group-hover:text-emerald-400 shrink-0 transition-colors" />
+                      <span>المنتجات والخدمات الرقمية</span>
+                    </Link>
+                  </li>
+                  <li>
+                    <Link to="/offers" className="hover:text-emerald-400 transition-colors flex items-center gap-2 group">
+                      <ChevronLeft className="h-3.5 w-3.5 text-stone-600 group-hover:text-emerald-400 shrink-0 transition-colors" />
+                      <span>عروض وخصومات إربد</span>
+                    </Link>
+                  </li>
+                  <li>
+                    <Link to="/news" className="hover:text-emerald-400 transition-colors flex items-center gap-2 group">
+                      <ChevronLeft className="h-3.5 w-3.5 text-stone-600 group-hover:text-emerald-400 shrink-0 transition-colors" />
+                      <span>أخبار وفعاليات إربد</span>
+                    </Link>
+                  </li>
+                  <li>
+                    <Link to="/search" className="hover:text-emerald-400 transition-colors flex items-center gap-2 group">
+                      <ChevronLeft className="h-3.5 w-3.5 text-stone-600 group-hover:text-emerald-400 shrink-0 transition-colors" />
+                      <span>البحث الشامل والمتقدم</span>
+                    </Link>
+                  </li>
+                </ul>
+              </div>
+
+              {/* Column 3: Medical, Housing, Jobs & Transit */}
+              <div>
+                <h3 className="font-black text-white text-sm sm:text-base mb-5 pb-2.5 border-b border-stone-800/60 flex items-center gap-2">
+                  <Compass className="h-4 w-4 text-[#ff9f1c]" />
+                  <span>الخدمات والمرافق</span>
+                </h3>
+                <ul className="space-y-3 text-xs sm:text-sm font-bold text-stone-400">
+                  <li>
+                    <Link to="/medical" className="hover:text-emerald-400 transition-colors flex items-center gap-2 group">
+                      <ChevronLeft className="h-3.5 w-3.5 text-stone-600 group-hover:text-emerald-400 shrink-0 transition-colors" />
+                      <span>الدليل الطبي والعيادات</span>
+                    </Link>
+                  </li>
+                  <li>
+                    <Link to="/housing" className="hover:text-emerald-400 transition-colors flex items-center gap-2 group">
+                      <ChevronLeft className="h-3.5 w-3.5 text-stone-600 group-hover:text-emerald-400 shrink-0 transition-colors" />
+                      <span>العقارات والسكنات والشقق</span>
+                    </Link>
+                  </li>
+                  <li>
+                    <Link to="/jobs" className="hover:text-emerald-400 transition-colors flex items-center gap-2 group">
+                      <ChevronLeft className="h-3.5 w-3.5 text-stone-600 group-hover:text-emerald-400 shrink-0 transition-colors" />
+                      <span>الوظائف والشواغر المتاحة</span>
+                    </Link>
+                  </li>
+                  <li>
+                    <Link to="/transportation" className="hover:text-emerald-400 transition-colors flex items-center gap-2 group">
+                      <ChevronLeft className="h-3.5 w-3.5 text-stone-600 group-hover:text-emerald-400 shrink-0 transition-colors" />
+                      <span>دليل المواصلات والمجمعات</span>
+                    </Link>
+                  </li>
+                  <li>
+                    <Link to="/tourism" className="hover:text-emerald-400 transition-colors flex items-center gap-2 group">
+                      <ChevronLeft className="h-3.5 w-3.5 text-stone-600 group-hover:text-emerald-400 shrink-0 transition-colors" />
+                      <span>السياحة والمعالم الأثرية</span>
+                    </Link>
+                  </li>
+                  <li>
+                    <Link to="/prayer-times" className="hover:text-emerald-400 transition-colors flex items-center gap-2 group">
+                      <ChevronLeft className="h-3.5 w-3.5 text-stone-600 group-hover:text-emerald-400 shrink-0 transition-colors" />
+                      <span>مواقيت الصلاة والأذان</span>
+                    </Link>
+                  </li>
+                </ul>
+              </div>
+
+              {/* Column 4: Merchants & Business Owners */}
+              <div>
+                <h3 className="font-black text-white text-sm sm:text-base mb-5 pb-2.5 border-b border-stone-800/60 flex items-center gap-2">
+                  <PlusCircle className="h-4 w-4 text-[#ff9f1c]" />
+                  <span>أصحاب المنشآت والشركاء</span>
+                </h3>
+                <ul className="space-y-3 text-xs sm:text-sm font-bold text-stone-400">
+                  <li>
+                    <Link to="/contact" className="hover:text-emerald-400 transition-colors flex items-center gap-2 group font-black text-emerald-400">
+                      <ChevronLeft className="h-3.5 w-3.5 text-stone-600 group-hover:text-emerald-400 shrink-0 transition-colors" />
+                      <span>سجل محلك التجاري مجاناً</span>
+                    </Link>
+                  </li>
+                  <li>
+                    <Link to="/medical/register" className="hover:text-emerald-400 transition-colors flex items-center gap-2 group">
+                      <ChevronLeft className="h-3.5 w-3.5 text-stone-600 group-hover:text-emerald-400 shrink-0 transition-colors" />
+                      <span>إضافة عيادة أو مركز طبي</span>
+                    </Link>
+                  </li>
+                  <li>
+                    <Link to="/packages" className="hover:text-emerald-400 transition-colors flex items-center gap-2 group">
+                      <ChevronLeft className="h-3.5 w-3.5 text-stone-600 group-hover:text-emerald-400 shrink-0 transition-colors" />
+                      <span>باقات الاشتراك والترويج</span>
+                    </Link>
+                  </li>
+                  <li>
+                    <Link to="/notifications" className="hover:text-emerald-400 transition-colors flex items-center gap-2 group">
+                      <ChevronLeft className="h-3.5 w-3.5 text-stone-600 group-hover:text-emerald-400 shrink-0 transition-colors" />
+                      <span>مركز الإشعارات والتحديثات</span>
+                    </Link>
+                  </li>
+                </ul>
+              </div>
+
             </div>
-            <div>
-              <h3 className="font-bold text-[#2d2a26] mb-4">روابط سريعة</h3>
-              <ul className="space-y-3 text-sm text-stone-500">
-                <li><Link to="/" className="hover:text-[#ff9f1c] transition-colors">الرئيسية</Link></li>
-                <li><Link to="/transportation" className="hover:text-[#ff9f1c] transition-colors font-bold text-[#1a4d2e] flex items-center gap-1"><Bus className="h-3.5 w-3.5 text-[#ff9f1c]" /> دليل المواصلات والمجمعات</Link></li>
-                <li><Link to="/notifications" className="hover:text-[#ff9f1c] transition-colors flex items-center gap-1 font-bold text-stone-700"><Bell className="h-3.5 w-3.5 text-[#ff9f1c]" /> مركز الإشعارات</Link></li>
-                <li><Link to="/offers" className="hover:text-[#ff9f1c] transition-colors font-black text-orange-600">عروض وخصومات إربد</Link></li>
-                <li><Link to="/jobs" className="hover:text-[#ff9f1c] transition-colors font-bold text-[#1a4d2e]">وظائف وشواغر إربد</Link></li>
-                <li><Link to="/packages" className="hover:text-[#ff9f1c] transition-colors font-bold text-[#1a4d2e]">باقات الاشتراك والترويج</Link></li>
-                <li><Link to="/contact" className="hover:text-[#ff9f1c] transition-colors font-bold text-[#1a4d2e]">ضاعف زبائنك (سجل محلك)</Link></li>
-              </ul>
-            </div>
-            <div>
-              <h3 className="font-bold text-[#2d2a26] mb-4">تواصل معنا</h3>
-              <ul className="space-y-3 text-sm text-stone-500 mb-4">
-                <li className="flex items-center gap-2"><MapPin className="h-4 w-4 text-[#ff9f1c]" /> إربد، الأردن</li>
-                <li className="flex items-center gap-2" dir="ltr"><Mail className="h-4 w-4 text-[#ff9f1c]" /> {globalSettings.contactEmail || "info@shoof-irbid.com"}</li>
-                <li className="flex items-center gap-2" dir="ltr"><Phone className="h-4 w-4 text-[#ff9f1c]" /> {globalSettings.contactPhone || "+962 7 0000 0000"}</li>
-              </ul>
-              {/* Social Media Icon-Only Buttons */}
-              <div className="flex items-center gap-2 pt-1">
-                {globalSettings.facebookUrl && (
-                  <a
-                    href={globalSettings.facebookUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    title="فيسبوك"
-                    aria-label="فيسبوك"
-                    className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 border border-blue-200 flex items-center justify-center hover:scale-110 hover:bg-blue-100 transition-all shadow-3xs"
-                  >
-                    <Facebook className="h-4 w-4" />
-                  </a>
-                )}
-                {globalSettings.instagramUrl && (
-                  <a
-                    href={globalSettings.instagramUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    title="إنستغرام"
-                    aria-label="إنستغرام"
-                    className="w-8 h-8 rounded-xl bg-pink-50 text-pink-600 border border-pink-200 flex items-center justify-center hover:scale-110 hover:bg-pink-100 transition-all shadow-3xs"
-                  >
-                    <Instagram className="h-4 w-4" />
-                  </a>
-                )}
-                {globalSettings.whatsappNumber && (
-                  <a
-                    href={`https://wa.me/${globalSettings.whatsappNumber}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    title="واتساب"
-                    aria-label="واتساب"
-                    className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center hover:scale-110 hover:bg-emerald-100 transition-all shadow-3xs"
-                  >
-                    <WhatsAppIcon className="h-4 w-4" />
-                  </a>
-                )}
+
+            {/* Bottom Copyright & Legal Strip */}
+            <div className="pt-8 border-t border-stone-800/80 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs font-bold text-stone-500">
+              <div>
+                © {getJordanYear()} {globalSettings.siteName}. جميع الحقوق محفوظة.
+              </div>
+              <div className="flex items-center gap-4 sm:gap-5 text-stone-400 flex-wrap justify-center">
+                <Link to="/about" className="hover:text-white transition-colors">عن المنصة</Link>
+                <span className="text-stone-800">•</span>
+                <Link to="/terms" className="hover:text-white transition-colors">الشروط والأحكام</Link>
+                <span className="text-stone-800">•</span>
+                <Link to="/privacy" className="hover:text-white transition-colors">سياسة الخصوصية</Link>
+                <span className="text-stone-800">•</span>
+                <Link to="/contact" className="hover:text-white transition-colors">اتصل بنا</Link>
               </div>
             </div>
+
           </div>
-          <div className="pt-8 border-t border-[#e5e1da] text-center text-sm font-medium text-stone-400 flex flex-col md:flex-row justify-between items-center gap-4">
-            <div>© {getJordanYear()} {globalSettings.siteName}. جميع الحقوق محفوظة.</div>
-            <div className="flex gap-4">
-              <Link to="/about" className="hover:text-[#1a4d2e] transition-colors">من نحن</Link>
-              <Link to="/terms" className="hover:text-[#1a4d2e] transition-colors">الشروط والأحكام</Link>
-              <Link to="/privacy" className="hover:text-[#1a4d2e] transition-colors">سياسة الخصوصية</Link>
-            </div>
-          </div>
-        </div>
-      </footer>
+        </footer>
       )}
 
       {/* Global Quick Search Modal Dialog - Removed */}

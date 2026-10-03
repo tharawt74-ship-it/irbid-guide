@@ -17,12 +17,13 @@ import {
   List,
   Filter,
   Check,
-  Sparkles
+  Sparkles,
+  Crown
 } from 'lucide-react';
 import { collection, getDocs, query, limit } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { getCachedBusinesses, setCachedBusinesses, isBusinessesCacheFresh } from '../lib/dataCache';
-import { Business, MenuItem } from '../types';
+import { Business, MenuItem, InFeedPromoCard } from '../types';
 import { SEO } from '../components/common/SEO';
 import { getWhatsAppUrl } from '../lib/contactHelper';
 import { WhatsApp3DIcon, Phone3DIcon } from '../components/common/PremiumContactButtons';
@@ -32,8 +33,10 @@ import { useSystemSettings } from '../contexts/SystemSettingsContext';
 import { getCategoryMeta } from '../lib/categoryMeta';
 import { CategoryButtonLabel, cleanCategoryName } from '../components/CategoryButtonLabel';
 import { CategoriesModal } from '../components/CategoriesModal';
+import { fetchPagePromoCards } from '../lib/promoCards';
+import { InFeedPromoCardItem } from '../components/common/InFeedPromoCardItem';
 import { VerifiedBadge } from '../components/vip/VerifiedBadge';
-import { getBusinessVipStatus } from '../lib/vipHelper';
+import { getBusinessVipStatus, isItemCurrentlyFeatured, isBusinessCurrentlyFeatured } from '../lib/vipHelper';
 import { BUSINESS_CATEGORIES, MainCategory, isFoodAndDrinkBusiness, getCanonicalBusinessCategory, normalizeArabic } from '../lib/categories';
 import { cn } from '../lib/utils';
 import { useHeaderVisibility } from '../lib/useHeaderVisibility';
@@ -80,6 +83,8 @@ export interface ProductItem extends MenuItem {
   businessRating?: number;
   businessIsVerified?: boolean;
   businessIsVip?: boolean;
+  businessIsFeatured?: boolean;
+  isMenuFeatured?: boolean;
   isMedicalProcedure?: boolean;
 }
 
@@ -94,9 +99,11 @@ export function Products() {
   const getSubCats = (catName: string) => categories.find(c => c.name === catName)?.subcategories || [];
 
   const [businesses, setBusinesses] = useState<Business[]>(() => getCachedBusinesses() || []);
+  const [promoCards, setPromoCards] = useState<InFeedPromoCard[]>([]);
   const [loading, setLoading] = useState(!businesses || businesses.length === 0);
   const [searchQuery, setSearchQuery] = useState(urlSearchParam);
   const [stickySearchInput, setStickySearchInput] = useState('');
+  const [desktopSearchInput, setDesktopSearchInput] = useState(urlSearchParam);
   const [selectedCategory, setSelectedCategory] = useState(urlCatParam);
   const [selectedSubCategory, setSelectedSubCategory] = useState(urlSubCatParam);
   const [selectedRegion, setSelectedRegion] = useState('');
@@ -112,16 +119,25 @@ export function Products() {
   const activeCategoryRef = useRef<HTMLButtonElement | null>(null);
   const activeSubCategoryRef = useRef<HTMLButtonElement | null>(null);
 
+  const scrollContainerToElement = (el: HTMLElement | null) => {
+    if (!el || !el.parentElement) return;
+    const container = el.parentElement;
+    const elRect = el.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+    const elCenter = elRect.left + elRect.width / 2;
+    const containerCenter = containerRect.left + containerRect.width / 2;
+    const scrollOffset = elCenter - containerCenter;
+
+    container.scrollBy({
+      left: scrollOffset,
+      behavior: 'smooth'
+    });
+  };
+
   // Auto scroll selected main category into view
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (activeCategoryRef.current) {
-        activeCategoryRef.current.scrollIntoView({
-          behavior: 'smooth',
-          block: 'nearest',
-          inline: 'center'
-        });
-      }
+      scrollContainerToElement(activeCategoryRef.current);
     }, 100);
     return () => clearTimeout(timer);
   }, [selectedCategory]);
@@ -129,13 +145,7 @@ export function Products() {
   // Auto scroll selected subcategory into view
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (activeSubCategoryRef.current) {
-        activeSubCategoryRef.current.scrollIntoView({
-          behavior: 'smooth',
-          block: 'nearest',
-          inline: 'center'
-        });
-      }
+      scrollContainerToElement(activeSubCategoryRef.current);
     }, 120);
     return () => clearTimeout(timer);
   }, [selectedSubCategory, selectedCategory]);
@@ -165,6 +175,8 @@ export function Products() {
 
   // Fetch businesses using controlled TTL cache
   useEffect(() => {
+    fetchPagePromoCards('products').then(cards => setPromoCards(cards)).catch(() => {});
+
     if (!db) {
       setLoading(false);
       return;
@@ -244,14 +256,20 @@ export function Products() {
       if (!vipStatus.isVip) return;
 
       const { mainCategory: stdCategory, subCategory: stdSubCategory } = getCanonicalBusinessCategory(biz);
+      const isBizFeatured = isBusinessCurrentlyFeatured(biz);
+      const isBizMenuFeatured = Boolean((biz as any).isMenuFeatured);
 
       // 1. Menu items / products
       if (Array.isArray(biz.menuItems) && biz.menuItems.length > 0) {
         biz.menuItems.forEach((item: MenuItem, idx: number) => {
           if (!item || !item.name) return;
+          const isItemFeat = isItemCurrentlyFeatured(item, biz);
           list.push({
             ...item,
             id: item.id || `biz_${biz.id}_item_${idx}`,
+            isFeatured: isItemFeat || isBizFeatured || isBizMenuFeatured || Boolean(item.isFeatured),
+            isSponsored: Boolean(item.isSponsored || isBizFeatured || isBizMenuFeatured),
+            isMenuFeatured: isBizMenuFeatured,
             businessId: biz.id,
             businessName: biz.name || 'محل تجاري',
             businessLogo: biz.logoUrl || biz.imageUrl,
@@ -266,6 +284,7 @@ export function Products() {
             businessRating: biz.rating,
             businessIsVerified: vipStatus.isVerified || Boolean(biz.isVerified),
             businessIsVip: vipStatus.isVip || Boolean(biz.isVip),
+            businessIsFeatured: isBizFeatured,
             isMedicalProcedure: isMedical
           });
         });
@@ -296,6 +315,8 @@ export function Products() {
               description: 'تشمل الفحص السريري والاستشارة الطبية المتخصصة وتقديم التشخيص الدقيق.',
               isPopular: true,
               isAvailable: true,
+              isFeatured: isBizFeatured,
+              isSponsored: isBizFeatured,
               businessId: biz.id,
               businessName: biz.name || 'منشأة طبية',
               businessLogo: biz.logoUrl || biz.imageUrl,
@@ -310,6 +331,7 @@ export function Products() {
               businessRating: biz.rating,
               businessIsVerified: vipStatus.isVerified || Boolean(biz.isVerified),
               businessIsVip: vipStatus.isVip || Boolean(biz.isVip),
+              businessIsFeatured: isBizFeatured,
               isMedicalProcedure: true
             });
           }
@@ -327,21 +349,7 @@ export function Products() {
       const isUnavailable = item.isAvailable === false || (item.trackStock && item.stockCount === 0);
       if (isUnavailable) return false;
 
-      // 1. Search Query Filter
-      if (searchQuery.trim()) {
-        const q = searchQuery.trim().toLowerCase();
-        const matchName = item.name?.toLowerCase().includes(q);
-        const matchDesc = item.description?.toLowerCase().includes(q);
-        const matchBiz = item.businessName?.toLowerCase().includes(q);
-        const matchCat = item.category?.toLowerCase().includes(q) || 
-                         item.businessCategory?.toLowerCase().includes(q) ||
-                         item.businessSubCategory?.toLowerCase().includes(q);
-        if (!matchName && !matchDesc && !matchBiz && !matchCat) {
-          return false;
-        }
-      }
-
-      // 2. Main Category Filter (Strictly matches the shop's main category)
+      // 1. Main Category Filter (Strictly matches the shop's main category)
       if (selectedCategory && selectedCategory !== 'الكل') {
         const selClean = cleanCategoryName(selectedCategory);
         const itemCatClean = cleanCategoryName(item.businessCategory || '');
@@ -374,8 +382,12 @@ export function Products() {
       return true;
     });
 
-    // Sorting
+    // Sorting: Featured / Sponsored items first (صدارة البحث والنتائج)
     result.sort((a, b) => {
+      const aFeat = isItemCurrentlyFeatured(a) ? 1 : 0;
+      const bFeat = isItemCurrentlyFeatured(b) ? 1 : 0;
+      if (bFeat !== aFeat) return bFeat - aFeat;
+
       const priceA = parseFloat(String(a.price)) || 0;
       const priceB = parseFloat(String(b.price)) || 0;
 
@@ -424,7 +436,7 @@ export function Products() {
       {/* MOBILE & TABLET STICKY TOP APP BAR (Native Mobile App Feeling)           */}
       {/* ========================================================================= */}
       <div className={cn(
-        "lg:hidden sticky z-30 bg-white/95 backdrop-blur-md border-b border-stone-200/80 shadow-2xs -mx-4 sm:-mx-6 px-4 sm:px-6 py-2.5 space-y-2 transition-all duration-300",
+        "lg:hidden sticky z-30 bg-white/95 backdrop-blur-md border-b border-stone-200/80 shadow-2xs px-4 py-2.5 space-y-2 transition-all duration-300",
         showHeader ? "top-[62px] sm:top-[68px] md:top-[72px]" : "top-0"
       )}>
         {/* Row 1: Search Bar, View Mode Switcher, Filter Sheet Button */}
@@ -723,24 +735,34 @@ export function Products() {
           </div>
 
           {/* Search Box */}
-          <div className="relative w-full md:w-96">
+          <form 
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (desktopSearchInput.trim()) {
+                navigate(`/search?q=${encodeURIComponent(desktopSearchInput.trim())}&tab=products`);
+              }
+            }}
+            className="relative w-full md:w-96"
+          >
             <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
             <input
-              type="text"
+              type="search"
+              enterKeyHint="search"
               placeholder="ابحث عن أي منتج، وجبة أو خدمة..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-10 py-2.5 bg-white border border-stone-200 rounded-2xl text-xs sm:text-sm font-bold placeholder:text-stone-400 focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/10 transition-all shadow-2xs"
+              value={desktopSearchInput}
+              onChange={(e) => setDesktopSearchInput(e.target.value)}
+              className="w-full pl-9 pr-10 py-2.5 bg-white border border-stone-200 rounded-2xl text-xs sm:text-sm font-bold placeholder:text-stone-400 focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/10 transition-all shadow-2xs [&::-webkit-search-cancel-button]:appearance-none"
             />
-            {searchQuery && (
+            {desktopSearchInput && (
               <button
-                onClick={() => setSearchQuery('')}
+                type="button"
+                onClick={() => setDesktopSearchInput('')}
                 className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 p-1 cursor-pointer"
               >
                 <X className="h-4 w-4" />
               </button>
             )}
-          </div>
+          </form>
         </div>
 
         {/* DESKTOP CATEGORIES BAR (Hidden on mobile) */}
@@ -1007,7 +1029,7 @@ export function Products() {
                   : "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-6"
               }
             >
-              {paginatedItems.map((item) => {
+              {paginatedItems.flatMap((item, idx) => {
                 const isUnavailable = item.isAvailable === false || (item.trackStock && item.stockCount === 0);
                 const priceNum = parseFloat(String(item.price)) || 0;
                 const origPriceNum = item.originalPrice ? parseFloat(item.originalPrice) : 0;
@@ -1018,18 +1040,22 @@ export function Products() {
                 const whatsappOrderMsg = `مرحباً ${item.businessName}، أود الطلب والاستفسار بخصوص (${item.name}) بسعر ${priceNum.toFixed(2)} د.أ المعروض على منصة شو في بإربد.`;
                 const whatsappUrl = getWhatsAppUrl(whatsappNum, whatsappOrderMsg);
 
+                const isFeaturedProduct = isItemCurrentlyFeatured(item);
+
                 // =========================================================================
                 // MOBILE LIST VIEW CARD (Horizontal App Row Layout)
                 // =========================================================================
-                if (mobileViewMode === 'list') {
-                  return (
-                    <div 
-                      key={`${item.businessId}_${item.id}`}
-                      className={`bg-white rounded-2xl border p-2.5 sm:p-3 transition-all flex items-center gap-3 relative overflow-hidden ${
+                const prodCardNode = mobileViewMode === 'list' ? (
+                  <div 
+                    key={`${item.businessId}_${item.id}`}
+                      className={cn(
+                        "bg-white rounded-2xl border p-2.5 sm:p-3 transition-all flex items-center gap-3 relative overflow-hidden",
                         isUnavailable 
-                          ? 'border-stone-200/60 bg-stone-50/50 opacity-90' 
-                          : 'border-stone-200/80 shadow-2xs hover:shadow-md hover:border-emerald-200'
-                      }`}
+                          ? "border-stone-200/60 bg-stone-50/50 opacity-90"
+                          : isFeaturedProduct
+                            ? "border-2 border-amber-400/90 ring-2 ring-amber-400/50 shadow-[0_0_20px_rgba(245,158,11,0.35)] hover:shadow-[0_0_30px_rgba(245,158,11,0.6)] hover:ring-amber-300"
+                            : "border-stone-200/80 shadow-2xs hover:shadow-md hover:border-emerald-200"
+                      )}
                     >
                       {/* Image Thumbnail */}
                       <Link 
@@ -1051,8 +1077,14 @@ export function Products() {
                           </h3>
                         </Link>
 
-                        {/* Category Badge - Positioned between Product Name and Store Name */}
-                        <div>
+                        {/* Badges strip: Category + Sponsored */}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {isFeaturedProduct && (
+                            <span className="bg-gradient-to-r from-amber-400 to-yellow-500 text-yellow-950 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-widest shadow-md flex items-center gap-1 w-fit border border-amber-300/60 shrink-0">
+                              <Crown className="h-3 w-3 fill-current shrink-0 text-amber-950" />
+                              <span>ممول</span>
+                            </span>
+                          )}
                           <span className="inline-block text-[10px] font-black text-emerald-800 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-md">
                             {item.businessSubCategory || item.businessCategory || item.category || 'صنف'}
                           </span>
@@ -1107,23 +1139,26 @@ export function Products() {
                         ) : null}
                       </div>
                     </div>
-                  );
-                }
-
-                // =========================================================================
-                // MOBILE GRID VIEW CARD (1-Column Stacked Full-Width App Card on Mobile)
-                // =========================================================================
-                return (
+                ) : (
                   <div 
                     key={`${item.businessId}_${item.id}`}
-                    className={`bg-white rounded-2xl sm:rounded-3xl border transition-all duration-300 flex flex-col group relative overflow-hidden ${
+                    className={cn(
+                      "bg-white rounded-2xl sm:rounded-3xl border transition-all duration-300 flex flex-col group relative overflow-hidden",
                       isUnavailable 
-                        ? 'border-stone-200/60 bg-stone-50/50 shadow-2xs opacity-90' 
-                        : 'border-stone-200/80 shadow-2xs hover:shadow-xl hover:border-emerald-200'
-                    }`}
+                        ? "border-stone-200/60 bg-stone-50/50 shadow-2xs opacity-90"
+                        : isFeaturedProduct
+                          ? "border-2 border-amber-400/90 ring-2 ring-amber-400/40 shadow-[0_0_22px_rgba(245,158,11,0.3)] hover:shadow-[0_0_35px_rgba(245,158,11,0.55)] hover:border-amber-400"
+                          : "border-stone-200/80 shadow-2xs hover:shadow-xl hover:border-emerald-200"
+                    )}
                   >
                     {/* Top Right Badges */}
                     <div className="absolute top-2.5 right-2.5 sm:top-3 sm:right-3 z-10 flex flex-col gap-1 items-start">
+                      {isFeaturedProduct && (
+                        <span className="bg-gradient-to-r from-amber-400 to-yellow-500 text-yellow-950 text-[10px] sm:text-[11px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest shadow-md flex items-center gap-1 w-fit border border-amber-300/60">
+                          <Crown className="h-3 w-3 sm:h-3.5 sm:w-3.5 fill-current shrink-0 text-amber-950" />
+                          <span>ممول</span>
+                        </span>
+                      )}
                       {isUnavailable ? (
                         <span className="bg-stone-500/90 text-white font-black text-[10px] sm:text-[11px] px-2.5 py-1 rounded-full shadow-md backdrop-blur-xs">
                           غير متوفر
@@ -1244,6 +1279,16 @@ export function Products() {
                     </div>
                   </div>
                 );
+
+                const shouldInsertPromo0 = (idx === 2 || (idx === paginatedItems.length - 1 && paginatedItems.length < 3)) && promoCards[0];
+                const shouldInsertPromo1 = (idx === 8) && promoCards[1];
+                const promoToInsert = shouldInsertPromo0 ? (
+                  <InFeedPromoCardItem key={`promo_${promoCards[0].id}_${idx}`} card={promoCards[0]} />
+                ) : shouldInsertPromo1 ? (
+                  <InFeedPromoCardItem key={`promo_${promoCards[1].id}_${idx}`} card={promoCards[1]} />
+                ) : null;
+
+                return promoToInsert ? [prodCardNode, promoToInsert] : [prodCardNode];
               })}
             </div>
 

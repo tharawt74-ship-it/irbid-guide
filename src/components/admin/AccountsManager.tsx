@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { db } from '../../lib/firebase';
-import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, addDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, addDoc, query, limit } from 'firebase/firestore';
 import { UserProfile, UserRole, Business } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { 
@@ -210,7 +210,7 @@ export function AccountsManager({ businesses: initialBusinesses = [] }: Accounts
  try {
  // Also fetch businesses to ensure fresh link mapping
  try {
- const bizSnap = await getDocs(collection(db, 'businesses'));
+ const bizSnap = await getDocs(query(collection(db, 'businesses'), limit(200)));
  const fetchedBiz: Business[] = [];
  bizSnap.forEach(d => {
  fetchedBiz.push({ id: d.id, ...d.data() } as Business);
@@ -222,7 +222,7 @@ export function AccountsManager({ businesses: initialBusinesses = [] }: Accounts
  console.warn('Could not refresh businesses in AccountsManager:', bErr);
  }
 
- const snap = await getDocs(collection(db, 'users'));
+ const snap = await getDocs(query(collection(db, 'users'), limit(200)));
  const fetchedMap = new Map<string, UserProfile>();
 
  snap.forEach(d => {
@@ -258,7 +258,7 @@ export function AccountsManager({ businesses: initialBusinesses = [] }: Accounts
 
  // Also check supervisors collection to include any supervisors created separately
  try {
- const supSnap = await getDocs(collection(db, 'supervisors'));
+ const supSnap = await getDocs(query(collection(db, 'supervisors'), limit(50)));
  supSnap.forEach(d => {
  const supData = d.data();
  if (!fetchedMap.has(d.id)) {

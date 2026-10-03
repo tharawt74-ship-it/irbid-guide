@@ -183,10 +183,36 @@ export function hasVerificationBadge(business?: Business | null): boolean {
  * Checks if a business is actively featured right now.
  */
 export function isBusinessCurrentlyFeatured(business?: Business | null, now = Date.now()): boolean {
-  if (!business || !business.isFeatured) return false;
+  if (!business) return false;
+  if (!business.isFeatured && !(business as any).isMenuFeatured) return false;
   const startsOk = !business.featuredStartDate || business.featuredStartDate <= now;
   const endsOk = !business.featuredExpiryDate || business.featuredExpiryDate > now;
   return startsOk && endsOk;
+}
+
+/**
+ * Checks if any item (Product, Offer, Job, Housing, Menu) is actively featured / sponsored right now,
+ * either by direct flag or inherited from parent business (e.g. Full Menu Featured or Sponsored Store).
+ */
+export function isItemCurrentlyFeatured(
+  item?: { isFeatured?: boolean; isSponsored?: boolean; isMenuFeatured?: boolean; featuredStartDate?: number | null; featuredExpiryDate?: number | null } | null,
+  parentBusiness?: Business | null,
+  now = Date.now()
+): boolean {
+  if (!item && !parentBusiness) return false;
+  
+  if (item && (item.isFeatured || item.isSponsored || item.isMenuFeatured)) {
+    const startsOk = !item.featuredStartDate || item.featuredStartDate <= now;
+    const endsOk = !item.featuredExpiryDate || item.featuredExpiryDate > now;
+    if (startsOk && endsOk) return true;
+  }
+  
+  if (parentBusiness) {
+    if (isBusinessCurrentlyFeatured(parentBusiness, now)) return true;
+    if ((parentBusiness as any).isMenuFeatured) return true;
+  }
+  
+  return false;
 }
 
 /**

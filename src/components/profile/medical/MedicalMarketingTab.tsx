@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Rocket, TrendingUp, Bell, Megaphone, 
-  Sparkles, Check, MessageSquare, Image as ImageIcon, Flame, Crown
+  Sparkles, Check, MessageSquare, Image as ImageIcon, Flame, Crown, LayoutGrid
 } from 'lucide-react';
 import { Business } from '../../../types';
 import { getAppConfig } from '../../../lib/demoDataHelper';
@@ -35,7 +35,7 @@ export function MedicalMarketingTab({
   const isUpgraded = business.premiumMessagingEnabled;
 
   return (
-    <div className="bg-white p-3.5 sm:p-8 rounded-xl sm:rounded-[32px] border-0 sm:border border-stone-200/80 shadow-none sm:shadow-xs space-y-4 sm:space-y-6">
+    <div className="bg-white p-3.5 sm:p-8 rounded-xl sm:rounded-[32px] border-0 sm:border border-stone-200/80 shadow-none sm:shadow-xs space-y-4 sm:space-y-6 animate-in fade-in duration-200">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 sm:pb-6 border-b border-stone-100">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#ff9f1c]/20 to-amber-500/10 text-[#ff9f1c] flex items-center justify-center font-bold shadow-xs">
@@ -52,7 +52,7 @@ export function MedicalMarketingTab({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {/* 1. Sponsored Listing */}
         <div className="bg-gradient-to-b from-emerald-50/40 via-white to-white border border-emerald-200/80 rounded-[24px] p-6 hover:shadow-lg hover:border-emerald-400 transition-all flex flex-col justify-between relative overflow-hidden group">
           <div className="absolute top-3 left-3 bg-gradient-to-r from-amber-500 to-[#ff9f1c] text-stone-950 text-[10px] font-black px-3 py-1 rounded-full shadow-xs flex items-center gap-1">
@@ -164,12 +164,12 @@ export function MedicalMarketingTab({
 
           <div>
             <div className="w-12 h-12 rounded-2xl bg-purple-100 text-purple-700 flex items-center justify-center mb-4">
-              <ImageIcon className="h-6 w-6" />
+              <Megaphone className="h-6 w-6" />
             </div>
 
             <h3 className="font-black text-lg text-stone-900 mb-1">بانر إعلاني مميز في الأعلى</h3>
             <p className="text-stone-500 text-xs mb-5 leading-relaxed">
-              احجز البانر الرئيسي في أعلى الواجهة الأولى أو دليل الرعاية الطبية بانتشار واجهة كاملة.
+              احجز البانر الرئيسي في أعلى الواجهة الأولى لموقع وتطبيق "شو في بإربد" مع انتشار كامل.
             </p>
 
             <div className="space-y-2 mb-6">
@@ -183,7 +183,7 @@ export function MedicalMarketingTab({
                 <div className="w-4 h-4 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
                   <Check className="h-3 w-3 stroke-[3]" />
                 </div>
-                <span>رابط توجيه داخلي أو خارجي مخصص</span>
+                <span>رابط توجيه داخلي أو خارجي مخصصوز مفعّل</span>
               </div>
             </div>
           </div>
@@ -207,11 +207,62 @@ export function MedicalMarketingTab({
           </div>
         </div>
 
-        {/* 4. Premium Messaging Add-on */}
+        {/* 4. In-Feed Promotional Card */}
+        <div className="bg-gradient-to-b from-amber-50/40 via-white to-white border border-amber-300 rounded-[24px] p-6 hover:shadow-lg hover:border-amber-400 transition-all flex flex-col justify-between relative overflow-hidden group">
+          <div className="absolute top-3 left-3 bg-amber-100 text-amber-900 text-[10px] font-black px-3 py-1 rounded-full border border-amber-300">
+            <span>مدمجة بالقوائم 📇</span>
+          </div>
+
+          <div>
+            <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center mb-4">
+              <LayoutGrid className="h-6 w-6" />
+            </div>
+
+            <h3 className="font-black text-lg text-stone-900 mb-1">بطاقة ترويجية مدمجة (In-Feed)</h3>
+            <p className="text-stone-500 text-xs mb-5 leading-relaxed">
+              إضافة بطاقة ترويجية خاصة تظهر بين بطاقات المحلات أو العروض أو المنتجات أو الوظائف أو العقارات مع صورة أو فيديو وأزرار تفاعلية.
+            </p>
+
+            <div className="space-y-2 mb-6">
+              <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
+                <div className="w-4 h-4 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+                  <Check className="h-3 w-3 stroke-[3]" />
+                </div>
+                <span>تظهر كبطاقة طبيعية مدمجة مع خيارات التصفح</span>
+              </div>
+              <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
+                <div className="w-4 h-4 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+                  <Check className="h-3 w-3 stroke-[3]" />
+                </div>
+                <span>دعم إرفاق صورة أو فيديو تفاعلي وأزرار توجيه</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-stone-100 space-y-3 mt-auto">
+            <div className="flex items-baseline justify-between">
+              <span className="text-xs font-bold text-stone-400">التكلفة الإجمالية:</span>
+              <div className="text-base font-black text-amber-900">
+                {appConfigState?.pricePromoCard ?? 20} دينار <span className="text-[10px] text-stone-400 font-normal">/ أسبوع</span>
+              </div>
+            </div>
+
+            <button 
+              type="button"
+              onClick={() => handleRequestService('promo_card', 'بطاقة ترويجية مدمجة (In-Feed)', 'تم استلام طلبك لخدمة "البطاقة الترويجية المدمجة". سيتواصل معك فريقنا قريباً لإعدادها وتفعيلها.')}
+              className="w-full bg-amber-600 hover:bg-amber-700 text-white py-3 rounded-xl text-xs font-black shadow-xs hover:shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 min-h-[44px]"
+            >
+              <Sparkles className="h-4 w-4 text-amber-200" />
+              <span>طلب بطاقة ترويجية مدمجة</span>
+            </button>
+          </div>
+        </div>
+
+        {/* 5. Premium Messaging Add-on */}
         <div className="bg-gradient-to-b from-amber-50/60 via-white to-white border-2 border-amber-300 rounded-[24px] p-6 hover:shadow-lg hover:border-amber-500 transition-all flex flex-col justify-between relative overflow-hidden group">
           <div className="absolute top-0 right-0 bg-amber-400 text-amber-950 text-[10px] font-black px-3 py-1 rounded-bl-xl flex items-center gap-1 shadow-2xs">
             <Crown className="h-3 w-3 fill-amber-950" />
-            <span>باقة رسائل مطورة 💬</span>
+            <span>باقة رسائل مطورة 👑</span>
           </div>
 
           <div>
@@ -221,7 +272,7 @@ export function MedicalMarketingTab({
 
             <h3 className="font-black text-lg text-stone-900 mb-1">ترقية نظام الرسائل والوسائط</h3>
             <p className="text-stone-500 text-xs mb-4 leading-relaxed">
-              تمكين استقبال صور المنتجات والتحاليل والمستندات من المراجعين وزيادة حفظ أرشيف المراسلة.
+              تمكين استقبال صور المنتجات والتحاليل والمستندات والطلبات من المراجعين والزبائن وزيادة حفظ أرشيف المراسلة.
             </p>
 
             <div className="mb-4 bg-amber-50/80 p-2.5 rounded-xl border border-amber-200 text-[11px] font-bold text-stone-700">
@@ -273,13 +324,13 @@ export function MedicalMarketingTab({
                 <div className="w-4 h-4 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
                   <Check className="h-3 w-3 stroke-[3]" />
                 </div>
-                <span>إمكانية إرسال واستقبال الصور والملفات</span>
+                <span>إمكانية إرسال واستقبال الصور والملفات والطلبات</span>
               </div>
               <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
                 <div className="w-4 h-4 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
                   <Check className="h-3 w-3 stroke-[3]" />
                 </div>
-                <span>أرشيف محادثات غير محدود ومحمي</span>
+                <span>أرشيف محادثات ممتد وغير محدود ومحمي</span>
               </div>
             </div>
           </div>

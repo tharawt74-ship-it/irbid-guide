@@ -279,7 +279,7 @@ export function AdminHeader({
  <div className="space-y-4" dir="rtl">
  <div>
  <span className="text-xs font-black text-stone-400 block mb-2 mr-1">الأقسام الرئيسية للوحة الإدارة</span>
- <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 xl:grid-cols-9 gap-2 w-full">
+ <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-9 gap-2 w-full min-w-0">
  {groups.map((group) => {
  const GroupIcon = group.icon;
  const isGroupActive = activeGroup.id === group.id;
@@ -301,14 +301,14 @@ export function AdminHeader({
  setActiveTab(group.tabs[0].id);
  }
  }}
- className={`relative flex flex-col items-center justify-center p-3.5 rounded-2xl border text-center transition-all duration-200 cursor-pointer ${
+ className={`relative flex flex-col items-center justify-center p-3 rounded-2xl border text-center transition-all duration-200 cursor-pointer min-w-0 ${
  isGroupActive
- ? 'bg-gradient-to-b from-[#1a4d2e] to-[#143e25] text-white border-[#1a4d2e] shadow-xs scale-102 font-black'
+ ? 'bg-gradient-to-b from-[#1a4d2e] to-[#143e25] text-white border-[#1a4d2e] shadow-xs font-black'
  : 'bg-white text-stone-600 border-[#e5e1da] hover:bg-stone-50 hover:text-stone-900 shadow-3xs'
  }`}
  >
- <GroupIcon className={`h-5 w-5 mb-1.5 ${isGroupActive ? 'text-[#ff9f1c]' : 'text-stone-400'}`} />
- <span className="text-xs sm:text-sm font-black tracking-tight leading-tight">{group.label}</span>
+ <GroupIcon className={`h-5 w-5 mb-1.5 shrink-0 ${isGroupActive ? 'text-[#ff9f1c]' : 'text-stone-400'}`} />
+ <span className="text-xs sm:text-sm font-black tracking-tight leading-tight truncate w-full px-1">{group.label}</span>
  
  {/* Alert Pulse or Count */}
  {totalCount > 0 && (
@@ -328,8 +328,8 @@ export function AdminHeader({
  </div>
 
  {/* Sub-Tabs Ribbon for the Active Group */}
- <div className="bg-stone-50 p-2.5 rounded-2xl border border-stone-200/60 shadow-inner flex flex-wrap items-center gap-1.5">
- <span className="text-[11px] font-black text-stone-400 px-2 select-none border-l border-stone-200 ml-1">التبويبات الفرعية:</span>
+ <div className="bg-stone-50 p-2 rounded-2xl border border-stone-200/60 shadow-inner flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin min-w-0">
+ <span className="text-[11px] font-black text-stone-400 px-2 select-none border-l border-stone-200 ml-1 shrink-0">التبويبات الفرعية:</span>
  {activeGroup.tabs.map((tab) => {
  const TabIcon = tab.icon;
  const isTabActive = activeTab === tab.id;
@@ -338,7 +338,7 @@ export function AdminHeader({
  <button
  key={tab.id}
  onClick={() => setActiveTab(tab.id)}
- className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl font-bold text-xs sm:text-sm whitespace-nowrap transition-all cursor-pointer ${
+ className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold text-xs sm:text-sm whitespace-nowrap transition-all cursor-pointer shrink-0 ${
  isTabActive
  ? 'bg-[#1a4d2e] text-white shadow-xs'
  : 'text-stone-600 hover:bg-stone-200 hover:text-stone-900 bg-white border border-stone-200/50'

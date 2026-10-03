@@ -434,7 +434,7 @@ export function RadialWheelTextScroller({
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder={isMobile ? 'عن ماذا تبحث؟' : effectiveSearchPlaceholder}
-          className="flex-1 min-w-0 bg-transparent border-none text-stone-900 placeholder-stone-500 px-3 sm:px-6 text-3xl sm:text-base font-black focus:outline-none text-right placeholder:text-2xl sm:placeholder:text-base tracking-tight"
+          className="flex-1 min-w-0 bg-transparent border-none text-stone-900 placeholder-stone-500 px-3 sm:px-6 text-3xl sm:text-base font-black focus:outline-none text-right placeholder:text-2xl sm:placeholder:text-base tracking-tight py-2.5 sm:py-0 leading-normal sm:leading-normal"
           dir="rtl"
         />
         <button

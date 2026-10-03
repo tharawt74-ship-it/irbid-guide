@@ -606,7 +606,7 @@ export function AdminStatsOverview({
  </div>
  )}
 
- <div className="h-72 w-full pt-2">
+ <div className="h-72 w-full pt-2 min-w-0 overflow-hidden">
  <ResponsiveContainer width="100%" height="100%">
  <AreaChart data={chartDetails.data} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
  <defs>
@@ -675,7 +675,7 @@ export function AdminStatsOverview({
  <span className="text-[10px] bg-amber-50 text-amber-700 px-2.5 py-1 rounded-full font-black">أسعار اشتراكات مرنة</span>
  </div>
 
- <div className="h-72 w-full pt-2">
+ <div className="h-72 w-full pt-2 min-w-0 overflow-hidden">
  <ResponsiveContainer width="100%" height="100%">
  <BarChart data={marketingDistributionData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />

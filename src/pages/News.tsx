@@ -7,7 +7,7 @@ import {
   RefreshCw, Send, ShieldCheck, Share2, ArrowRight, Video,
   BookOpen, Eye, ExternalLink, Utensils, Layers, Store, ChevronDown
 } from 'lucide-react';
-import { collection, getDocs, doc, setDoc, deleteDoc, addDoc, query, orderBy } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc, deleteDoc, addDoc, query, orderBy, limit } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { NewsArticle, HomepageBanner, Business, MenuItem, NewsMenuAttachment } from '../types';
 import { useAuth } from '../contexts/AuthContext';
@@ -17,7 +17,7 @@ import { ImageUploader } from '../components/ui/ImageUploader';
 import { BannerSlideshow } from '../components/BannerSlideshow';
 import { fetchPageBanners, DEFAULT_NEWS_BANNERS } from '../lib/pageBanners';
 import { useConfirm } from '../contexts/ConfirmContext';
-import { getCachedBusinesses } from '../lib/dataCache';
+import { getCachedBusinesses, setCachedBusinesses } from '../lib/dataCache';
 
 const CATEGORIES = ['الكل', 'أخبار المدينة', 'تعليم وجامعات', 'فعاليات وثقافة', 'سياحة وبيئة', 'تجارة ومحلات', 'طقس وخدمات'];
 
@@ -44,6 +44,7 @@ export function News() {
   const [banners, setBanners] = useState<HomepageBanner[]>(DEFAULT_NEWS_BANNERS);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState('الكل');
+  const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   
   // Modal states
@@ -83,22 +84,23 @@ export function News() {
   useEffect(() => {
     async function loadBusinesses() {
       try {
-        if (!db) return;
+        if (!db || !isAdmin) return;
         const cached = getCachedBusinesses();
         if (cached && cached.length > 0) {
           setAllBusinesses(cached);
           return;
         }
-        const snap = await getDocs(collection(db, 'businesses'));
+        const snap = await getDocs(query(collection(db, 'businesses'), limit(150)));
         const list: Business[] = [];
         snap.forEach(d => list.push({ id: d.id, ...d.data() } as Business));
         setAllBusinesses(list);
+        setCachedBusinesses(list);
       } catch (err) {
         console.warn('Could not load businesses in news:', err);
       }
     }
     loadBusinesses();
-  }, []);
+  }, [isAdmin]);
 
   const availableBusinesses = useMemo(() => {
     const list: Business[] = [];
@@ -823,35 +825,45 @@ export function News() {
         </div>
 
         {/* Search Bar */}
-        <div className="relative">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (searchInput.trim()) {
+              navigate(`/search?q=${encodeURIComponent(searchInput.trim())}&tab=news`);
+            }
+          }}
+          className="relative"
+        >
           <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            type="search"
+            enterKeyHint="search"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             placeholder="ابحث في عناوين الأخبار، الأحداث، أو المواقع..."
-            className="w-full bg-white/10 backdrop-blur-md text-white placeholder:text-stone-300 border border-white/20 rounded-2xl px-4 py-3 pr-10 text-xs sm:text-sm focus:outline-none focus:bg-white/20 transition-all shadow-inner"
+            className="w-full bg-white/10 backdrop-blur-md text-white placeholder:text-stone-300 border border-white/20 rounded-2xl px-4 py-3 pr-10 text-xs sm:text-sm focus:outline-none focus:bg-white/20 transition-all shadow-inner [&::-webkit-search-cancel-button]:appearance-none"
           />
           <Search className="h-4 w-4 text-emerald-200 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-          {searchQuery && (
+          {searchInput && (
             <button 
-              onClick={() => setSearchQuery('')}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-300 hover:text-white p-1.5"
+              type="button"
+              onClick={() => setSearchInput('')}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-300 hover:text-white p-1.5 cursor-pointer"
             >
               <X className="h-4 w-4" />
             </button>
           )}
-        </div>
+        </form>
       </div>
 
-      {/* Category Filter Chips */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none snap-x -mx-4 px-4 sm:mx-0 sm:px-0">
+      {/* Category Filter Chips - Sticky On Mobile */}
+      <div className="sticky top-[62px] sm:top-[68px] z-20 bg-[#fdfcfb]/95 backdrop-blur-md py-2 -mx-4 px-4 sm:mx-0 sm:px-0 flex items-center gap-2 overflow-x-auto scrollbar-none snap-x border-b border-stone-200/60 sm:border-0 sm:py-0">
         {CATEGORIES.map(cat => {
           const isSelected = selectedCategory === cat;
           return (
             <button
               key={cat}
               onClick={() => setSelectedCategory(cat)}
-              className={`snap-start whitespace-nowrap px-4.5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all cursor-pointer min-h-[44px] flex items-center shrink-0 active:scale-95 ${
+              className={`snap-start whitespace-nowrap px-4 py-2 sm:px-4.5 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all cursor-pointer min-h-[44px] flex items-center shrink-0 active:scale-95 ${
                 isSelected
                   ? 'bg-[#1a4d2e] text-white shadow-xs font-black'
                   : 'bg-white border border-[#e5e1da] text-stone-600 hover:border-[#1a4d2e]/40 hover:bg-stone-50'
@@ -893,10 +905,10 @@ export function News() {
           {selectedCategory === 'الكل' && !searchQuery && featuredNews && (
             <div 
               onClick={() => navigate(`/news/${featuredNews.id}`)}
-              className="bg-white rounded-3xl border border-[#e5e1da] overflow-hidden shadow-xs hover:shadow-md transition-all cursor-pointer relative group"
+              className="bg-white rounded-2xl sm:rounded-3xl border border-[#e5e1da] overflow-hidden shadow-xs hover:shadow-md transition-all cursor-pointer relative group active:scale-[0.99]"
             >
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-0">
-                <div className="lg:col-span-7 relative h-64 sm:h-80 lg:h-auto min-h-[300px] overflow-hidden bg-stone-100">
+                <div className="lg:col-span-7 relative h-52 sm:h-80 lg:h-auto min-h-[220px] sm:min-h-[300px] overflow-hidden bg-stone-100">
                   <img 
                     src={featuredNews.imageUrl || featuredNews.image} 
                     alt={featuredNews.title} 
@@ -905,12 +917,12 @@ export function News() {
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent lg:hidden"></div>
                   
-                  <div className="absolute top-4 right-4 flex items-center gap-2">
-                    <span className="bg-red-600 text-white px-3.5 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 shadow-md">
+                  <div className="absolute top-3.5 right-3.5 sm:top-4 sm:right-4 flex items-center gap-2">
+                    <span className="bg-red-600 text-white px-3 py-0.5 sm:px-3.5 sm:py-1 rounded-full text-[11px] sm:text-xs font-bold flex items-center gap-1.5 shadow-md">
                       <Flame className="h-3.5 w-3.5" />
                       <span>خبر بارز</span>
                     </span>
-                    <span className="bg-white/90 backdrop-blur-md text-[#1a4d2e] px-3 py-1 rounded-full text-xs font-bold shadow-xs">
+                    <span className="bg-white/90 backdrop-blur-md text-[#1a4d2e] px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full text-[11px] sm:text-xs font-bold shadow-xs">
                       {featuredNews.category}
                     </span>
                   </div>
@@ -936,8 +948,8 @@ export function News() {
                   )}
                 </div>
 
-                <div className="lg:col-span-5 p-6 sm:p-8 flex flex-col justify-between space-y-4">
-                  <div className="space-y-3">
+                <div className="lg:col-span-5 p-4 sm:p-8 flex flex-col justify-between space-y-3 sm:space-y-4">
+                  <div className="space-y-2 sm:space-y-3">
                     <div className="flex items-center gap-2 text-xs font-bold text-stone-400">
                       <span className="flex items-center gap-1">
                         <Clock className="h-3.5 w-3.5 text-[#ff9f1c]" />
@@ -947,11 +959,11 @@ export function News() {
                       <span>قراءة {featuredNews.readTime}</span>
                     </div>
 
-                    <h2 className="text-xl sm:text-2xl font-black text-[#2d2a26] leading-snug break-words group-hover:text-[#1a4d2e] transition-colors">
+                    <h2 className="text-lg sm:text-2xl font-black text-[#2d2a26] leading-snug break-words group-hover:text-[#1a4d2e] transition-colors">
                       {featuredNews.title}
                     </h2>
 
-                    <p className="text-stone-600 text-xs sm:text-sm leading-relaxed line-clamp-4 break-words">
+                    <p className="text-stone-600 text-xs sm:text-sm leading-relaxed line-clamp-3 sm:line-clamp-4 break-words">
                       {featuredNews.excerpt || featuredNews.summary}
                     </p>
 
@@ -975,12 +987,12 @@ export function News() {
                     )}
                   </div>
 
-                  <div className="pt-4 border-t border-[#e5e1da] flex items-center justify-between text-xs text-stone-500 font-medium">
+                  <div className="pt-3 sm:pt-4 border-t border-[#e5e1da] flex items-center justify-between text-xs text-stone-500 font-medium">
                     <div className="flex items-center gap-1.5 text-stone-600">
                       <MapPin className="h-3.5 w-3.5 text-orange-500 shrink-0" />
-                      <span className="truncate max-w-[160px]">{featuredNews.location}</span>
+                      <span className="truncate max-w-[140px] sm:max-w-[160px]">{featuredNews.location}</span>
                     </div>
-                    <span className="font-bold text-stone-700 bg-stone-100 px-2.5 py-1 rounded-lg">
+                    <span className="font-bold text-stone-700 bg-stone-100 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg text-[11px] sm:text-xs">
                       {featuredNews.source}
                     </span>
                   </div>
@@ -992,8 +1004,8 @@ export function News() {
           {/* News Grid (All articles or remaining) */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-xl sm:text-2xl font-black text-[#2d2a26] flex items-center gap-2">
-                <Sparkles className="h-5 w-5 text-[#ff9f1c]" />
+              <h2 className="text-lg sm:text-2xl font-black text-[#2d2a26] flex items-center gap-2">
+                <Sparkles className="h-4 w-4 sm:h-5 sm:w-5 text-[#ff9f1c]" />
                 <span>قائمة الأخبار والمقالات</span>
               </h2>
               <span className="text-xs sm:text-sm font-semibold text-stone-500 bg-stone-100 px-3 py-1 rounded-full">
@@ -1001,16 +1013,16 @@ export function News() {
               </span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
               {filteredNews.map(item => (
                 <div 
                   key={item.id}
                   onClick={() => navigate(`/news/${item.id}`)}
-                  className="bg-white rounded-2xl sm:rounded-3xl border border-[#e5e1da] overflow-hidden shadow-xs hover:shadow-md hover:border-[#1a4d2e]/30 transition-all flex flex-col justify-between group relative cursor-pointer"
+                  className="bg-white rounded-2xl sm:rounded-3xl border border-[#e5e1da] overflow-hidden shadow-xs hover:shadow-md hover:border-[#1a4d2e]/30 transition-all flex flex-col justify-between group relative cursor-pointer active:scale-[0.99]"
                 >
                   {/* Article Image & Controls */}
                   <div>
-                    <div className="h-48 relative overflow-hidden bg-stone-100">
+                    <div className="h-40 sm:h-48 relative overflow-hidden bg-stone-100">
                       <img 
                         src={item.imageUrl || item.image} 
                         alt={item.title} 
@@ -1052,7 +1064,7 @@ export function News() {
                     </div>
 
                     {/* Article Content */}
-                    <div className="p-5 sm:p-6 space-y-2.5">
+                    <div className="p-4 sm:p-6 space-y-2 sm:space-y-2.5">
                       <div className="flex items-center gap-2 text-[11px] text-stone-400 font-bold">
                         <span className="flex items-center gap-1">
                           <Clock className="h-3 w-3 text-[#ff9f1c]" />

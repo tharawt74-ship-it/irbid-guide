@@ -422,108 +422,25 @@ export function SystemSettingsProvider({ children }: { children: React.ReactNode
 
     async function loadSettings() {
       try {
-        let data: any = null;
-        
         // 1. Try to fetch from server-side API (guarantees bypass of client-side rules/permissions)
         try {
           const apiRes = await fetch('/api/system-settings', { cache: 'no-store' });
           if (apiRes.ok) {
             const resJson = await apiRes.json();
             if (resJson.success && resJson.settings) {
-              data = resJson.settings;
+              processConfigData(resJson.settings);
             }
           }
         } catch (apiErr) {
-          console.warn('Could not fetch settings from server API, falling back to direct Firestore:', apiErr);
-        }
-
-        // 2. Direct client-side Firestore read
-        if (db) {
-          try {
-            const docRef = doc(db, 'systemConfig', 'settings');
-            const snap = await getDoc(docRef);
-            if (snap.exists()) {
-              const fsData = snap.data();
-              data = { ...(data || {}), ...fsData };
-            }
-          } catch (e) {
-            console.warn('Could not read systemConfig/settings:', e);
-          }
-
-          // Read direct QR poster template document
-          try {
-            const qrDocRef = doc(db, 'system_settings', 'qr_poster_template');
-            const qrSnap = await getDoc(qrDocRef);
-            if (qrSnap.exists()) {
-              const qrData = qrSnap.data();
-              if (qrData?.template) {
-                if (!data) data = {};
-                data.defaultQrPosterTemplate = qrData.template;
-              }
-            }
-          } catch (e) {
-            console.warn('Could not read system_settings/qr_poster_template:', e);
-          }
-
-          // Read direct Reviews QR poster template document
-          try {
-            const qrRevDocRef = doc(db, 'system_settings', 'reviews_qr_poster_template');
-            const qrRevSnap = await getDoc(qrRevDocRef);
-            if (qrRevSnap.exists()) {
-              const qrRevData = qrRevSnap.data();
-              if (qrRevData?.template) {
-                if (!data) data = {};
-                data.defaultReviewsQrPosterTemplate = qrRevData.template;
-              }
-            }
-          } catch (e) {
-            console.warn('Could not read system_settings/reviews_qr_poster_template:', e);
-          }
-
-          // 3. Cross-check settings/appConfig for enableAiAssistant
-          try {
-            const appConfigDoc = await getDoc(doc(db, 'settings', 'appConfig'));
-            if (appConfigDoc.exists()) {
-              const appConfData = appConfigDoc.data();
-              if (appConfData.enableAiAssistant === false) {
-                if (!data) data = { globalSettings: {} };
-                if (!data.globalSettings) data.globalSettings = {};
-                data.globalSettings.enableAiAssistant = false;
-              }
-            }
-          } catch (e) {
-            console.warn('Could not read settings/appConfig:', e);
-          }
-        }
-
-        if (data) {
-          processConfigData(data);
-        } else {
-          // Auto-seed Firestore with default configuration if it is empty
-          if (db) {
-            try {
-              await setDoc(doc(db, 'systemConfig', 'settings'), {
-                globalSettings: DEFAULT_GLOBAL_SETTINGS,
-                vipPlans: DEFAULT_VIP_PLANS,
-                staticPages: DEFAULT_STATIC_PAGES,
-                seasonalCampaigns: DEFAULT_SEASONAL_CAMPAIGNS,
-                stories: DEFAULT_STORIES,
-                categories: categories,
-                neighborhoods: neighborhoods
-              });
-              console.log('Successfully seeded Firestore with default system settings!');
-            } catch (seedErr) {
-              console.warn('Could not auto-seed system settings into Firestore (expected if write rules or auth is not set up):', seedErr);
-            }
-          }
+          // Fallback seamlessly to direct Firestore onSnapshot
         }
       } catch (err) {
-        console.warn('Could not load system config from Firestore:', err);
+        console.warn('System config initialization notice:', err);
       } finally {
         setIsSettingsLoaded(true);
       }
 
-      // 3. Attach real-time Firestore onSnapshot listener for instant live updates across all sessions & visitors
+      // 2. Attach single real-time Firestore onSnapshot listener (efficiently receives initial data + live updates in 1 stream)
       if (db) {
         try {
           const settingsDocRef = doc(db, 'systemConfig', 'settings');
@@ -533,7 +450,7 @@ export function SystemSettingsProvider({ children }: { children: React.ReactNode
               processConfigData(liveData);
             }
           }, (snapErr) => {
-            console.warn('Firestore settings snapshot error:', snapErr);
+            console.warn('Firestore settings snapshot notice:', snapErr);
           });
         } catch (subErr) {
           console.warn('Failed to subscribe to settings document:', subErr);

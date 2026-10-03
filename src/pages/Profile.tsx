@@ -17,7 +17,7 @@ import {
  Trash2, ExternalLink, Clock, Users, Award, Crown, BarChart3, UtensilsCrossed,
  Lock, Tag, Info, Sparkles, ChevronLeft, ChevronRight, ChevronDown, Phone, MessageCircle, Star,
  Home, Copy, ShieldCheck, Key, Heart, MessageSquareText, Building2, Shield, Printer, QrCode, Calendar, ArrowLeft, ArrowRight, ShieldAlert, LogOut,
- Stethoscope, ClipboardList, Gift, Settings2, LayoutDashboard
+ Stethoscope, ClipboardList, Gift, Settings2, LayoutDashboard, LayoutGrid, Video, Tablet, Monitor
 } from 'lucide-react';
 import { JobFormModal } from '../components/jobs/JobFormModal';
 import { VipAnalyticsModal } from '../components/vip/VipAnalyticsModal';
@@ -25,6 +25,8 @@ import { VipAnalyticsDashboard } from '../components/vip/VipAnalyticsDashboard';
 import { DigitalMenuManagerModal } from '../components/vip/DigitalMenuManagerModal';
 import { VipPopupManagerModal } from '../components/vip/VipPopupManagerModal';
 import { VipUpgradeRequestModal } from '../components/vip/VipUpgradeRequestModal';
+import { InFeedPromoCardItem } from '../components/common/InFeedPromoCardItem';
+import { VideoUploader } from '../components/common/VideoUploader';
 import { getBusinessVipStatus } from '../lib/vipHelper';
 import { ensureBusinessAnalyticsSaved } from '../lib/analyticsTracker';
 import { sanitizeFirestorePayload, compressAndSanitizeFirestorePayload } from '../lib/firestoreHelper';
@@ -146,6 +148,7 @@ export function Profile() {
  setTimeout(() => setServiceRequestSuccess(null), 4000);
  };
  const [selectedBusinessIdForService, setSelectedBusinessIdForService] = useState<string>("");
+ const [selectedMessagingPlanShop, setSelectedMessagingPlanShop] = useState<'1_month' | '3_months' | '6_months' | '1_year'>('1_month');
 
  // Marketing Popup Modal state
  const [isMarketingModalOpen, setIsMarketingModalOpen] = useState(false);
@@ -167,6 +170,9 @@ export function Profile() {
  publishStartDate: '',
  targetKeywords: '',
  notes: '',
+ sponsoredTargetType: 'business' as 'business' | 'single_product' | 'full_menu' | 'single_offer' | 'multiple_offers' | 'single_job' | 'multiple_jobs' | 'all_inclusive',
+ sponsoredEntityId: '',
+ sponsoredEntityName: '',
  notificationTitle: '',
  notificationBody: '',
  scheduledTime: '',
@@ -180,14 +186,25 @@ export function Profile() {
  // banner specific (if they order homepage banner through marketing card)
  pageTarget: 'home' as 'home' | 'housing' | 'offers' | 'jobs' | 'transportation' | 'news' | 'tourism' | 'medical',
  targetEntityId: '',
+ targetEntityName: '',
  bannerType: 'business' as 'business' | 'image_only' | 'animated_image' | 'text_and_button',
  bannerTitle: '',
  bannerSubtitle: '',
  bannerImageUrl: '',
  buttonText: 'معاينة المحل',
  buttonLink: '',
- badgeText: 'موصى به '
+ badgeText: 'ممول',
+ promoCardTargetPage: 'home' as 'home' | 'offers' | 'products' | 'medical' | 'jobs' | 'housing',
+ promoCardTargetType: 'business' as 'business' | 'medical' | 'product' | 'offer' | 'job' | 'housing' | 'custom',
+ promoCardMediaType: 'image' as 'image' | 'video',
+ promoCardImageUrl: '',
+ promoCardVideoUrl: '',
+ promoCardLayout: 'standard' as 'standard' | 'full',
+ promoCardMediaFit: 'crop' as 'crop' | 'fit' | 'fill' | 'pad',
+ promoCardContentDisplay: 'always' as 'always' | 'hover'
  });
+
+ const [previewDevice, setPreviewDevice] = useState<'mobile' | 'tablet' | 'desktop'>('mobile');
 
  // Job Modal state
  const [isJobModalOpen, setIsJobModalOpen] = useState(false);
@@ -462,6 +479,7 @@ export function Profile() {
  reply: {
  text: stripUrlsAndLinks(sanitizeInput(replyText)),
  createdAt: Date.now(),
+ promoCardLayout: marketingForm.promoCardLayout,
  authorName: selectedBusiness.name
  }
  });
@@ -796,7 +814,7 @@ export function Profile() {
  }
  }, [businesses]);
 
- const handleOpenMarketingModal = (serviceType: string, serviceName: string, successMessage: string, targetBusinessId?: string) => {
+ const handleOpenMarketingModal = (serviceType: string, serviceName: string, successMessage: string, targetBusinessId?: string, initialTargetType?: string) => {
  const bizId = targetBusinessId || selectedBusinessIdForService;
  if (!currentUser || !bizId) {
  alert("يرجى اختيار المنشأة المستهدفة أولاً");
@@ -820,6 +838,9 @@ export function Profile() {
  publishStartDate: new Date(Date.now() + 3600000).toISOString().slice(0, 16), // 1 hour from now
  targetKeywords: '',
  notes: '',
+ sponsoredTargetType: (initialTargetType as any) || 'business',
+ sponsoredEntityId: '',
+ sponsoredEntityName: '',
  notificationTitle: `عرض مميز من ${business.name}`,
  notificationBody: `تفضلوا بزيارتنا للاستفادة من أقوى العروض والخصومات الجديدة!`,
  scheduledTime: new Date(Date.now() + 86400000).toISOString().slice(0, 16), // tomorrow
@@ -832,13 +853,22 @@ export function Profile() {
  highlightPoints: '',
  pageTarget: 'home',
  targetEntityId: business.id,
+ targetEntityName: '',
  bannerType: 'business',
  bannerTitle: business.name,
  bannerSubtitle: business.description || '',
  bannerImageUrl: business.imageUrl || '',
  buttonText: 'معاينة المحل',
  buttonLink: `/business/${business.id}`,
- badgeText: 'موصى به '
+ badgeText: serviceType === 'promo_card' ? 'ممول' : 'موصى به ',
+ promoCardTargetPage: 'home',
+ promoCardTargetType: 'business',
+ promoCardMediaType: 'image',
+ promoCardImageUrl: business.imageUrl || '',
+ promoCardVideoUrl: '',
+ promoCardLayout: 'standard',
+ promoCardMediaFit: 'crop',
+ promoCardContentDisplay: 'always'
  });
 
  setActiveMarketingModalType(serviceType);
@@ -874,6 +904,9 @@ export function Profile() {
  basePayload.notes = marketingForm.notes.trim();
  basePayload.publishTimeOption = marketingForm.publishTimeOption;
  basePayload.publishStartDate = marketingForm.publishTimeOption === 'scheduled' ? marketingForm.publishStartDate : '';
+ basePayload.sponsoredTargetType = marketingForm.sponsoredTargetType;
+ basePayload.sponsoredEntityId = marketingForm.sponsoredEntityId;
+ basePayload.sponsoredEntityName = marketingForm.sponsoredEntityName;
  } else if (activeMarketingModalType === 'push_notifications') {
  basePayload.notificationTitle = marketingForm.notificationTitle.trim();
  basePayload.notificationBody = marketingForm.notificationBody.trim();
@@ -890,6 +923,25 @@ export function Profile() {
  basePayload.buttonText = marketingForm.buttonText.trim();
  basePayload.buttonLink = marketingForm.buttonLink.trim();
  basePayload.badgeText = marketingForm.badgeText.trim();
+ basePayload.durationWeeks = marketingForm.durationWeeks;
+ basePayload.publishTimeOption = marketingForm.publishTimeOption;
+ basePayload.publishStartDate = marketingForm.publishTimeOption === 'scheduled' ? marketingForm.publishStartDate : '';
+ } else if (activeMarketingModalType === 'promo_card') {
+ basePayload.promoCardTargetPage = marketingForm.promoCardTargetPage;
+ basePayload.promoCardTargetType = marketingForm.promoCardTargetType;
+ basePayload.promoCardMediaType = marketingForm.promoCardMediaType;
+ basePayload.promoCardImageUrl = (marketingForm.promoCardImageUrl || marketingForm.bannerImageUrl).trim();
+ basePayload.promoCardVideoUrl = marketingForm.promoCardVideoUrl.trim();
+ basePayload.promoCardLayout = marketingForm.promoCardLayout || 'standard';
+ basePayload.promoCardMediaFit = marketingForm.promoCardMediaFit || 'crop';
+ basePayload.promoCardContentDisplay = marketingForm.promoCardContentDisplay || 'always';
+ basePayload.targetEntityId = marketingForm.targetEntityId;
+ basePayload.targetEntityName = marketingForm.targetEntityName;
+ basePayload.bannerTitle = marketingForm.bannerTitle.trim();
+ basePayload.bannerSubtitle = marketingForm.bannerSubtitle.trim();
+ basePayload.buttonText = marketingForm.buttonText.trim();
+ basePayload.buttonLink = marketingForm.buttonLink.trim();
+ basePayload.badgeText = 'ممول';
  basePayload.durationWeeks = marketingForm.durationWeeks;
  basePayload.publishTimeOption = marketingForm.publishTimeOption;
  basePayload.publishStartDate = marketingForm.publishTimeOption === 'scheduled' ? marketingForm.publishStartDate : '';
@@ -3715,238 +3767,311 @@ export function Profile() {
  </div>
  )}
 
- <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-5">
- {/* 1. Sponsored Listing */}
- <div className="bg-gradient-to-b from-emerald-50/40 via-white to-white border border-emerald-200/80 rounded-[24px] p-6 hover:shadow-lg hover:border-emerald-400 transition-all flex flex-col justify-between relative overflow-hidden group">
- <div className="absolute top-3 left-3 bg-gradient-to-r from-amber-500 to-[#ff9f1c] text-stone-950 text-[10px] font-black px-3 py-1 rounded-full shadow-xs flex items-center gap-1">
- <Flame className="h-3 w-3 fill-stone-950" />
- <span>الأكثر طلباً </span>
- </div>
+ <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+  {/* 1. Sponsored Listing */}
+  <div className="bg-gradient-to-b from-emerald-50/40 via-white to-white border border-emerald-200/80 rounded-[24px] p-6 hover:shadow-lg hover:border-emerald-400 transition-all flex flex-col justify-between relative overflow-hidden group">
+  <div className="absolute top-3 left-3 bg-gradient-to-r from-amber-500 to-[#ff9f1c] text-stone-950 text-[10px] font-black px-3 py-1 rounded-full shadow-xs flex items-center gap-1">
+  <Flame className="h-3 w-3 fill-stone-950" />
+  <span>الأكثر طلباً 🔥</span>
+  </div>
 
- <div>
- <div className="w-12 h-12 rounded-2xl bg-emerald-100/80 text-[#1a4d2e] flex items-center justify-center mb-4">
- <TrendingUp className="h-6 w-6" />
- </div>
+  <div>
+  <div className="w-12 h-12 rounded-2xl bg-emerald-100/80 text-[#1a4d2e] flex items-center justify-center mb-4">
+  <TrendingUp className="h-6 w-6" />
+  </div>
 
- <h3 className="font-black text-lg text-stone-900 mb-1">صدارة البحث (Sponsored)</h3>
- <p className="text-stone-500 text-xs mb-5 leading-relaxed">
- ظهور محلك أول النتائج بكلمات مفتاحية مخصصة للوصول لأول زبون يبحث عن خدمتك.
- </p>
+  <h3 className="font-black text-lg text-stone-900 mb-1">صدارة البحث (Sponsored)</h3>
+  <p className="text-stone-500 text-xs mb-5 leading-relaxed">
+  ظهور محلك أول النتائج بكلمات مفتاحية مخصصة للوصول لأول زبون يبحث عن خدمتك.
+  </p>
 
- <div className="space-y-2 mb-6">
- <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
- <div className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
- <Check className="h-3 w-3 stroke-[3]" />
- </div>
- <span>ظهور أعلى المنافسين في نتائج البحث</span>
- </div>
- <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
- <div className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
- <Check className="h-3 w-3 stroke-[3]" />
- </div>
- <span>شارة "ممول" بارزة</span>
- </div>
- </div>
- </div>
+  <div className="space-y-2 mb-6">
+  <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
+  <div className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+  <Check className="h-3 w-3 stroke-[3]" />
+  </div>
+  <span>ظهور أعلى المنافسين في نتائج البحث</span>
+  </div>
+  <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
+  <div className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+  <Check className="h-3 w-3 stroke-[3]" />
+  </div>
+  <span>شارة "ممول" بارزة وملفتة</span>
+  </div>
+  </div>
+  </div>
 
- <div className="pt-4 border-t border-stone-100 space-y-3 mt-auto">
- <div className="flex items-baseline justify-between">
- <span className="text-xs font-bold text-stone-400">التكلفة الإجمالية:</span>
- <div className="text-base font-black text-[#1a4d2e]">
- {appConfigState?.priceSponsored ?? 15} دينار <span className="text-[10px] text-stone-400 font-normal">/ أسبوع</span>
- </div>
- </div>
+  <div className="pt-4 border-t border-stone-100 space-y-3 mt-auto">
+  <div className="flex items-baseline justify-between">
+  <span className="text-xs font-bold text-stone-400">التكلفة الإجمالية:</span>
+  <div className="text-base font-black text-[#1a4d2e]">
+  {appConfigState?.priceSponsored ?? 15} دينار <span className="text-[10px] text-stone-400 font-normal">/ أسبوع</span>
+  </div>
+  </div>
 
- <button 
- onClick={() => handleOpenMarketingModal('sponsored', 'صدارة البحث (Sponsored)', 'تم استلام طلبك لخدمة "صدارة البحث". سيتواصل معك فريقنا قريباً لإتمام الدفع وتفعيل الخدمة.')}
- className="w-full bg-[#1a4d2e] hover:bg-[#133b22] text-white py-3 rounded-xl text-xs font-black shadow-xs hover:shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 min-h-[44px]"
- >
- <Sparkles className="h-4 w-4 text-[#ff9f1c]" />
- <span>اطلب صدارة البحث الآن</span>
- </button>
- </div>
- </div>
+  <button 
+  onClick={() => handleOpenMarketingModal('sponsored', 'صدارة البحث (Sponsored)', 'تم استلام طلبك لخدمة "صدارة البحث". سيتواصل معك فريقنا قريباً لإتمام الدفع وتفعيل الخدمة.')}
+  className="w-full bg-[#1a4d2e] hover:bg-[#133b22] text-white py-3 rounded-xl text-xs font-black shadow-xs hover:shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 min-h-[44px]"
+  >
+  <Sparkles className="h-4 w-4 text-[#ff9f1c]" />
+  <span>اطلب صدارة البحث الآن</span>
+  </button>
+  </div>
+  </div>
 
- {/* 2. Push Notifications */}
- <div className="bg-gradient-to-b from-sky-50/40 via-white to-white border border-sky-200/80 rounded-[24px] p-6 hover:shadow-lg hover:border-sky-400 transition-all flex flex-col justify-between relative overflow-hidden group">
- <div className="absolute top-3 left-3 bg-sky-100 text-sky-800 text-[10px] font-black px-3 py-1 rounded-full border border-sky-200">
- <span>وصول فوري </span>
- </div>
+  {/* 2. Push Notifications */}
+  <div className="bg-gradient-to-b from-sky-50/40 via-white to-white border border-sky-200/80 rounded-[24px] p-6 hover:shadow-lg hover:border-sky-400 transition-all flex flex-col justify-between relative overflow-hidden group">
+  <div className="absolute top-3 left-3 bg-sky-100 text-sky-800 text-[10px] font-black px-3 py-1 rounded-full border border-sky-200">
+  <span>وصول فوري ⚡</span>
+  </div>
 
- <div>
- <div className="w-12 h-12 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center mb-4">
- <Bell className="h-6 w-6" />
- </div>
+  <div>
+  <div className="w-12 h-12 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center mb-4">
+  <Bell className="h-6 w-6" />
+  </div>
 
- <h3 className="font-black text-lg text-stone-900 mb-1">إشعارات جماعية لكافة المستخدمين</h3>
- <p className="text-stone-500 text-xs mb-5 leading-relaxed">
- إرسال إشعار فوري لجميع هواتف الآلاف من مستخدمي المنصة للترويج لعروضك الجديدة.
- </p>
+  <h3 className="font-black text-lg text-stone-900 mb-1">إشعارات جماعية لكافة المستخدمين</h3>
+  <p className="text-stone-500 text-xs mb-5 leading-relaxed">
+  إرسال إشعار فوري لجميع هواتف الآلاف من مستخدمي المنصة للترويج لعروضك الجديدة.
+  </p>
 
- <div className="space-y-2 mb-6">
- <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
- <div className="w-4 h-4 rounded-full bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
- <Check className="h-3 w-3 stroke-[3]" />
- </div>
- <span>رسالة مخصصة تصل لشاشات الأجهزة</span>
- </div>
- <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
- <div className="w-4 h-4 rounded-full bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
- <Check className="h-3 w-3 stroke-[3]" />
- </div>
- <span>تحويل مباشر لصفحة منشأتك عند النقر</span>
- </div>
- </div>
- </div>
+  <div className="space-y-2 mb-6">
+  <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
+  <div className="w-4 h-4 rounded-full bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
+  <Check className="h-3 w-3 stroke-[3]" />
+  </div>
+  <span>رسالة مخصصة تصل لشاشات الأجهزة</span>
+  </div>
+  <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
+  <div className="w-4 h-4 rounded-full bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
+  <Check className="h-3 w-3 stroke-[3]" />
+  </div>
+  <span>تحويل مباشر لصفحة منشأتك عند النقر</span>
+  </div>
+  </div>
+  </div>
 
- <div className="pt-4 border-t border-stone-100 space-y-3 mt-auto">
- <div className="flex items-baseline justify-between">
- <span className="text-xs font-bold text-stone-400">التكلفة الإجمالية:</span>
- <div className="text-base font-black text-sky-800">
- {appConfigState?.pricePushNotifications ?? 10} دنانير <span className="text-[10px] text-stone-400 font-normal">/ إشعار</span>
- </div>
- </div>
+  <div className="pt-4 border-t border-stone-100 space-y-3 mt-auto">
+  <div className="flex items-baseline justify-between">
+  <span className="text-xs font-bold text-stone-400">التكلفة الإجمالية:</span>
+  <div className="text-base font-black text-sky-800">
+  {appConfigState?.pricePushNotifications ?? 10} دنانير <span className="text-[10px] text-stone-400 font-normal">/ إشعار</span>
+  </div>
+  </div>
 
- <button 
- onClick={() => handleOpenMarketingModal('push_notifications', 'إشعارات جماعية', 'تم استلام طلبك لخدمة "إشعارات جماعية". سيتواصل معك فريقنا قريباً.')}
- className="w-full bg-sky-700 hover:bg-sky-800 text-white py-3 rounded-xl text-xs font-black shadow-xs hover:shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 min-h-[44px]"
- >
- <Bell className="h-4 w-4" />
- <span>اطلب الإشعار الجماعي</span>
- </button>
- </div>
- </div>
+  <button 
+  onClick={() => handleOpenMarketingModal('push_notifications', 'إشعارات جماعية', 'تم استلام طلبك لخدمة "إشعارات جماعية". سيتواصل معك فريقنا قريباً.')}
+  className="w-full bg-sky-700 hover:bg-sky-800 text-white py-3 rounded-xl text-xs font-black shadow-xs hover:shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 min-h-[44px]"
+  >
+  <Bell className="h-4 w-4" />
+  <span>اطلب الإشعار الجماعي</span>
+  </button>
+  </div>
+  </div>
 
- {/* 3. Homepage Banner */}
- <div className="bg-gradient-to-b from-purple-50/40 via-white to-white border border-purple-200/80 rounded-[24px] p-6 hover:shadow-lg hover:border-purple-400 transition-all flex flex-col justify-between relative overflow-hidden group">
- <div className="absolute top-3 left-3 bg-purple-100 text-purple-800 text-[10px] font-black px-3 py-1 rounded-full border border-purple-200">
- <span>واجهة الموقع </span>
- </div>
+  {/* 3. Homepage Banner */}
+  <div className="bg-gradient-to-b from-purple-50/40 via-white to-white border border-purple-200/80 rounded-[24px] p-6 hover:shadow-lg hover:border-purple-400 transition-all flex flex-col justify-between relative overflow-hidden group">
+  <div className="absolute top-3 left-3 bg-purple-100 text-purple-800 text-[10px] font-black px-3 py-1 rounded-full border border-purple-200">
+  <span>واجهة الموقع 🖼️</span>
+  </div>
 
- <div>
- <div className="w-12 h-12 rounded-2xl bg-purple-100 text-purple-700 flex items-center justify-center mb-4">
- <ImageIcon className="h-6 w-6" />
- </div>
+  <div>
+  <div className="w-12 h-12 rounded-2xl bg-purple-100 text-purple-700 flex items-center justify-center mb-4">
+  <Megaphone className="h-6 w-6" />
+  </div>
 
- <h3 className="font-black text-lg text-stone-900 mb-1">بانر إعلاني مميز في الأعلى</h3>
- <p className="text-stone-500 text-xs mb-5 leading-relaxed">
- احجز البانر الرئيسي في أعلى الصفحة الأولى لموقع "شو في بإربد" بانتشار واجهة كاملة.
- </p>
+  <h3 className="font-black text-lg text-stone-900 mb-1">بانر إعلاني مميز في الأعلى</h3>
+  <p className="text-stone-500 text-xs mb-5 leading-relaxed">
+  احجز البانر الرئيسي في أعلى الواجهة الأولى لموقع وتطبيق "شو في بإربد" مع انتشار كامل.
+  </p>
 
- <div className="space-y-2 mb-6">
- <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
- <div className="w-4 h-4 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
- <Check className="h-3 w-3 stroke-[3]" />
- </div>
- <span>تصميم احترافي مجاني مرفق من الفريق</span>
- </div>
- <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
- <div className="w-4 h-4 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
- <Check className="h-3 w-3 stroke-[3]" />
- </div>
- <span>رابط توجيه داخلي أو خارجي مخصص</span>
- </div>
- </div>
- </div>
+  <div className="space-y-2 mb-6">
+  <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
+  <div className="w-4 h-4 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
+  <Check className="h-3 w-3 stroke-[3]" />
+  </div>
+  <span>تصميم احترافي مجاني مرفق من الفريق</span>
+  </div>
+  <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
+  <div className="w-4 h-4 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
+  <Check className="h-3 w-3 stroke-[3]" />
+  </div>
+  <span>رابط توجيه داخلي أو خارجي مخصص</span>
+  </div>
+  </div>
+  </div>
 
- <div className="pt-4 border-t border-stone-100 space-y-3 mt-auto">
- <div className="flex items-baseline justify-between">
- <span className="text-xs font-bold text-stone-400">التكلفة الإجمالية:</span>
- <div className="text-base font-black text-purple-800">
- {appConfigState?.priceHomepageBanner ?? 25} دينار <span className="text-[10px] text-stone-400 font-normal">/ أسبوع</span>
- </div>
- </div>
+  <div className="pt-4 border-t border-stone-100 space-y-3 mt-auto">
+  <div className="flex items-baseline justify-between">
+  <span className="text-xs font-bold text-stone-400">التكلفة الإجمالية:</span>
+  <div className="text-base font-black text-purple-800">
+  {appConfigState?.priceHomepageBanner ?? 25} دينار <span className="text-[10px] text-stone-400 font-normal">/ أسبوع</span>
+  </div>
+  </div>
 
- <button 
- onClick={() => handleOpenMarketingModal('homepage_banner', 'بانر إعلاني مميز', 'تم استلام طلبك لخدمة "بانر إعلاني مميز". سيتواصل معك فريقنا قريباً.')}
- className="w-full bg-purple-700 hover:bg-purple-800 text-white py-3 rounded-xl text-xs font-black shadow-xs hover:shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 min-h-[44px]"
- >
- <Megaphone className="h-4 w-4" />
- <span>حجز البانر الإعلاني</span>
- </button>
- </div>
- </div>
+  <button 
+  onClick={() => handleOpenMarketingModal('homepage_banner', 'بانر إعلاني مميز', 'تم استلام طلبك لخدمة "بانر إعلاني مميز". سيتواصل معك فريقنا قريباً.')}
+  className="w-full bg-purple-700 hover:bg-purple-800 text-white py-3 rounded-xl text-xs font-black shadow-xs hover:shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 min-h-[44px]"
+  >
+  <Megaphone className="h-4 w-4" />
+  <span>حجز البانر الإعلاني</span>
+  </button>
+  </div>
+  </div>
 
- {/* 4. Premium Messaging Add-on Card */}
- <div className="bg-gradient-to-b from-amber-50/60 via-white to-white border-2 border-amber-300 rounded-[24px] p-6 hover:shadow-lg hover:border-amber-500 transition-all flex flex-col justify-between relative overflow-hidden group">
- <div className="absolute top-0 right-0 bg-amber-400 text-amber-950 text-[10px] font-black px-3 py-1 rounded-bl-xl flex items-center gap-1 shadow-2xs">
- <Crown className="h-3 w-3 fill-amber-950" />
- <span>باقة رسائل مطورة </span>
- </div>
+  {/* 4. In-Feed Promotional Card */}
+  <div className="bg-gradient-to-b from-amber-50/40 via-white to-white border border-amber-300 rounded-[24px] p-6 hover:shadow-lg hover:border-amber-400 transition-all flex flex-col justify-between relative overflow-hidden group">
+  <div className="absolute top-3 left-3 bg-amber-100 text-amber-900 text-[10px] font-black px-3 py-1 rounded-full border border-amber-300">
+  <span>مدمجة بالقوائم 📇</span>
+  </div>
 
- <div>
- <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center mb-4 mt-2">
- <MessageSquare className="h-6 w-6" />
- </div>
+  <div>
+  <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center mb-4">
+  <LayoutGrid className="h-6 w-6" />
+  </div>
 
- <h3 className="font-black text-lg text-stone-900 mb-1">ترقية نظام الرسائل والوسائط</h3>
- <p className="text-stone-500 text-xs mb-4 leading-relaxed">
- تمكين استقبال صور المنتجات والمستندات من الزبائن وزيادة حفظ أرشيف المراسلة.
- </p>
+  <h3 className="font-black text-lg text-stone-900 mb-1">بطاقة ترويجية مدمجة (In-Feed)</h3>
+  <p className="text-stone-500 text-xs mb-5 leading-relaxed">
+  إضافة بطاقة ترويجية خاصة تظهر بين بطاقات المحلات أو العروض أو المنتجات أو الوظائف أو العقارات مع صورة أو فيديو وأزرار تفاعلية.
+  </p>
 
- {selectedBusinessIdForService && (() => {
- const b = businesses.find(x => x.id === selectedBusinessIdForService);
- if (!b) return null;
- const isUpgraded = b.premiumMessagingEnabled;
- return (
- <div className="mb-4 bg-amber-50/80 p-2.5 rounded-xl border border-amber-200 text-[11px] font-bold text-stone-700">
- <div className="flex items-center justify-between">
- <span>حالة المحل الحالي:</span>
- {isUpgraded ? (
- <span className="text-emerald-700 font-black bg-emerald-100 px-2 py-0.5 rounded-md">مفعلة ({b.premiumMessagingPlan === '1_month' ? 'شهر' : b.premiumMessagingPlan === '3_months' ? '3 أشهر' : b.premiumMessagingPlan === '6_months' ? '6 أشهر' : 'سنة'})</span>
- ) : (
- <span className="text-amber-800 font-bold bg-amber-100 px-2 py-0.5 rounded-md">باقة أساسية (7 أيام)</span>
- )}
- </div>
- </div>
- );
- })()}
+  <div className="space-y-2 mb-6">
+  <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
+  <div className="w-4 h-4 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+  <Check className="h-3 w-3 stroke-[3]" />
+  </div>
+  <span>تظهر كبطاقة طبيعية مدمجة مع خيارات التصفح</span>
+  </div>
+  <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
+  <div className="w-4 h-4 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+  <Check className="h-3 w-3 stroke-[3]" />
+  </div>
+  <span>دعم إرفاق صورة أو فيديو تفاعلي وأزرار توجيه</span>
+  </div>
+  </div>
+  </div>
 
- <div className="space-y-2 mb-4">
- <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
- <div className="w-4 h-4 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
- <Check className="h-3 w-3 stroke-[3]" />
- </div>
- <span>استقبال صور وطلبات الزبائن مباشرة</span>
- </div>
- <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
- <div className="w-4 h-4 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
- <Check className="h-3 w-3 stroke-[3]" />
- </div>
- <span>الاحتفاظ بأرشيف المحادثات لفترة أطول</span>
- </div>
- </div>
+  <div className="pt-4 border-t border-stone-100 space-y-3 mt-auto">
+  <div className="flex items-baseline justify-between">
+  <span className="text-xs font-bold text-stone-400">التكلفة الإجمالية:</span>
+  <div className="text-base font-black text-amber-900">
+  {appConfigState?.pricePromoCard ?? 20} دينار <span className="text-[10px] text-stone-400 font-normal">/ أسبوع</span>
+  </div>
+  </div>
 
- <div className="mb-4">
- <label className="block text-[10px] font-bold text-stone-500 mb-1">اختر باقة الترقية:</label>
- <select
- id="messaging-plan-select"
- className="w-full p-2.5 rounded-xl border border-amber-200 bg-white text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-400"
- defaultValue="1_month"
- >
- <option value="1_month">شهري: {appConfigState?.priceMessaging1Month ?? 5} دنانير (وسائط | الاحتفاظ 1 شهر)</option>
- <option value="3_months">3 أشهر: {appConfigState?.priceMessaging3Months ?? 12} دينار (الاحتفاظ 3 أشهر)</option>
- <option value="6_months">6 أشهر: {appConfigState?.priceMessaging6Months ?? 20} دينار (الاحتفاظ 6 أشهر)</option>
- <option value="1_year">سنوي: {appConfigState?.priceMessaging1Year ?? 35} دينار (الاحتفاظ 1 سنة)</option>
- </select>
- </div>
- </div>
+  <button 
+  onClick={() => handleOpenMarketingModal('promo_card', 'بطاقة ترويجية مدمجة (In-Feed)', 'تم استلام طلبك لخدمة "البطاقة الترويجية المدمجة". سيتواصل معك فريقنا قريباً لإعدادها وتفعيلها.')}
+  className="w-full bg-amber-600 hover:bg-amber-700 text-white py-3 rounded-xl text-xs font-black shadow-xs hover:shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 min-h-[44px]"
+  >
+  <Sparkles className="h-4 w-4 text-amber-200" />
+  <span>طلب بطاقة ترويجية مدمجة</span>
+  </button>
+  </div>
+  </div>
 
- <div className="pt-3 border-t border-amber-100 space-y-2 mt-auto">
- <button 
- onClick={() => {
- const selectEl = document.getElementById('messaging-plan-select') as HTMLSelectElement;
- const plan = (selectEl?.value || '1_month') as '1_month' | '3_months' | '6_months' | '1_year';
- handlePremiumMessagingUpgrade(plan);
- }}
- className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white py-3 rounded-xl text-xs font-black shadow-xs hover:shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 min-h-[44px]"
- >
- <Crown className="h-4 w-4 fill-white" />
- <span>تفعيل وترقية نظام الرسائل</span>
- </button>
- </div>
- </div>
- </div>
+  {/* 5. Premium Messaging Add-on Card */}
+  <div className="bg-gradient-to-b from-amber-50/60 via-white to-white border-2 border-amber-300 rounded-[24px] p-6 hover:shadow-lg hover:border-amber-500 transition-all flex flex-col justify-between relative overflow-hidden group">
+  <div className="absolute top-0 right-0 bg-amber-400 text-amber-950 text-[10px] font-black px-3 py-1 rounded-bl-xl flex items-center gap-1 shadow-2xs">
+  <Crown className="h-3 w-3 fill-amber-950" />
+  <span>باقة رسائل مطورة 👑</span>
+  </div>
+
+  <div>
+  <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center mb-4 mt-2">
+  <MessageSquare className="h-6 w-6" />
+  </div>
+
+  <h3 className="font-black text-lg text-stone-900 mb-1">ترقية نظام الرسائل والوسائط</h3>
+  <p className="text-stone-500 text-xs mb-4 leading-relaxed">
+  تمكين استقبال صور المنتجات والمستندات والطلبات من الزبائن وزيادة حفظ أرشيف المراسلة.
+  </p>
+
+  {selectedBusinessIdForService && (() => {
+  const b = businesses.find(x => x.id === selectedBusinessIdForService);
+  if (!b) return null;
+  const isUpgraded = b.premiumMessagingEnabled;
+  return (
+  <div className="mb-4 bg-amber-50/80 p-2.5 rounded-xl border border-amber-200 text-[11px] font-bold text-stone-700">
+  <div className="flex items-center justify-between">
+  <span>حالة المحل الحالي:</span>
+  {isUpgraded ? (
+  <span className="text-emerald-700 font-black bg-emerald-100 px-2 py-0.5 rounded-md">مفعلة ({b.premiumMessagingPlan === '1_month' ? 'شهر' : b.premiumMessagingPlan === '3_months' ? '3 أشهر' : b.premiumMessagingPlan === '6_months' ? '6 أشهر' : 'سنة'})</span>
+  ) : (
+  <span className="text-amber-800 font-bold bg-amber-100 px-2 py-0.5 rounded-md">باقة أساسية (7 أيام)</span>
+  )}
+  </div>
+  </div>
+  );
+  })()}
+
+  {/* Package selection buttons */}
+  <div className="mb-5 space-y-2">
+  <label className="block text-xs font-black text-stone-800">
+  اختر باقة الترقية المطلوبة:
+  </label>
+  <div className="grid grid-cols-2 gap-2">
+  {[
+  { id: '1_month', label: 'شهر واحد', price: appConfigState?.priceMessaging1Month ?? 5 },
+  { id: '3_months', label: '3 أشهر', price: appConfigState?.priceMessaging3Months ?? 12 },
+  { id: '6_months', label: '6 أشهر', price: appConfigState?.priceMessaging6Months ?? 20 },
+  { id: '1_year', label: 'سنة كاملة', price: appConfigState?.priceMessaging1Year ?? 35 }
+  ].map((plan) => (
+  <button
+  key={plan.id}
+  type="button"
+  onClick={() => setSelectedMessagingPlanShop(plan.id as any)}
+  className={`p-2.5 rounded-xl border text-right transition-all cursor-pointer flex items-center justify-between ${
+  selectedMessagingPlanShop === plan.id
+  ? 'border-amber-500 bg-amber-50 text-amber-950 font-black ring-2 ring-amber-400/50 shadow-xs'
+  : 'border-stone-200 hover:border-amber-300 text-stone-700 bg-white'
+  }`}
+  >
+  <span className="text-xs font-black">{plan.label}</span>
+  <span className="text-xs font-black text-amber-900">{plan.price} د.أ</span>
+  </button>
+  ))}
+  </div>
+  </div>
+
+  <div className="space-y-2 mb-6">
+  <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
+  <div className="w-4 h-4 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+  <Check className="h-3 w-3 stroke-[3]" />
+  </div>
+  <span>استقبال صور وطلبات الزبائن مباشرة</span>
+  </div>
+  <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
+  <div className="w-4 h-4 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+  <Check className="h-3 w-3 stroke-[3]" />
+  </div>
+  <span>الاحتفاظ بأرشيف المحادثات لفترة أطول</span>
+  </div>
+  </div>
+  </div>
+
+  <div className="pt-4 border-t border-stone-100 space-y-3 mt-auto">
+  <div className="flex items-baseline justify-between">
+  <span className="text-xs font-bold text-stone-400">تكلفة الباقة المختارة:</span>
+  <div className="text-base font-black text-amber-900">
+  {selectedMessagingPlanShop === '1_month' && `${appConfigState?.priceMessaging1Month ?? 5} دنانير / شهر`}
+  {selectedMessagingPlanShop === '3_months' && `${appConfigState?.priceMessaging3Months ?? 12} دينار / 3 أشهر`}
+  {selectedMessagingPlanShop === '6_months' && `${appConfigState?.priceMessaging6Months ?? 20} دينار / 6 أشهر`}
+  {selectedMessagingPlanShop === '1_year' && `${appConfigState?.priceMessaging1Year ?? 35} دينار / سنة`}
+  </div>
+  </div>
+
+  <button 
+  onClick={() => {
+  handlePremiumMessagingUpgrade(selectedMessagingPlanShop);
+  }}
+  className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-stone-950 py-3 rounded-xl text-xs font-black shadow-xs hover:shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 min-h-[44px]"
+  >
+  <Crown className="h-4 w-4 fill-stone-950" />
+  <span>تفعيل وترقية نظام الرسائل</span>
+  </button>
+  </div>
+  </div>
+  </div>
  </div>
 
  {/* Banner Manager Sub-Panel */}
@@ -4967,8 +5092,8 @@ export function Profile() {
  const b = businesses.find(x => x.id === id);
  if (b) setSelectedBusiness(b);
  }}
- onSelectService={(serviceType, serviceName, successMsg) => {
- handleOpenMarketingModal(serviceType, serviceName, successMsg, selectedBusinessIdForService);
+ onSelectService={(serviceType, serviceName, successMsg, targetType) => {
+ handleOpenMarketingModal(serviceType, serviceName, successMsg, selectedBusinessIdForService, targetType);
  }}
  onOpenVipUpgrade={(biz) => {
  setSelectedBusinessForUpgrade(biz);
@@ -5061,20 +5186,184 @@ export function Profile() {
  {/* SERVICE SPECIFIC FIELDS */}
  
  {/* 1. Sponsored */}
- {activeMarketingModalType === 'sponsored' && (
+ {activeMarketingModalType === 'sponsored' && (() => {
+ const selectedBiz = businesses.find(b => b.id === selectedBusinessIdForService);
+ const targetBasePrice = (() => {
+ switch (marketingForm.sponsoredTargetType) {
+ case 'single_product': return appConfigState?.priceSponsoredProduct ?? 7;
+ case 'full_menu': return appConfigState?.priceSponsoredMenu ?? 12;
+ case 'single_offer': return appConfigState?.priceSponsoredOffer ?? 6;
+ case 'multiple_offers': return appConfigState?.priceSponsoredOffersGroup ?? 12;
+ case 'single_job': return appConfigState?.priceSponsoredJob ?? 8;
+ case 'multiple_jobs': return appConfigState?.priceSponsoredJobsGroup ?? 14;
+ case 'all_inclusive': return appConfigState?.priceSponsoredAllInclusive ?? 25;
+ case 'business':
+ default:
+ return appConfigState?.priceSponsored ?? 15;
+ }
+ })();
+
+ const bizMenuItems = Array.isArray(selectedBiz?.menuItems) ? selectedBiz.menuItems : [];
+ const bizOffers = offers.filter(o => o.businessId === selectedBiz?.id || o.businessName === selectedBiz?.name);
+ const bizJobs = userJobs.filter(j => j.businessId === selectedBiz?.id || j.company === selectedBiz?.name);
+
+ return (
  <div className="space-y-4 pt-2 border-t border-stone-100">
+ {/* Target Scope Selector */}
+ <div>
+ <label className="block text-xs font-black text-stone-900 mb-2">تحديد نطاق وهدف صدارة البحث:</label>
+ <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+ {[
+ { id: 'business', label: 'بطاقة المحل في الرئيسية والبحث', price: appConfigState?.priceSponsored ?? 15 },
+ { id: 'single_product', label: 'منتج أو خدمة محددة', price: appConfigState?.priceSponsoredProduct ?? 7 },
+ { id: 'full_menu', label: 'المنيو والكتالوج بالكامل', price: appConfigState?.priceSponsoredMenu ?? 12 },
+ { id: 'single_offer', label: 'عرض أو خصم محدد', price: appConfigState?.priceSponsoredOffer ?? 6 },
+ { id: 'multiple_offers', label: 'مجموعة عروض وخصومات المحل', price: appConfigState?.priceSponsoredOffersGroup ?? 12 },
+ { id: 'single_job', label: 'شاغر أو وظيفة محددة', price: appConfigState?.priceSponsoredJob ?? 8 },
+ { id: 'multiple_jobs', label: 'مجموعة شواغر ووظائف المحل', price: appConfigState?.priceSponsoredJobsGroup ?? 14 },
+ { id: 'all_inclusive', label: 'صدارة شاملة لكل شيء', price: appConfigState?.priceSponsoredAllInclusive ?? 25 }
+ ].map(targetOption => (
+ <button
+ key={targetOption.id}
+ type="button"
+ onClick={() => {
+ setMarketingForm(prev => ({
+ ...prev,
+ sponsoredTargetType: targetOption.id as any,
+ sponsoredEntityId: '',
+ sponsoredEntityName: ''
+ }));
+ }}
+ className={`p-2.5 rounded-xl border text-right transition-all flex items-center justify-between cursor-pointer ${
+ marketingForm.sponsoredTargetType === targetOption.id
+ ? 'border-[#1a4d2e] bg-[#1a4d2e]/10 text-[#1a4d2e] ring-2 ring-[#1a4d2e]/20 font-black shadow-xs'
+ : 'border-stone-200 hover:border-stone-300 text-stone-700 bg-white'
+ }`}
+ >
+ <span className="text-xs font-bold">{targetOption.label}</span>
+ <span className="text-xs font-black text-[#1a4d2e] bg-white px-2 py-0.5 rounded-lg border border-stone-200 shrink-0">
+ {targetOption.price} د.أ
+ </span>
+ </button>
+ ))}
+ </div>
+ </div>
+
+ {/* Conditional Entity Selectors */}
+ {marketingForm.sponsoredTargetType === 'single_product' && (
+ <div className="p-3.5 rounded-2xl bg-amber-50/70 border border-amber-200 space-y-2">
+ <label className="block text-xs font-black text-amber-950">اختر المنتج أو الخدمة المستهدفة بالصدارة: *</label>
+ {bizMenuItems.length > 0 ? (
+ <select
+ value={marketingForm.sponsoredEntityId || ''}
+ onChange={e => {
+ const item = bizMenuItems.find(m => m.id === e.target.value);
+ setMarketingForm(prev => ({
+ ...prev,
+ sponsoredEntityId: e.target.value,
+ sponsoredEntityName: item ? item.name : ''
+ }));
+ }}
+ className="w-full bg-white border border-amber-300 rounded-xl px-3 py-2 text-xs font-bold text-stone-800"
+ >
+ <option value="">-- اختر المنتج من منيو المحل --</option>
+ {bizMenuItems.map(m => (
+ <option key={m.id} value={m.id}>{m.name} ({m.price} د.أ)</option>
+ ))}
+ </select>
+ ) : (
+ <input
+ type="text"
+ required
+ value={marketingForm.sponsoredEntityName || ''}
+ onChange={e => setMarketingForm(prev => ({ ...prev, sponsoredEntityName: e.target.value }))}
+ placeholder="اكتب اسم المنتج أو الخدمة المطلوب تصديرها"
+ className="w-full bg-white border border-amber-300 rounded-xl px-3 py-2 text-xs font-bold text-stone-800"
+ />
+ )}
+ </div>
+ )}
+
+ {marketingForm.sponsoredTargetType === 'single_offer' && (
+ <div className="p-3.5 rounded-2xl bg-red-50/70 border border-red-200 space-y-2">
+ <label className="block text-xs font-black text-red-950">اختر العرض الترويجي المستهدف بالصدارة: *</label>
+ {bizOffers.length > 0 ? (
+ <select
+ value={marketingForm.sponsoredEntityId || ''}
+ onChange={e => {
+ const off = bizOffers.find(o => o.id === e.target.value);
+ setMarketingForm(prev => ({
+ ...prev,
+ sponsoredEntityId: e.target.value,
+ sponsoredEntityName: off ? off.title : ''
+ }));
+ }}
+ className="w-full bg-white border border-red-300 rounded-xl px-3 py-2 text-xs font-bold text-stone-800"
+ >
+ <option value="">-- اختر العرض المطلوب --</option>
+ {bizOffers.map(o => (
+ <option key={o.id} value={o.id}>{o.title} {o.discountPercentage ? `(خصم %${o.discountPercentage})` : ''}</option>
+ ))}
+ </select>
+ ) : (
+ <input
+ type="text"
+ required
+ value={marketingForm.sponsoredEntityName || ''}
+ onChange={e => setMarketingForm(prev => ({ ...prev, sponsoredEntityName: e.target.value }))}
+ placeholder="اكتب عنوان العرض المطلوب تصديره"
+ className="w-full bg-white border border-red-300 rounded-xl px-3 py-2 text-xs font-bold text-stone-800"
+ />
+ )}
+ </div>
+ )}
+
+ {marketingForm.sponsoredTargetType === 'single_job' && (
+ <div className="p-3.5 rounded-2xl bg-teal-50/70 border border-teal-200 space-y-2">
+ <label className="block text-xs font-black text-teal-950">اختر الشاغر الوظيفي المستهدف بالصدارة: *</label>
+ {bizJobs.length > 0 ? (
+ <select
+ value={marketingForm.sponsoredEntityId || ''}
+ onChange={e => {
+ const j = bizJobs.find(item => item.id === e.target.value);
+ setMarketingForm(prev => ({
+ ...prev,
+ sponsoredEntityId: e.target.value,
+ sponsoredEntityName: j ? j.title : ''
+ }));
+ }}
+ className="w-full bg-white border border-teal-300 rounded-xl px-3 py-2 text-xs font-bold text-stone-800"
+ >
+ <option value="">-- اختر الشاغر الوظيفي المطلوب --</option>
+ {bizJobs.map(j => (
+ <option key={j.id} value={j.id}>{j.title} ({j.jobType})</option>
+ ))}
+ </select>
+ ) : (
+ <input
+ type="text"
+ required
+ value={marketingForm.sponsoredEntityName || ''}
+ onChange={e => setMarketingForm(prev => ({ ...prev, sponsoredEntityName: e.target.value }))}
+ placeholder="اكتب مسمى الوظيفة المطلوب تصديرها"
+ className="w-full bg-white border border-teal-300 rounded-xl px-3 py-2 text-xs font-bold text-stone-800"
+ />
+ )}
+ </div>
+ )}
+
  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
  <div>
- <label className="block text-xs font-bold text-stone-700 mb-1.5 font-black">المدة الإعلانية المطلوبة:</label>
+ <label className="block text-xs font-bold text-stone-700 mb-1.5 font-black">المدة الإعلانية المطلوبة والتكلفة:</label>
  <select
  value={marketingForm.durationWeeks}
  onChange={e => setMarketingForm(prev => ({ ...prev, durationWeeks: e.target.value }))}
  className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs font-bold text-stone-700"
  >
- <option value="أسبوع واحد">أسبوع واحد ({appConfigState?.priceSponsored ?? 15} دينار)</option>
- <option value="أسبوعين">أسبوعين ({(appConfigState?.priceSponsored ?? 15) * 2} دينار)</option>
- <option value="شهر كامل">شهر كامل ({(appConfigState?.priceSponsored ?? 15) * 4 - 10} دينار - وفر 10 دنانير)</option>
- <option value="3 أشهر">3 أشهر ({(appConfigState?.priceSponsored ?? 15) * 12 - 50} دينار - وفر 50 دينار)</option>
+ <option value="أسبوع واحد">أسبوع واحد ({targetBasePrice} دينار)</option>
+ <option value="أسبوعين">أسبوعين ({targetBasePrice * 2} دينار)</option>
+ <option value="شهر كامل">شهر كامل ({Math.max(1, targetBasePrice * 4 - (targetBasePrice > 10 ? 10 : 4))} دينار)</option>
+ <option value="3 أشهر">3 أشهر ({Math.max(1, targetBasePrice * 12 - (targetBasePrice > 10 ? 50 : 20))} دينار)</option>
  </select>
  </div>
 
@@ -5128,7 +5417,8 @@ export function Profile() {
  />
  </div>
  </div>
- )}
+ );
+ })()}
 
  {/* 2. Push Notifications */}
  {activeMarketingModalType === 'push_notifications' && (
@@ -5703,6 +5993,696 @@ export function Profile() {
  </span>
  </div>
  )}
+ </div>
+ )}
+ </div>
+ </div>
+ </div>
+ )}
+
+ {/* 4. In-Feed Promotional Card */}
+ {activeMarketingModalType === 'promo_card' && (
+ <div className="space-y-5 pt-2 border-t border-stone-100">
+ {/* Page Location Selector */}
+ <div className="space-y-2 bg-stone-50 p-3.5 rounded-2xl border border-stone-200">
+ <label className="block text-xs font-black text-stone-900 flex items-center gap-1.5">
+ <LayoutGrid className="h-4 w-4 text-[#1a4d2e]" />
+ <span>اختيار الصفحة المستهدفة لإدراج البطاقة: *</span>
+ </label>
+ <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
+ {[
+ { id: 'home', label: 'الصفحة الرئيسية' },
+ { id: 'offers', label: 'صفحة العروض والخصومات' },
+ { id: 'products', label: 'صفحة المنتجات والخدمات' },
+ { id: 'medical', label: 'صفحة الرعاية الطبية' },
+ { id: 'jobs', label: 'صفحة الوظائف والشواغر' },
+ { id: 'housing', label: 'صفحة السكنات والعقارات' }
+ ].map(pg => (
+ <button
+ key={pg.id}
+ type="button"
+ onClick={() => setMarketingForm(prev => ({ ...prev, promoCardTargetPage: pg.id as any }))}
+ className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer font-bold text-xs ${
+ marketingForm.promoCardTargetPage === pg.id
+ ? 'border-[#1a4d2e] bg-[#1a4d2e]/10 text-[#1a4d2e] ring-2 ring-[#1a4d2e]/20 font-black shadow-xs'
+ : 'border-stone-200 hover:border-stone-300 text-stone-700 bg-white'
+ }`}
+ >
+ {pg.label}
+ </button>
+ ))}
+ </div>
+ </div>
+
+ {/* Promotion Target Entity Selector */}
+ <div className="space-y-2 bg-stone-50 p-3.5 rounded-2xl border border-stone-200">
+   <label className="block text-xs font-black text-stone-900">
+     ما الذي ترغب بالترويج له في البطاقة؟
+   </label>
+   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+     {[
+       { id: 'business', label: 'صفحة المحل نفسه' },
+       { id: 'product', label: 'منتج أو خدمة' },
+       { id: 'offer', label: 'عرض أو خصم' },
+       { id: 'job', label: 'شاغر وظيفي' },
+       { id: 'housing', label: 'سكن أو عقار' },
+       { id: 'custom', label: 'إعلان مخصص' },
+     ].map(opt => (
+       <button
+         key={opt.id}
+         type="button"
+         onClick={() => {
+           setMarketingForm(prev => {
+             const updated = { ...prev, promoCardTargetType: opt.id as any };
+             if (opt.id === 'business' && selectedBusiness) {
+               updated.targetEntityId = selectedBusiness.id;
+               updated.targetEntityName = selectedBusiness.name;
+               updated.bannerTitle = selectedBusiness.name;
+               updated.bannerSubtitle = selectedBusiness.description || '';
+               updated.promoCardImageUrl = selectedBusiness.imageUrl || '';
+               updated.buttonText = 'زيارة المحل';
+               updated.buttonLink = `/business/${selectedBusiness.id}`;
+               updated.badgeText = 'ممول';
+             } else if (opt.id === 'custom') {
+               updated.targetEntityId = '';
+               updated.targetEntityName = '';
+             }
+             return updated;
+           });
+         }}
+         className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer font-bold text-xs ${
+           marketingForm.promoCardTargetType === opt.id
+             ? 'border-[#1a4d2e] bg-[#1a4d2e]/10 text-[#1a4d2e] ring-2 ring-[#1a4d2e]/20 font-black shadow-xs'
+             : 'border-stone-200 hover:border-stone-300 text-stone-700 bg-white'
+         }`}
+       >
+         {opt.label}
+       </button>
+     ))}
+   </div>
+
+   {/* Specific Entity Pickers based on target type */}
+   {marketingForm.promoCardTargetType === 'product' && (
+     <div className="pt-2">
+       <label className="block text-xs font-bold text-stone-700 mb-1">اختر المنتج أو الخدمة المراد ترويجها:</label>
+       {selectedBusiness?.menuItems && selectedBusiness.menuItems.length > 0 ? (
+         <select
+           value={marketingForm.targetEntityId || ''}
+           onChange={(e) => {
+             const prodId = e.target.value;
+             const prod = selectedBusiness?.menuItems?.find(m => m.id === prodId);
+             setMarketingForm(prev => ({
+               ...prev,
+               targetEntityId: prodId,
+               targetEntityName: prod?.name || '',
+               bannerTitle: prod?.name || prev.bannerTitle,
+               bannerSubtitle: prod?.description || prev.bannerSubtitle,
+               promoCardImageUrl: prod?.imageUrl || prev.promoCardImageUrl,
+               buttonText: 'طلب المنتج',
+               buttonLink: prod ? `/products/${prod.id}` : prev.buttonLink,
+               promoCardTargetPage: 'products'
+             }));
+           }}
+           className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2 text-xs font-bold text-stone-800"
+         >
+           <option value="">-- اضغط لاختيار منتج من منيو المحل --</option>
+           {selectedBusiness.menuItems.map(item => (
+             <option key={item.id} value={item.id}>{item.name} ({item.price} د.أ)</option>
+           ))}
+         </select>
+       ) : (
+         <p className="text-xs text-stone-500 font-medium">لا توجد منتجات مسجلة في قائمة منيو هذا المحل حالياً.</p>
+       )}
+     </div>
+   )}
+
+   {marketingForm.promoCardTargetType === 'offer' && (
+     <div className="pt-2">
+       <label className="block text-xs font-bold text-stone-700 mb-1">اختر العرض الترويجي:</label>
+       {offers && offers.length > 0 ? (
+         <select
+           value={marketingForm.targetEntityId || ''}
+           onChange={(e) => {
+             const offId = e.target.value;
+             const off = offers.find(o => o.id === offId);
+             setMarketingForm(prev => ({
+               ...prev,
+               targetEntityId: offId,
+               targetEntityName: off?.title || '',
+               bannerTitle: off?.title || prev.bannerTitle,
+               bannerSubtitle: off?.description || `خصم بقيمة ${off?.discountPercentage || ''}%`,
+               promoCardImageUrl: off?.imageUrl || prev.promoCardImageUrl,
+               buttonText: 'تصفح العرض',
+               buttonLink: off ? `/offers/${off.id}` : prev.buttonLink,
+               promoCardTargetPage: 'offers'
+             }));
+           }}
+           className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2 text-xs font-bold text-stone-800"
+         >
+           <option value="">-- اضغط لاختيار عرض منشور --</option>
+           {offers.map(off => (
+             <option key={off.id} value={off.id}>{off.title} ({off.discountPercentage}% خصم)</option>
+           ))}
+         </select>
+       ) : (
+         <p className="text-xs text-stone-500 font-medium">لا توجد عروض منشورة للمحل حالياً.</p>
+       )}
+     </div>
+   )}
+
+   {marketingForm.promoCardTargetType === 'job' && (
+     <div className="pt-2">
+       <label className="block text-xs font-bold text-stone-700 mb-1">اختر الشاغر الوظيفي:</label>
+       {userJobs && userJobs.length > 0 ? (
+         <select
+           value={marketingForm.targetEntityId || ''}
+           onChange={(e) => {
+             const jId = e.target.value;
+             const j = userJobs.find(item => item.id === jId);
+             setMarketingForm(prev => ({
+               ...prev,
+               targetEntityId: jId,
+               targetEntityName: j?.title || '',
+               bannerTitle: j?.title || prev.bannerTitle,
+               bannerSubtitle: j?.description || prev.bannerSubtitle,
+               buttonText: 'التقديم للوظيفة',
+               buttonLink: j ? `/jobs/${j.id}` : prev.buttonLink,
+               promoCardTargetPage: 'jobs'
+             }));
+           }}
+           className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2 text-xs font-bold text-stone-800"
+         >
+           <option value="">-- اضغط لاختيار شاغر وظيفي --</option>
+           {userJobs.map(j => (
+             <option key={j.id} value={j.id}>{j.title}</option>
+           ))}
+         </select>
+       ) : (
+         <p className="text-xs text-stone-500 font-medium">لا توجد شواغر وظيفية منشورة لك حالياً.</p>
+       )}
+     </div>
+   )}
+
+   {marketingForm.promoCardTargetType === 'housing' && (
+     <div className="pt-2">
+       <label className="block text-xs font-bold text-stone-700 mb-1">اختر السكن أو العقار:</label>
+       {userHousings && userHousings.length > 0 ? (
+         <select
+           value={marketingForm.targetEntityId || ''}
+           onChange={(e) => {
+             const hId = e.target.value;
+             const h = userHousings.find(item => item.id === hId);
+             setMarketingForm(prev => ({
+               ...prev,
+               targetEntityId: hId,
+               targetEntityName: h?.title || '',
+               bannerTitle: h?.title || prev.bannerTitle,
+               bannerSubtitle: h?.description || prev.bannerSubtitle,
+               promoCardImageUrl: h?.image || prev.promoCardImageUrl,
+               buttonText: 'عرض العقار',
+               buttonLink: h ? `/housing/${h.id}` : prev.buttonLink,
+               promoCardTargetPage: 'housing'
+             }));
+           }}
+           className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2 text-xs font-bold text-stone-800"
+         >
+           <option value="">-- اضغط لاختيار عقار منشور --</option>
+           {userHousings.map(h => (
+             <option key={h.id} value={h.id}>{h.title}</option>
+           ))}
+         </select>
+       ) : (
+         <p className="text-xs text-stone-500 font-medium">لا توجد إعلانات سكن أو عقار منشورة لك حالياً.</p>
+       )}
+     </div>
+   )}
+ </div>
+
+ {/* Media Type Selector */}
+ <div className="space-y-2">
+ <label className="block text-xs font-black text-stone-900">نوع الوسائط للبطاقة:</label>
+ <div className="grid grid-cols-2 gap-3">
+ <button
+ type="button"
+ onClick={() => setMarketingForm(prev => ({ ...prev, promoCardMediaType: 'image' }))}
+ className={`p-3 rounded-xl border flex items-center justify-center gap-2 cursor-pointer font-bold text-xs ${
+ marketingForm.promoCardMediaType === 'image'
+ ? 'border-[#1a4d2e] bg-[#1a4d2e]/10 text-[#1a4d2e] ring-2 ring-[#1a4d2e]/20'
+ : 'border-stone-200 bg-white text-stone-700'
+ }`}
+ >
+ <ImageIcon className="h-4 w-4" />
+ <span>صورة إعلانية</span>
+ </button>
+ <button
+ type="button"
+ onClick={() => setMarketingForm(prev => ({ ...prev, promoCardMediaType: 'video' }))}
+ className={`p-3 rounded-xl border flex items-center justify-center gap-2 cursor-pointer font-bold text-xs ${
+ marketingForm.promoCardMediaType === 'video'
+ ? 'border-[#1a4d2e] bg-[#1a4d2e]/10 text-[#1a4d2e] ring-2 ring-[#1a4d2e]/20'
+ : 'border-stone-200 bg-white text-stone-700'
+ }`}
+ >
+ <Video className="h-4 w-4" />
+ <span>فيديو ترويجي</span>
+ </button>
+ </div>
+ </div>
+
+ {/* Card Format Selector */}
+ <div className="space-y-2">
+ <label className="block text-xs font-black text-stone-900">شكل وتنسيق البطاقة الترويجية:</label>
+ <div className="grid grid-cols-2 gap-3">
+ <button
+ type="button"
+ onClick={() => setMarketingForm(prev => ({ ...prev, promoCardLayout: 'standard' }))}
+ className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1 cursor-pointer font-bold text-xs transition-all ${(marketingForm.promoCardLayout || 'standard') === 'standard' ? 'border-[#1a4d2e] bg-[#1a4d2e]/10 text-[#1a4d2e] ring-2 ring-[#1a4d2e]/20 font-black' : 'border-stone-200 bg-white text-stone-700 hover:border-stone-300'}`}
+ >
+ <span>تنسيق قياسي (كباقي البطاقات)</span>
+ <span className="text-[9px] text-stone-500 font-medium">مساحة بيضاء بالأسفل للتفاصيل</span>
+ </button>
+ <button
+ type="button"
+ onClick={() => setMarketingForm(prev => ({ ...prev, promoCardLayout: 'full' }))}
+ className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1 cursor-pointer font-bold text-xs transition-all ${marketingForm.promoCardLayout === 'full' ? 'border-[#1a4d2e] bg-[#1a4d2e]/10 text-[#1a4d2e] ring-2 ring-[#1a4d2e]/20 font-black' : 'border-stone-200 bg-white text-stone-700 hover:border-stone-300'}`}
+ >
+ <span>تنسيق كامل (Full Overlay)</span>
+ <span className="text-[9px] text-stone-500 font-medium">بدون مساحة بيضاء (النص فوق الصورة)</span>
+ </button>
+ </div>
+ </div>
+
+ {/* Media Input */}
+ {marketingForm.promoCardMediaType === 'image' ? (
+ <div>
+ <ImageUploader
+ label="صورة البطاقة الترويجية: *"
+ folder="promo_cards"
+ value={marketingForm.promoCardImageUrl || marketingForm.bannerImageUrl}
+ onChange={(url) => setMarketingForm(prev => ({ ...prev, promoCardImageUrl: url, bannerImageUrl: url }))}
+ aspectRatio="banner"
+ placeholder="اختر ملف الصورة أو اسحبه هنا"
+ />
+ </div>
+ ) : (
+ <div>
+ <VideoUploader
+ label="فيديو البطاقة الترويجية: *"
+ value={marketingForm.promoCardVideoUrl || ''}
+ onChange={(url) => setMarketingForm(prev => ({ ...prev, promoCardVideoUrl: url }))}
+ placeholder="انسخ رابط الفيديو (YouTube أو MP4) أو ارفع ملف من جهازك"
+ showPreview={true}
+ />
+ </div>
+ )}
+
+ {/* Media Fit / Crop Mode Selector */}
+ <div className="space-y-2">
+ <label className="block text-xs font-black text-stone-900">
+ طريقة عرض واقتصاص الوسائط (الصورة أو الفيديو):
+ </label>
+ <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+ {[
+ { id: 'crop', label: 'اقتصاص وملء (Crop)', desc: 'يملأ المساحة دون تشويه' },
+ { id: 'fit', label: 'احتواء كامل (Fit)', desc: 'يظهر بالكامل دون اقتصاص' },
+ { id: 'fill', label: 'ملء متمدد (Fill)', desc: 'تمدد لملء كامل الإطار' },
+ { id: 'pad', label: 'احتواء بهامش (Pad)', desc: 'توسيط مع خلفية حماية' },
+ ].map(opt => (
+ <button
+ key={opt.id}
+ type="button"
+ onClick={() => setMarketingForm(prev => ({ ...prev, promoCardMediaFit: opt.id as any }))}
+ className={`p-2.5 rounded-xl border flex flex-col items-center justify-center text-center gap-0.5 cursor-pointer text-xs transition-all ${
+ (marketingForm.promoCardMediaFit || 'crop') === opt.id
+ ? 'border-[#1a4d2e] bg-[#1a4d2e]/10 text-[#1a4d2e] ring-2 ring-[#1a4d2e]/20 font-black shadow-xs'
+ : 'border-stone-200 bg-white text-stone-700 hover:border-stone-300'
+ }`}
+ >
+ <span className="font-bold text-[11px]">{opt.label}</span>
+ <span className="text-[9px] text-stone-500">{opt.desc}</span>
+ </button>
+ ))}
+ </div>
+ </div>
+
+ {/* Text Customization */}
+ <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+ <div>
+ <label className="block text-xs font-bold text-stone-700 mb-1">العنوان الرئيسي للبطاقة: *</label>
+ <input
+ type="text"
+ required
+ value={marketingForm.bannerTitle || ''}
+ onChange={e => setMarketingForm(prev => ({ ...prev, bannerTitle: e.target.value }))}
+ placeholder="مثال: خصم خاص 30% على جميع الوجبات"
+ className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3.5 py-2 text-xs font-bold text-stone-800"
+ />
+ </div>
+ <div>
+ <label className="block text-xs font-bold text-stone-700 mb-1">الشارة التسويقية (ثابتة معتمدة):</label>
+ <div className="w-full bg-amber-50/80 border border-amber-200 rounded-xl px-3.5 py-2 text-xs font-black text-amber-950 flex items-center gap-1.5 select-none h-[38px]">
+ <Crown className="w-3.5 h-3.5 fill-current text-amber-950 shrink-0" />
+ <span>ممول</span>
+ </div>
+ </div>
+ </div>
+
+ {/* Content Visibility Mode */}
+ <div className="space-y-2">
+ <label className="block text-xs font-black text-stone-900">
+ طريقة ظهور محتوى البطاقة (العنوان، الوصف، والزر):
+ </label>
+ <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+ <button
+ type="button"
+ onClick={() => setMarketingForm(prev => ({ ...prev, promoCardContentDisplay: 'always' }))}
+ className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1 cursor-pointer font-bold text-xs transition-all ${
+ (marketingForm.promoCardContentDisplay || 'always') === 'always'
+ ? 'border-[#1a4d2e] bg-[#1a4d2e]/10 text-[#1a4d2e] ring-2 ring-[#1a4d2e]/20 font-black shadow-xs'
+ : 'border-stone-200 bg-white text-stone-700 hover:border-stone-300'
+ }`}
+ >
+ <span>ظهور دائم (مستمر)</span>
+ <span className="text-[9px] text-stone-500 font-medium">العنوان والوصف والزر ظاهرة دائماً للزوار</span>
+ </button>
+ <button
+ type="button"
+ onClick={() => setMarketingForm(prev => ({ ...prev, promoCardContentDisplay: 'hover' }))}
+ className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1 cursor-pointer font-bold text-xs transition-all ${
+ marketingForm.promoCardContentDisplay === 'hover'
+ ? 'border-[#1a4d2e] bg-[#1a4d2e]/10 text-[#1a4d2e] ring-2 ring-[#1a4d2e]/20 font-black shadow-xs'
+ : 'border-stone-200 bg-white text-stone-700 hover:border-stone-300'
+ }`}
+ >
+ <span>عند التمرير أو النقر (Hover / Tap)</span>
+ <span className="text-[9px] text-stone-500 font-medium">إخفاء التفاصيل وظهورها عند تحويم الماوس أو النقر باللمس</span>
+ </button>
+ </div>
+ </div>
+
+ <div>
+ <label className="block text-xs font-bold text-stone-700 mb-1">الوصف أو العنوان الفرعي للبطاقة:</label>
+ <textarea
+ value={marketingForm.bannerSubtitle || ''}
+ onChange={e => setMarketingForm(prev => ({ ...prev, bannerSubtitle: e.target.value }))}
+ rows={2}
+ placeholder="تفاصيل العرض الترويجي أو الخدمة المقدمة للزبائن"
+ className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3 text-xs font-medium text-stone-800"
+ />
+ </div>
+
+ {/* Button Customization */}
+ <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+ <div>
+ <label className="block text-xs font-bold text-stone-700 mb-1">نص الزر التفاعلي:</label>
+ <input
+ type="text"
+ value={marketingForm.buttonText || ''}
+ onChange={e => setMarketingForm(prev => ({ ...prev, buttonText: e.target.value }))}
+ placeholder="مثال: اطلب الآن / تواصل واتساب / عرض التفاصيل"
+ className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3.5 py-2 text-xs font-bold text-stone-800"
+ />
+ </div>
+ <div>
+ <label className="block text-xs font-bold text-stone-700 mb-1">رابط توجيه الزر (داخلي أو خارجي):</label>
+ <input
+ type="text"
+ dir="ltr"
+ value={marketingForm.buttonLink || ''}
+ onChange={e => setMarketingForm(prev => ({ ...prev, buttonLink: e.target.value }))}
+ placeholder="/business/... أو https://wa.me/..."
+ className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3.5 py-2 text-xs font-bold text-stone-800 text-left"
+ />
+ </div>
+ </div>
+
+ {/* Duration & Scheduling */}
+ <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+ <div>
+ <label className="block text-xs font-black text-stone-700 mb-1.5">المدة الإعلانية والتكلفة:</label>
+ <select
+ value={marketingForm.durationWeeks || 'أسبوع واحد'}
+ onChange={e => setMarketingForm(prev => ({ ...prev, durationWeeks: e.target.value }))}
+ className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs font-bold text-stone-700 cursor-pointer"
+ >
+ <option value="أسبوع واحد">أسبوع واحد ({appConfigState?.pricePromoCard ?? 20} دينار)</option>
+ <option value="أسبوعين">أسبوعين ({(appConfigState?.pricePromoCard ?? 20) * 2 - 5} دينار)</option>
+ <option value="شهر كامل">شهر كامل ({(appConfigState?.pricePromoCard ?? 20) * 4 - 15} دينار)</option>
+ <option value="3 أشهر">3 أشهر ({(appConfigState?.pricePromoCard ?? 20) * 12 - 60} دينار)</option>
+ </select>
+ </div>
+
+ <div>
+ <label className="block text-xs font-bold text-[#1a4d2e] mb-1.5 font-black">توقيت النشر المطلوب:</label>
+ <select
+ value={marketingForm.publishTimeOption || 'immediately'}
+ onChange={e => setMarketingForm(prev => ({ ...prev, publishTimeOption: e.target.value as any }))}
+ className="w-full bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 text-xs font-bold text-amber-900 focus:outline-none"
+ >
+ <option value="immediately">فورا بعد موافقة الإدارة وتفعيلها</option>
+ <option value="scheduled">جدولة وتحديد تاريخ البدء يدوياً</option>
+ </select>
+ </div>
+ </div>
+
+ {marketingForm.publishTimeOption === 'scheduled' && (
+ <div>
+ <label className="block text-xs font-bold text-amber-950 mb-1.5 font-black">تاريخ ووقت بدء النشر المطلوب:</label>
+ <input
+ type="datetime-local"
+ required={marketingForm.publishTimeOption === 'scheduled'}
+ value={marketingForm.publishStartDate || ''}
+ onChange={e => setMarketingForm(prev => ({ ...prev, publishStartDate: e.target.value }))}
+ className="w-full bg-amber-50 border border-amber-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
+ />
+ </div>
+ )}
+
+ {/* Live Card Preview */}
+ <div className="p-4 sm:p-5 rounded-2xl bg-stone-50 border border-stone-200 space-y-4 text-right">
+ <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-stone-200/80 pb-3">
+ <div>
+ <span className="text-xs font-black text-stone-800 flex items-center gap-1.5">
+ <Eye className="h-4 w-4 text-[#1a4d2e]" />
+ معاينة حية ومباشرة للبطاقة الترويجية:
+ </span>
+ </div>
+
+ {/* Device Viewport Selector */}
+ <div className="flex items-center gap-1 bg-stone-200/80 p-1 rounded-xl self-start sm:self-auto">
+ <button
+ type="button"
+ onClick={() => setPreviewDevice('mobile')}
+ className={`px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+ previewDevice === 'mobile'
+ ? 'bg-white text-stone-900 shadow-xs font-black'
+ : 'text-stone-600 hover:text-stone-900'
+ }`}
+ >
+ <Smartphone className="h-3.5 w-3.5" />
+ <span>هاتف</span>
+ </button>
+ <button
+ type="button"
+ onClick={() => setPreviewDevice('tablet')}
+ className={`px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+ previewDevice === 'tablet'
+ ? 'bg-white text-stone-900 shadow-xs font-black'
+ : 'text-stone-600 hover:text-stone-900'
+ }`}
+ >
+ <Tablet className="h-3.5 w-3.5" />
+ <span>تابلت</span>
+ </button>
+ <button
+ type="button"
+ onClick={() => setPreviewDevice('desktop')}
+ className={`px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+ previewDevice === 'desktop'
+ ? 'bg-white text-stone-900 shadow-xs font-black'
+ : 'text-stone-600 hover:text-stone-900'
+ }`}
+ >
+ <Monitor className="h-3.5 w-3.5" />
+ <span>كمبيوتر</span>
+ </button>
+ </div>
+ </div>
+
+ {/* Realistic Device Window Container */}
+ <div className="flex justify-center items-center py-2 transition-all">
+ {previewDevice === 'mobile' && (
+ <div className="w-full max-w-[365px] bg-stone-900 rounded-[28px] p-2.5 shadow-xl border-2 border-stone-800 transition-all duration-300">
+ {/* Mobile Screen Bezel & Bar */}
+ <div className="flex items-center justify-center gap-1.5 py-1 mb-1.5">
+ <div className="w-10 h-1 bg-stone-700 rounded-full" />
+ <div className="w-2 h-2 bg-stone-700 rounded-full" />
+ </div>
+ <div className="bg-stone-800/90 rounded-t-xl px-3 py-1.5 flex items-center justify-between text-stone-300 text-[10px] font-bold border-b border-stone-700/60 mb-2">
+ <span className="text-stone-400 font-mono text-[9px]">شاشة هاتف (375px)</span>
+ <div className="bg-stone-900/90 px-2 py-0.5 rounded text-stone-300 text-[9px] font-mono">
+ shofiirbid.jo/offers
+ </div>
+ </div>
+ <div className="bg-stone-100 rounded-xl p-2.5 max-h-[520px] overflow-y-auto">
+ <InFeedPromoCardItem
+ card={{
+ id: 'preview-card',
+ targetPage: marketingForm.promoCardTargetPage,
+ title: marketingForm.bannerTitle || 'عنوان البطاقة الترويجية',
+ subtitle: marketingForm.bannerSubtitle || 'وصف أو تفاصيل العرض الترويجي',
+ mediaType: marketingForm.promoCardMediaType,
+ imageUrl: marketingForm.promoCardImageUrl || marketingForm.bannerImageUrl,
+ videoUrl: marketingForm.promoCardVideoUrl,
+ badgeText: 'ممول',
+ buttonText: marketingForm.buttonText || 'عرض التفاصيل',
+ buttonLink: marketingForm.buttonLink || '#',
+ businessName: businesses.find(b => b.id === selectedBusinessIdForService)?.name || '',
+ businessLogo: businesses.find(b => b.id === selectedBusinessIdForService)?.logoUrl || '',
+ active: true,
+ createdAt: Date.now(),
+ promoCardLayout: marketingForm.promoCardLayout,
+ promoCardMediaFit: marketingForm.promoCardMediaFit,
+ promoCardContentDisplay: marketingForm.promoCardContentDisplay
+ }}
+ />
+ </div>
+ </div>
+ )}
+
+ {previewDevice === 'tablet' && (
+ <div className="w-full max-w-[580px] bg-stone-900 rounded-[24px] p-3 shadow-xl border-2 border-stone-800 transition-all duration-300">
+ {/* Tablet Browser Window Header */}
+ <div className="bg-stone-800/90 rounded-t-xl px-3 py-1.5 flex items-center justify-between text-stone-300 text-[10px] font-bold border-b border-stone-700/60 mb-2.5">
+ <div className="flex items-center gap-1.5">
+ <div className="w-2.5 h-2.5 rounded-full bg-red-500/80" />
+ <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/80" />
+ <div className="w-2.5 h-2.5 rounded-full bg-green-500/80" />
+ <span className="mr-2 text-stone-400 font-mono text-[10px]">شاشة تابلت (شبكة من عمودين)</span>
+ </div>
+ <div className="bg-stone-900/90 px-2.5 py-0.5 rounded text-stone-300 text-[9px] font-mono">
+ shofiirbid.jo/products
+ </div>
+ </div>
+ <div className="bg-stone-100 rounded-xl p-3 max-h-[540px] overflow-y-auto">
+ <div className="grid grid-cols-2 gap-3 items-stretch">
+ <InFeedPromoCardItem
+ card={{
+ id: 'preview-card',
+ targetPage: marketingForm.promoCardTargetPage,
+ title: marketingForm.bannerTitle || 'عنوان البطاقة الترويجية',
+ subtitle: marketingForm.bannerSubtitle || 'وصف أو تفاصيل العرض الترويجي',
+ mediaType: marketingForm.promoCardMediaType,
+ imageUrl: marketingForm.promoCardImageUrl || marketingForm.bannerImageUrl,
+ videoUrl: marketingForm.promoCardVideoUrl,
+ badgeText: 'ممول',
+ buttonText: marketingForm.buttonText || 'عرض التفاصيل',
+ buttonLink: marketingForm.buttonLink || '#',
+ businessName: businesses.find(b => b.id === selectedBusinessIdForService)?.name || '',
+ businessLogo: businesses.find(b => b.id === selectedBusinessIdForService)?.logoUrl || '',
+ active: true,
+ createdAt: Date.now(),
+ promoCardLayout: marketingForm.promoCardLayout,
+ promoCardMediaFit: marketingForm.promoCardMediaFit,
+ promoCardContentDisplay: marketingForm.promoCardContentDisplay
+ }}
+ />
+ {/* Companion listing card */}
+ <div className="bg-white rounded-2xl sm:rounded-3xl border border-stone-200/90 shadow-2xs overflow-hidden flex flex-col justify-between h-full opacity-75 pointer-events-none select-none">
+ <div className="aspect-[16/10] sm:h-52 bg-stone-200 relative overflow-hidden flex items-center justify-center">
+ <Store className="w-10 h-10 text-stone-400/60" />
+ <div className="absolute top-2.5 right-2.5 bg-stone-900/70 text-white text-[9px] font-bold px-2 py-0.5 rounded-md">
+ بطاقة اعتيادية بالقائمة
+ </div>
+ </div>
+ <div className="p-4 space-y-2 flex-1 flex flex-col justify-between">
+ <div className="space-y-1">
+ <div className="h-4 bg-stone-200 rounded-md w-3/4" />
+ <div className="h-3 bg-stone-100 rounded-md w-full" />
+ </div>
+ <div className="pt-2 border-t border-stone-100 flex items-center justify-between">
+ <span className="text-[10px] font-bold text-stone-400">بطاقة مجاورة</span>
+ <span className="text-[10px] font-bold text-stone-400">تطابق تام بالحجم</span>
+ </div>
+ </div>
+ </div>
+ </div>
+ </div>
+ </div>
+ )}
+
+ {previewDevice === 'desktop' && (
+ <div className="w-full bg-stone-900 rounded-2xl p-2.5 shadow-xl border-2 border-stone-800 transition-all duration-300">
+ {/* Desktop Browser Window Header */}
+ <div className="bg-stone-800/95 rounded-t-xl px-3 py-1.5 flex items-center justify-between text-stone-300 text-[10px] border-b border-stone-700/60 mb-2">
+ <div className="flex items-center gap-1.5">
+ <div className="w-2.5 h-2.5 rounded-full bg-red-500" />
+ <div className="w-2.5 h-2.5 rounded-full bg-yellow-500" />
+ <div className="w-2.5 h-2.5 rounded-full bg-green-500" />
+ <span className="mr-2 text-stone-400 font-mono text-[10px]">شاشة كمبيوتر (شبكة من 3 أعمدة)</span>
+ </div>
+ <div className="bg-stone-950 px-2.5 py-0.5 rounded text-stone-300 text-[9px] font-mono">
+ shofiirbid.jo/offers
+ </div>
+ </div>
+ <div className="bg-stone-100 rounded-xl p-2.5 max-h-[540px] overflow-y-auto">
+ <div className="grid grid-cols-3 gap-2.5 items-stretch">
+ {/* Column 1: Companion Listing */}
+ <div className="bg-white rounded-2xl border border-stone-200/90 shadow-2xs overflow-hidden flex flex-col justify-between h-full opacity-65 pointer-events-none select-none">
+ <div className="aspect-[16/10] sm:h-44 bg-stone-200 relative overflow-hidden flex items-center justify-center">
+ <Store className="w-7 h-7 text-stone-400/60" />
+ <div className="absolute top-2 right-2 bg-stone-900/70 text-white text-[8px] font-bold px-1.5 py-0.5 rounded">
+ بطاقة 1
+ </div>
+ </div>
+ <div className="p-2.5 space-y-1.5 flex-1 flex flex-col justify-between">
+ <div className="h-3.5 bg-stone-200 rounded w-3/4" />
+ <div className="h-2.5 bg-stone-100 rounded w-full" />
+ <div className="h-5 bg-stone-100 rounded mt-1" />
+ </div>
+ </div>
+
+ {/* Column 2: Promo Card */}
+ <div className="h-full">
+ <InFeedPromoCardItem
+ card={{
+ id: 'preview-card',
+ targetPage: marketingForm.promoCardTargetPage,
+ title: marketingForm.bannerTitle || 'عنوان البطاقة الترويجية',
+ subtitle: marketingForm.bannerSubtitle || 'وصف أو تفاصيل العرض الترويجي',
+ mediaType: marketingForm.promoCardMediaType,
+ imageUrl: marketingForm.promoCardImageUrl || marketingForm.bannerImageUrl,
+ videoUrl: marketingForm.promoCardVideoUrl,
+ badgeText: 'ممول',
+ buttonText: marketingForm.buttonText || 'عرض التفاصيل',
+ buttonLink: marketingForm.buttonLink || '#',
+ businessName: businesses.find(b => b.id === selectedBusinessIdForService)?.name || '',
+ businessLogo: businesses.find(b => b.id === selectedBusinessIdForService)?.logoUrl || '',
+ active: true,
+ createdAt: Date.now(),
+ promoCardLayout: marketingForm.promoCardLayout,
+ promoCardMediaFit: marketingForm.promoCardMediaFit,
+ promoCardContentDisplay: marketingForm.promoCardContentDisplay
+ }}
+ />
+ </div>
+
+ {/* Column 3: Companion Listing */}
+ <div className="bg-white rounded-2xl border border-stone-200/90 shadow-2xs overflow-hidden flex flex-col justify-between h-full opacity-65 pointer-events-none select-none">
+ <div className="aspect-[16/10] sm:h-44 bg-stone-200 relative overflow-hidden flex items-center justify-center">
+ <Store className="w-7 h-7 text-stone-400/60" />
+ <div className="absolute top-2 right-2 bg-stone-900/70 text-white text-[8px] font-bold px-1.5 py-0.5 rounded">
+ بطاقة 2
+ </div>
+ </div>
+ <div className="p-2.5 space-y-1.5 flex-1 flex flex-col justify-between">
+ <div className="h-3.5 bg-stone-200 rounded w-3/4" />
+ <div className="h-2.5 bg-stone-100 rounded w-full" />
+ <div className="h-5 bg-stone-100 rounded mt-1" />
+ </div>
+ </div>
+ </div>
+ </div>
  </div>
  )}
  </div>

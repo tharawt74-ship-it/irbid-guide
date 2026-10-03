@@ -10,8 +10,20 @@ import { GoogleGenAI } from "@google/genai";
 import rateLimit from "express-rate-limit";
 import FormData from "form-data";
 import https from "https";
+import webpush from "web-push";
 
 dotenv.config();
+
+// Web Push VAPID Configuration for Background Device Notifications
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || process.env.VITE_FIREBASE_VAPID_KEY || "BF7BlmkqjBP1Fjc5aI6SHcmZpBVOT5_Q9mSP5bhS9GVf_7vO_04WVI4nYwDI2sLUQVLXu5ZlMB2hPgbmiXeiNVk";
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || "-ACtFv4DS13hxbuxaii4HeLIAOLcHM8weKIkgHkTUNs";
+const VAPID_SUBJECT = process.env.VAPID_SUBJECT || "mailto:admin@shofibirbid.site";
+
+try {
+  webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+} catch (vapidErr) {
+  console.warn("WebPush VAPID setup warning:", vapidErr);
+}
 
 // Lazy initialized Gemini AI instance
 let geminiClient: GoogleGenAI | null = null;
@@ -1262,6 +1274,341 @@ async function startServer() {
     }
   };
 
+  // 📡 Web Push Notification Dispatcher (Delivers to phones even when browser is closed) 📡
+  async function dispatchPushNotifications(payload: {
+    title: string;
+    body: string;
+    url?: string;
+    icon?: string;
+    badge?: string;
+    targetGroup?: string;
+    targetArea?: string;
+    targetCategory?: string;
+  }) {
+    const admin = getAdminApp();
+    if (!admin) return { sent: 0, failed: 0 };
+    const db = getAdminFirestore(admin);
+
+    const pushPayload = JSON.stringify({
+      title: payload.title,
+      body: payload.body,
+      message: payload.body,
+      url: payload.url || '/notifications',
+      link: payload.url || '/notifications',
+      icon: payload.icon || '/favicon.jpg',
+      badge: payload.badge || '/favicon.jpg',
+      timestamp: Date.now()
+    });
+
+    let sentCount = 0;
+    let failCount = 0;
+
+    // 1. Send via standard W3C Web Push Protocol to all subscribed browsers and PWAs
+    try {
+      const subscriptionsSnap = await db.collection('pushSubscriptions').get();
+      const deletePromises: Promise<any>[] = [];
+
+      const sendPromises = subscriptionsSnap.docs.map(async (docSnap) => {
+        const data = docSnap.data();
+        const sub = data.subscription || (data.endpoint && data.keys ? { endpoint: data.endpoint, keys: data.keys } : null);
+        if (!sub || !sub.endpoint) return;
+
+        // Role filtering if specific audience targeted
+        if (payload.targetGroup && payload.targetGroup !== 'all') {
+          if (data.role && data.role !== payload.targetGroup && data.userId !== payload.targetGroup) {
+            return;
+          }
+        }
+
+        try {
+          await webpush.sendNotification(sub, pushPayload, {
+            TTL: 259200, // 72 hours delivery queue for offline / turned-off devices
+            urgency: 'high'
+          });
+          sentCount++;
+        } catch (pushErr: any) {
+          failCount++;
+          // 404 or 410 indicates expired or uninstalled push subscription
+          if (pushErr.statusCode === 404 || pushErr.statusCode === 410) {
+            deletePromises.push(docSnap.ref.delete().catch(() => {}));
+          }
+        }
+      });
+
+      await Promise.all(sendPromises);
+      if (deletePromises.length > 0) {
+        await Promise.all(deletePromises);
+      }
+    } catch (err) {
+      console.error('Error in dispatchPushNotifications (webpush):', err);
+    }
+
+    // 2. Multicast via FCM if deviceTokens are present
+    try {
+      const tokensSnap = await db.collection('deviceTokens').get();
+      const fcmTokens: string[] = [];
+      tokensSnap.forEach(docSnap => {
+        const d = docSnap.data();
+        if (d.token && typeof d.token === 'string' && d.token.length > 50 && !d.token.startsWith('web_device_') && !d.token.startsWith('http')) {
+          fcmTokens.push(d.token);
+        }
+      });
+
+      if (fcmTokens.length > 0 && admin.messaging) {
+        try {
+          const messaging = admin.messaging();
+          await messaging.sendEachForMulticast({
+            tokens: fcmTokens.slice(0, 500),
+            notification: {
+              title: payload.title,
+              body: payload.body,
+              imageUrl: payload.icon || 'https://shofibirbid.site/favicon.jpg'
+            },
+            webpush: {
+              notification: {
+                title: payload.title,
+                body: payload.body,
+                icon: '/favicon.jpg',
+                badge: '/favicon.jpg'
+              },
+              fcmOptions: {
+                link: payload.url || '/notifications'
+              }
+            }
+          });
+        } catch (fcmErr) {
+          console.warn('FCM multicast warning:', fcmErr);
+        }
+      }
+    } catch (fcmQueryErr) {
+      console.warn('FCM query warning:', fcmQueryErr);
+    }
+
+    return { sent: sentCount, failed: failCount };
+  }
+
+  // 🔑 Get VAPID Public Key for Web Push Subscriptions 🔑
+  app.get("/api/push/vapid-public-key", (req, res) => {
+    res.json({ publicKey: VAPID_PUBLIC_KEY });
+  });
+
+  // 📲 Register / Sync Push Subscription (Standard W3C Web Push) 📲
+  app.post("/api/push/subscribe", express.json({ limit: "1mb" }), async (req, res) => {
+    try {
+      const { subscription, userId, platform, userAgent, role } = req.body;
+      if (!subscription || !subscription.endpoint || !subscription.keys) {
+        return res.status(400).json({ error: 'بيانات الاشتراك غير مكتملة' });
+      }
+
+      const admin = getAdminApp();
+      if (!admin) {
+        return res.status(500).json({ error: 'الفايربيس غير متصل' });
+      }
+
+      const db = getAdminFirestore(admin);
+      const subId = 'sub_' + Buffer.from(subscription.endpoint).toString('base64').replace(/[^a-zA-Z0-9_-]/g, '').slice(-40);
+
+      await db.collection('pushSubscriptions').doc(subId).set({
+        subscription,
+        endpoint: subscription.endpoint,
+        keys: subscription.keys,
+        userId: userId || 'anonymous',
+        role: role || 'user',
+        platform: platform || 'web_pwa',
+        userAgent: userAgent || req.headers['user-agent'] || '',
+        updatedAt: Date.now()
+      }, { merge: true });
+
+      // Also record in deviceTokens
+      await db.collection('deviceTokens').doc(subId).set({
+        token: subscription.endpoint,
+        type: 'web_push',
+        userId: userId || 'anonymous',
+        role: role || 'user',
+        platform: platform || 'web_pwa',
+        updatedAt: Date.now(),
+        userAgent: userAgent || req.headers['user-agent'] || ''
+      }, { merge: true });
+
+      res.json({ success: true, subId });
+    } catch (err) {
+      console.error('/api/push/subscribe Error:', err);
+      res.status(500).json({ error: 'فشل حفظ اشتراك الإشعارات' });
+    }
+  });
+
+  // 📊 Real Push Delivery & Subscriber Statistics 📊
+  app.get("/api/push/stats", verifyAdminToken, async (req, res) => {
+    try {
+      const admin = getAdminApp();
+      if (!admin) return res.status(500).json({ error: 'الفايربيس غير متصل' });
+      const db = getAdminFirestore(admin);
+
+      const [subsSnap, tokensSnap, notifsSnap, scheduledSnap] = await Promise.all([
+        db.collection('pushSubscriptions').get(),
+        db.collection('deviceTokens').get(),
+        db.collection('notifications').get(),
+        db.collection('scheduledNotifications').where('status', '==', 'pending').get().catch(() => ({ size: 0, docs: [] }))
+      ]);
+
+      let merchantsCount = 0;
+      let supervisorsCount = 0;
+      let usersCount = 0;
+
+      subsSnap.forEach(d => {
+        const data = d.data();
+        if (data.role === 'merchant') merchantsCount++;
+        else if (data.role === 'admin' || data.role === 'supervisor') supervisorsCount++;
+        else usersCount++;
+      });
+
+      res.json({
+        totalSubscriptions: subsSnap.size,
+        totalDevices: tokensSnap.size,
+        merchantsCount,
+        supervisorsCount,
+        usersCount,
+        totalSentNotifications: notifsSnap.size,
+        pendingScheduledCount: scheduledSnap.size || 0
+      });
+    } catch (err) {
+      console.error('/api/push/stats Error:', err);
+      res.status(500).json({ error: 'تعذر جلب إحصائيات الإشعارات' });
+    }
+  });
+
+  // 🎯 Send Direct Notification to Specific Single User or Merchant 🎯
+  app.post("/api/push/send-direct", verifyAdminToken, express.json({ limit: "2mb" }), async (req, res) => {
+    try {
+      const { targetUserId, targetEmail, title, body, link, badge } = req.body;
+      if (!title || !body || (!targetUserId && !targetEmail)) {
+        return res.status(400).json({ error: 'بيانات المستهدف والعنوان والمحتوى مطلوبة' });
+      }
+
+      const admin = getAdminApp();
+      if (!admin) return res.status(500).json({ error: 'الفايربيس غير متصل' });
+      const db = getAdminFirestore(admin);
+
+      // Search for user subscription
+      let targetUid = targetUserId;
+      if (!targetUid && targetEmail) {
+        try {
+          const userRecord = await getAuth(admin).getUserByEmail(targetEmail);
+          targetUid = userRecord.uid;
+        } catch {}
+      }
+
+      let sentCount = 0;
+      if (targetUid) {
+        const userSubsSnap = await db.collection('pushSubscriptions').where('userId', '==', targetUid).get();
+        const pushPayload = JSON.stringify({
+          title: sanitizeInput(title, 150),
+          body: sanitizeInput(body, 500),
+          message: sanitizeInput(body, 500),
+          url: link || '/notifications',
+          link: link || '/notifications',
+          badge: badge || 'إشعار خاص',
+          icon: '/favicon.jpg',
+          timestamp: Date.now()
+        });
+
+        const sendPromises = userSubsSnap.docs.map(async (docSnap) => {
+          const sub = docSnap.data().subscription;
+          if (sub) {
+            try {
+              await webpush.sendNotification(sub, pushPayload, { TTL: 259200, urgency: 'high' });
+              sentCount++;
+            } catch (e: any) {
+              if (e.statusCode === 404 || e.statusCode === 410) {
+                docSnap.ref.delete().catch(() => {});
+              }
+            }
+          }
+        });
+        await Promise.all(sendPromises);
+
+        // Add personal notification in database
+        await db.collection('notifications').add({
+          title: sanitizeInput(title, 150),
+          message: sanitizeInput(body, 500),
+          createdAt: new Date().toISOString(),
+          type: 'system',
+          userId: targetUid,
+          badge: badge || 'إشعار خاص',
+          link: link || '/notifications',
+          sentByAdmin: (req as any).user.uid
+        });
+      }
+
+      res.json({ success: true, sentCount, targetUid });
+    } catch (err) {
+      console.error('/api/push/send-direct Error:', err);
+      res.status(500).json({ error: 'فشل إرسال الإشعار المباشر' });
+    }
+  });
+
+  // 🧪 Send Test Web Push Notification 🧪
+  app.post("/api/push/test", express.json({ limit: "1mb" }), async (req, res) => {
+    try {
+      const { subscription } = req.body;
+      if (!subscription || !subscription.endpoint) {
+        return res.status(400).json({ error: 'بيانات الاشتراك مطلوبة' });
+      }
+
+      await webpush.sendNotification(
+        subscription,
+        JSON.stringify({
+          title: 'شو في بإربد؟',
+          body: 'تم تفعيل الإشعارات الفورية بنجاح على هاتفك.',
+          url: '/notifications',
+          icon: '/favicon.jpg',
+          badge: '/favicon.jpg',
+          timestamp: Date.now()
+        }),
+        { TTL: 60, urgency: 'high' }
+      );
+
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error('/api/push/test Error:', err);
+      res.status(500).json({ error: err.message || 'فشل إرسال الإشعار التجريبي' });
+    }
+  });
+
+  // ⏰ Schedule Notification Endpoint ⏰
+  app.post("/api/queue/schedule", apiLimiter, verifyAdminToken, express.json({ limit: "5mb" }), async (req, res) => {
+    try {
+      const { title, body, scheduledTimestamp, targetGroup, extraData, badge, type, link } = req.body;
+      if (!title || !body || !scheduledTimestamp) {
+        return res.status(400).json({ error: 'بيانات العنوان والوقت المجدول مطلوبة' });
+      }
+
+      const admin = getAdminApp();
+      if (!admin) return res.status(500).json({ error: 'الفايربيس غير متصل' });
+      const db = getAdminFirestore(admin);
+
+      const docRef = await db.collection('scheduledNotifications').add({
+        title: sanitizeInput(title, 150),
+        body: sanitizeInput(body, 500),
+        type: type || 'general',
+        badge: badge || 'إشعار مجدول',
+        link: link || '/notifications',
+        targetGroup: targetGroup || 'all',
+        scheduledTimestamp: Number(scheduledTimestamp),
+        scheduledDateStr: new Date(Number(scheduledTimestamp)).toLocaleString('ar-JO'),
+        extraData: extraData || {},
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+        createdBy: (req as any).user.email || (req as any).user.uid
+      });
+
+      res.json({ success: true, id: docRef.id });
+    } catch (err) {
+      console.error('/api/queue/schedule Error:', err);
+      res.status(500).json({ error: 'فشل جدولة الإشعار' });
+    }
+  });
+
   // 📬 Background Queue Endpoint: Asynchronous Broadcast Notification Processor 📬
   app.post("/api/queue/broadcast", apiLimiter, verifyAdminToken, express.json({ limit: "5mb" }), async (req, res) => {
     try {
@@ -1287,14 +1634,19 @@ async function startServer() {
       // Execute asynchronously in background queue worker thread
       setImmediate(async () => {
         try {
-          const deviceTokensSnap = await db.collection('deviceTokens').get();
-          const tokens: string[] = [];
-          deviceTokensSnap.forEach(doc => {
-            const data = doc.data();
-            if (data.token) tokens.push(data.token);
+          // 1. Dispatch real Web Push notifications to devices in background
+          const pushResult = await dispatchPushNotifications({
+            title: sanitizeInput(title, 150),
+            body: sanitizeInput(body, 500),
+            url: extraData?.link || '/notifications',
+            icon: '/favicon.jpg',
+            badge: '/favicon.jpg',
+            targetGroup: targetGroup || 'all',
+            targetArea: extraData?.targetArea,
+            targetCategory: extraData?.targetCategory
           });
 
-          // Write app notification record
+          // 2. Write app notification record to Firestore
           await db.collection('notifications').add({
             title: sanitizeInput(title, 150),
             message: sanitizeInput(body, 500),
@@ -1304,15 +1656,15 @@ async function startServer() {
             sentByAdmin: (req as any).user.uid
           });
 
-          // Audit log the background job completion
+          // 3. Audit log the background job completion
           await db.collection('auditLogs').add({
             action: 'BROADCAST_NOTIFICATION_PROCESSED',
             performedBy: (req as any).user.email || (req as any).user.uid,
-            details: `تم معالجة بث جماعي لعدد ${tokens.length} جهاز بنجاح.`,
+            details: `تم معالجة بث جماعي وإرسال ${pushResult.sent} إشعار فوري للأجهزة بالخلفية بنجاح.`,
             timestamp: new Date().toISOString(),
             ip: req.ip
           });
-          console.log(`[Queue Worker] Broadcast notification job finished. Processed ${tokens.length} devices.`);
+          console.log(`[Queue Worker] Broadcast notification job finished. Sent to ${pushResult.sent} devices.`);
         } catch (workerErr) {
           console.error('[Queue Worker] Error in broadcast background task:', workerErr);
         }
@@ -1322,6 +1674,56 @@ async function startServer() {
       return res.status(500).json({ error: 'حدث خطأ في جدولة الإشعار' });
     }
   });
+
+  // ⏰ Periodic Worker: Check & Dispatch Due Scheduled Notifications ⏰
+  setInterval(async () => {
+    try {
+      const admin = getAdminApp();
+      if (!admin) return;
+      const db = getAdminFirestore(admin);
+      const now = Date.now();
+
+      const dueSnap = await db.collection('scheduledNotifications')
+        .where('status', '==', 'pending')
+        .where('scheduledTimestamp', '<=', now)
+        .limit(10)
+        .get();
+
+      if (dueSnap.empty) return;
+
+      for (const docSnap of dueSnap.docs) {
+        const item = docSnap.data();
+        await docSnap.ref.update({ status: 'processing' });
+
+        const pushResult = await dispatchPushNotifications({
+          title: item.title,
+          body: item.body,
+          url: item.link || '/notifications',
+          icon: '/favicon.jpg',
+          badge: '/favicon.jpg',
+          targetGroup: item.targetGroup || 'all'
+        });
+
+        await db.collection('notifications').add({
+          title: item.title,
+          message: item.body,
+          createdAt: new Date().toISOString(),
+          type: item.type || 'general',
+          badge: item.badge || 'إشعار مجدول',
+          link: item.link || '/notifications',
+          isScheduled: true
+        });
+
+        await docSnap.ref.update({
+          status: 'sent',
+          executedAt: new Date().toISOString(),
+          deliveredCount: pushResult.sent
+        });
+      }
+    } catch (schedErr) {
+      // Silent error handling for background scheduled worker
+    }
+  }, 60000);
 
   // 📜 Background Queue Endpoint: Asynchronous Audit Logging 📜
   app.post("/api/queue/audit-log", apiLimiter, express.json({ limit: "1mb" }), async (req, res) => {

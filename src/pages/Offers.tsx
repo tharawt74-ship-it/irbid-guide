@@ -21,7 +21,8 @@ import {
   SlidersHorizontal,
   ChevronDown,
   LayoutGrid,
-  List
+  List,
+  Crown
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useHeaderVisibility } from '../lib/useHeaderVisibility';
@@ -31,7 +32,10 @@ import { collection, getDocs, query, orderBy, addDoc, limit } from 'firebase/fir
 import { db } from '../lib/firebase';
 import { getCachedOffers, setCachedOffers, getCachedBusinesses, setCachedBusinesses } from '../lib/dataCache';
 import { getAppConfig } from '../lib/demoDataHelper';
-import { getBusinessVipStatus } from '../lib/vipHelper';
+import { getBusinessVipStatus, isItemCurrentlyFeatured } from '../lib/vipHelper';
+import { fetchPagePromoCards } from '../lib/promoCards';
+import { InFeedPromoCardItem } from '../components/common/InFeedPromoCardItem';
+import { InFeedPromoCard } from '../types';
 import { ShareButton } from '../components/ShareButton';
 import { getWhatsAppUrl, formatOfferWhatsAppMessage } from '../lib/contactHelper';
 import { WhatsApp3DIcon, Phone3DIcon } from '../components/common/PremiumContactButtons';
@@ -51,6 +55,7 @@ interface OfferItem {
   id: string;
   title: string;
   businessName: string;
+  businessId?: string;
   category: string;
   discountPercentage: number | string;
   oldPrice?: string;
@@ -72,6 +77,10 @@ interface OfferItem {
   isHot?: boolean;
   isStudent?: boolean;
   isDemo?: boolean;
+  isFeatured?: boolean;
+  isSponsored?: boolean;
+  featuredStartDate?: number | null;
+  featuredExpiryDate?: number | null;
   createdAt?: number;
 }
 
@@ -124,12 +133,15 @@ export function Offers() {
   const hasBusiness = Boolean(currentUser && (isAdmin || isStaff || isMerchant || (ownedBusinesses && ownedBusinesses.length > 0)));
 
   const [offers, setOffers] = useState<OfferItem[]>([]);
+  const [businessMap, setBusinessMap] = useState<Record<string, Business>>({});
   const [banners, setBanners] = useState<HomepageBanner[]>(DEFAULT_OFFERS_BANNERS);
+  const [promoCards, setPromoCards] = useState<InFeedPromoCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState('الكل');
   const [selectedSubCategory, setSelectedSubCategory] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [stickySearchInput, setStickySearchInput] = useState('');
+  const [desktopSearchInput, setDesktopSearchInput] = useState('');
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isCategoriesModalOpen, setIsCategoriesModalOpen] = useState(false);
@@ -146,16 +158,25 @@ export function Offers() {
   const activeCategoryRef = useRef<HTMLButtonElement | null>(null);
   const activeSubCategoryRef = useRef<HTMLButtonElement | null>(null);
 
+  const scrollContainerToElement = (el: HTMLElement | null) => {
+    if (!el || !el.parentElement) return;
+    const container = el.parentElement;
+    const elRect = el.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+    const elCenter = elRect.left + elRect.width / 2;
+    const containerCenter = containerRect.left + containerRect.width / 2;
+    const scrollOffset = elCenter - containerCenter;
+
+    container.scrollBy({
+      left: scrollOffset,
+      behavior: 'smooth'
+    });
+  };
+
   // Auto scroll selected main category into view
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (activeCategoryRef.current) {
-        activeCategoryRef.current.scrollIntoView({
-          behavior: 'smooth',
-          block: 'nearest',
-          inline: 'center'
-        });
-      }
+      scrollContainerToElement(activeCategoryRef.current);
     }, 100);
     return () => clearTimeout(timer);
   }, [selectedCategory]);
@@ -163,13 +184,7 @@ export function Offers() {
   // Auto scroll selected subcategory into view
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (activeSubCategoryRef.current) {
-        activeSubCategoryRef.current.scrollIntoView({
-          behavior: 'smooth',
-          block: 'nearest',
-          inline: 'center'
-        });
-      }
+      scrollContainerToElement(activeSubCategoryRef.current);
     }, 120);
     return () => clearTimeout(timer);
   }, [selectedSubCategory, selectedCategory]);
@@ -212,7 +227,7 @@ export function Offers() {
         let bizList = getCachedBusinesses();
         if (!bizList || bizList.length === 0) {
           try {
-            const bizSnap = await getDocs(collection(db, 'businesses'));
+            const bizSnap = await getDocs(query(collection(db, 'businesses'), limit(150)));
             bizList = bizSnap.docs.map(d => ({ id: d.id, ...d.data() } as Business));
             setCachedBusinesses(bizList);
           } catch (e) {
@@ -222,10 +237,18 @@ export function Offers() {
         }
 
         const bizMap = new Map<string, Business>();
+        const bMapObj: Record<string, Business> = {};
         (bizList || []).forEach(b => {
-          if (b.id) bizMap.set(b.id, b);
-          if (b.name) bizMap.set(b.name.trim().toLowerCase(), b);
+          if (b.id) {
+            bizMap.set(b.id, b);
+            bMapObj[b.id] = b;
+          }
+          if (b.name) {
+            bizMap.set(b.name.trim().toLowerCase(), b);
+            bMapObj[b.name.trim().toLowerCase()] = b;
+          }
         });
+        setBusinessMap(bMapObj);
 
         const appConfig = await getAppConfig();
         const q = query(collection(db, 'offers'), orderBy('createdAt', 'desc'), limit(80));
@@ -258,6 +281,7 @@ export function Offers() {
 
         setOffers(loaded);
         setCachedOffers(loaded);
+        fetchPagePromoCards('offers').then(cards => setPromoCards(cards)).catch(() => {});
       } catch (err) {
         console.warn('Error loading offers from Firestore:', err);
         setOffers([]);
@@ -289,31 +313,32 @@ export function Offers() {
         }
       }
 
-      const matchesSearch = 
-        (offer.title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (offer.businessName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (offer.description || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (offer.location || '').toLowerCase().includes(searchQuery.toLowerCase());
-
       let matchesFilter = true;
       if (filterType === 'hot') matchesFilter = Boolean(offer.isHot);
       if (filterType === 'student') matchesFilter = Boolean(offer.isStudent);
 
-      return matchesCategory && matchesSearch && matchesFilter;
+      return matchesCategory && matchesFilter;
     });
 
-    if (sortBy === 'discount_desc') {
-      list = [...list].sort((a, b) => {
+    list = [...list].sort((a, b) => {
+      const parentA = (a.businessId && businessMap[a.businessId]) || (a.businessName && businessMap[String(a.businessName).trim().toLowerCase()]);
+      const parentB = (b.businessId && businessMap[b.businessId]) || (b.businessName && businessMap[String(b.businessName).trim().toLowerCase()]);
+      const featA = isItemCurrentlyFeatured(a, parentA) ? 1 : 0;
+      const featB = isItemCurrentlyFeatured(b, parentB) ? 1 : 0;
+      if (featB !== featA) return featB - featA;
+
+      if (sortBy === 'discount_desc') {
         const dA = parseFloat(String(a.discountPercentage).replace(/[^0-9.]/g, '')) || 0;
         const dB = parseFloat(String(b.discountPercentage).replace(/[^0-9.]/g, '')) || 0;
         return dB - dA;
-      });
-    } else if (sortBy === 'newest') {
-      list = [...list].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-    }
+      } else if (sortBy === 'newest') {
+        return (b.createdAt || 0) - (a.createdAt || 0);
+      }
+      return (b.createdAt || 0) - (a.createdAt || 0);
+    });
 
     return list;
-  }, [offers, selectedCategory, selectedSubCategory, searchQuery, filterType, sortBy]);
+  }, [offers, selectedCategory, selectedSubCategory, searchQuery, filterType, sortBy, businessMap]);
 
   return (
     <div className="w-full space-y-6 sm:space-y-8 pb-16 relative" dir="rtl">
@@ -328,7 +353,7 @@ export function Offers() {
       {/* MOBILE & TABLET STICKY TOP APP BAR (Native Mobile App Feeling)           */}
       {/* ========================================================================= */}
       <div className={cn(
-        "lg:hidden sticky z-30 bg-white/95 backdrop-blur-md border-b border-stone-200/80 shadow-2xs -mx-4 sm:-mx-6 px-4 sm:px-6 py-2.5 space-y-2 transition-all duration-300",
+        "lg:hidden sticky z-30 bg-white/95 backdrop-blur-md border-b border-stone-200/80 shadow-2xs px-4 py-2.5 space-y-2 transition-all duration-300",
         showHeader ? "top-[62px] sm:top-[68px] md:top-[72px]" : "top-0"
       )}>
         {/* Row 1: Search Bar, View Mode Switcher, Filter Sheet Button, Quick Add */}
@@ -676,24 +701,34 @@ export function Offers() {
         )}
 
         {/* Search Input */}
-        <div className="relative">
+        <form 
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (desktopSearchInput.trim()) {
+              navigate(`/search?q=${encodeURIComponent(desktopSearchInput.trim())}&tab=offers`);
+            }
+          }}
+          className="relative"
+        >
           <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            type="search"
+            enterKeyHint="search"
+            value={desktopSearchInput}
+            onChange={(e) => setDesktopSearchInput(e.target.value)}
             placeholder="ابحث عن عرض، اسم مطعم، كافيه، محل أزياء، أو منطقة..."
-            className="w-full bg-[#fdfcfb] text-stone-900 placeholder:text-stone-400 border border-[#e5e1da] rounded-xl px-3.5 py-2.5 pr-10 text-xs sm:text-sm focus:outline-none focus:border-[#1a4d2e] focus:bg-white transition-all shadow-inner"
+            className="w-full bg-[#fdfcfb] text-stone-900 placeholder:text-stone-400 border border-[#e5e1da] rounded-xl px-3.5 py-2.5 pr-10 text-xs sm:text-sm focus:outline-none focus:border-[#1a4d2e] focus:bg-white transition-all shadow-inner [&::-webkit-search-cancel-button]:appearance-none"
           />
           <Search className="h-4 w-4 text-stone-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-          {searchQuery && (
+          {desktopSearchInput && (
             <button 
-              onClick={() => setSearchQuery('')}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 p-1"
+              type="button"
+              onClick={() => setDesktopSearchInput('')}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 p-1 cursor-pointer"
             >
               <X className="h-3.5 w-3.5" />
             </button>
           )}
-        </div>
+        </form>
       </div>
 
       {/* Dynamic Main and Sub Categories Section (DESKTOP ONLY - Hidden on Mobile) */}
@@ -912,19 +947,26 @@ export function Offers() {
             >
             {filteredOffers
               .slice((currentPage - 1) * 15, currentPage * 15)
-              .map((offer) => {
+              .flatMap((offer, idx) => {
                 const durationText = renderOfferDurationText(offer);
                 const isExpired = offer.expiresAt && offer.expiresAt <= Date.now() && offer.durationMode !== 'recurring_weekly';
                 const isUrgent = offer.expiresAt && (offer.expiresAt - Date.now() < 24 * 3600 * 1000) && offer.durationMode !== 'recurring_weekly';
 
+                const parentBiz = (offer.businessId && businessMap[offer.businessId]) || (offer.businessName && businessMap[String(offer.businessName).trim().toLowerCase()]);
+                const isFeaturedOffer = isItemCurrentlyFeatured(offer, parentBiz);
+
                 // =========================================================================
                 // MOBILE LIST VIEW CARD (Horizontal App Row Layout)
                 // =========================================================================
-                if (mobileViewMode === 'list') {
-                  return (
+                const offerCardNode = mobileViewMode === 'list' ? (
                     <div 
                       key={offer.id}
-                      className="bg-white rounded-2xl border border-stone-200/80 shadow-2xs hover:shadow-md transition-all p-3 flex flex-col gap-2.5 relative overflow-hidden"
+                      className={cn(
+                        "bg-white rounded-2xl p-3 flex flex-col gap-2.5 relative overflow-hidden transition-all",
+                        isFeaturedOffer
+                          ? "border-2 border-amber-400/90 ring-2 ring-amber-400/40 shadow-[0_0_20px_rgba(245,158,11,0.3)] hover:shadow-[0_0_30px_rgba(245,158,11,0.55)] hover:border-amber-400"
+                          : "border border-stone-200/80 shadow-2xs hover:shadow-md"
+                      )}
                     >
                       <div className="flex items-start gap-3">
                         {/* Thumbnail Image with Discount Badge */}
@@ -945,6 +987,12 @@ export function Offers() {
                         {/* Middle Info */}
                         <div className="flex-1 min-w-0 space-y-1">
                           <div className="flex items-center gap-1.5 flex-wrap">
+                            {isFeaturedOffer && (
+                              <span className="bg-gradient-to-r from-amber-400 to-yellow-500 text-yellow-950 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-widest shadow-md flex items-center gap-1 w-fit border border-amber-300/60 shrink-0">
+                                <Crown className="h-3 w-3 fill-current shrink-0 text-amber-950" />
+                                <span>ممول</span>
+                              </span>
+                            )}
                             <span className="text-[10px] font-black text-red-700 bg-red-50 border border-red-200/80 px-2 py-0.5 rounded-md">
                               {offer.category}
                             </span>
@@ -1058,29 +1106,34 @@ export function Offers() {
                         />
                       </div>
                     </div>
-                  );
-                }
-
-                // =========================================================================
-                // GRID VIEW CARD (Standard Card Layout)
-                // =========================================================================
-                return (
+                  ) : (
                   <div 
                     key={offer.id}
-                    className="bg-white rounded-3xl border border-stone-200/80 overflow-hidden shadow-xs hover:shadow-xl transition-all duration-300 flex flex-col group relative"
+                    className={cn(
+                      "bg-white rounded-3xl overflow-hidden transition-all duration-300 flex flex-col group relative",
+                      isFeaturedOffer
+                        ? "border-2 border-amber-400/90 ring-2 ring-amber-400/40 shadow-[0_0_22px_rgba(245,158,11,0.3)] hover:shadow-[0_0_35px_rgba(245,158,11,0.55)] hover:border-amber-400"
+                        : "border border-stone-200/80 shadow-xs hover:shadow-xl"
+                    )}
                   >
                     {/* Badges */}
                     <div className="absolute top-3 right-3 z-10 flex flex-col gap-1.5 items-start">
+                      {isFeaturedOffer && (
+                        <span className="bg-gradient-to-r from-amber-400 to-yellow-500 text-yellow-950 text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest shadow-md flex items-center gap-1 w-fit border border-amber-300/60">
+                          <Crown className="h-3 w-3 fill-current shrink-0 text-amber-950" />
+                          <span>ممول</span>
+                        </span>
+                      )}
                       {offer.isHot && (
                         <span className="bg-red-600 text-white font-black text-[11px] px-3 py-1 rounded-full shadow-md flex items-center gap-1">
                           <Flame className="h-3 w-3 fill-white" />
-                          <span>سوبر هُوت 🔥</span>
+                          <span>سوبر هُوت</span>
                         </span>
                       )}
                       {offer.isStudent && (
                         <span className="bg-blue-600 text-white font-black text-[11px] px-3 py-1 rounded-full shadow-md flex items-center gap-1">
                           <Gift className="h-3 w-3" />
-                          <span>خصم طلابي 🎓</span>
+                          <span>خصم طلابي</span>
                         </span>
                       )}
                     </div>
@@ -1207,6 +1260,17 @@ export function Offers() {
 
                   </div>
                 );
+
+                const currentSlice = filteredOffers.slice((currentPage - 1) * 15, currentPage * 15);
+                const shouldInsertPromo0 = (idx === 2 || (idx === currentSlice.length - 1 && currentSlice.length < 3)) && promoCards[0];
+                const shouldInsertPromo1 = (idx === 8) && promoCards[1];
+                const promoToInsert = shouldInsertPromo0 ? (
+                  <InFeedPromoCardItem key={`promo_${promoCards[0].id}_${idx}`} card={promoCards[0]} />
+                ) : shouldInsertPromo1 ? (
+                  <InFeedPromoCardItem key={`promo_${promoCards[1].id}_${idx}`} card={promoCards[1]} />
+                ) : null;
+
+                return promoToInsert ? [offerCardNode, promoToInsert] : [offerCardNode];
               })}
           </div>
 

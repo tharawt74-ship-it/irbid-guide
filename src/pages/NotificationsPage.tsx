@@ -44,7 +44,7 @@ const NOTIFICATIONS_PER_PAGE = 30;
 export function NotificationsPage() {
   const { confirm } = useConfirm();
   const { notifications, unreadCount, markAsRead, markAllAsRead, deleteNotification, clearAll } = useNotifications();
-  const { currentUser } = useAuth();
+  const { currentUser, userRole } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [isSearchOpenMobile, setIsSearchOpenMobile] = useState(false);
   const [activeCategory, setActiveCategory] = useState<CategoryFilter>('all');
@@ -66,11 +66,11 @@ export function NotificationsPage() {
   const handleEnablePush = async () => {
     setIsActivatingPush(true);
     try {
-      const res = await requestPushPermission(currentUser?.uid);
+      const res = await requestPushPermission(currentUser?.uid, userRole);
       setPushPermission(res.permission);
       if (res.permission === 'granted') {
         showNativeNotification(
-          "تم تفعيل الإشعارات الفورية! 🎉",
+          "تم تفعيل الإشعارات الفورية",
           "ستصلك أهم العروض والوظائف والتنبيهات الهامة مباشرة على شاشة جهازك."
         );
       } else if (res.permission === 'denied') {

@@ -17,6 +17,8 @@ import { HomepageBanner } from '../types';
 import { fetchPageBanners, DEFAULT_TOURISM_BANNERS } from '../lib/pageBanners';
 import { useConfirm } from '../contexts/ConfirmContext';
 import { ImageUploader } from '../components/ui/ImageUploader';
+import { useHeaderVisibility } from '../lib/useHeaderVisibility';
+import { cn } from '../lib/utils';
 
 export interface TourismSpot {
   id: string;
@@ -49,12 +51,14 @@ export const SEED_TOURISM_SPOTS: TourismSpot[] = [];
 export function Tourism() {
   const { confirm } = useConfirm();
   const { isAdmin } = useAuth();
+  const showHeader = useHeaderVisibility();
   const [searchParams, setSearchParams] = useSearchParams();
   const { id: routeId } = useParams();
   const navigate = useNavigate();
   const [spots, setSpots] = useState<TourismSpot[]>([]);
   const [banners, setBanners] = useState<HomepageBanner[]>(DEFAULT_TOURISM_BANNERS);
   const [loading, setLoading] = useState(true);
+  const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('الكل');
   
@@ -489,7 +493,7 @@ export function Tourism() {
   }
 
   return (
-    <div className="w-full space-y-8 sm:space-y-10 pb-16 relative" dir="rtl">
+    <div className="w-full min-h-screen bg-[#fdfcfb] pb-16" dir="rtl">
       <SEO 
         title="السياحة ومعالم إربد | أم قيس، طبقة فحل، غابات برقش وتل إربد"
         description="دليل الأماكن السياحية والآثار والطبيعة في محافظة إربد وعروس الشمال: أم قيس، طبقة فحل، غابات برقش، سد وادي العرب، بيت عرار الثقافي، ومتحف التراث الأردني."
@@ -504,175 +508,258 @@ export function Tourism() {
         </div>
       )}
 
-      {/* Banner Slideshow */}
-      <BannerSlideshow banners={banners} />
-
-      {/* Page Header & Search Bar (2026 Mobile Optimized Design) */}
-      <div className="bg-gradient-to-br from-[#1a4d2e] via-[#153e25] to-[#0f2e1d] text-white rounded-3xl p-4 sm:p-6 shadow-xl border border-emerald-800/40 relative overflow-hidden space-y-3.5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="w-9 h-9 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/10 text-emerald-300">
-              <Compass className="h-5 w-5 text-emerald-300" />
-            </span>
-            <div>
-              <h1 className="text-lg sm:text-2xl font-black tracking-tight text-white">
-                أماكن سياحية ومعالم إربد
-              </h1>
-              <p className="text-[11px] sm:text-xs text-emerald-100/80 font-medium">
-                آثار أم قيس، غابات برقش، المتاحف والمنتزهات الطبيعية
-              </p>
-            </div>
-          </div>
+      {/* ========================================================================= */}
+      {/* MOBILE STICKY TOP APP BAR (Native Mobile UX matching Medical & Products) */}
+      {/* ========================================================================= */}
+      <div className={cn(
+        "lg:hidden sticky z-30 bg-white/95 backdrop-blur-md border-b border-stone-200/80 shadow-2xs px-4 py-2.5 space-y-2 transition-all duration-300",
+        showHeader ? "top-[62px] sm:top-[68px] md:top-[72px]" : "top-0"
+      )}>
+        {/* Row 1: Search Bar & Add Button if Admin */}
+        <div className="flex items-center gap-2">
+          <form 
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (searchInput.trim()) {
+                navigate(`/search?q=${encodeURIComponent(searchInput.trim())}&tab=tourism`);
+              }
+            }}
+            className="relative flex-1 min-w-0"
+          >
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-stone-400 pointer-events-none" />
+            <input
+              type="search"
+              enterKeyHint="search"
+              placeholder="عن ماذا تبحث؟ معالم، آثار، منتزهات..."
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              className="w-full pl-8 pr-8 py-2 bg-stone-100/90 border border-stone-200 rounded-xl text-xs font-bold placeholder:text-stone-400 focus:outline-none focus:bg-white focus:border-[#1a4d2e] transition-all cursor-text [&::-webkit-search-cancel-button]:appearance-none"
+            />
+            {searchInput && (
+              <button 
+                type="button"
+                onClick={() => setSearchInput('')}
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 p-1 rounded-full cursor-pointer"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </form>
 
           {isAdmin && (
             <button
               onClick={openAddModal}
-              className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#ff9f1c] hover:bg-[#f08f0c] text-stone-950 font-black text-xs rounded-xl shadow-md transition-all active:scale-95 cursor-pointer shrink-0"
+              className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#ff9f1c] hover:bg-[#f08f0c] text-stone-950 font-black text-xs rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer shrink-0"
             >
-              <Plus className="h-4 w-4" />
+              <Plus className="h-3.5 w-3.5" />
               <span>إضافة معلم</span>
             </button>
           )}
         </div>
 
-        {/* Search Bar */}
-        <div className="relative">
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="ابحث عن معلّم (أم قيس، غابة، متحف، سد)..."
-            className="w-full bg-white/10 backdrop-blur-md text-white placeholder:text-stone-300 border border-white/20 rounded-2xl px-4 py-3 pr-10 text-xs sm:text-sm focus:outline-none focus:bg-white/20 transition-all shadow-inner"
-          />
-          <Search className="h-4 w-4 text-emerald-200 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-          {searchQuery && (
-            <button 
-              onClick={() => setSearchQuery('')}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-300 hover:text-white p-1.5"
+        {/* Row 2: Category Filter Chips Carousel */}
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar scroll-smooth pt-0.5 pb-1 -mx-2.5 px-2.5 sm:-mx-4 sm:px-4" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+          {CATEGORIES.map(cat => (
+            <button
+              key={cat}
+              type="button"
+              onClick={() => setSelectedCategory(cat)}
+              className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1 cursor-pointer border ${
+                selectedCategory === cat
+                  ? 'bg-[#1a4d2e] text-white border-transparent shadow-xs font-black'
+                  : 'bg-white text-stone-700 border-stone-200 hover:border-emerald-300'
+              }`}
             >
-              <X className="h-4 w-4" />
+              <span>{cat}</span>
             </button>
-          )}
-        </div>
-      </div>
-
-      {/* Category Filter Tabs */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none snap-x -mx-4 px-4 sm:mx-0 sm:px-0">
-        {CATEGORIES.map(cat => (
-          <button
-            key={cat}
-            onClick={() => setSelectedCategory(cat)}
-            className={`snap-start px-4.5 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer min-h-[44px] flex items-center shrink-0 active:scale-95 ${
-              selectedCategory === cat
-                ? 'bg-[#1a4d2e] text-white shadow-xs font-black'
-                : 'bg-white text-stone-600 border border-[#e5e1da] hover:bg-stone-50'
-            }`}
-          >
-            {cat}
-          </button>
-        ))}
-      </div>
-
-      {/* Display Results */}
-      {loading ? (
-        <div className="flex flex-col items-center justify-center py-16 space-y-4 bg-white rounded-3xl border border-[#e5e1da]">
-          <RefreshCw className="h-8 w-8 text-[#1a4d2e] animate-spin" />
-          <p className="text-sm font-bold text-[#1a4d2e]">جاري تحميل المعالم والأماكن السياحية في إربد...</p>
-        </div>
-      ) : filteredSpots.length === 0 ? (
-        <div className="bg-white rounded-3xl p-12 text-center border border-[#e5e1da] space-y-4">
-          <div className="w-16 h-16 bg-stone-100 rounded-2xl flex items-center justify-center mx-auto text-stone-400">
-            <Compass className="h-8 w-8" />
-          </div>
-          <h3 className="text-xl font-bold text-stone-800">لا توجد معالم تطابق بحثك حالياً</h3>
-          <p className="text-stone-500 text-sm max-w-md mx-auto">
-            جرّب تغيير كلمات البحث أو تصفح الأقسام الأخرى لاستكشاف المزيد من معالم عروس الشمال.
-          </p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredSpots.map((spot) => (
-            <div
-              key={spot.id}
-              onClick={() => navigate(`/tourism/${spot.id}`)}
-              className="bg-white rounded-3xl border border-[#e5e1da] overflow-hidden hover:shadow-xl hover:border-[#1a4d2e]/30 transition-all flex flex-col justify-between group cursor-pointer relative"
-            >
-              {/* Actions panel overlay - Admin only */}
-              {isAdmin && (
-                <div className="absolute top-3 left-3 flex items-center gap-1.5 bg-black/40 backdrop-blur-md p-1 rounded-xl z-20">
-                  <button
-                    onClick={(e) => openEditModal(e, spot)}
-                    className="p-1.5 bg-white/90 hover:bg-white text-stone-700 hover:text-[#1a4d2e] rounded-lg transition-colors cursor-pointer"
-                    title="تعديل المعلم"
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    onClick={(e) => handleDeleteSpot(e, spot.id)}
-                    className="p-1.5 bg-white/90 hover:bg-red-50 text-stone-700 hover:text-red-600 rounded-lg transition-colors cursor-pointer"
-                    title="حذف المعلم"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              )}
-
-              <div>
-                {/* Photo Header */}
-                <div className="relative aspect-[16/10] overflow-hidden bg-stone-100">
-                  <img 
-                    src={spot.image} 
-                    alt={spot.name} 
-                    className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-500"
-                    referrerPolicy="no-referrer"
-                  />
-                  <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-md text-stone-800 px-2.5 py-1 rounded-lg text-[10px] font-black shadow-2xs">
-                    {spot.category === 'أثري' ? 'معالم أثرية' : spot.category === 'طبيعة' ? 'طبيعة ومحميات' : spot.category === 'ترفيه' ? 'ترفيه وتسلية' : 'ثقافة وفنون'}
-                  </div>
-                </div>
-
-                {/* Content */}
-                <div className="p-5 space-y-3">
-                  <h3 className="font-black text-lg text-stone-900 group-hover:text-[#1a4d2e] transition-colors leading-tight">
-                    {spot.name}
-                  </h3>
-                  
-                  <div className="flex items-center gap-1.5 text-xs text-stone-500 font-medium">
-                    <MapPin className="h-3.5 w-3.5 text-orange-500 shrink-0" />
-                    <span className="truncate">{spot.location}</span>
-                  </div>
-
-                  <p className="text-stone-600 text-xs leading-relaxed line-clamp-3">
-                    {spot.description}
-                  </p>
-
-                  {/* Tags */}
-                  {spot.tags && spot.tags.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 pt-1">
-                      {spot.tags.slice(0, 3).map((tag, idx) => (
-                        <span key={idx} className="bg-stone-50 text-stone-600 border border-stone-200/50 text-[10px] font-bold px-2 py-0.5 rounded-md">
-                          #{tag}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Card Footer Click */}
-              <div className="p-5 pt-0">
-                <div className="pt-3.5 border-t border-stone-100 flex items-center justify-between text-xs font-black text-[#1a4d2e] group-hover:underline">
-                  <span className="flex items-center gap-1">
-                    <span>التفاصيل ونصائح الزيارة</span>
-                    <Info className="h-4 w-4 text-[#ff9f1c]" />
-                  </span>
-                  <ChevronRight className="h-4 w-4 transform rotate-180 group-hover:-translate-x-1 transition-transform" />
-                </div>
-              </div>
-            </div>
           ))}
         </div>
-      )}
+      </div>
+
+      {/* Banner Slideshow */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+        <BannerSlideshow banners={banners} />
+      </div>
+
+      {/* Main Content Area */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 sm:mt-6 space-y-6">
+        {/* Desktop Page Header & Search Bar */}
+        <div className="hidden lg:block bg-gradient-to-br from-[#1a4d2e] via-[#153e25] to-[#0f2e1d] text-white rounded-3xl p-6 shadow-xl border border-emerald-800/40 relative overflow-hidden space-y-3.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="w-9 h-9 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/10 text-emerald-300">
+                <Compass className="h-5 w-5 text-emerald-300" />
+              </span>
+              <div>
+                <h1 className="text-2xl font-black tracking-tight text-white">
+                  أماكن سياحية ومعالم إربد
+                </h1>
+                <p className="text-xs text-emerald-100/80 font-medium">
+                  آثار أم قيس، غابات برقش، المتاحف والمنتزهات الطبيعية
+                </p>
+              </div>
+            </div>
+
+            {isAdmin && (
+              <button
+                onClick={openAddModal}
+                className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#ff9f1c] hover:bg-[#f08f0c] text-stone-950 font-black text-xs rounded-xl shadow-md transition-all active:scale-95 cursor-pointer shrink-0"
+              >
+                <Plus className="h-4 w-4" />
+                <span>إضافة معلم</span>
+              </button>
+            )}
+          </div>
+
+          {/* Search Bar */}
+          <form 
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (searchInput.trim()) {
+                navigate(`/search?q=${encodeURIComponent(searchInput.trim())}&tab=tourism`);
+              }
+            }}
+            className="relative"
+          >
+            <input
+              type="search"
+              enterKeyHint="search"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="ابحث عن معلّم (أم قيس، غابة، متحف، سد)..."
+              className="w-full bg-white/10 backdrop-blur-md text-white placeholder:text-stone-300 border border-white/20 rounded-2xl px-4 py-3 pr-10 text-sm focus:outline-none focus:bg-white/20 transition-all shadow-inner [&::-webkit-search-cancel-button]:appearance-none"
+            />
+            <Search className="h-4 w-4 text-emerald-200 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            {searchInput && (
+              <button 
+                type="button"
+                onClick={() => setSearchInput('')}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-300 hover:text-white p-1.5 cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </form>
+        </div>
+
+        {/* Desktop Category Filter Tabs */}
+        <div className="hidden lg:flex items-center gap-2 bg-[#fdfcfb]/95 backdrop-blur-md overflow-x-auto scrollbar-none">
+          {CATEGORIES.map(cat => (
+            <button
+              key={cat}
+              onClick={() => setSelectedCategory(cat)}
+              className={`px-4.5 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap cursor-pointer min-h-[44px] flex items-center shrink-0 active:scale-95 ${
+                selectedCategory === cat
+                  ? 'bg-[#1a4d2e] text-white shadow-xs font-black'
+                  : 'bg-white text-stone-600 border border-[#e5e1da] hover:bg-stone-50'
+              }`}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+
+        {/* Display Results */}
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-16 space-y-4 bg-white rounded-2xl sm:rounded-3xl border border-[#e5e1da]">
+            <RefreshCw className="h-8 w-8 text-[#1a4d2e] animate-spin" />
+            <p className="text-sm font-bold text-[#1a4d2e]">جاري تحميل المعالم والأماكن السياحية في إربد...</p>
+          </div>
+        ) : filteredSpots.length === 0 ? (
+          <div className="bg-white rounded-2xl sm:rounded-3xl p-8 sm:p-12 text-center border border-[#e5e1da] space-y-4">
+            <div className="w-16 h-16 bg-stone-100 rounded-2xl flex items-center justify-center mx-auto text-stone-400">
+              <Compass className="h-8 w-8" />
+            </div>
+            <h3 className="text-lg sm:text-xl font-bold text-stone-800">لا توجد معالم تطابق بحثك حالياً</h3>
+            <p className="text-stone-500 text-xs sm:text-sm max-w-md mx-auto">
+              جرّب تغيير كلمات البحث أو تصفح الأقسام الأخرى لاستكشاف المزيد من معالم عروس الشمال.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+            {filteredSpots.map((spot) => (
+              <div
+                key={spot.id}
+                onClick={() => navigate(`/tourism/${spot.id}`)}
+                className="bg-white rounded-2xl sm:rounded-3xl border border-[#e5e1da] overflow-hidden hover:shadow-xl hover:border-[#1a4d2e]/30 transition-all flex flex-col justify-between group cursor-pointer relative active:scale-[0.99]"
+              >
+                {/* Actions panel overlay - Admin only */}
+                {isAdmin && (
+                  <div className="absolute top-3 left-3 flex items-center gap-1.5 bg-black/40 backdrop-blur-md p-1 rounded-xl z-20">
+                    <button
+                      onClick={(e) => openEditModal(e, spot)}
+                      className="p-1.5 bg-white/90 hover:bg-white text-stone-700 hover:text-[#1a4d2e] rounded-lg transition-colors cursor-pointer"
+                      title="تعديل المعلم"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      onClick={(e) => handleDeleteSpot(e, spot.id)}
+                      className="p-1.5 bg-white/90 hover:bg-red-50 text-stone-700 hover:text-red-600 rounded-lg transition-colors cursor-pointer"
+                      title="حذف المعلم"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )}
+
+                <div>
+                  {/* Photo Header */}
+                  <div className="relative aspect-[16/10] overflow-hidden bg-stone-100">
+                    <img 
+                      src={spot.image} 
+                      alt={spot.name} 
+                      className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-500"
+                      referrerPolicy="no-referrer"
+                    />
+                    <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-md text-stone-800 px-2.5 py-1 rounded-lg text-[10px] font-black shadow-2xs">
+                      {spot.category === 'أثري' ? 'معالم أثرية' : spot.category === 'طبيعة' ? 'طبيعة ومحميات' : spot.category === 'ترفيه' ? 'ترفيه وتسلية' : 'ثقافة وفنون'}
+                    </div>
+                  </div>
+
+                  {/* Content */}
+                  <div className="p-4 sm:p-5 space-y-2.5 sm:space-y-3">
+                    <h3 className="font-black text-base sm:text-lg text-stone-900 group-hover:text-[#1a4d2e] transition-colors leading-tight">
+                      {spot.name}
+                    </h3>
+                    
+                    <div className="flex items-center gap-1.5 text-xs text-stone-500 font-medium">
+                      <MapPin className="h-3.5 w-3.5 text-orange-500 shrink-0" />
+                      <span className="truncate">{spot.location}</span>
+                    </div>
+
+                    <p className="text-stone-600 text-xs leading-relaxed line-clamp-3">
+                      {spot.description}
+                    </p>
+
+                    {/* Tags */}
+                    {spot.tags && spot.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {spot.tags.slice(0, 3).map((tag, idx) => (
+                          <span key={idx} className="bg-stone-50 text-stone-600 border border-stone-200/50 text-[10px] font-bold px-2 py-0.5 rounded-md">
+                            #{tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Card Footer Click */}
+                <div className="p-4 sm:p-5 pt-0">
+                  <div className="pt-3.5 border-t border-stone-100 flex items-center justify-between text-xs font-black text-[#1a4d2e] group-hover:underline">
+                    <span className="flex items-center gap-1">
+                      <span>التفاصيل ونصائح الزيارة</span>
+                      <Info className="h-4 w-4 text-[#ff9f1c]" />
+                    </span>
+                    <ChevronRight className="h-4 w-4 transform rotate-180 group-hover:-translate-x-1 transition-transform" />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Add / Edit Tourism Spot Modal - Admin Only */}
       {isModalOpen && isAdmin && typeof document !== 'undefined' && createPortal(

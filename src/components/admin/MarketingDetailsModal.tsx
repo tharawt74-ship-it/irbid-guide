@@ -55,17 +55,39 @@ export function MarketingDetailsModal({
 
   if (!isOpen || !request || typeof document === 'undefined') return null;
 
-  const getServicePricing = (type: string) => {
+  const getServicePricing = (type: string, req?: any) => {
+    if (type === 'sponsored') {
+      const targetType = req?.sponsoredTargetType || req?.targetType || 'business';
+      switch (targetType) {
+        case 'single_product':
+          return { price: `${appConfigState?.priceSponsoredProduct ?? 7} دينار / أسبوعياً`, desc: `صدارة بحث لمنتج محدد: ${req?.sponsoredEntityName || 'منتج من المنيو'}` };
+        case 'full_menu':
+          return { price: `${appConfigState?.priceSponsoredMenu ?? 12} دينار / أسبوعياً`, desc: 'صدارة بحث لكامل منيو وكتالوج المحل في صفحة المنتجات والبحث' };
+        case 'single_offer':
+          return { price: `${appConfigState?.priceSponsoredOffer ?? 6} دينار / أسبوعياً`, desc: `صدارة بحث لعرض ترويجي محدد: ${req?.sponsoredEntityName || 'عرض خاص'}` };
+        case 'multiple_offers':
+          return { price: `${appConfigState?.priceSponsoredOffersGroup ?? 12} دينار / أسبوعياً`, desc: 'صدارة بحث لمجموعة عروض وخصومات المحل في صفحة العروض والبحث' };
+        case 'single_job':
+          return { price: `${appConfigState?.priceSponsoredJob ?? 8} دينار / أسبوعياً`, desc: `صدارة بحث لشاغر وظيفي محدد: ${req?.sponsoredEntityName || 'وظيفة شاغرة'}` };
+        case 'multiple_jobs':
+          return { price: `${appConfigState?.priceSponsoredJobsGroup ?? 14} دينار / أسبوعياً`, desc: 'صدارة بحث لمجموعة شواغر ووظائف المحل في صفحة الوظائف والبحث' };
+        case 'all_inclusive':
+          return { price: `${appConfigState?.priceSponsoredAllInclusive ?? 25} دينار / أسبوعياً`, desc: 'صدارة بحث شاملة لكل شيء (المحل والمنيو والعروض والوظائف)' };
+        case 'business':
+        default:
+          return { price: `${appConfigState?.priceSponsored ?? 15} دينار / أسبوعياً`, desc: 'ظهور المحل في صدارة نتائج البحث والتصنيفات وبانر مميز' };
+      }
+    }
     switch (type) {
-      case 'sponsored': return { price: `${appConfigState?.priceSponsored ?? 15} دينار / أسبوعياً`, desc: 'ظهور المحل في صدارة نتائج البحث والتصنيفات وبانر مميز' };
       case 'push_notifications': return { price: `${appConfigState?.pricePushNotifications ?? 10} دنانير / إشعار`, desc: 'إشعار فوري موجه لجميع مستخدمي المنصة في إربد' };
       case 'homepage_banner': return { price: `${appConfigState?.priceHomepageBanner ?? 25} دينار / أسبوعياً`, desc: 'إعلان رئيسي بارز في سلايدر أعلى الصفحة الرئيسية' };
+      case 'promo_card': return { price: `${appConfigState?.pricePromoCard ?? 20} دينار / أسبوعياً`, desc: 'بطاقة ترويجية مدمجة ضمن قوائم وبطاقات الصفحة المختارة' };
       case 'premium_messaging': return { price: `${appConfigState?.priceMessaging1Month ?? 5} دنانير / شهرياً`, desc: 'ترقية نظام استقبال الوسائط والمحادثات' };
       default: return { price: '15 دينار', desc: 'خدمة تسويقية مخصصة' };
     }
   };
 
-  const serviceInfo = getServicePricing(request.serviceType);
+  const serviceInfo = getServicePricing(request.serviceType, request);
 
   // Generate WhatsApp message link
   const generateWhatsAppUrl = () => {
@@ -129,12 +151,12 @@ export function MarketingDetailsModal({
                   : 'bg-amber-100 text-amber-800'
               }`}>
                 {request.status === 'completed' || request.status === 'approved'
-                  ? 'مفعّل ومعتمد ✅'
+                  ? 'مفعّل ومعتمد'
                   : request.status === 'contacted'
-                  ? 'تم التواصل 📞'
+                  ? 'تم التواصل'
                   : request.status === 'rejected'
-                  ? 'مرفوض ❌'
-                  : 'قيد الانتظار ⏳'}
+                  ? 'مرفوض'
+                  : 'قيد الانتظار'}
               </span>
             </div>
 
@@ -243,7 +265,7 @@ export function MarketingDetailsModal({
           {request.serviceType === 'sponsored' && (
             <div className="bg-emerald-50/40 p-5 rounded-2xl border border-emerald-200/60 space-y-3 text-right">
               <div className="font-black text-xs text-emerald-950 border-b border-emerald-100 pb-1.5 flex items-center gap-1.5">
-                <span>⭐ تفاصيل طلب صدارة البحث (Sponsored):</span>
+                <span>تفاصيل طلب صدارة البحث (Sponsored):</span>
               </div>
               <div className="grid grid-cols-2 gap-3 text-xs">
                 <div>
@@ -253,7 +275,7 @@ export function MarketingDetailsModal({
                 <div>
                   <span className="text-stone-500 font-bold block mb-0.5">توقيت النشر المطلوب:</span>
                   <span className="text-stone-800 font-bold">
-                    {request.publishTimeOption === 'scheduled' ? `📅 مجدول للبدء في: ${request.publishStartDate || 'غير محدد'}` : '⚡ فوري (مباشرة بعد الموافقة)'}
+                    {request.publishTimeOption === 'scheduled' ? `مجدول للبدء في: ${request.publishStartDate || 'غير محدد'}` : 'فوري (مباشرة بعد الموافقة)'}
                   </span>
                 </div>
               </div>
@@ -331,7 +353,7 @@ export function MarketingDetailsModal({
           {request.serviceType === 'homepage_banner' && (
             <div className="bg-amber-50/40 p-5 rounded-2xl border border-amber-200/60 space-y-3 text-right">
               <div className="font-black text-xs text-amber-950 border-b border-amber-100 pb-1.5 flex items-center gap-1.5">
-                <span>🖼️ تفاصيل طلب بانر الصفحة الرئيسية:</span>
+                <span>تفاصيل طلب بانر الصفحة الرئيسية</span>
               </div>
               <div className="space-y-1.5 text-xs">
                 <div>
@@ -342,6 +364,126 @@ export function MarketingDetailsModal({
                   <span className="text-stone-500 font-bold block">الوصف:</span>
                   <span className="text-stone-700 leading-relaxed block">{request.bannerSubtitle || 'لا يوجد'}</span>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Custom details for in-feed promo_card */}
+          {request.serviceType === 'promo_card' && (
+            <div className="bg-amber-50/40 p-5 rounded-2xl border border-amber-200/60 space-y-3.5 text-right">
+              <div className="font-black text-xs text-amber-950 border-b border-amber-100 pb-1.5 flex items-center gap-1.5">
+                <span>تفاصيل البطاقة الترويجية المدمجة بالقوائم</span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div>
+                  <span className="text-stone-500 font-bold block mb-0.5">الصفحة المستهدفة:</span>
+                  <span className="text-stone-800 font-bold">
+                    {request.promoCardTargetPage === 'home' ? 'الصفحة الرئيسية' :
+                     request.promoCardTargetPage === 'offers' ? 'صفحة العروض والخصومات' :
+                     request.promoCardTargetPage === 'products' ? 'صفحة المنتجات والخدمات' :
+                     request.promoCardTargetPage === 'medical' ? 'صفحة الرعاية الطبية' :
+                     request.promoCardTargetPage === 'jobs' ? 'صفحة الوظائف والشواغر' :
+                     request.promoCardTargetPage === 'housing' ? 'صفحة السكنات والعقارات' : 'الرئيسية'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-stone-500 font-bold block mb-0.5">نوع المحتوى المروج:</span>
+                  <span className="text-stone-800 font-bold">
+                    {request.promoCardTargetType === 'product' ? 'منتج محدد' :
+                     request.promoCardTargetType === 'offer' ? 'عرض محدد' :
+                     request.promoCardTargetType === 'job' ? 'وظيفة محددة' :
+                     request.promoCardTargetType === 'housing' ? 'عقار محدد' :
+                     request.promoCardTargetType === 'custom' ? 'إعلان مخصص' : 'صفحة المحل نفسه'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-stone-500 font-bold block mb-0.5">شكل وتنسيق البطاقة:</span>
+                  <span className="text-[#1a4d2e] font-black">
+                    {(request as any).promoCardLayout === 'full' ? 'تنسيق كامل (Full Overlay)' : 'تنسيق قياسي كباقي البطاقات'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-stone-500 font-bold block mb-0.5">طريقة الاقتصاص والعرض:</span>
+                  <span className="text-stone-800 font-black">
+                    {(request as any).promoCardMediaFit === 'fit' ? 'احتواء كامل (Fit)' : (request as any).promoCardMediaFit === 'fill' ? 'ملء متمدد (Fill)' : (request as any).promoCardMediaFit === 'pad' ? 'احتواء بهامش (Pad)' : 'اقتصاص وملء (Crop)'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-stone-500 font-bold block mb-0.5">طريقة ظهور المحتوى:</span>
+                  <span className="text-stone-800 font-black">
+                    {(request as any).promoCardContentDisplay === 'hover' ? 'عند التمرير أو النقر (Hover / Tap)' : 'ظهور دائم (مستمر)'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-1.5 text-xs">
+                <div>
+                  <span className="text-stone-500 font-bold block">العنوان الرئيسي للبطاقة:</span>
+                  <span className="text-stone-950 font-bold text-sm">{request.bannerTitle || 'لا يوجد'}</span>
+                </div>
+                {request.bannerSubtitle && (
+                  <div>
+                    <span className="text-stone-500 font-bold block">الوصف أو العنوان الفرعي:</span>
+                    <span className="text-stone-700 leading-relaxed block">{request.bannerSubtitle}</span>
+                  </div>
+                )}
+                {request.badgeText && (
+                  <div>
+                    <span className="text-stone-500 font-bold block">الشارة الترويجية:</span>
+                    <span className="inline-block bg-amber-100 text-amber-900 font-bold text-[11px] px-2 py-0.5 rounded-md mt-0.5">{request.badgeText}</span>
+                  </div>
+                )}
+              </div>
+
+              {(request.buttonText || request.buttonLink) && (
+                <div className="grid grid-cols-2 gap-3 text-xs pt-2 border-t border-amber-100/60">
+                  {request.buttonText && (
+                    <div>
+                      <span className="text-stone-500 font-bold block mb-0.5">نص الزر:</span>
+                      <span className="text-stone-800 font-bold">{request.buttonText}</span>
+                    </div>
+                  )}
+                  {request.buttonLink && (
+                    <div>
+                      <span className="text-stone-500 font-bold block mb-0.5">رابط الزر:</span>
+                      <a href={request.buttonLink} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline inline-flex items-center gap-1 break-all" dir="ltr">
+                        {request.buttonLink}
+                        <ExternalLink className="h-3 w-3 shrink-0" />
+                      </a>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Media Preview (Image or Video) */}
+              <div className="pt-2 border-t border-amber-100/60 space-y-2">
+                <span className="text-stone-500 font-bold text-xs block">معاينة وسائط البطاقة ({request.promoCardMediaType === 'video' ? 'فيديو' : 'صورة'}):</span>
+                {request.promoCardMediaType === 'video' && request.promoCardVideoUrl ? (
+                  <div className="relative rounded-xl overflow-hidden border border-stone-200 bg-black aspect-video max-w-sm">
+                    {request.promoCardVideoUrl.includes('youtube') || request.promoCardVideoUrl.includes('youtu.be') ? (
+                      <iframe
+                        src={request.promoCardVideoUrl.replace('watch?v=', 'embed/').split('&')[0]}
+                        title="Video Preview"
+                        className="w-full h-full border-0"
+                        allowFullScreen
+                      />
+                    ) : (
+                      <video src={request.promoCardVideoUrl} controls className="w-full h-full object-cover" />
+                    )}
+                  </div>
+                ) : (request.promoCardImageUrl || request.bannerImageUrl) ? (
+                  <div className="relative rounded-xl overflow-hidden border border-stone-200 bg-stone-100 aspect-[16/10] max-w-sm">
+                    <img 
+                      src={request.promoCardImageUrl || request.bannerImageUrl} 
+                      alt="Promo Card Preview" 
+                      className="w-full h-full object-cover"
+                      referrerPolicy="no-referrer"
+                    />
+                  </div>
+                ) : (
+                  <span className="text-stone-400 text-xs italic block">لا توجد وسائط مرفقة</span>
+                )}
               </div>
             </div>
           )}
@@ -427,7 +569,7 @@ export function MarketingDetailsModal({
               className="bg-[#1a4d2e] hover:bg-[#143e25] text-white p-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
             >
               <CheckCircle2 className="h-4 w-4 text-[#ff9f1c]" />
-              <span>اعتماد وتفعيل الخدمة ⭐</span>
+              <span>اعتماد وتفعيل الخدمة</span>
             </button>
 
             <button

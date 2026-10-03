@@ -21,6 +21,9 @@ import { BlurredVerticalTextScroller } from '../components/common/BlurredVertica
 import { getCachedBusinesses, setCachedBusinesses, getCachedBanners, setCachedBanners, isBusinessesCacheFresh } from '../lib/dataCache';
 import { BOOK_YOUR_AD_BANNER } from '../lib/pageBanners';
 import { compareBusinessesByTier, isBusinessCurrentlyFeatured } from '../lib/vipHelper';
+import { fetchPagePromoCards } from '../lib/promoCards';
+import { InFeedPromoCardItem } from '../components/common/InFeedPromoCardItem';
+import { InFeedPromoCard } from '../types';
 import { cn } from '../lib/utils';
 import { 
   MapPin, Star, Search, Store, Filter, X,
@@ -96,8 +99,10 @@ export function Home() {
   const { userFavorites } = useAuth();
   const [businesses, setBusinesses] = useState<Business[]>(() => getCachedBusinesses() || []);
   const [banners, setBanners] = useState<HomepageBanner[]>(() => getCachedBanners() || []);
+  const [promoCards, setPromoCards] = useState<InFeedPromoCard[]>([]);
   const [loading, setLoading] = useState(() => !getCachedBusinesses());
   const [searchTerm, setSearchTerm] = useState(() => searchParams.get('search') || '');
+  const [heroSearchInput, setHeroSearchInput] = useState(() => searchParams.get('search') || '');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [subCategoryFilter, setSubCategoryFilter] = useState('');
   const [regionFilter, setRegionFilter] = useState('');
@@ -121,23 +126,27 @@ export function Home() {
   const activeMobileSubCatRef = useRef<HTMLButtonElement | null>(null);
   const activeListingCatRef = useRef<HTMLButtonElement | null>(null);
 
+  // Helper to scroll element into center horizontally within its scroll container without scrolling page vertically
+  const scrollContainerToElement = (el: HTMLElement | null) => {
+    if (!el || !el.parentElement) return;
+    const container = el.parentElement;
+    const elRect = el.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+    const elCenter = elRect.left + elRect.width / 2;
+    const containerCenter = containerRect.left + containerRect.width / 2;
+    const scrollOffset = elCenter - containerCenter;
+
+    container.scrollBy({
+      left: scrollOffset,
+      behavior: 'smooth'
+    });
+  };
+
   // Auto scroll selected main category into view across mobile sticky header and listing cards
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (activeMobileCatRef.current) {
-        activeMobileCatRef.current.scrollIntoView({
-          behavior: 'smooth',
-          block: 'nearest',
-          inline: 'center'
-        });
-      }
-      if (activeListingCatRef.current) {
-        activeListingCatRef.current.scrollIntoView({
-          behavior: 'smooth',
-          block: 'nearest',
-          inline: 'center'
-        });
-      }
+      scrollContainerToElement(activeMobileCatRef.current);
+      scrollContainerToElement(activeListingCatRef.current);
     }, 100);
     return () => clearTimeout(timer);
   }, [categoryFilter]);
@@ -145,13 +154,7 @@ export function Home() {
   // Auto scroll selected subcategory into view in mobile sticky header
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (activeMobileSubCatRef.current) {
-        activeMobileSubCatRef.current.scrollIntoView({
-          behavior: 'smooth',
-          block: 'nearest',
-          inline: 'center'
-        });
-      }
+      scrollContainerToElement(activeMobileSubCatRef.current);
     }, 120);
     return () => clearTimeout(timer);
   }, [subCategoryFilter, categoryFilter]);
@@ -236,6 +239,8 @@ export function Home() {
         setLoading(false);
         return;
       }
+
+      fetchPagePromoCards('home').then(cards => setPromoCards(cards)).catch(() => {});
 
       // If we already have fresh cached data, use it immediately and skip Firestore read
       const cached = getCachedBusinesses();
@@ -1008,24 +1013,25 @@ export function Home() {
               <form 
                 onSubmit={(e) => {
                   e.preventDefault();
-                  if (searchTerm.trim()) {
-                    navigate(`/search?q=${encodeURIComponent(searchTerm.trim())}`);
+                  if (heroSearchInput.trim()) {
+                    navigate(`/search?q=${encodeURIComponent(heroSearchInput.trim())}`);
                   }
                 }}
                 className="mt-6 md:mt-10 w-full max-w-2xl mx-auto min-w-0 relative group"
               >
                 <input
-                  type="text"
-                  className="block w-full pr-6 pl-24 py-3.5 md:pr-8 md:pl-28 md:py-5 border border-white/20 rounded-2xl md:rounded-[28px] leading-5 bg-white/10 backdrop-blur-xl text-white placeholder-white/70 focus:outline-none focus:ring-4 focus:ring-amber-500/30 focus:border-amber-400/50 focus:bg-white/15 shadow-[0_8px_32px_rgba(0,0,0,0.2)] font-bold text-sm md:text-lg transition-all duration-300"
+                  type="search"
+                  enterKeyHint="search"
+                  className="block w-full pr-6 pl-24 py-3.5 md:pr-8 md:pl-28 md:py-5 border border-white/20 rounded-2xl md:rounded-[28px] leading-relaxed md:leading-5 bg-white/10 backdrop-blur-xl text-white placeholder-white/70 focus:outline-none focus:ring-4 focus:ring-amber-500/30 focus:border-amber-400/50 focus:bg-white/15 shadow-[0_8px_32px_rgba(0,0,0,0.2)] font-bold text-sm md:text-lg transition-all duration-300 [&::-webkit-search-cancel-button]:appearance-none"
                   placeholder="عن ماذا تبحث؟ (مثال: شاورما، ملابس)..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  value={heroSearchInput}
+                  onChange={(e) => setHeroSearchInput(e.target.value)}
                 />
                 <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1 z-20">
-                  {searchTerm && (
+                  {heroSearchInput && (
                     <button 
                       type="button"
-                      onClick={() => setSearchTerm('')}
+                      onClick={() => setHeroSearchInput('')}
                       className="hover:bg-white/10 text-white/80 hover:text-white rounded-full p-2 transition-colors cursor-pointer"
                       title="مسح"
                     >
@@ -1044,17 +1050,9 @@ export function Home() {
 
               {/* Dynamic Smart Suggestions Deck */}
               <DynamicSmartSuggestions onSelectSuggestion={(queryText) => {
-                setSearchTerm(queryText);
+                setHeroSearchInput(queryText);
                 navigate(`/search?q=${encodeURIComponent(queryText)}`);
               }} />
-
-              {/* Intelligent Search Feedback Badge */}
-              {searchTerm && (
-                <div className="mt-3 inline-flex items-center gap-1.5 text-amber-50 text-[10px] md:text-xs font-black bg-black/30 backdrop-blur-md py-1.5 px-3 md:py-2 md:px-4 rounded-xl border border-amber-500/30 text-right shadow-xl">
-                  <Sparkles className="h-3 w-3 md:h-4 md:w-4 text-amber-400 animate-pulse shrink-0" />
-                  <span>محركنا الذكي يبحث الآن في المرادفات والتصنيفات بدقة ✨</span>
-                </div>
-              )}
             </div>
           </div>
         </>
@@ -1356,11 +1354,23 @@ export function Home() {
           {displayedBusinesses.length > 0 ? (
             <div className="space-y-8">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {displayedBusinesses
-                  .slice((currentPage - 1) * 15, currentPage * 15)
-                  .map((business) => (
-                  <BusinessCard key={business.id} business={business} />
-                ))}
+                {(() => {
+                  const currentSlice = displayedBusinesses.slice((currentPage - 1) * 15, currentPage * 15);
+                  const elements: React.ReactNode[] = [];
+                  let promoIndex = 0;
+                  currentSlice.forEach((business, idx) => {
+                    elements.push(<BusinessCard key={business.id} business={business} />);
+                    if ((idx === 2 || idx === 8) && promoCards[promoIndex]) {
+                      const promo = promoCards[promoIndex];
+                      elements.push(<InFeedPromoCardItem key={`promo_${promo.id}_${idx}`} card={promo} />);
+                      promoIndex++;
+                    }
+                  });
+                  if (currentSlice.length < 3 && promoCards.length > 0 && promoIndex === 0) {
+                    elements.push(<InFeedPromoCardItem key={`promo_${promoCards[0].id}`} card={promoCards[0]} />);
+                  }
+                  return elements;
+                })()}
               </div>
 
               <Pagination

@@ -63,7 +63,14 @@ import {
   Crown,
   Newspaper,
   Home,
-  Compass
+  Compass,
+  Calendar,
+  DollarSign,
+  Image as ImageIcon,
+  Video,
+  Play,
+  ArrowUpDown,
+  Tag
 } from 'lucide-react';
 import { Business, MarketingRequest, JobOffer, AppNotification, BannerBookingRequest, EditSuggestion, ReviewReport, UpgradeRequest } from '../types';
 import { isMedicalBusiness } from '../lib/medicalHelper';
@@ -105,6 +112,7 @@ import { invalidateCache } from '../lib/dataCache';
 import { getWhatsAppUrl } from '../lib/contactHelper';
 import { WhatsAppIcon } from '../components/common/WhatsAppIcon';
 import { getAppConfig, setAppConfig, seedDemoDataToFirestore, clearDemoDataFromFirestore } from '../lib/demoDataHelper';
+import { invalidatePromoCardsCache } from '../lib/promoCards';
 import { deleteBusinessCascading } from '../lib/businessDeleteHelper';
 import { useSystemSettings } from '../contexts/SystemSettingsContext';
 
@@ -227,6 +235,7 @@ export function AdminDashboard() {
   const [marketingSearch, setMarketingSearch] = useState('');
   const [marketingStatusFilter, setMarketingStatusFilter] = useState<'all' | 'pending' | 'contacted' | 'completed' | 'rejected'>('all');
   const [marketingServiceFilter, setMarketingServiceFilter] = useState<string>('all');
+  const [marketingSortBy, setMarketingSortBy] = useState<'newest' | 'oldest'>('newest');
 
   const [jobSearch, setJobSearch] = useState('');
   const [jobTypeFilter, setJobTypeFilter] = useState<string>('all');
@@ -1334,59 +1343,205 @@ export function AdminDashboard() {
       await updateDoc(doc(db, 'marketingRequests', reqId), { status: newStatus });
       setMarketingRequests(prev => prev.map(r => r.id === reqId ? { ...r, status: newStatus } : r));
 
+      // Helper to convert duration string to weeks count
+      const getDurationWeeksValue = (durationStr?: string): number => {
+        if (!durationStr) return 1;
+        if (durationStr.includes('أسبوع واحد') || durationStr === '1') return 1;
+        if (durationStr.includes('أسبوعين') || durationStr === '2') return 2;
+        if (durationStr.includes('شهر كامل') || durationStr === '4') return 4;
+        if (durationStr.includes('3 أشهر') || durationStr === '12') return 12;
+        return 1;
+      };
+
+      const reqDoc = marketingRequests.find(r => r.id === reqId);
+      let startDate = Date.now();
+      if (reqDoc?.publishTimeOption === 'scheduled' && reqDoc?.publishStartDate) {
+        startDate = new Date(reqDoc.publishStartDate).getTime();
+      }
+
+      const weeks = getDurationWeeksValue(reqDoc?.durationWeeks);
+      const durationMs = weeks * 7 * 24 * 60 * 60 * 1000;
+      const expiryDate = startDate + durationMs;
+
       // Side Effect: If sponsored or homepage banner is approved, mark the business as featured in Firestore
       if ((serviceType === 'sponsored' || serviceType === 'homepage_banner') && businessId && typeof businessId === 'string' && businessId.trim() !== '' && businessId !== 'undefined' && businessId !== 'null') {
         const isApproved = newStatus === 'completed' || newStatus === 'approved';
-        
-        // Helper to convert duration string to weeks count
-        const getDurationWeeksValue = (durationStr?: string): number => {
-          if (!durationStr) return 1;
-          if (durationStr.includes('أسبوع واحد') || durationStr === '1') return 1;
-          if (durationStr.includes('أسبوعين') || durationStr === '2') return 2;
-          if (durationStr.includes('شهر كامل') || durationStr === '4') return 4;
-          if (durationStr.includes('3 أشهر') || durationStr === '12') return 12;
-          return 1;
-        };
-
-        const reqDoc = marketingRequests.find(r => r.id === reqId);
-        let startDate = Date.now();
-        if (reqDoc?.publishTimeOption === 'scheduled' && reqDoc?.publishStartDate) {
-          startDate = new Date(reqDoc.publishStartDate).getTime();
-        }
-
-        const weeks = getDurationWeeksValue(reqDoc?.durationWeeks);
-        const durationMs = weeks * 7 * 24 * 60 * 60 * 1000;
-        const expiryDate = startDate + durationMs;
 
         try {
-          if (isApproved) {
-            await updateDoc(doc(db, 'businesses', businessId), { 
-              isFeatured: true,
-              featuredStartDate: startDate,
-              featuredExpiryDate: expiryDate
-            });
-            setBusinesses(prev => prev.map(b => b.id === businessId ? { 
-              ...b, 
-              isFeatured: true,
-              featuredStartDate: startDate,
-              featuredExpiryDate: expiryDate
-            } : b));
+          const targetType = reqDoc?.sponsoredTargetType || (reqDoc as any)?.targetType || 'business';
+          const entityId = reqDoc?.sponsoredEntityId || (reqDoc as any)?.targetEntityId;
+
+          if (serviceType === 'sponsored') {
+            if (targetType === 'single_product') {
+              // Update specific product in business menuItems
+              const bizDocSnap = await getDoc(doc(db, 'businesses', businessId));
+              if (bizDocSnap.exists()) {
+                const bData = bizDocSnap.data() as Business;
+                const updatedItems = (bData.menuItems || []).map((mItem: any) => {
+                  if (mItem.id === entityId || mItem.name === reqDoc?.sponsoredEntityName) {
+                    return {
+                      ...mItem,
+                      isFeatured: isApproved,
+                      isSponsored: isApproved,
+                      featuredStartDate: isApproved ? startDate : null,
+                      featuredExpiryDate: isApproved ? expiryDate : null
+                    };
+                  }
+                  return mItem;
+                });
+                await updateDoc(doc(db, 'businesses', businessId), { menuItems: updatedItems });
+                setBusinesses(prev => prev.map(b => b.id === businessId ? { ...b, menuItems: updatedItems } : b));
+              }
+            } else if (targetType === 'full_menu') {
+              // Update business full menu feature
+              await updateDoc(doc(db, 'businesses', businessId), {
+                isMenuFeatured: isApproved,
+                featuredStartDate: isApproved ? startDate : null,
+                featuredExpiryDate: isApproved ? expiryDate : null
+              });
+              setBusinesses(prev => prev.map(b => b.id === businessId ? {
+                ...b,
+                isMenuFeatured: isApproved,
+                featuredStartDate: isApproved ? startDate : undefined,
+                featuredExpiryDate: isApproved ? expiryDate : undefined
+              } : b));
+            } else if (targetType === 'single_offer' && entityId) {
+              // Update specific offer
+              try {
+                await updateDoc(doc(db, 'offers', entityId), {
+                  isFeatured: isApproved,
+                  isSponsored: isApproved,
+                  featuredStartDate: isApproved ? startDate : null,
+                  featuredExpiryDate: isApproved ? expiryDate : null
+                });
+              } catch (oErr) {
+                console.warn("Could not update single offer:", oErr);
+              }
+            } else if (targetType === 'multiple_offers') {
+              // Update all offers for this business
+              try {
+                const offSnap = await getDocs(query(collection(db, 'offers'), where('businessId', '==', businessId)));
+                for (const oDoc of offSnap.docs) {
+                  await updateDoc(doc(db, 'offers', oDoc.id), {
+                    isFeatured: isApproved,
+                    isSponsored: isApproved,
+                    featuredStartDate: isApproved ? startDate : null,
+                    featuredExpiryDate: isApproved ? expiryDate : null
+                  });
+                }
+              } catch (mOffErr) {
+                console.warn("Could not update multiple offers:", mOffErr);
+              }
+            } else if (targetType === 'single_job' && entityId) {
+              // Update specific job
+              try {
+                await updateDoc(doc(db, 'jobs', entityId), {
+                  isFeatured: isApproved,
+                  isSponsored: isApproved,
+                  featuredStartDate: isApproved ? startDate : null,
+                  featuredExpiryDate: isApproved ? expiryDate : null
+                });
+              } catch (jErr) {
+                console.warn("Could not update single job:", jErr);
+              }
+            } else if (targetType === 'multiple_jobs') {
+              // Update all jobs for this business
+              try {
+                const jobsSnap = await getDocs(query(collection(db, 'jobs'), where('businessId', '==', businessId)));
+                for (const jDoc of jobsSnap.docs) {
+                  await updateDoc(doc(db, 'jobs', jDoc.id), {
+                    isFeatured: isApproved,
+                    isSponsored: isApproved,
+                    featuredStartDate: isApproved ? startDate : null,
+                    featuredExpiryDate: isApproved ? expiryDate : null
+                  });
+                }
+              } catch (mJobErr) {
+                console.warn("Could not update multiple jobs:", mJobErr);
+              }
+            } else if (targetType === 'all_inclusive') {
+              // Update business, menu, offers, and jobs
+              await updateDoc(doc(db, 'businesses', businessId), {
+                isFeatured: isApproved,
+                isMenuFeatured: isApproved,
+                featuredStartDate: isApproved ? startDate : null,
+                featuredExpiryDate: isApproved ? expiryDate : null
+              });
+              setBusinesses(prev => prev.map(b => b.id === businessId ? {
+                ...b,
+                isFeatured: isApproved,
+                isMenuFeatured: isApproved,
+                featuredStartDate: isApproved ? startDate : undefined,
+                featuredExpiryDate: isApproved ? expiryDate : undefined
+              } : b));
+              // Offers
+              try {
+                const offSnap = await getDocs(query(collection(db, 'offers'), where('businessId', '==', businessId)));
+                for (const oDoc of offSnap.docs) {
+                  await updateDoc(doc(db, 'offers', oDoc.id), {
+                    isFeatured: isApproved,
+                    isSponsored: isApproved,
+                    featuredStartDate: isApproved ? startDate : null,
+                    featuredExpiryDate: isApproved ? expiryDate : null
+                  });
+                }
+              } catch (e) {}
+              // Jobs
+              try {
+                const jobsSnap = await getDocs(query(collection(db, 'jobs'), where('businessId', '==', businessId)));
+                for (const jDoc of jobsSnap.docs) {
+                  await updateDoc(doc(db, 'jobs', jDoc.id), {
+                    isFeatured: isApproved,
+                    isSponsored: isApproved,
+                    featuredStartDate: isApproved ? startDate : null,
+                    featuredExpiryDate: isApproved ? expiryDate : null
+                  });
+                }
+              } catch (e) {}
+            } else {
+              // Default business card
+              await updateDoc(doc(db, 'businesses', businessId), { 
+                isFeatured: isApproved,
+                featuredStartDate: isApproved ? startDate : null,
+                featuredExpiryDate: isApproved ? expiryDate : null
+              });
+              setBusinesses(prev => prev.map(b => b.id === businessId ? { 
+                ...b, 
+                isFeatured: isApproved,
+                featuredStartDate: isApproved ? startDate : undefined,
+                featuredExpiryDate: isApproved ? expiryDate : undefined
+              } : b));
+            }
           } else {
-            // If rejected or reset, clear feature flags
-            await updateDoc(doc(db, 'businesses', businessId), { 
-              isFeatured: false,
-              featuredStartDate: null,
-              featuredExpiryDate: null
-            });
-            setBusinesses(prev => prev.map(b => b.id === businessId ? { 
-              ...b, 
-              isFeatured: false,
-              featuredStartDate: undefined,
-              featuredExpiryDate: undefined
-            } : b));
+            // For homepage_banner or other
+            if (isApproved) {
+              await updateDoc(doc(db, 'businesses', businessId), { 
+                isFeatured: true,
+                featuredStartDate: startDate,
+                featuredExpiryDate: expiryDate
+              });
+              setBusinesses(prev => prev.map(b => b.id === businessId ? { 
+                ...b, 
+                isFeatured: true,
+                featuredStartDate: startDate,
+                featuredExpiryDate: expiryDate
+              } : b));
+            } else {
+              await updateDoc(doc(db, 'businesses', businessId), { 
+                isFeatured: false,
+                featuredStartDate: null,
+                featuredExpiryDate: null
+              });
+              setBusinesses(prev => prev.map(b => b.id === businessId ? { 
+                ...b, 
+                isFeatured: false,
+                featuredStartDate: undefined,
+                featuredExpiryDate: undefined
+              } : b));
+            }
           }
         } catch (busErr) {
-          console.warn("Could not update business feature status in Firestore (it might be a demo business or deleted):", busErr);
+          console.warn("Could not update feature status in Firestore:", busErr);
         }
 
         if (serviceType === 'homepage_banner') {
@@ -1491,8 +1646,61 @@ export function AdminDashboard() {
         }
       }
 
+      // Side Effect: If in-feed promotional card request is approved, publish/update in promo_cards collection
+      if (serviceType === 'promo_card') {
+        try {
+          const isApproved = newStatus === 'completed' || newStatus === 'approved';
+          const reqDoc = marketingRequests.find(r => r.id === reqId);
+          if (isApproved && reqDoc) {
+            let biz = (businessId && businessId !== 'undefined' && businessId !== 'null') ? businesses.find(b => b.id === businessId) : undefined;
+            if (!biz && businessId && businessId !== 'undefined' && businessId !== 'null') {
+              const bizDocSnap = await getDoc(doc(db, 'businesses', businessId));
+              if (bizDocSnap.exists()) {
+                biz = { id: bizDocSnap.id, ...bizDocSnap.data() } as Business;
+              }
+            }
+
+            const promoDocId = `promocard_mkt_${reqId}`;
+            const reqDocAny = reqDoc as any;
+            const promoData: any = {
+              targetPage: reqDocAny.promoCardTargetPage || 'home',
+              targetType: reqDocAny.promoCardTargetType || 'business',
+              targetEntityId: reqDocAny.targetEntityId || '',
+              targetEntityName: reqDocAny.targetEntityName || '',
+              title: reqDocAny.bannerTitle || biz?.name || 'إعلان ترويجي مميز',
+              subtitle: reqDocAny.bannerSubtitle || '',
+              mediaType: reqDocAny.promoCardMediaType || 'image',
+              imageUrl: reqDocAny.promoCardImageUrl || reqDocAny.bannerImageUrl || biz?.imageUrl || '',
+              videoUrl: reqDocAny.promoCardVideoUrl || '',
+              badgeText: 'ممول',
+              buttonText: reqDocAny.buttonText || 'عرض التفاصيل',
+              buttonLink: reqDocAny.buttonLink || (businessId ? `/business/${businessId}` : ''),
+              businessId: businessId || '',
+              businessName: biz?.name || reqDocAny.businessName || '',
+              businessLogo: biz?.logoUrl || '',
+              active: true,
+              createdAt: reqDocAny.createdAt || Date.now(),
+              startDate: startDate,
+              expiryDate: expiryDate,
+              marketingRequestId: reqId,
+              promoCardLayout: reqDocAny.promoCardLayout || 'standard',
+              promoCardMediaFit: reqDocAny.promoCardMediaFit || 'crop',
+              promoCardContentDisplay: reqDocAny.promoCardContentDisplay || 'always'
+            };
+
+            await setDoc(doc(db, 'promo_cards', promoDocId), promoData);
+            invalidatePromoCardsCache();
+          } else {
+            await deleteDoc(doc(db, 'promo_cards', `promocard_mkt_${reqId}`)).catch(() => {});
+            invalidatePromoCardsCache();
+          }
+        } catch (promoErr) {
+          console.warn("Could not update promo_cards collection:", promoErr);
+        }
+      }
+
       showToast(`تم تحديث حالة الطلب التسويقي إلى: ${
-        newStatus === 'completed' || newStatus === 'approved' ? 'مفعّل ومعتمد ✅' : newStatus === 'contacted' ? 'تم التواصل 📞' : 'مرفوض ❌'
+        newStatus === 'completed' || newStatus === 'approved' ? 'مفعّل ومعتمد' : newStatus === 'contacted' ? 'تم التواصل' : 'مرفوض'
       }`);
     } catch (error) {
       console.error("Error updating marketing request status:", error);
@@ -1513,6 +1721,10 @@ export function AdminDashboard() {
       }
       if (reqToDelete && reqToDelete.serviceType === 'push_notifications') {
         await deleteDoc(doc(db, 'notifications', `notif_marketing_${reqId}`));
+      }
+      if (reqToDelete && reqToDelete.serviceType === 'promo_card') {
+        await deleteDoc(doc(db, 'promo_cards', `promocard_mkt_${reqId}`)).catch(() => {});
+        invalidatePromoCardsCache();
       }
       await deleteDoc(doc(db, 'marketingRequests', reqId));
       setMarketingRequests(prev => prev.filter(r => r.id !== reqId));
@@ -1728,19 +1940,38 @@ export function AdminDashboard() {
 
   // Filtered Marketing Requests
   const filteredMarketing = useMemo(() => {
-    return marketingRequests.filter(m => {
-      if (marketingStatusFilter !== 'all' && m.status !== marketingStatusFilter) return false;
-      if (marketingServiceFilter !== 'all' && m.serviceType !== marketingServiceFilter) return false;
-      if (marketingSearch.trim()) {
-        const q = marketingSearch.toLowerCase().trim();
-        const matchBiz = m.businessName?.toLowerCase().includes(q);
-        const matchSrv = m.serviceName?.toLowerCase().includes(q);
-        const matchEmail = m.userEmail?.toLowerCase().includes(q);
-        return matchBiz || matchSrv || matchEmail;
-      }
-      return true;
-    });
-  }, [marketingRequests, marketingStatusFilter, marketingServiceFilter, marketingSearch]);
+    return marketingRequests
+      .filter(m => {
+        if (marketingStatusFilter !== 'all') {
+          if (marketingStatusFilter === 'completed') {
+            if (m.status !== 'completed' && m.status !== 'approved') return false;
+          } else {
+            if (m.status !== marketingStatusFilter) return false;
+          }
+        }
+        if (marketingServiceFilter !== 'all' && m.serviceType !== marketingServiceFilter) return false;
+        if (marketingSearch.trim()) {
+          const q = marketingSearch.toLowerCase().trim();
+          const matchBiz = m.businessName?.toLowerCase().includes(q);
+          const matchSrv = m.serviceName?.toLowerCase().includes(q);
+          const matchEmail = m.userEmail?.toLowerCase().includes(q);
+          const matchTitle = (m as any).bannerTitle?.toLowerCase().includes(q);
+          const matchSubtitle = (m as any).bannerSubtitle?.toLowerCase().includes(q);
+          const matchEntity = (m as any).targetEntityName?.toLowerCase().includes(q) || (m as any).sponsoredEntityName?.toLowerCase().includes(q);
+          const matchTargetPage = (m as any).promoCardTargetPage?.toLowerCase().includes(q);
+          const matchOwner = (m as any).ownerName?.toLowerCase().includes(q);
+          const matchPhone = (m as any).phone?.includes(q) || (m as any).contactWhatsapp?.includes(q);
+          return matchBiz || matchSrv || matchEmail || matchTitle || matchSubtitle || matchEntity || matchTargetPage || matchOwner || matchPhone;
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        if (marketingSortBy === 'oldest') {
+          return (a.createdAt || 0) - (b.createdAt || 0);
+        }
+        return (b.createdAt || 0) - (a.createdAt || 0);
+      });
+  }, [marketingRequests, marketingStatusFilter, marketingServiceFilter, marketingSearch, marketingSortBy]);
 
   // Filtered Jobs
   const filteredJobs = useMemo(() => {
@@ -1978,7 +2209,7 @@ export function AdminDashboard() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8 pb-16" dir="rtl">
+    <div className="w-full space-y-6 sm:space-y-8 pb-16 min-w-0" dir="rtl">
       
       {/* Toast Floating Alert */}
       {toastMessage && (
@@ -2860,12 +3091,532 @@ export function AdminDashboard() {
       {/* TAB 4: MARKETING CAMPAIGNS */}
       {activeTab === 'marketing' && (
         <div className="space-y-6">
-          {/* Marketing Header Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Sub Navigation */}
+          <div className="bg-white p-2 rounded-2xl border border-[#e5e1da] shadow-xs flex items-center gap-2 max-w-md">
+            <button
+              onClick={() => setMarketingSubTab('requests')}
+              className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                marketingSubTab === 'requests'
+                  ? 'bg-[#1a4d2e] text-white shadow-xs'
+                  : 'text-stone-600 hover:bg-stone-100'
+              }`}
+            >
+              <Megaphone className="h-4 w-4" />
+              <span>طلبات الحملات والترويج</span>
+              {marketingRequests.filter(m => m.status === 'pending').length > 0 && (
+                <span className="bg-amber-400 text-amber-950 px-2 py-0.5 rounded-full text-[10px] font-black">
+                  {marketingRequests.filter(m => m.status === 'pending').length}
+                </span>
+              )}
+            </button>
+
+            <button
+              onClick={() => setMarketingSubTab('notifications_center' as any)}
+              className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                (marketingSubTab as string) === 'pricing' || (marketingSubTab as string) === 'notifications_center'
+                  ? 'bg-[#1a4d2e] text-white shadow-xs'
+                  : 'text-stone-600 hover:bg-stone-100'
+              }`}
+            >
+              <DollarSign className="h-4 w-4" />
+              <span>تسعير وباقات الخدمات</span>
+            </button>
+          </div>
+
+          {(marketingSubTab as string) === 'requests' ? (
+            <div className="space-y-6">
+              {/* Marketing KPI Header Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+                <div className="bg-white p-4 rounded-2xl sm:rounded-3xl border border-[#e5e1da] shadow-xs space-y-1">
+                  <div className="flex items-center justify-between text-stone-500">
+                    <span className="text-xs font-bold">إجمالي الطلبات</span>
+                    <Megaphone className="h-4 w-4 text-[#1a4d2e]" />
+                  </div>
+                  <div className="text-xl sm:text-2xl font-black text-stone-900">{marketingRequests.length}</div>
+                  <div className="text-[10px] text-stone-400 font-bold">كافة طلبات الترويج المسجلة</div>
+                </div>
+
+                <div className="bg-amber-50/60 p-4 rounded-2xl sm:rounded-3xl border border-amber-200 shadow-xs space-y-1">
+                  <div className="flex items-center justify-between text-amber-800">
+                    <span className="text-xs font-bold">بانتظار المراجعة</span>
+                    <Clock className="h-4 w-4 text-amber-600" />
+                  </div>
+                  <div className="text-xl sm:text-2xl font-black text-amber-950">
+                    {marketingRequests.filter(m => m.status === 'pending').length}
+                  </div>
+                  <div className="text-[10px] text-amber-700 font-bold">تتطلب تدقيق واعتماد الإدارة</div>
+                </div>
+
+                <div className="bg-emerald-50/60 p-4 rounded-2xl sm:rounded-3xl border border-emerald-200 shadow-xs space-y-1">
+                  <div className="flex items-center justify-between text-emerald-800">
+                    <span className="text-xs font-bold">مفعّل ومعتمد</span>
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                  </div>
+                  <div className="text-xl sm:text-2xl font-black text-emerald-950">
+                    {marketingRequests.filter(m => m.status === 'completed' || m.status === 'approved').length}
+                  </div>
+                  <div className="text-[10px] text-emerald-700 font-bold">حملات نشطة ومنشورة</div>
+                </div>
+
+                <div className="bg-purple-50/60 p-4 rounded-2xl sm:rounded-3xl border border-purple-200 shadow-xs space-y-1">
+                  <div className="flex items-center justify-between text-purple-800">
+                    <span className="text-xs font-bold">بطاقات مدمجة</span>
+                    <Layers className="h-4 w-4 text-purple-600" />
+                  </div>
+                  <div className="text-xl sm:text-2xl font-black text-purple-950">
+                    {marketingRequests.filter(m => m.serviceType === 'promo_card').length}
+                  </div>
+                  <div className="text-[10px] text-purple-700 font-bold">إعلانات بطاقات القوائم</div>
+                </div>
+
+                <div className="bg-blue-50/60 p-4 rounded-2xl sm:rounded-3xl border border-blue-200 shadow-xs space-y-1 col-span-2 sm:col-span-1">
+                  <div className="flex items-center justify-between text-blue-800">
+                    <span className="text-xs font-bold">صدارة وبانرات</span>
+                    <Crown className="h-4 w-4 text-amber-500" />
+                  </div>
+                  <div className="text-xl sm:text-2xl font-black text-blue-950">
+                    {marketingRequests.filter(m => m.serviceType === 'sponsored' || m.serviceType === 'homepage_banner').length}
+                  </div>
+                  <div className="text-[10px] text-blue-700 font-bold">صدارة بحث وسلايدر رئيسي</div>
+                </div>
+              </div>
+
+              {/* Service Type Filter Horizontal Bar */}
+              <div className="bg-white p-3 sm:p-4 rounded-3xl border border-[#e5e1da] shadow-xs space-y-3">
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-xs font-black text-stone-800 flex items-center gap-1.5">
+                    <Filter className="h-3.5 w-3.5 text-[#1a4d2e]" />
+                    <span>فرز الطلبات حسب نوع الخدمة التسويقية:</span>
+                  </span>
+                  <span className="text-[11px] text-stone-500 font-bold">
+                    النتائج المعروضة: {filteredMarketing.length} من أصل {marketingRequests.length}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
+                  {[
+                    { id: 'all', label: 'جميع الخدمات', count: marketingRequests.length, icon: Sparkles },
+                    { id: 'promo_card', label: 'بطاقة ترويجية مدمجة', count: marketingRequests.filter(m => m.serviceType === 'promo_card').length, icon: Layers },
+                    { id: 'sponsored', label: 'صدارة البحث والترويج', count: marketingRequests.filter(m => m.serviceType === 'sponsored').length, icon: Crown },
+                    { id: 'homepage_banner', label: 'بانر الصفحة الرئيسية', count: marketingRequests.filter(m => m.serviceType === 'homepage_banner').length, icon: Newspaper },
+                    { id: 'push_notifications', label: 'إشعار جماعي مباشر', count: marketingRequests.filter(m => m.serviceType === 'push_notifications').length, icon: Bell },
+                    { id: 'premium_messaging', label: 'ترقية نظام الرسائل', count: marketingRequests.filter(m => m.serviceType === 'premium_messaging').length, icon: MessageSquare },
+                  ].map(srv => {
+                    const IconComp = srv.icon;
+                    const isActive = marketingServiceFilter === srv.id;
+                    return (
+                      <button
+                        key={srv.id}
+                        type="button"
+                        onClick={() => setMarketingServiceFilter(srv.id)}
+                        className={`px-3.5 py-2.5 rounded-2xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-2 cursor-pointer shrink-0 border ${
+                          isActive
+                            ? 'bg-[#1a4d2e] text-white border-[#1a4d2e] shadow-xs font-black'
+                            : 'bg-stone-50 hover:bg-stone-100 text-stone-700 border-stone-200/80 hover:border-stone-300'
+                        }`}
+                      >
+                        <IconComp className={`h-3.5 w-3.5 ${isActive ? 'text-amber-300' : 'text-stone-500'}`} />
+                        <span>{srv.label}</span>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                          isActive ? 'bg-white/20 text-white' : 'bg-stone-200 text-stone-700'
+                        }`}>
+                          {srv.count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Search, Status & Sorting Bar */}
+              <div className="bg-white p-4.5 rounded-3xl border border-[#e5e1da] shadow-xs flex flex-col md:flex-row items-center justify-between gap-4">
+                <div className="relative flex-1 w-full">
+                  <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
+                  <input
+                    type="text"
+                    value={marketingSearch}
+                    onChange={e => setMarketingSearch(e.target.value)}
+                    placeholder="ابحث باسم المحل، المالك، الهاتف، عنوان الحملة، الصفحة المستهدفة..."
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl pr-10 pl-4 py-2.5 text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                  />
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+                  {/* Status Chips */}
+                  <div className="flex items-center gap-1 overflow-x-auto">
+                    {[
+                      { id: 'all', label: 'الكل' },
+                      { id: 'pending', label: `قيد الانتظار (${marketingRequests.filter(m => m.status === 'pending').length})` },
+                      { id: 'completed', label: 'مفعّل' },
+                      { id: 'contacted', label: 'تم التواصل' },
+                      { id: 'rejected', label: 'مرفوض' }
+                    ].map(st => (
+                      <button
+                        key={st.id}
+                        type="button"
+                        onClick={() => setMarketingStatusFilter(st.id as any)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-colors cursor-pointer ${
+                          marketingStatusFilter === st.id
+                            ? 'bg-[#1a4d2e] text-white font-black'
+                            : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                        }`}
+                      >
+                        {st.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Sort Order */}
+                  <select
+                    value={marketingSortBy}
+                    onChange={e => setMarketingSortBy(e.target.value as any)}
+                    className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs font-bold text-stone-700 cursor-pointer"
+                  >
+                    <option value="newest">الأحدث أولاً</option>
+                    <option value="oldest">الأقدم أولاً</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Marketing Requests List */}
+              {filteredMarketing.length === 0 ? (
+                <div className="text-center py-16 bg-white rounded-3xl border border-[#e5e1da] space-y-3">
+                  <Megaphone className="h-12 w-12 text-stone-300 mx-auto" />
+                  <h3 className="font-bold text-stone-700">لا توجد طلبات تطابق معايير الفلترة المحددة</h3>
+                  <p className="text-xs text-stone-500">جرب تغيير نوع الخدمة أو حالة الطلب أو مسح كلمات البحث</p>
+                </div>
+              ) : (
+                <div className="grid gap-4">
+                  {filteredMarketing.map(req => {
+                    const relatedBiz = businesses.find(b => b.id === req.businessId);
+                    const reqAny = req as any;
+                    const isPromoCard = req.serviceType === 'promo_card';
+                    const isSponsored = req.serviceType === 'sponsored';
+                    const isBanner = req.serviceType === 'homepage_banner';
+                    const mediaThumbnail = reqAny.promoCardImageUrl || reqAny.bannerImageUrl || relatedBiz?.imageUrl;
+                    const mediaVideo = reqAny.promoCardVideoUrl;
+                    const hasMedia = Boolean(mediaThumbnail || mediaVideo);
+
+                    return (
+                      <div 
+                        key={req.id}
+                        className={`bg-white p-5 sm:p-6 rounded-3xl border transition-all shadow-xs flex flex-col gap-4 ${
+                          req.status === 'pending'
+                            ? 'border-amber-300 bg-amber-50/15 ring-1 ring-amber-300/50'
+                            : req.status === 'completed' || req.status === 'approved'
+                            ? 'border-emerald-200/90'
+                            : 'border-[#e5e1da]'
+                        }`}
+                      >
+                        {/* Card Top Row: Header & Status */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-stone-100 pb-3">
+                          <div className="flex flex-wrap items-center gap-2.5">
+                            {/* Business Logo & Name */}
+                            <div className="flex items-center gap-2">
+                              {relatedBiz?.logoUrl ? (
+                                <img src={relatedBiz.logoUrl} alt="" className="w-8 h-8 rounded-full object-cover border border-stone-200" />
+                              ) : (
+                                <div className="w-8 h-8 rounded-full bg-stone-100 text-stone-500 flex items-center justify-center">
+                                  <Store className="w-4 h-4" />
+                                </div>
+                              )}
+                              <h3 className="text-base sm:text-lg font-black text-[#2d2a26]">
+                                {req.businessName}
+                              </h3>
+                            </div>
+
+                            {/* Service Badge */}
+                            <span className={`px-3 py-1 rounded-full text-xs font-black flex items-center gap-1 ${
+                              isPromoCard 
+                                ? 'bg-purple-100 text-purple-900 border border-purple-200' 
+                                : isSponsored 
+                                ? 'bg-amber-100 text-amber-900 border border-amber-300' 
+                                : isBanner 
+                                ? 'bg-blue-100 text-blue-900 border border-blue-200' 
+                                : 'bg-stone-100 text-stone-800'
+                            }`}>
+                              {isPromoCard && <Layers className="w-3.5 h-3.5" />}
+                              {isSponsored && <Crown className="w-3.5 h-3.5 text-amber-600" />}
+                              {isBanner && <Newspaper className="w-3.5 h-3.5" />}
+                              <span>{req.serviceName}</span>
+                            </span>
+
+                            {/* Sponsored Target Entity badge if applicable */}
+                            {isSponsored && (
+                              <span className="bg-amber-50 text-amber-800 border border-amber-200 px-2.5 py-0.5 rounded-full text-[11px] font-bold">
+                                {(() => {
+                                  const tType = req.sponsoredTargetType || reqAny.targetType;
+                                  switch (tType) {
+                                    case 'single_product': return `منتج: ${req.sponsoredEntityName || 'محدد'}`;
+                                    case 'full_menu': return 'المنيو بالكامل';
+                                    case 'single_offer': return `عرض: ${req.sponsoredEntityName || 'محدد'}`;
+                                    case 'multiple_offers': return 'مجموعة عروض';
+                                    case 'single_job': return `وظيفة: ${req.sponsoredEntityName || 'محددة'}`;
+                                    case 'multiple_jobs': return 'مجموعة وظائف';
+                                    case 'all_inclusive': return 'شامل لكل شيء';
+                                    case 'business':
+                                    default:
+                                      return 'بطاقة المحل';
+                                  }
+                                })()}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Status Badge */}
+                          <div className="flex items-center gap-2">
+                            <span className={`px-3 py-1 rounded-full text-xs font-black flex items-center gap-1.5 ${
+                              req.status === 'completed' || req.status === 'approved' 
+                                ? 'bg-emerald-100 text-emerald-800' 
+                                : req.status === 'contacted' 
+                                ? 'bg-blue-100 text-blue-800' 
+                                : req.status === 'rejected'
+                                ? 'bg-red-100 text-red-800'
+                                : 'bg-amber-100 text-amber-900 animate-pulse'
+                            }`}>
+                              {req.status === 'completed' || req.status === 'approved' ? (
+                                <>
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                  <span>مفعّل ومعتمد</span>
+                                </>
+                              ) : req.status === 'contacted' ? (
+                                <>
+                                  <Phone className="w-3.5 h-3.5 text-blue-600" />
+                                  <span>تم التواصل</span>
+                                </>
+                              ) : req.status === 'rejected' ? (
+                                <>
+                                  <XCircle className="w-3.5 h-3.5 text-red-600" />
+                                  <span>مرفوض</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Clock className="w-3.5 h-3.5 text-amber-600" />
+                                  <span>قيد المراجعة والتدقيق</span>
+                                </>
+                              )}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Card Body: Media Preview & Campaign Copy */}
+                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+                          {/* Media Thumbnail Preview (if applicable) */}
+                          {hasMedia && (
+                            <div className="lg:col-span-3">
+                              <div className="relative aspect-video sm:aspect-[16/10] bg-stone-900 rounded-2xl overflow-hidden border border-stone-200 shadow-2xs group">
+                                {mediaVideo ? (
+                                  <div className="w-full h-full flex items-center justify-center bg-stone-950 text-white relative">
+                                    <video src={mediaVideo} className="w-full h-full object-cover opacity-80" muted playsInline />
+                                    <div className="absolute inset-0 flex items-center justify-center">
+                                      <div className="w-9 h-9 rounded-full bg-black/60 backdrop-blur-md flex items-center justify-center text-white border border-white/30">
+                                        <Play className="w-4 h-4 fill-white mr-0.5" />
+                                      </div>
+                                    </div>
+                                    <span className="absolute bottom-2 right-2 bg-black/70 text-amber-300 text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1">
+                                      <Video className="w-3 h-3" />
+                                      فيديو
+                                    </span>
+                                  </div>
+                                ) : mediaThumbnail ? (
+                                  <>
+                                    <img src={mediaThumbnail} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                                    <span className="absolute bottom-2 right-2 bg-black/70 text-white text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1">
+                                      <ImageIcon className="w-3 h-3" />
+                                      صورة
+                                    </span>
+                                  </>
+                                ) : null}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Content Details & Copy */}
+                          <div className={`${hasMedia ? 'lg:col-span-9' : 'lg:col-span-12'} space-y-3`}>
+                            {/* Campaign Title & Subtitle */}
+                            {(reqAny.bannerTitle || reqAny.title) && (
+                              <div className="bg-stone-50 p-3 rounded-2xl border border-stone-200/70 space-y-1">
+                                <div className="text-xs font-black text-stone-900">
+                                  {reqAny.bannerTitle || reqAny.title}
+                                </div>
+                                {(reqAny.bannerSubtitle || reqAny.subtitle) && (
+                                  <div className="text-xs text-stone-600 font-medium">
+                                    {reqAny.bannerSubtitle || reqAny.subtitle}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Configuration Tag Pills */}
+                            <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                              {/* Target Page */}
+                              {reqAny.promoCardTargetPage && (
+                                <span className="bg-stone-100 text-stone-700 px-2.5 py-1 rounded-xl font-bold flex items-center gap-1">
+                                  <Tag className="w-3 h-3 text-[#1a4d2e]" />
+                                  <span>الصفحة:</span>
+                                  <span className="font-black text-stone-900">
+                                    {reqAny.promoCardTargetPage === 'home' ? 'الرئيسية' :
+                                     reqAny.promoCardTargetPage === 'offers' ? 'العروض' :
+                                     reqAny.promoCardTargetPage === 'products' ? 'المنتجات' :
+                                     reqAny.promoCardTargetPage === 'medical' ? 'الدليل الطبي' :
+                                     reqAny.promoCardTargetPage === 'jobs' ? 'الوظائف' :
+                                     reqAny.promoCardTargetPage === 'housing' ? 'السكنات' : reqAny.promoCardTargetPage}
+                                  </span>
+                                </span>
+                              )}
+
+                              {/* Layout Mode */}
+                              {reqAny.promoCardLayout && (
+                                <span className="bg-stone-100 text-stone-700 px-2.5 py-1 rounded-xl font-bold">
+                                  التنسيق: <span className="font-black text-stone-900">{reqAny.promoCardLayout === 'full' ? 'كامل (Full Overlay)' : 'قياسي'}</span>
+                                </span>
+                              )}
+
+                              {/* Media Fit Mode */}
+                              {reqAny.promoCardMediaFit && (
+                                <span className="bg-stone-100 text-stone-700 px-2.5 py-1 rounded-xl font-bold">
+                                  الاقتصاص: <span className="font-black text-stone-900">
+                                    {reqAny.promoCardMediaFit === 'fit' ? 'احتواء كامل' :
+                                     reqAny.promoCardMediaFit === 'fill' ? 'ملء متمدد' :
+                                     reqAny.promoCardMediaFit === 'pad' ? 'احتواء بهامش' : 'اقتصاص وملء'}
+                                  </span>
+                                </span>
+                              )}
+
+                              {/* Content Display Mode */}
+                              {reqAny.promoCardContentDisplay && (
+                                <span className="bg-stone-100 text-stone-700 px-2.5 py-1 rounded-xl font-bold">
+                                  الظهور: <span className="font-black text-stone-900">{reqAny.promoCardContentDisplay === 'hover' ? 'عند التمرير / النقر' : 'دائم'}</span>
+                                </span>
+                              )}
+
+                              {/* Action button preview */}
+                              {reqAny.buttonText && (
+                                <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-2.5 py-1 rounded-xl font-bold">
+                                  الزر: <span className="font-black">{reqAny.buttonText}</span>
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Contact & Advertiser Row */}
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-stone-500 pt-1">
+                              <span className="flex items-center gap-1">
+                                <Calendar className="w-3.5 h-3.5 text-stone-400" />
+                                <span>تاريخ التقديم: {new Date(req.createdAt).toLocaleDateString('ar-EG')}</span>
+                              </span>
+
+                              {req.publishTimeOption === 'scheduled' && req.publishStartDate && (
+                                <span className="flex items-center gap-1 font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                                  <Clock className="w-3.5 h-3.5 text-amber-600" />
+                                  <span>بدء مجدول: {req.publishStartDate}</span>
+                                </span>
+                              )}
+
+                              {req.durationWeeks && (
+                                <span className="font-bold text-stone-700">
+                                  المدة: {req.durationWeeks}
+                                </span>
+                              )}
+
+                              {req.userEmail && (
+                                <span>البريد: {req.userEmail}</span>
+                              )}
+
+                              {(relatedBiz?.phone || req.phone) && (
+                                <div className="flex items-center gap-2 font-mono">
+                                  <a
+                                    href={`tel:${relatedBiz?.phone || req.phone}`}
+                                    className="text-stone-700 hover:text-[#1a4d2e] font-bold flex items-center gap-1"
+                                  >
+                                    <Phone className="w-3.5 h-3.5 text-emerald-600" />
+                                    <span dir="ltr">{relatedBiz?.phone || req.phone}</span>
+                                  </a>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Actions Footer */}
+                        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-stone-100">
+                          <div className="flex items-center gap-2">
+                            {req.businessId && (
+                              <Link
+                                to={`/business/${req.businessId}`}
+                                target="_blank"
+                                className="inline-flex items-center gap-1.5 text-xs font-bold text-[#1a4d2e] hover:underline bg-stone-50 hover:bg-stone-100 px-3 py-1.5 rounded-xl transition-colors"
+                              >
+                                <span>زيارة صفحة المحل</span>
+                                <ExternalLink className="w-3.5 h-3.5" />
+                              </Link>
+                            )}
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                            <button
+                              onClick={() => {
+                                setSelectedMarketingRequest(req);
+                                setIsMarketingDetailsOpen(true);
+                              }}
+                              className="flex-1 sm:flex-none bg-stone-100 hover:bg-stone-200 text-stone-800 px-4 py-2 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                            >
+                              <Eye className="w-3.5 h-3.5 text-stone-600" />
+                              <span>عرض النموذج والتفاصيل</span>
+                            </button>
+
+                            {req.status !== 'completed' && req.status !== 'approved' ? (
+                              <>
+                                <button
+                                  onClick={() => handleMarketingStatusUpdate(req.id!, 'completed', req.businessId, req.serviceType)}
+                                  className="flex-1 sm:flex-none bg-[#1a4d2e] hover:bg-[#143d24] text-white px-4 py-2 rounded-xl text-xs font-black transition-colors shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
+                                >
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-[#ff9f1c]" />
+                                  <span>موافقة وتفعيل</span>
+                                </button>
+
+                                {req.status === 'pending' && (
+                                  <button
+                                    onClick={() => handleMarketingStatusUpdate(req.id!, 'rejected', req.businessId, req.serviceType)}
+                                    className="flex-1 sm:flex-none bg-red-50 hover:bg-red-100 text-red-700 px-3.5 py-2 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                                  >
+                                    <span>رفض</span>
+                                  </button>
+                                )}
+                              </>
+                            ) : (
+                              <button
+                                onClick={() => handleMarketingStatusUpdate(req.id!, 'rejected', req.businessId, req.serviceType)}
+                                className="flex-1 sm:flex-none bg-stone-100 hover:bg-red-50 text-stone-700 hover:text-red-700 px-3.5 py-2 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                              >
+                                <span>إلغاء التفعيل</span>
+                              </button>
+                            )}
+
+                            <button
+                              onClick={() => handleDeleteMarketingRequest(req.id)}
+                              className="p-2 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors cursor-pointer"
+                              title="حذف هذا الطلب"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ) : (
+            /* Pricing & Packages SubTab */
+            <div className="space-y-6">
+              {/* Marketing Header Pricing Overview Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                 {[
                   { title: 'صدارة البحث والتصنيف', price: `${appConfigState?.priceSponsored ?? 15} د.أ`, desc: 'ظهور المحل في أعلى نتائج البحث وبانر مميز', type: 'sponsored', count: marketingRequests.filter(m => m.serviceType === 'sponsored').length },
                   { title: 'إشعار جماعي مباشر', price: `${appConfigState?.pricePushNotifications ?? 10} د.أ`, desc: 'إشعار فوري لجميع مستخدمي المنصة في إربد', type: 'push_notifications', count: marketingRequests.filter(m => m.serviceType === 'push_notifications').length },
                   { title: 'بانر الصفحة الرئيسية', price: `${appConfigState?.priceHomepageBanner ?? 25} د.أ`, desc: 'إعلان رئيسي بارز في سلايدر أعلى الصفحة', type: 'homepage_banner', count: marketingRequests.filter(m => m.serviceType === 'homepage_banner').length },
+                  { title: 'بطاقة ترويجية مدمجة', price: `${appConfigState?.pricePromoCard ?? 20} د.أ`, desc: 'ظهور بطاقة مدمجة بالقوائم بالصفحات المختارة', type: 'promo_card', count: marketingRequests.filter(m => m.serviceType === 'promo_card').length },
                   { title: 'ترقية نظام الرسائل', price: `يبدأ من ${appConfigState?.priceMessaging1Month ?? 5} د.أ`, desc: 'ترقية نظام استقبال الوسائط والمحادثات', type: 'premium_messaging', count: marketingRequests.filter(m => m.serviceType === 'premium_messaging').length },
                 ].map(pkg => (
                   <div key={pkg.type} className="bg-white p-4.5 rounded-3xl border border-[#e5e1da] shadow-xs space-y-2">
@@ -2882,14 +3633,17 @@ export function AdminDashboard() {
               {/* Edit Marketing Prices Form */}
               <div className="bg-white p-5 rounded-3xl border border-[#e5e1da] shadow-xs">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-black text-[#2d2a26]">تسعير الخدمات التسويقية</h3>
+                  <div>
+                    <h3 className="font-black text-[#2d2a26]">تسعير الخدمات التسويقية</h3>
+                    <p className="text-xs text-stone-500 mt-0.5">تحديد أسعار صدارة البحث والترويج الممول لكل نطاق وخدمة على حدة</p>
+                  </div>
                   {!isEditingPrices ? (
                     <button
                       onClick={() => {
                         setEditPricesData(appConfigState || {});
                         setIsEditingPrices(true);
                       }}
-                      className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold rounded-xl transition-colors"
+                      className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold rounded-xl transition-colors cursor-pointer"
                     >
                       تعديل الأسعار
                     </button>
@@ -2897,13 +3651,13 @@ export function AdminDashboard() {
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => setIsEditingPrices(false)}
-                        className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold rounded-xl transition-colors"
+                        className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold rounded-xl transition-colors cursor-pointer"
                       >
                         إلغاء
                       </button>
                       <button
                         onClick={handleSavePrices}
-                        className="px-4 py-2 bg-[#1a4d2e] hover:bg-[#143a23] text-white text-xs font-bold rounded-xl transition-colors"
+                        className="px-4 py-2 bg-[#1a4d2e] hover:bg-[#143a23] text-white text-xs font-bold rounded-xl transition-colors cursor-pointer"
                       >
                         حفظ التغييرات
                       </button>
@@ -2911,193 +3665,225 @@ export function AdminDashboard() {
                   )}
                 </div>
 
-                {isEditingPrices && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-bold text-stone-500">صدارة البحث (د.أ)</label>
-                      <input
-                        type="number"
-                        value={editPricesData.priceSponsored || 15}
-                        onChange={(e) => setEditPricesData({ ...editPricesData, priceSponsored: Number(e.target.value) })}
-                        className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
-                      />
+                {!isEditingPrices ? (
+                  <div className="space-y-4 pt-2 border-t border-stone-100">
+                    <div className="space-y-2">
+                      <span className="text-xs font-black text-amber-900 block">أسعار خدمات صدارة البحث الممولة (أسبوعياً)</span>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div className="bg-stone-50 p-3 rounded-2xl border border-stone-200/80">
+                          <span className="text-[11px] text-stone-500 font-bold block">بطاقة المحل</span>
+                          <span className="text-sm font-black text-[#1a4d2e]">{appConfigState?.priceSponsored ?? 15} د.أ</span>
+                        </div>
+                        <div className="bg-stone-50 p-3 rounded-2xl border border-stone-200/80">
+                          <span className="text-[11px] text-stone-500 font-bold block">منتج / خدمة محددة</span>
+                          <span className="text-sm font-black text-[#1a4d2e]">{appConfigState?.priceSponsoredProduct ?? 7} د.أ</span>
+                        </div>
+                        <div className="bg-stone-50 p-3 rounded-2xl border border-stone-200/80">
+                          <span className="text-[11px] text-stone-500 font-bold block">المنيو بالكامل</span>
+                          <span className="text-sm font-black text-[#1a4d2e]">{appConfigState?.priceSponsoredMenu ?? 12} د.أ</span>
+                        </div>
+                        <div className="bg-stone-50 p-3 rounded-2xl border border-stone-200/80">
+                          <span className="text-[11px] text-stone-500 font-bold block">عرض / خصم محدد</span>
+                          <span className="text-sm font-black text-[#1a4d2e]">{appConfigState?.priceSponsoredOffer ?? 6} د.أ</span>
+                        </div>
+                        <div className="bg-stone-50 p-3 rounded-2xl border border-stone-200/80">
+                          <span className="text-[11px] text-stone-500 font-bold block">مجموعة عروض</span>
+                          <span className="text-sm font-black text-[#1a4d2e]">{appConfigState?.priceSponsoredOffersGroup ?? 12} د.أ</span>
+                        </div>
+                        <div className="bg-stone-50 p-3 rounded-2xl border border-stone-200/80">
+                          <span className="text-[11px] text-stone-500 font-bold block">وظيفة / شاغر محدد</span>
+                          <span className="text-sm font-black text-[#1a4d2e]">{appConfigState?.priceSponsoredJob ?? 8} د.أ</span>
+                        </div>
+                        <div className="bg-stone-50 p-3 rounded-2xl border border-stone-200/80">
+                          <span className="text-[11px] text-stone-500 font-bold block">مجموعة وظائف</span>
+                          <span className="text-sm font-black text-[#1a4d2e]">{appConfigState?.priceSponsoredJobsGroup ?? 14} د.أ</span>
+                        </div>
+                        <div className="bg-amber-50 p-3 rounded-2xl border border-amber-200">
+                          <span className="text-[11px] text-amber-900 font-bold block">صدارة شاملة لكل شيء</span>
+                          <span className="text-sm font-black text-amber-950">{appConfigState?.priceSponsoredAllInclusive ?? 25} د.أ</span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-bold text-stone-500">إشعار جماعي (د.أ)</label>
-                      <input
-                        type="number"
-                        value={editPricesData.pricePushNotifications || 10}
-                        onChange={(e) => setEditPricesData({ ...editPricesData, pricePushNotifications: Number(e.target.value) })}
-                        className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
-                      />
+
+                    <div className="space-y-2 pt-2 border-t border-stone-100">
+                      <span className="text-xs font-black text-stone-800 block">أسعار الخدمات الإضافية</span>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div className="bg-stone-50 p-3 rounded-2xl border border-stone-200/80">
+                          <span className="text-[11px] text-stone-500 font-bold block">إشعار جماعي مباشر</span>
+                          <span className="text-sm font-black text-sky-800">{appConfigState?.pricePushNotifications ?? 10} د.أ</span>
+                        </div>
+                        <div className="bg-stone-50 p-3 rounded-2xl border border-stone-200/80">
+                          <span className="text-[11px] text-stone-500 font-bold block">بانر رئيسي أسبوعي</span>
+                          <span className="text-sm font-black text-purple-800">{appConfigState?.priceHomepageBanner ?? 25} د.أ</span>
+                        </div>
+                        <div className="bg-amber-50 p-3 rounded-2xl border border-amber-200">
+                          <span className="text-[11px] text-amber-900 font-bold block">بطاقة ترويجية مدمجة</span>
+                          <span className="text-sm font-black text-amber-950">{appConfigState?.pricePromoCard ?? 20} د.أ</span>
+                        </div>
+                        <div className="bg-stone-50 p-3 rounded-2xl border border-stone-200/80">
+                          <span className="text-[11px] text-stone-500 font-bold block">نظام الرسائل (شهر / 3 أشهر)</span>
+                          <span className="text-sm font-black text-stone-800">{appConfigState?.priceMessaging1Month ?? 5} / {appConfigState?.priceMessaging3Months ?? 12} د.أ</span>
+                        </div>
+                        <div className="bg-stone-50 p-3 rounded-2xl border border-stone-200/80">
+                          <span className="text-[11px] text-stone-500 font-bold block">نظام الرسائل (6 أشهر / سنة)</span>
+                          <span className="text-sm font-black text-stone-800">{appConfigState?.priceMessaging6Months ?? 20} / {appConfigState?.priceMessaging1Year ?? 35} د.أ</span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-bold text-stone-500">بانر رئيسي (د.أ)</label>
-                      <input
-                        type="number"
-                        value={editPricesData.priceHomepageBanner || 25}
-                        onChange={(e) => setEditPricesData({ ...editPricesData, priceHomepageBanner: Number(e.target.value) })}
-                        className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
-                      />
+                  </div>
+                ) : (
+                  <div className="space-y-5 pt-3 border-t border-stone-100">
+                    <div>
+                      <h4 className="text-xs font-black text-amber-900 mb-2.5">تسعير خيارات صدارة البحث والنتائج (د.أ / أسبوع)</h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-bold text-stone-600">صدارة بطاقة المحل</label>
+                          <input
+                            type="number"
+                            value={editPricesData.priceSponsored ?? 15}
+                            onChange={(e) => setEditPricesData({ ...editPricesData, priceSponsored: Number(e.target.value) })}
+                            className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-bold text-stone-600">صدارة منتج / خدمة واحدة</label>
+                          <input
+                            type="number"
+                            value={editPricesData.priceSponsoredProduct ?? 7}
+                            onChange={(e) => setEditPricesData({ ...editPricesData, priceSponsoredProduct: Number(e.target.value) })}
+                            className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-bold text-stone-600">صدارة المنيو بالكامل</label>
+                          <input
+                            type="number"
+                            value={editPricesData.priceSponsoredMenu ?? 12}
+                            onChange={(e) => setEditPricesData({ ...editPricesData, priceSponsoredMenu: Number(e.target.value) })}
+                            className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-bold text-stone-600">صدارة عرض / خصم واحد</label>
+                          <input
+                            type="number"
+                            value={editPricesData.priceSponsoredOffer ?? 6}
+                            onChange={(e) => setEditPricesData({ ...editPricesData, priceSponsoredOffer: Number(e.target.value) })}
+                            className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-bold text-stone-600">صدارة مجموعة عروض</label>
+                          <input
+                            type="number"
+                            value={editPricesData.priceSponsoredOffersGroup ?? 12}
+                            onChange={(e) => setEditPricesData({ ...editPricesData, priceSponsoredOffersGroup: Number(e.target.value) })}
+                            className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-bold text-stone-600">صدارة شاغر / وظيفة واحدة</label>
+                          <input
+                            type="number"
+                            value={editPricesData.priceSponsoredJob ?? 8}
+                            onChange={(e) => setEditPricesData({ ...editPricesData, priceSponsoredJob: Number(e.target.value) })}
+                            className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-bold text-stone-600">صدارة مجموعة وظائف</label>
+                          <input
+                            type="number"
+                            value={editPricesData.priceSponsoredJobsGroup ?? 14}
+                            onChange={(e) => setEditPricesData({ ...editPricesData, priceSponsoredJobsGroup: Number(e.target.value) })}
+                            className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-black text-amber-900">صدارة شاملة لكل شيء</label>
+                          <input
+                            type="number"
+                            value={editPricesData.priceSponsoredAllInclusive ?? 25}
+                            onChange={(e) => setEditPricesData({ ...editPricesData, priceSponsoredAllInclusive: Number(e.target.value) })}
+                            className="w-full px-3 py-2 bg-amber-50 border border-amber-300 rounded-lg text-sm font-bold text-amber-950 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                          />
+                        </div>
+                      </div>
                     </div>
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-bold text-stone-500">نظام الرسائل (1 شهر)</label>
-                      <input
-                        type="number"
-                        value={editPricesData.priceMessaging1Month || 5}
-                        onChange={(e) => setEditPricesData({ ...editPricesData, priceMessaging1Month: Number(e.target.value) })}
-                        className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-bold text-stone-500">نظام الرسائل (3 أشهر)</label>
-                      <input
-                        type="number"
-                        value={editPricesData.priceMessaging3Months || 12}
-                        onChange={(e) => setEditPricesData({ ...editPricesData, priceMessaging3Months: Number(e.target.value) })}
-                        className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-bold text-stone-500">نظام الرسائل (6 أشهر)</label>
-                      <input
-                        type="number"
-                        value={editPricesData.priceMessaging6Months || 20}
-                        onChange={(e) => setEditPricesData({ ...editPricesData, priceMessaging6Months: Number(e.target.value) })}
-                        className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-bold text-stone-500">نظام الرسائل (سنة)</label>
-                      <input
-                        type="number"
-                        value={editPricesData.priceMessaging1Year || 35}
-                        onChange={(e) => setEditPricesData({ ...editPricesData, priceMessaging1Year: Number(e.target.value) })}
-                        className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
-                      />
+
+                    <div>
+                      <h4 className="text-xs font-black text-stone-800 mb-2.5">تسعير الخدمات التسويقية الأخرى</h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-bold text-stone-600">إشعار جماعي مباشر (د.أ)</label>
+                          <input
+                            type="number"
+                            value={editPricesData.pricePushNotifications ?? 10}
+                            onChange={(e) => setEditPricesData({ ...editPricesData, pricePushNotifications: Number(e.target.value) })}
+                            className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-bold text-stone-600">بانر الصفحة الرئيسية (د.أ)</label>
+                          <input
+                            type="number"
+                            value={editPricesData.priceHomepageBanner ?? 25}
+                            onChange={(e) => setEditPricesData({ ...editPricesData, priceHomepageBanner: Number(e.target.value) })}
+                            className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-bold text-stone-600">بطاقة ترويجية مدمجة (د.أ)</label>
+                          <input
+                            type="number"
+                            value={editPricesData.pricePromoCard ?? 20}
+                            onChange={(e) => setEditPricesData({ ...editPricesData, pricePromoCard: Number(e.target.value) })}
+                            className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-bold text-stone-600">نظام الرسائل (1 شهر)</label>
+                          <input
+                            type="number"
+                            value={editPricesData.priceMessaging1Month ?? 5}
+                            onChange={(e) => setEditPricesData({ ...editPricesData, priceMessaging1Month: Number(e.target.value) })}
+                            className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-bold text-stone-600">نظام الرسائل (3 أشهر)</label>
+                          <input
+                            type="number"
+                            value={editPricesData.priceMessaging3Months ?? 12}
+                            onChange={(e) => setEditPricesData({ ...editPricesData, priceMessaging3Months: Number(e.target.value) })}
+                            className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-bold text-stone-600">نظام الرسائل (6 أشهر)</label>
+                          <input
+                            type="number"
+                            value={editPricesData.priceMessaging6Months ?? 20}
+                            onChange={(e) => setEditPricesData({ ...editPricesData, priceMessaging6Months: Number(e.target.value) })}
+                            className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-bold text-stone-600">نظام الرسائل (سنة)</label>
+                          <input
+                            type="number"
+                            value={editPricesData.priceMessaging1Year ?? 35}
+                            onChange={(e) => setEditPricesData({ ...editPricesData, priceMessaging1Year: Number(e.target.value) })}
+                            className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                          />
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )}
               </div>
-
-              {/* Filters Bar */}
-              <div className="bg-white p-4.5 rounded-3xl border border-[#e5e1da] shadow-xs flex flex-col md:flex-row items-center justify-between gap-4">
-                <div className="relative flex-1 w-full">
-                  <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
-                  <input
-                    type="text"
-                    value={marketingSearch}
-                    onChange={e => setMarketingSearch(e.target.value)}
-                    placeholder="ابحث باسم المحل أو الخدمة أو بريد التاجر..."
-                    className="w-full bg-stone-50 border border-stone-200 rounded-xl pr-10 pl-4 py-2.5 text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
-                  />
-                </div>
-
-                <div className="flex items-center gap-2 w-full md:w-auto">
-                  <select
-                    value={marketingStatusFilter}
-                    onChange={e => setMarketingStatusFilter(e.target.value as any)}
-                    className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs font-bold text-stone-700"
-                  >
-                    <option value="all">جميع الحالات</option>
-                    <option value="pending">قيد الانتظار ({marketingRequests.filter(m => m.status === 'pending').length})</option>
-                    <option value="contacted">تم التواصل</option>
-                    <option value="completed">مفعّل ومعتمد</option>
-                    <option value="rejected">مرفوض</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Marketing Requests List */}
-              {filteredMarketing.length === 0 ? (
-                <div className="text-center py-16 bg-white rounded-3xl border border-[#e5e1da] space-y-3">
-                  <Megaphone className="h-12 w-12 text-stone-300 mx-auto" />
-                  <h3 className="font-bold text-stone-700">لا توجد طلبات تسويقية حالياً</h3>
-                  <p className="text-xs text-stone-500">تظهر هنا جميع طلبات الترويج من أصحاب المنشآت</p>
-                </div>
-              ) : (
-                <div className="grid gap-4">
-                  {filteredMarketing.map(req => {
-                    const relatedBiz = businesses.find(b => b.id === req.businessId);
-                    return (
-                      <div 
-                        key={req.id}
-                        className="bg-white p-6 rounded-3xl border border-[#e5e1da] shadow-xs flex flex-col lg:flex-row gap-6 justify-between items-start lg:items-center"
-                      >
-                        <div className="space-y-2 flex-1">
-                          <div className="flex flex-wrap items-center gap-2.5">
-                            <h3 className="text-lg font-black text-[#2d2a26]">{req.businessName}</h3>
-                            
-                            <span className={`px-3 py-1 rounded-full text-xs font-black ${
-                              req.status === 'completed' || req.status === 'approved' 
-                                ? 'bg-emerald-100 text-emerald-800' 
-                                : req.status === 'contacted' 
-                                ? 'bg-blue-100 text-blue-800' 
-                                : req.status === 'rejected'
-                                ? 'bg-red-100 text-red-800'
-                                : 'bg-amber-100 text-amber-800 animate-pulse'
-                            }`}>
-                              {req.status === 'completed' || req.status === 'approved' 
-                                ? 'مفعّل ومعتمد ✅' 
-                                : req.status === 'contacted' 
-                                ? 'تم التواصل 📞' 
-                                : req.status === 'rejected'
-                                ? 'مرفوض'
-                                : 'طلب جديد ⏳'}
-                            </span>
-
-                            <span className="bg-purple-100 text-purple-800 px-3 py-0.5 rounded-full text-xs font-bold">
-                              {req.serviceName}
-                            </span>
-                          </div>
-
-                          <div className="flex flex-wrap items-center gap-4 text-xs text-stone-500 pt-1">
-                            <span>تاريخ الطلب: {new Date(req.createdAt).toLocaleDateString('ar-EG')}</span>
-                            {req.userEmail && <span>البريد: {req.userEmail}</span>}
-                            {relatedBiz?.phone && <span>الهاتف: <span dir="ltr">{relatedBiz.phone}</span></span>}
-                          </div>
-                        </div>
-
-                        {/* Actions */}
-                        <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
-                          <button
-                            onClick={() => {
-                              setSelectedMarketingRequest(req);
-                              setIsMarketingDetailsOpen(true);
-                            }}
-                            className="flex-1 lg:flex-none bg-stone-100 hover:bg-stone-200 text-stone-800 px-4 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-                          >
-                            تفاصيل وتواصل 📋
-                          </button>
-
-                          {req.status !== 'completed' && req.status !== 'approved' ? (
-                            <button
-                              onClick={() => handleMarketingStatusUpdate(req.id!, 'completed', req.businessId, req.serviceType)}
-                              className="flex-1 lg:flex-none bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl text-xs font-black transition-colors shadow-xs cursor-pointer"
-                            >
-                              موافقة وتفعيل ⭐
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => handleMarketingStatusUpdate(req.id!, 'rejected', req.businessId, req.serviceType)}
-                              className="flex-1 lg:flex-none bg-stone-100 hover:bg-red-50 text-stone-700 hover:text-red-700 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-                            >
-                              إلغاء التفعيل
-                            </button>
-                          )}
-
-                          <button
-                            onClick={() => handleDeleteMarketingRequest(req.id)}
-                            className="p-2.5 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors cursor-pointer"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+            </div>
+          )}
         </div>
       )}
 

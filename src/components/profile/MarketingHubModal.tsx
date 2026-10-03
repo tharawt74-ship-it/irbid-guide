@@ -14,7 +14,8 @@ import {
   Store,
   ArrowRight,
   ClipboardList,
-  Layers
+  Layers,
+  LayoutGrid
 } from 'lucide-react';
 import { Business } from '../../types';
 
@@ -24,14 +25,22 @@ export interface MarketingHubModalProps {
   businesses: Business[];
   selectedBusinessId: string;
   onSelectBusinessId: (id: string) => void;
-  onSelectService: (serviceType: 'sponsored' | 'push_notifications' | 'homepage_banner', serviceName: string, successMsg: string) => void;
+  onSelectService: (serviceType: 'sponsored' | 'push_notifications' | 'homepage_banner' | 'promo_card', serviceName: string, successMsg: string, targetType?: string) => void;
   onOpenVipUpgrade: (business: Business) => void;
   onUpgradeMessaging: (plan: '1_month' | '3_months' | '6_months' | '1_year', businessId: string) => void;
   onViewRequests: () => void;
   appConfigState?: {
     priceSponsored?: number;
+    priceSponsoredProduct?: number;
+    priceSponsoredMenu?: number;
+    priceSponsoredOffer?: number;
+    priceSponsoredOffersGroup?: number;
+    priceSponsoredJob?: number;
+    priceSponsoredJobsGroup?: number;
+    priceSponsoredAllInclusive?: number;
     pricePushNotifications?: number;
     priceHomepageBanner?: number;
+    pricePromoCard?: number;
     priceMessaging1Month?: number;
     priceMessaging3Months?: number;
     priceMessaging6Months?: number;
@@ -51,6 +60,8 @@ export function MarketingHubModal({
   onViewRequests,
   appConfigState
 }: MarketingHubModalProps) {
+  const [selectedMessagingPlan, setSelectedMessagingPlan] = React.useState<'1_month' | '3_months' | '6_months' | '1_year'>('1_month');
+
   if (!isOpen || typeof document === 'undefined') return null;
 
   const currentBusiness = businesses.find(b => b.id === selectedBusinessId) || (businesses.length > 0 ? businesses[0] : null);
@@ -142,7 +153,7 @@ export function MarketingHubModal({
             <div className="bg-gradient-to-b from-emerald-50/40 via-white to-white border border-emerald-200/90 rounded-2xl sm:rounded-3xl p-5 hover:shadow-md hover:border-emerald-400 transition-all flex flex-col justify-between relative overflow-hidden group">
               <div className="absolute top-3 left-3 bg-gradient-to-r from-amber-500 to-[#ff9f1c] text-stone-950 text-[10px] font-black px-2.5 py-0.5 rounded-full shadow-xs flex items-center gap-1">
                 <Flame className="h-3 w-3 fill-stone-950" />
-                <span>الأكثر طلباً 🔥</span>
+                <span>الأكثر طلباً</span>
               </div>
 
               <div>
@@ -150,32 +161,45 @@ export function MarketingHubModal({
                   <TrendingUp className="h-5 w-5" />
                 </div>
 
-                <h3 className="font-black text-base text-stone-900 mb-1">صدارة البحث (Sponsored)</h3>
-                <p className="text-stone-500 text-xs mb-4 leading-relaxed">
-                  ظهور محلك في مقدمة نتائج البحث بكلمات مفتاحية مخصصة للوصول لأول زبون يبحث عن مجالك.
+                <h3 className="font-black text-base text-stone-900 mb-1">صدارة البحث والنتائج الممولة</h3>
+                <p className="text-stone-500 text-xs mb-3.5 leading-relaxed">
+                  ظهور متصدر في مقدمة نتائج البحث مع الإطار الذهبي وشارة ممول للمحل أو منتجاته أو عروضه أو وظائفه.
                 </p>
 
-                <div className="space-y-1.5 mb-5">
-                  <div className="flex items-center gap-2 text-[11px] font-bold text-stone-700">
-                    <div className="w-3.5 h-3.5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-                      <Check className="h-2.5 w-2.5 stroke-[3]" />
-                    </div>
-                    <span>ظهور أعلى المنافسين في نتائج البحث</span>
+                {/* Sub-options Breakdown */}
+                <div className="space-y-1.5 mb-4 bg-stone-50/90 p-2.5 rounded-2xl border border-stone-200/70 text-[11px]">
+                  <div className="flex items-center justify-between font-bold text-stone-700">
+                    <span className="flex items-center gap-1.5"><Crown className="h-3 w-3 text-amber-500" /> بطاقة المحل:</span>
+                    <span className="font-black text-[#1a4d2e]">{appConfigState?.priceSponsored ?? 15} د.أ</span>
                   </div>
-                  <div className="flex items-center gap-2 text-[11px] font-bold text-stone-700">
-                    <div className="w-3.5 h-3.5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-                      <Check className="h-2.5 w-2.5 stroke-[3]" />
-                    </div>
-                    <span>شارة "ممول" بارزة لجذب الزوار</span>
+                  <div className="flex items-center justify-between font-bold text-stone-700">
+                    <span className="flex items-center gap-1.5"><Sparkles className="h-3 w-3 text-amber-500" /> منتج / خدمة محددة:</span>
+                    <span className="font-black text-[#1a4d2e]">{appConfigState?.priceSponsoredProduct ?? 7} د.أ</span>
+                  </div>
+                  <div className="flex items-center justify-between font-bold text-stone-700">
+                    <span className="flex items-center gap-1.5"><Layers className="h-3 w-3 text-amber-500" /> المنيو والكتالوج بالكامل:</span>
+                    <span className="font-black text-[#1a4d2e]">{appConfigState?.priceSponsoredMenu ?? 12} د.أ</span>
+                  </div>
+                  <div className="flex items-center justify-between font-bold text-stone-700">
+                    <span className="flex items-center gap-1.5"><Flame className="h-3 w-3 text-red-500" /> عرض وخصم محدد:</span>
+                    <span className="font-black text-[#1a4d2e]">{appConfigState?.priceSponsoredOffer ?? 6} د.أ</span>
+                  </div>
+                  <div className="flex items-center justify-between font-bold text-stone-700">
+                    <span className="flex items-center gap-1.5"><Sparkles className="h-3 w-3 text-teal-600" /> شاغر / وظيفة محددة:</span>
+                    <span className="font-black text-[#1a4d2e]">{appConfigState?.priceSponsoredJob ?? 8} د.أ</span>
+                  </div>
+                  <div className="flex items-center justify-between font-bold text-stone-700 border-t border-stone-200/60 pt-1 mt-1">
+                    <span className="flex items-center gap-1.5 text-amber-900 font-black"><Crown className="h-3 w-3 text-amber-600 fill-amber-600" /> صدارة شاملة لكل شيء:</span>
+                    <span className="font-black text-amber-900">{appConfigState?.priceSponsoredAllInclusive ?? 25} د.أ</span>
                   </div>
                 </div>
               </div>
 
               <div className="pt-3 border-t border-stone-100 space-y-2.5 mt-auto">
                 <div className="flex items-baseline justify-between">
-                  <span className="text-[11px] font-bold text-stone-400">التكلفة:</span>
+                  <span className="text-[11px] font-bold text-stone-400">يبدأ من:</span>
                   <div className="text-sm font-black text-[#1a4d2e]">
-                    {appConfigState?.priceSponsored ?? 15} دينار <span className="text-[10px] text-stone-400 font-normal">/ أسبوع</span>
+                    {appConfigState?.priceSponsoredOffer ?? 6} دينار <span className="text-[10px] text-stone-400 font-normal">/ أسبوع</span>
                   </div>
                 </div>
 
@@ -185,7 +209,7 @@ export function MarketingHubModal({
                     onClose();
                     onSelectService(
                       'sponsored', 
-                      'صدارة البحث (Sponsored)', 
+                      'صدارة البحث والنتائج الممولة', 
                       'تم استلام طلبك لخدمة "صدارة البحث". سيتواصل معك فريقنا قريباً لإتمام الدفع وتفعيل الخدمة.'
                     );
                   }}
@@ -313,10 +337,73 @@ export function MarketingHubModal({
               </div>
             </div>
 
-            {/* 4. Premium Messaging Addon */}
-            <div className="bg-gradient-to-b from-stone-50 via-white to-white border border-stone-200/90 rounded-2xl sm:rounded-3xl p-5 hover:shadow-md hover:border-stone-400 transition-all flex flex-col justify-between relative overflow-hidden group">
+            {/* 4. In-Feed Promotional Card */}
+            <div className="bg-gradient-to-b from-amber-50/40 via-white to-white border border-amber-300 rounded-2xl sm:rounded-3xl p-5 hover:shadow-md hover:border-amber-400 transition-all flex flex-col justify-between relative overflow-hidden group">
+              <div className="absolute top-3 left-3 bg-amber-100 text-amber-900 text-[10px] font-black px-2.5 py-0.5 rounded-full border border-amber-300">
+                <span>مدمجة بالقوائم 📇</span>
+              </div>
+
               <div>
-                <div className="w-11 h-11 rounded-2xl bg-stone-100 text-stone-800 flex items-center justify-center mb-3.5">
+                <div className="w-11 h-11 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center mb-3.5">
+                  <LayoutGrid className="h-5 w-5" />
+                </div>
+
+                <h3 className="font-black text-base text-stone-900 mb-1">بطاقة ترويجية مدمجة (In-Feed)</h3>
+                <p className="text-stone-500 text-xs mb-4 leading-relaxed">
+                  إضافة بطاقة ترويجية خاصة تظهر بين بطاقات المحلات أو العروض أو المنتجات أو الوظائف أو العقارات مع صورة أو فيديو وأزرار تفاعلية.
+                </p>
+
+                <div className="space-y-1.5 mb-5">
+                  <div className="flex items-center gap-2 text-[11px] font-bold text-stone-700">
+                    <div className="w-3.5 h-3.5 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+                      <Check className="h-2.5 w-2.5 stroke-[3]" />
+                    </div>
+                    <span>تظهر كبطاقة طبيعية مدمجة مع خيارات التصفح</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-[11px] font-bold text-stone-700">
+                    <div className="w-3.5 h-3.5 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+                      <Check className="h-2.5 w-2.5 stroke-[3]" />
+                    </div>
+                    <span>دعم إرفاق صورة أو فيديو تفاعلي وأزرار توجيه</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-stone-100 space-y-2.5 mt-auto">
+                <div className="flex items-baseline justify-between">
+                  <span className="text-[11px] font-bold text-stone-400">التكلفة:</span>
+                  <div className="text-sm font-black text-amber-900">
+                    {appConfigState?.pricePromoCard ?? 20} دينار <span className="text-[10px] text-stone-400 font-normal">/ أسبوع</span>
+                  </div>
+                </div>
+
+                <button 
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onSelectService(
+                      'promo_card', 
+                      'بطاقة ترويجية مدمجة (In-Feed)', 
+                      'تم استلام طلبك لخدمة "البطاقة الترويجية المدمجة". سيتواصل معك فريقنا قريباً لإعدادها وتفعيلها.'
+                    );
+                  }}
+                  className="w-full bg-amber-600 hover:bg-amber-700 text-white py-2.5 rounded-xl text-xs font-black shadow-xs hover:shadow-md transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <Sparkles className="h-3.5 w-3.5 text-amber-200" />
+                  <span>طلب بطاقة ترويجية مدمجة</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 5. Premium Messaging Addon */}
+            <div className="bg-gradient-to-b from-amber-50/60 via-white to-white border-2 border-amber-300 rounded-2xl sm:rounded-3xl p-5 hover:shadow-md hover:border-amber-500 transition-all flex flex-col justify-between relative overflow-hidden group">
+              <div className="absolute top-0 right-0 bg-amber-400 text-amber-950 text-[10px] font-black px-3 py-1 rounded-bl-xl flex items-center gap-1 shadow-2xs">
+                <Crown className="h-3.5 w-3.5 fill-amber-950 text-amber-950" />
+                <span>باقة رسائل مطورة 👑</span>
+              </div>
+
+              <div>
+                <div className="w-11 h-11 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center mb-3.5 mt-2">
                   <MessageSquare className="h-5 w-5" />
                 </div>
 
@@ -325,15 +412,64 @@ export function MarketingHubModal({
                   تمكين استقبال صور المنتجات والطلبات من الزبائن وزيادة مدة حفظ أرشيف المحادثات.
                 </p>
 
+                {currentBusiness && (() => {
+                  const isUpgraded = currentBusiness.premiumMessagingEnabled;
+                  return (
+                    <div className="mb-4 bg-amber-50/80 p-2.5 rounded-xl border border-amber-200 text-[11px] font-bold text-stone-700">
+                      <div className="flex items-center justify-between">
+                        <span>حالة المنشأة الحالية:</span>
+                        {isUpgraded ? (
+                          <span className="text-emerald-700 font-black bg-emerald-100 px-2 py-0.5 rounded-md">
+                            مفعلة ✓ ({currentBusiness.premiumMessagingPlan === '1_month' ? 'شهر' : currentBusiness.premiumMessagingPlan === '3_months' ? '3 أشهر' : currentBusiness.premiumMessagingPlan === '6_months' ? '6 أشهر' : 'سنة'})
+                          </span>
+                        ) : (
+                          <span className="text-amber-800 font-bold bg-amber-100 px-2 py-0.5 rounded-md">
+                            باقة أساسية (7 أيام)
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Package selection buttons inside modal */}
+                <div className="mb-4 space-y-2">
+                  <label className="block text-xs font-black text-stone-800">
+                    اختر باقة الترقية المطلوبة:
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { id: '1_month', label: 'شهر واحد', price: appConfigState?.priceMessaging1Month ?? 5 },
+                      { id: '3_months', label: '3 أشهر', price: appConfigState?.priceMessaging3Months ?? 12 },
+                      { id: '6_months', label: '6 أشهر', price: appConfigState?.priceMessaging6Months ?? 20 },
+                      { id: '1_year', label: 'سنة كاملة', price: appConfigState?.priceMessaging1Year ?? 35 }
+                    ].map((plan) => (
+                      <button
+                        key={plan.id}
+                        type="button"
+                        onClick={() => setSelectedMessagingPlan(plan.id as any)}
+                        className={`p-2 rounded-xl border text-right transition-all cursor-pointer flex items-center justify-between ${
+                          selectedMessagingPlan === plan.id
+                            ? 'border-amber-500 bg-amber-50 text-amber-950 font-black ring-2 ring-amber-400/50 shadow-xs'
+                            : 'border-stone-200 hover:border-amber-300 text-stone-700 bg-white'
+                        }`}
+                      >
+                        <span className="text-[11px] font-black">{plan.label}</span>
+                        <span className="text-[11px] font-black text-amber-900">{plan.price} د.أ</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="space-y-1.5 mb-5">
                   <div className="flex items-center gap-2 text-[11px] font-bold text-stone-700">
-                    <div className="w-3.5 h-3.5 rounded-full bg-stone-200 text-stone-800 flex items-center justify-center shrink-0">
+                    <div className="w-3.5 h-3.5 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
                       <Check className="h-2.5 w-2.5 stroke-[3]" />
                     </div>
                     <span>استقبال صور طلبات ومستندات الزبائن</span>
                   </div>
                   <div className="flex items-center gap-2 text-[11px] font-bold text-stone-700">
-                    <div className="w-3.5 h-3.5 rounded-full bg-stone-200 text-stone-800 flex items-center justify-center shrink-0">
+                    <div className="w-3.5 h-3.5 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
                       <Check className="h-2.5 w-2.5 stroke-[3]" />
                     </div>
                     <span>الاحتفاظ بالأرشيف حتى سنة كاملة</span>
@@ -342,18 +478,28 @@ export function MarketingHubModal({
               </div>
 
               <div className="pt-3 border-t border-stone-100 space-y-2.5 mt-auto">
+                <div className="flex items-baseline justify-between mb-1">
+                  <span className="text-[11px] font-bold text-stone-400">تكلفة الباقة المختارة:</span>
+                  <div className="text-sm font-black text-amber-900">
+                    {selectedMessagingPlan === '1_month' && `${appConfigState?.priceMessaging1Month ?? 5} دنانير / شهر`}
+                    {selectedMessagingPlan === '3_months' && `${appConfigState?.priceMessaging3Months ?? 12} دينار / 3 أشهر`}
+                    {selectedMessagingPlan === '6_months' && `${appConfigState?.priceMessaging6Months ?? 20} دينار / 6 أشهر`}
+                    {selectedMessagingPlan === '1_year' && `${appConfigState?.priceMessaging1Year ?? 35} دينار / سنة`}
+                  </div>
+                </div>
+
                 <button 
                   type="button"
                   onClick={() => {
                     if (currentBusiness) {
-                      onUpgradeMessaging('1_month', currentBusiness.id);
+                      onUpgradeMessaging(selectedMessagingPlan, currentBusiness.id);
                       onClose();
                     }
                   }}
-                  className="w-full bg-stone-800 hover:bg-stone-900 text-white py-2.5 rounded-xl text-xs font-black shadow-xs hover:shadow-md transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                  className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-stone-950 py-2.5 rounded-xl text-xs font-black shadow-xs hover:shadow-md transition-all cursor-pointer flex items-center justify-center gap-1.5"
                 >
-                  <MessageSquare className="h-3.5 w-3.5" />
-                  <span>ترقية باقة الرسائل 💬</span>
+                  <Crown className="h-3.5 w-3.5 fill-stone-950" />
+                  <span>تفعيل وترقية نظام الرسائل</span>
                 </button>
               </div>
             </div>
@@ -364,7 +510,7 @@ export function MarketingHubModal({
         {/* Footer */}
         <div className="p-3.5 sm:p-4 bg-stone-50 border-t border-stone-200/80 flex items-center justify-between text-xs text-stone-500 shrink-0">
           <span className="font-medium text-[11px] sm:text-xs">
-            ✨ يتم تفعيل الخدمات الإعلانية ومراجعتها فوراً بالتعاون مع فريق المنصة.
+            يتم تفعيل الخدمات الإعلانية ومراجعتها فوراً بالتعاون مع فريق المنصة.
           </span>
           <button
             type="button"

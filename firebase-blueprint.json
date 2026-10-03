@@ -104,7 +104,8 @@
         "bannerImageUrl": { "type": "string", "maxLength": 1000 },
         "buttonText": { "type": "string", "maxLength": 100 },
         "buttonLink": { "type": "string", "maxLength": 500 },
-        "badgeText": { "type": "string", "maxLength": 100 }
+        "badgeText": { "type": "string", "maxLength": 100 },
+        "promoCardLayout": { "type": "string", "enum": ["standard", "full"] }
       },
       "required": ["serviceType", "userId"]
     },
@@ -186,6 +187,35 @@
         "createdAt": { "type": "number" }
       },
       "required": ["businessId", "businessName", "items", "totalPrice", "customerName", "customerPhone", "orderType", "status", "createdAt"]
+    },
+    "PromoCard": {
+      "title": "PromoCard",
+      "description": "In-feed promotional card embedded in chosen list page",
+      "type": "object",
+      "properties": {
+        "targetPage": { "type": "string", "maxLength": 100 },
+        "targetType": { "type": "string", "maxLength": 100 },
+        "targetEntityId": { "type": "string", "maxLength": 128 },
+        "targetEntityName": { "type": "string", "maxLength": 200 },
+        "title": { "type": "string", "maxLength": 200 },
+        "subtitle": { "type": "string", "maxLength": 500 },
+        "mediaType": { "type": "string", "maxLength": 50 },
+        "imageUrl": { "type": "string", "maxLength": 1000 },
+        "videoUrl": { "type": "string", "maxLength": 1000 },
+        "badgeText": { "type": "string", "maxLength": 100 },
+        "buttonText": { "type": "string", "maxLength": 100 },
+        "buttonLink": { "type": "string", "maxLength": 500 },
+        "businessId": { "type": "string", "maxLength": 128 },
+        "businessName": { "type": "string", "maxLength": 200 },
+        "businessLogo": { "type": "string", "maxLength": 1000 },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "number" },
+        "startDate": { "type": "string", "maxLength": 100 },
+        "expiryDate": { "type": "string", "maxLength": 100 },
+        "marketingRequestId": { "type": "string", "maxLength": 128 },
+        "promoCardLayout": { "type": "string", "enum": ["standard", "full"] }
+      },
+      "required": ["targetPage", "title", "active"]
     }
   },
   "firestore": {
@@ -228,6 +258,10 @@
     "/transportation/{transportId}": {
       "schema": { "$ref": "#/entities/TransportationItem" },
       "description": "Public transportation hubs, bus routes, and taxi apps"
+    },
+    "/promo_cards/{promoId}": {
+      "schema": { "$ref": "#/entities/PromoCard" },
+      "description": "In-feed promotional cards"
     }
   }
 }

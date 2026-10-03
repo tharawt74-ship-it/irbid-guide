@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   Briefcase, Search, Plus, MapPin, Clock, DollarSign, 
   Phone, MessageSquare, Building2, CheckCircle2, Flame, 
   Filter, Sparkles, X, Send, GraduationCap, Check, Trash2, 
-  Pencil, RefreshCw, Share2, Eye, Store, ExternalLink, Users, Award, ChevronDown
+  Pencil, RefreshCw, Share2, Eye, Store, ExternalLink, Users, Award, ChevronDown, Crown
 } from 'lucide-react';
 import { collection, getDocs, doc, deleteDoc, query, orderBy, limit } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -15,12 +15,16 @@ import { Link, useNavigate } from 'react-router';
 import { JobFormModal } from '../components/jobs/JobFormModal';
 import { getAppConfig } from '../lib/demoDataHelper';
 import { BlueCheckIcon } from '../components/vip/VerifiedBadge';
+import { getBusinessVipStatus, isItemCurrentlyFeatured } from '../lib/vipHelper';
 import { ShareButton } from '../components/ShareButton';
 import { getWhatsAppUrl, formatJobWhatsAppMessage } from '../lib/contactHelper';
 import { WhatsApp3DIcon, Phone3DIcon } from '../components/common/PremiumContactButtons';
 import { SEO } from '../components/common/SEO';
 import { BannerSlideshow } from '../components/BannerSlideshow';
 import { fetchPageBanners, DEFAULT_JOBS_BANNERS } from '../lib/pageBanners';
+import { fetchPagePromoCards } from '../lib/promoCards';
+import { InFeedPromoCardItem } from '../components/common/InFeedPromoCardItem';
+import { InFeedPromoCard } from '../types';
 import { useSystemSettings } from '../contexts/SystemSettingsContext';
 import { getCategoryMeta } from '../lib/categoryMeta';
 import { CategoryButtonLabel } from '../components/CategoryButtonLabel';
@@ -75,25 +79,36 @@ export function Jobs() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [stickySearchInput, setStickySearchInput] = useState('');
+  const [desktopSearchInput, setDesktopSearchInput] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('الكل');
   const [selectedSubCategory, setSelectedSubCategory] = useState('');
   const [selectedJobType, setSelectedJobType] = useState('الكل');
   const [selectedRegion, setSelectedRegion] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [promoCards, setPromoCards] = useState<InFeedPromoCard[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
 
   const activeJobTypeRef = useRef<HTMLButtonElement | null>(null);
 
+  const scrollContainerToElement = (el: HTMLElement | null) => {
+    if (!el || !el.parentElement) return;
+    const container = el.parentElement;
+    const elRect = el.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+    const elCenter = elRect.left + elRect.width / 2;
+    const containerCenter = containerRect.left + containerRect.width / 2;
+    const scrollOffset = elCenter - containerCenter;
+
+    container.scrollBy({
+      left: scrollOffset,
+      behavior: 'smooth'
+    });
+  };
+
   // Auto scroll selected job type pill into view
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (activeJobTypeRef.current) {
-        activeJobTypeRef.current.scrollIntoView({
-          behavior: 'smooth',
-          block: 'nearest',
-          inline: 'center'
-        });
-      }
+      scrollContainerToElement(activeJobTypeRef.current);
     }, 100);
     return () => clearTimeout(timer);
   }, [selectedJobType]);
@@ -126,6 +141,8 @@ export function Jobs() {
   };
 
   useEffect(() => {
+    fetchPagePromoCards('jobs').then(cards => setPromoCards(cards)).catch(() => {});
+
     async function fetchJobsAndBanners() {
       setLoading(true);
       try {
@@ -140,7 +157,7 @@ export function Jobs() {
           cachedBiz.forEach(b => { map[b.id] = b; });
           setBusinessMap(map);
         } else if (db) {
-          getDocs(collection(db, 'businesses')).then(snap => {
+          getDocs(query(collection(db, 'businesses'), limit(150))).then(snap => {
             const map: Record<string, Business> = {};
             const list: Business[] = [];
             snap.forEach(d => {
@@ -242,53 +259,66 @@ export function Jobs() {
     }
   };
 
-  // Filter jobs with business category, subcategory, and district enrichment
-  const filteredJobs = jobs.filter(job => {
-    const biz = job.businessId ? businessMap[job.businessId] : null;
+  // Filter and sort jobs with business category, subcategory, and district enrichment
+  const filteredJobs = useMemo(() => {
+    const list = jobs.filter(job => {
+      const biz = job.businessId ? businessMap[job.businessId] : null;
 
-    // Derived category, subcategory, district, and company name from publishing business
-    const effectiveCategory = biz?.category || job.businessCategory || job.category || '';
-    const effectiveSubCat = biz?.subCategory || job.businessSubCategory || job.subCategory || '';
-    const effectiveDistrict = biz?.district || biz?.address || biz?.region || job.businessDistrict || job.location || '';
-    const effectiveCompany = biz?.name || job.company || '';
+      // Derived category, subcategory, district, and company name from publishing business
+      const effectiveCategory = biz?.category || job.businessCategory || job.category || '';
+      const effectiveSubCat = biz?.subCategory || job.businessSubCategory || job.subCategory || '';
+      const effectiveDistrict = biz?.district || biz?.address || biz?.region || job.businessDistrict || job.location || '';
+      const effectiveCompany = biz?.name || job.company || '';
 
-    // Category & Subcategory matching
-    let matchesCategory = true;
-    if (selectedCategory && selectedCategory !== 'الكل') {
-      const validSubCats = getSubCats(selectedCategory);
-      if (selectedSubCategory) {
-        matchesCategory = 
-          effectiveCategory === selectedSubCategory || 
-          effectiveSubCat === selectedSubCategory ||
-          job.category === selectedSubCategory ||
-          (job.subCategory && job.subCategory === selectedSubCategory);
-      } else {
-        matchesCategory = 
-          effectiveCategory === selectedCategory || 
-          job.category === selectedCategory ||
-          validSubCats.some(s => effectiveCategory === s || effectiveSubCat === s || job.category === s) ||
-          effectiveCategory.includes(selectedCategory) ||
-          selectedCategory.includes(effectiveCategory);
+      // Category & Subcategory matching
+      let matchesCategory = true;
+      if (selectedCategory && selectedCategory !== 'الكل') {
+        const validSubCats = getSubCats(selectedCategory);
+        if (selectedSubCategory) {
+          matchesCategory = 
+            effectiveCategory === selectedSubCategory || 
+            effectiveSubCat === selectedSubCategory ||
+            job.category === selectedSubCategory ||
+            (job.subCategory && job.subCategory === selectedSubCategory);
+        } else {
+          matchesCategory = 
+            effectiveCategory === selectedCategory || 
+            job.category === selectedCategory ||
+            validSubCats.some(s => effectiveCategory === s || effectiveSubCat === s || job.category === s) ||
+            effectiveCategory.includes(selectedCategory) ||
+            selectedCategory.includes(effectiveCategory);
+        }
       }
-    }
 
-    // Job Type matching
-    const matchesType = selectedJobType === 'الكل' || job.jobType === selectedJobType;
+      // Job Type matching
+      const matchesType = selectedJobType === 'الكل' || job.jobType === selectedJobType;
 
-    // Location matching
-    const matchesLocation = !selectedRegion || selectedRegion === 'الكل' || isMatchingJobLocation(selectedRegion, effectiveDistrict, effectiveCompany);
+      // Location matching
+      const matchesLocation = !selectedRegion || selectedRegion === 'الكل' || isMatchingJobLocation(selectedRegion, effectiveDistrict, effectiveCompany);
 
-    // Search query matching
-    const matchesSearch = !searchQuery ||
-      job.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      effectiveCompany.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      effectiveDistrict.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      job.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      effectiveCategory.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      effectiveSubCat.toLowerCase().includes(searchQuery.toLowerCase());
+      // Search query matching
+      const matchesSearch = !searchQuery ||
+        job.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        effectiveCompany.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        effectiveDistrict.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        job.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        effectiveCategory.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        effectiveSubCat.toLowerCase().includes(searchQuery.toLowerCase());
 
-    return matchesCategory && matchesType && matchesLocation && matchesSearch;
-  });
+      return matchesCategory && matchesType && matchesLocation && matchesSearch;
+    });
+
+    // Sorting: Featured / Sponsored jobs first (صدارة البحث والنتائج)
+    return list.sort((a, b) => {
+      const bizA = a.businessId ? businessMap[a.businessId] : null;
+      const bizB = b.businessId ? businessMap[b.businessId] : null;
+      const featA = isItemCurrentlyFeatured(a, bizA) ? 1 : 0;
+      const featB = isItemCurrentlyFeatured(b, bizB) ? 1 : 0;
+      if (featB !== featA) return featB - featA;
+
+      return (b.createdAt || 0) - (a.createdAt || 0);
+    });
+  }, [jobs, businessMap, selectedCategory, selectedSubCategory, selectedJobType, selectedRegion, searchQuery]);
 
   return (
     <div className="w-full space-y-8 sm:space-y-10 pb-16 relative">
@@ -310,7 +340,7 @@ export function Jobs() {
       {/* MOBILE STICKY TOP APP BAR (Positioned Above Promotional Banner on Mobile) */}
       {/* ========================================================================= */}
       <div className={cn(
-        "lg:hidden sticky z-30 bg-white/95 backdrop-blur-md border-b border-stone-200/80 shadow-2xs -mx-4 sm:-mx-6 px-4 sm:px-6 py-2.5 space-y-2 transition-all duration-300",
+        "lg:hidden sticky z-30 bg-white/95 backdrop-blur-md border-b border-stone-200/80 shadow-2xs px-4 py-2.5 space-y-2 transition-all duration-300",
         showHeader ? "top-[62px] sm:top-[68px] md:top-[72px]" : "top-0"
       )}>
         {/* Row 1: Search Bar & Filters Button */}
@@ -431,24 +461,34 @@ export function Jobs() {
           {/* Search Input Bar & Location Filter Grid */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             {/* Search Input */}
-            <div className="relative md:col-span-2">
+            <form 
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (desktopSearchInput.trim()) {
+                  navigate(`/search?q=${encodeURIComponent(desktopSearchInput.trim())}&tab=jobs`);
+                }
+              }}
+              className="relative md:col-span-2"
+            >
               <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                type="search"
+                enterKeyHint="search"
+                value={desktopSearchInput}
+                onChange={(e) => setDesktopSearchInput(e.target.value)}
                 placeholder="ابحث المسمى الوظيفي، المحل، أو المنطقة..."
-                className="w-full bg-white/10 backdrop-blur-md text-white placeholder:text-stone-300 border border-white/20 rounded-2xl px-4 py-3 pr-10 text-sm focus:outline-none focus:bg-white/20 transition-all shadow-inner"
+                className="w-full bg-white/10 backdrop-blur-md text-white placeholder:text-stone-300 border border-white/20 rounded-2xl px-4 py-3 pr-10 text-sm focus:outline-none focus:bg-white/20 transition-all shadow-inner [&::-webkit-search-cancel-button]:appearance-none"
               />
               <Search className="h-4 w-4 text-emerald-200 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-              {searchQuery && (
+              {desktopSearchInput && (
                 <button 
-                  onClick={() => setSearchQuery('')}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-300 hover:text-white p-1.5"
+                  type="button"
+                  onClick={() => setDesktopSearchInput('')}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-300 hover:text-white p-1.5 cursor-pointer"
                 >
                   <X className="h-4 w-4" />
                 </button>
               )}
-            </div>
+            </form>
 
             {/* Location Dropdown */}
             <div className="relative">
@@ -719,7 +759,7 @@ export function Jobs() {
           <div id="jobs-grid" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
             {filteredJobs
               .slice((currentPage - 1) * 15, currentPage * 15)
-              .map((job) => {
+              .flatMap((job, idx) => {
                 const biz = job.businessId ? businessMap[job.businessId] : null;
                 const effectiveCategory = biz?.category || job.businessCategory || job.category || '';
                 const effectiveSubCat = biz?.subCategory || job.businessSubCategory || job.subCategory || '';
@@ -730,11 +770,18 @@ export function Jobs() {
                   ? `${effectiveCategory} • ${effectiveSubCat}`
                   : effectiveCategory;
 
-                return (
+                const isFeaturedJob = isItemCurrentlyFeatured(job, biz);
+
+                const jobCardNode = (
                   <div
                     key={job.id}
                     onClick={() => setSelectedDetailJob(job)}
-                    className="bg-white rounded-3xl p-4 sm:p-6 border border-[#e5e1da] hover:border-[#1a4d2e]/40 shadow-xs hover:shadow-lg transition-all flex flex-col justify-between group relative cursor-pointer active:scale-[0.99]"
+                    className={cn(
+                      "bg-white rounded-3xl p-4 sm:p-6 transition-all flex flex-col justify-between group relative cursor-pointer active:scale-[0.99]",
+                      isFeaturedJob
+                        ? "border-2 border-amber-400/90 ring-2 ring-amber-400/40 shadow-[0_0_22px_rgba(245,158,11,0.3)] hover:shadow-[0_0_35px_rgba(245,158,11,0.55)] hover:border-amber-400"
+                        : "border border-[#e5e1da] hover:border-[#1a4d2e]/40 shadow-xs hover:shadow-lg"
+                    )}
                   >
                   <div className="space-y-3">
                     
@@ -760,12 +807,20 @@ export function Jobs() {
                         </div>
                       </div>
 
-                      {job.isUrgent && (
-                        <span className="bg-red-50 text-red-600 border border-red-200 text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1 shrink-0">
-                          <Flame className="h-3 w-3 fill-red-600" />
-                          <span>عاجل</span>
-                        </span>
-                      )}
+                      <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+                        {isFeaturedJob && (
+                          <span className="bg-gradient-to-r from-amber-400 to-yellow-500 text-yellow-950 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-widest shadow-md flex items-center gap-1 w-fit border border-amber-300/60 shrink-0">
+                            <Crown className="h-3 w-3 fill-current shrink-0 text-amber-950" />
+                            <span>ممول</span>
+                          </span>
+                        )}
+                        {job.isUrgent && (
+                          <span className="bg-red-50 text-red-600 border border-red-200 text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1 shrink-0">
+                            <Flame className="h-3 w-3 fill-red-600" />
+                            <span>عاجل</span>
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     {/* Job Types & Category Badges */}
@@ -867,6 +922,17 @@ export function Jobs() {
                   </div>
                 </div>
               );
+
+                const currentSlice = filteredJobs.slice((currentPage - 1) * 15, currentPage * 15);
+                const shouldInsertPromo0 = (idx === 2 || (idx === currentSlice.length - 1 && currentSlice.length < 3)) && promoCards[0];
+                const shouldInsertPromo1 = (idx === 8) && promoCards[1];
+                const promoToInsert = shouldInsertPromo0 ? (
+                  <InFeedPromoCardItem key={`promo_${promoCards[0].id}_${idx}`} card={promoCards[0]} />
+                ) : shouldInsertPromo1 ? (
+                  <InFeedPromoCardItem key={`promo_${promoCards[1].id}_${idx}`} card={promoCards[1]} />
+                ) : null;
+
+                return promoToInsert ? [jobCardNode, promoToInsert] : [jobCardNode];
             })}
           </div>
 

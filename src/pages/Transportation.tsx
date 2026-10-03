@@ -22,18 +22,23 @@ import {
   ExternalLink,
   X
 } from 'lucide-react';
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { SEO } from '../components/common/SEO';
 import { BannerSlideshow } from '../components/BannerSlideshow';
 import { HomepageBanner, TerminalItem, RouteItem, TaxiItem } from '../types';
 import { fetchPageBanners, DEFAULT_TRANSPORT_BANNERS } from '../lib/pageBanners';
 import { fetchTransportation } from '../lib/transportationService';
 import { useAuth } from '../contexts/AuthContext';
+import { useHeaderVisibility } from '../lib/useHeaderVisibility';
+import { cn } from '../lib/utils';
 
 export function Transportation() {
+  const navigate = useNavigate();
   const { isAdmin } = useAuth();
+  const showHeader = useHeaderVisibility();
   const [activeTab, setActiveTab] = useState<'terminals' | 'routes' | 'taxis' | 'tips'>('terminals');
   const [banners, setBanners] = useState<HomepageBanner[]>(DEFAULT_TRANSPORT_BANNERS);
+  const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -93,33 +98,137 @@ export function Transportation() {
   };
 
   return (
-    <div className="min-h-screen bg-[#fdfcfb] pb-16" dir="rtl">
+    <div className="w-full min-h-screen bg-[#fdfcfb] pb-16" dir="rtl">
       <SEO 
         title="دليل مواصلات ومجمعات إربد | خطوط باصات وتكاسي إربد"
         description="دليل خطوط ومواصلات محافظة إربد الشامل: مجمع عمان الجديد، مجمع الشمال، مجمع الأغوار، باصات جامعة اليرموك وجامعة العلوم والتكنولوجيا، خطوط السرفيس وتطبيقات التاكسي."
         keywords={['مواصلات إربد', 'باصات إربد', 'مجمع عمان الجديد', 'مجمع الشمال إربد', 'مجمع الأغوار إربد', 'تكاسي إربد', 'سرفيس إربد', 'جامعة اليرموك مواصلات', 'تكنولوجيا مواصلات']}
         canonicalUrl="https://shofibirbid.site/transportation"
       />
+      {/* ========================================================================= */}
+      {/* MOBILE STICKY TOP APP BAR (Native Mobile UX matching Medical & Products) */}
+      {/* ========================================================================= */}
+      <div className={cn(
+        "lg:hidden sticky z-30 bg-white/95 backdrop-blur-md border-b border-stone-200/80 shadow-2xs px-4 py-2.5 space-y-2 transition-all duration-300",
+        showHeader ? "top-[62px] sm:top-[68px] md:top-[72px]" : "top-0"
+      )}>
+        {/* Row 1: Search Input & Share button */}
+        <div className="flex items-center gap-2">
+          <form 
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (searchInput.trim()) {
+                navigate(`/search?q=${encodeURIComponent(searchInput.trim())}&tab=transportation`);
+              }
+            }}
+            className="relative flex-1 min-w-0"
+          >
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-stone-400 pointer-events-none" />
+            <input
+              type="search"
+              enterKeyHint="search"
+              placeholder="عن ماذا تبحث؟ مجمع، خط، وجهة..."
+              value={searchInput}
+              onChange={e => setSearchInput(e.target.value)}
+              className="w-full pl-8 pr-8 py-2 bg-stone-100/90 border border-stone-200 rounded-xl text-xs font-bold placeholder:text-stone-400 focus:outline-none focus:bg-white focus:border-[#1a4d2e] transition-all cursor-text [&::-webkit-search-cancel-button]:appearance-none"
+            />
+            {searchInput && (
+              <button
+                type="button"
+                onClick={() => setSearchInput('')}
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 p-1 rounded-full cursor-pointer"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </form>
+
+          <button
+            onClick={handleCopyGuide}
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#1a4d2e] hover:bg-[#133b22] text-white font-bold text-xs rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer shrink-0"
+            title="مشاركة الدليل"
+          >
+            {copied ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300" /> : <Share2 className="h-3.5 w-3.5" />}
+            <span>{copied ? 'تم النسخ' : 'مشاركة'}</span>
+          </button>
+        </div>
+
+        {/* Row 2: Tabs Carousel */}
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar scroll-smooth pt-0.5 pb-1 -mx-2.5 px-2.5 sm:-mx-4 sm:px-4" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+          <button
+            type="button"
+            onClick={() => setActiveTab('terminals')}
+            className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${
+              activeTab === 'terminals'
+                ? 'bg-[#1a4d2e] text-white border-transparent shadow-xs font-black'
+                : 'bg-white text-stone-700 border-stone-200 hover:border-emerald-300'
+            }`}
+          >
+            <Building2 className="h-3.5 w-3.5" />
+            <span>المجمعات ({terminalsData.length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('routes')}
+            className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${
+              activeTab === 'routes'
+                ? 'bg-[#1a4d2e] text-white border-transparent shadow-xs font-black'
+                : 'bg-white text-stone-700 border-stone-200 hover:border-emerald-300'
+            }`}
+          >
+            <ArrowLeftRight className="h-3.5 w-3.5" />
+            <span>الخطوط والسرفيس ({internalRoutes.length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('taxis')}
+            className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${
+              activeTab === 'taxis'
+                ? 'bg-[#1a4d2e] text-white border-transparent shadow-xs font-black'
+                : 'bg-white text-stone-700 border-stone-200 hover:border-emerald-300'
+            }`}
+          >
+            <Car className="h-3.5 w-3.5" />
+            <span>التاكسي والتطبيقات ({taxiApps.length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('tips')}
+            className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${
+              activeTab === 'tips'
+                ? 'bg-[#1a4d2e] text-white border-transparent shadow-xs font-black'
+                : 'bg-white text-stone-700 border-stone-200 hover:border-emerald-300'
+            }`}
+          >
+            <Info className="h-3.5 w-3.5" />
+            <span>نصائح وذروة</span>
+          </button>
+        </div>
+      </div>
+
       {/* Banner Slideshow */}
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
         <BannerSlideshow banners={banners} />
       </div>
 
       {/* Main Container */}
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 space-y-6">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 sm:mt-6 space-y-6">
         
-        {/* Page Header & Search Bar (2026 Mobile Optimized Design) */}
-        <div className="bg-gradient-to-br from-[#1a4d2e] via-[#153e25] to-[#0f2e1d] text-white rounded-3xl p-4 sm:p-6 shadow-xl border border-emerald-800/40 relative overflow-hidden space-y-3.5">
+        {/* Desktop Page Header & Search Bar */}
+        <div className="hidden lg:block bg-gradient-to-br from-[#1a4d2e] via-[#153e25] to-[#0f2e1d] text-white rounded-3xl p-6 shadow-xl border border-emerald-800/40 relative overflow-hidden space-y-3.5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="w-9 h-9 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/10 text-emerald-300">
                 <Bus className="h-5 w-5 text-emerald-300" />
               </span>
               <div>
-                <h1 className="text-lg sm:text-2xl font-black tracking-tight text-white">
+                <h1 className="text-2xl font-black tracking-tight text-white">
                   دليل النقل والمواصلات
                 </h1>
-                <p className="text-[11px] sm:text-xs text-emerald-100/80 font-medium">
+                <p className="text-xs text-emerald-100/80 font-medium">
                   مجمعات الحافلات، السرفيس، والتاكسي في إربد
                 </p>
               </div>
@@ -127,7 +236,7 @@ export function Transportation() {
 
             <button
               onClick={handleCopyGuide}
-              className="inline-flex items-center gap-1.5 px-3 py-2 bg-white/10 hover:bg-white/20 text-white font-bold text-xs rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer border border-white/10 shrink-0"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white/10 hover:bg-white/20 text-white font-bold text-xs rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer border border-white/10 shrink-0"
             >
               {copied ? <CheckCircle2 className="h-4 w-4 text-emerald-300" /> : <Share2 className="h-4 w-4" />}
               <span>{copied ? 'تم النسخ' : 'مشاركة'}</span>
@@ -135,74 +244,84 @@ export function Transportation() {
           </div>
 
           {/* Search bar */}
-          <div className="relative">
+          <form 
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (searchInput.trim()) {
+                navigate(`/search?q=${encodeURIComponent(searchInput.trim())}&tab=transportation`);
+              }
+            }}
+            className="relative"
+          >
             <input
-              type="text"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
+              type="search"
+              enterKeyHint="search"
+              value={searchInput}
+              onChange={e => setSearchInput(e.target.value)}
               placeholder="ابحث عن منطقتك أو وجهتك (عمان، الرمثا، التكنولوجيا، الحصن)..."
-              className="w-full bg-white/10 backdrop-blur-md text-white placeholder:text-stone-300 border border-white/20 rounded-2xl px-4 py-3 pr-10 text-xs sm:text-sm focus:outline-none focus:bg-white/20 transition-all shadow-inner"
+              className="w-full bg-white/10 backdrop-blur-md text-white placeholder:text-stone-300 border border-white/20 rounded-2xl px-4 py-3 pr-10 text-sm focus:outline-none focus:bg-white/20 transition-all shadow-inner [&::-webkit-search-cancel-button]:appearance-none"
             />
             <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-200 pointer-events-none" />
-            {searchQuery && (
+            {searchInput && (
               <button
-                onClick={() => setSearchQuery('')}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-300 hover:text-white p-1.5"
+                type="button"
+                onClick={() => setSearchInput('')}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-300 hover:text-white p-1.5 cursor-pointer"
               >
                 <X className="h-4 w-4" />
               </button>
             )}
-          </div>
+          </form>
         </div>
         
-        {/* Navigation Tabs */}
-        <div className="flex items-center gap-2 overflow-x-auto bg-white/90 backdrop-blur-md p-1.5 sm:p-2 rounded-2xl shadow-xs border border-stone-200/80 scrollbar-none snap-x -mx-4 px-4 sm:mx-0 sm:px-2">
+        {/* Desktop Navigation Tabs */}
+        <div className="hidden lg:flex items-center gap-2 bg-white/95 backdrop-blur-md p-2 rounded-2xl shadow-xs border border-stone-200/80">
           <button
             onClick={() => setActiveTab('terminals')}
-            className={`snap-start px-4 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 min-h-[44px] shrink-0 active:scale-95 ${
+            className={`px-4 py-2.5 rounded-xl text-sm font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 min-h-[44px] shrink-0 active:scale-95 ${
               activeTab === 'terminals' 
                 ? 'bg-[#1a4d2e] text-white shadow-md' 
                 : 'text-stone-600 hover:bg-stone-100'
             }`}
           >
             <Building2 className="h-4 w-4 text-[#ff9f1c]" />
-            <span>مجمعات الحافلات الرئيسية ({terminalsData.length})</span>
+            <span>مجمعات الحافلات ({terminalsData.length})</span>
           </button>
 
           <button
             onClick={() => setActiveTab('routes')}
-            className={`snap-start px-4 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 min-h-[44px] shrink-0 active:scale-95 ${
+            className={`px-4 py-2.5 rounded-xl text-sm font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 min-h-[44px] shrink-0 active:scale-95 ${
               activeTab === 'routes' 
                 ? 'bg-[#1a4d2e] text-white shadow-md' 
                 : 'text-stone-600 hover:bg-stone-100'
             }`}
           >
             <ArrowLeftRight className="h-4 w-4 text-[#ff9f1c]" />
-            <span>خطوط السرفيس والباص الداخلي ({internalRoutes.length})</span>
+            <span>الخطوط والسرفيس ({internalRoutes.length})</span>
           </button>
 
           <button
             onClick={() => setActiveTab('taxis')}
-            className={`snap-start px-4 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 min-h-[44px] shrink-0 active:scale-95 ${
+            className={`px-4 py-2.5 rounded-xl text-sm font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 min-h-[44px] shrink-0 active:scale-95 ${
               activeTab === 'taxis' 
                 ? 'bg-[#1a4d2e] text-white shadow-md' 
                 : 'text-stone-600 hover:bg-stone-100'
             }`}
           >
             <Car className="h-4 w-4 text-[#ff9f1c]" />
-            <span>التاكسي والتطبيقات الذكية ({taxiApps.length})</span>
+            <span>التاكسي والتطبيقات ({taxiApps.length})</span>
           </button>
 
           <button
             onClick={() => setActiveTab('tips')}
-            className={`snap-start px-4 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 min-h-[44px] shrink-0 active:scale-95 ${
+            className={`px-4 py-2.5 rounded-xl text-sm font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 min-h-[44px] shrink-0 active:scale-95 ${
               activeTab === 'tips' 
                 ? 'bg-[#1a4d2e] text-white shadow-md' 
                 : 'text-stone-600 hover:bg-stone-100'
             }`}
           >
             <Info className="h-4 w-4 text-[#ff9f1c]" />
-            <span>نصائح وأوقات الذروة</span>
+            <span>نصائح وذروة</span>
           </button>
         </div>
 
@@ -239,16 +358,16 @@ export function Transportation() {
                 )}
               </div>
             ) : (
-              <div className="space-y-6">
+              <div className="space-y-4 sm:space-y-6">
               {filteredTerminals.map((terminal) => (
-                <div key={terminal.id} className="bg-white rounded-3xl p-6 border border-stone-200 shadow-md space-y-5 hover:border-[#1a4d2e]/30 transition-all">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-stone-100 pb-4">
+                <div key={terminal.id} className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-stone-200 shadow-xs sm:shadow-md space-y-4 sm:space-y-5 hover:border-[#1a4d2e]/30 transition-all">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-stone-100 pb-3 sm:pb-4">
                     <div className="flex items-start gap-3">
-                      <div className="w-12 h-12 rounded-2xl bg-[#1a4d2e]/10 text-[#1a4d2e] flex items-center justify-center shrink-0 font-bold">
-                        <Bus className="h-6 w-6" />
+                      <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-[#1a4d2e]/10 text-[#1a4d2e] flex items-center justify-center shrink-0 font-bold">
+                        <Bus className="h-5 w-5 sm:h-6 sm:w-6" />
                       </div>
                       <div>
-                        <h3 className="text-lg sm:text-xl font-black text-[#2d2a26]">{terminal.name}</h3>
+                        <h3 className="text-base sm:text-xl font-black text-[#2d2a26]">{terminal.name}</h3>
                         <p className="text-xs text-[#1a4d2e] font-bold flex items-center gap-1 mt-0.5">
                           <MapPin className="h-3.5 w-3.5 text-[#ff9f1c]" />
                           <span>{terminal.location}</span>
@@ -267,11 +386,11 @@ export function Transportation() {
                       الوجهات والخطوط المنطلقة من المجمع:
                     </span>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-3">
                       {terminal.destinations.map((dest, idx) => (
-                        <div key={idx} className="bg-stone-50 rounded-2xl p-4 border border-stone-200/80 flex flex-col justify-between gap-2">
+                        <div key={idx} className="bg-stone-50 rounded-xl sm:rounded-2xl p-3 sm:p-4 border border-stone-200/80 flex flex-col justify-between gap-2">
                           <div className="flex items-center justify-between gap-2">
-                            <span className="font-black text-sm text-[#2d2a26]">{dest.name}</span>
+                            <span className="font-black text-xs sm:text-sm text-[#2d2a26]">{dest.name}</span>
                             <span className="text-xs font-black text-[#1a4d2e] bg-emerald-100/80 px-2.5 py-0.5 rounded-full">
                               {dest.approxFare}
                             </span>
@@ -321,15 +440,15 @@ export function Transportation() {
                 )}
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
                 {filteredRoutes.map((route, idx) => (
-                  <div key={route.id || idx} className="bg-white rounded-3xl p-5 border border-stone-200 shadow-sm space-y-4 hover:shadow-md transition-all">
+                  <div key={route.id || idx} className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-5 border border-stone-200 shadow-xs sm:shadow-sm space-y-3.5 sm:space-y-4 hover:shadow-md transition-all">
                     <div className="flex items-start justify-between gap-2 border-b border-stone-100 pb-3">
                       <div>
                         <span className="text-[10px] font-black bg-[#1a4d2e]/10 text-[#1a4d2e] px-2.5 py-0.5 rounded-full block w-fit mb-1">
                           {route.code}
                         </span>
-                        <h3 className="font-black text-base text-[#2d2a26]">{route.name}</h3>
+                        <h3 className="font-black text-sm sm:text-base text-[#2d2a26]">{route.name}</h3>
                       </div>
 
                       <div className="text-left shrink-0">
@@ -345,7 +464,7 @@ export function Transportation() {
                       <div className="flex flex-wrap items-center gap-1.5">
                         {route.stops.map((stop, sIdx) => (
                           <React.Fragment key={sIdx}>
-                            <span className="text-xs font-bold text-stone-700 bg-stone-100 px-2.5 py-1 rounded-lg">
+                            <span className="text-[11px] sm:text-xs font-bold text-stone-700 bg-stone-100 px-2.5 py-1 rounded-lg">
                               {stop}
                             </span>
                             {sIdx < route.stops.length - 1 && (
@@ -392,10 +511,10 @@ export function Transportation() {
                 )}
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 sm:gap-5">
                 {taxiApps.map((app, idx) => (
-                  <div key={app.id || idx} className="bg-white rounded-3xl p-6 border border-stone-200 shadow-sm space-y-4 flex flex-col justify-between">
-                    <div className="space-y-3">
+                  <div key={app.id || idx} className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-stone-200 shadow-xs sm:shadow-sm space-y-3.5 sm:space-y-4 flex flex-col justify-between">
+                    <div className="space-y-2.5 sm:space-y-3">
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-black bg-[#ff9f1c]/20 text-amber-900 px-2.5 py-0.5 rounded-full">
                           {app.badge}
@@ -403,7 +522,7 @@ export function Transportation() {
                         <Car className="h-5 w-5 text-[#1a4d2e]" />
                       </div>
 
-                      <h3 className="font-black text-lg text-[#2d2a26]">{app.name}</h3>
+                      <h3 className="font-black text-base sm:text-lg text-[#2d2a26]">{app.name}</h3>
                       <p className="text-xs text-[#1a4d2e] font-bold">{app.categoryType || (app as any).type}</p>
                       <p className="text-xs text-stone-600 leading-relaxed">{app.description}</p>
                     </div>
@@ -412,7 +531,7 @@ export function Transportation() {
                       <div className="pt-3 border-t border-stone-100">
                         <a
                           href={`tel:${app.phone.split('/')[0].trim()}`}
-                          className="w-full inline-flex items-center justify-center gap-2 bg-[#1a4d2e] hover:bg-[#133b22] text-white py-2.5 rounded-xl text-xs font-bold transition-colors"
+                          className="w-full inline-flex items-center justify-center gap-2 bg-[#1a4d2e] hover:bg-[#133b22] text-white py-2.5 min-h-[44px] rounded-xl text-xs font-bold transition-colors active:scale-98"
                         >
                           <Phone className="h-3.5 w-3.5" />
                           <span>اتصال: {app.phone}</span>
@@ -438,8 +557,8 @@ export function Transportation() {
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-amber-50/70 border border-amber-200 rounded-3xl p-6 space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 sm:gap-4">
+              <div className="bg-amber-50/70 border border-amber-200 rounded-2xl sm:rounded-3xl p-4 sm:p-6 space-y-3">
                 <div className="flex items-center gap-2 text-amber-900 font-black">
                   <Clock className="h-5 w-5 text-amber-600" />
                   <h3>أوقات الذروة المرورية في إربد</h3>
@@ -451,7 +570,7 @@ export function Transportation() {
                 </ul>
               </div>
 
-              <div className="bg-emerald-50/70 border border-emerald-200 rounded-3xl p-6 space-y-3">
+              <div className="bg-emerald-50/70 border border-emerald-200 rounded-2xl sm:rounded-3xl p-4 sm:p-6 space-y-3">
                 <div className="flex items-center gap-2 text-emerald-950 font-black">
                   <ShieldCheck className="h-5 w-5 text-emerald-700" />
                   <h3>نصائح ذهبية للركاب والطلاب</h3>

@@ -73,46 +73,68 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
-// Handle FCM and Web Push Notifications in background
+// Handle FCM and Web Push Notifications in background (works even if browser/app is closed)
 self.addEventListener('push', (event) => {
   let data = {
-    title: 'شو في بإربد؟ 📢',
-    body: 'تنبيه جديد من دليل محلات وعروض إربد',
-    url: '/'
+    title: 'شو في بإربد؟',
+    body: 'تنبيه جديد من منصة دليل وعروض إربد',
+    url: '/notifications'
   };
 
   if (event.data) {
     try {
-      data = { ...data, ...event.data.json() };
+      const parsed = event.data.json();
+      data = { ...data, ...parsed };
+      if (parsed.message && !parsed.body) {
+        data.body = parsed.message;
+      }
+      if (parsed.link && !parsed.url) {
+        data.url = parsed.link;
+      }
     } catch (e) {
       data.body = event.data.text();
     }
   }
 
+  const notificationTitle = data.title || 'شو في بإربد؟';
+  const notificationBody = data.body || data.message || 'لديك إشعار جديد';
+  const targetUrl = data.url || data.link || '/notifications';
+
   const options = {
-    body: data.body,
-    icon: '/favicon.jpg',
-    badge: '/favicon.jpg',
-    vibrate: [100, 50, 100],
+    body: notificationBody,
+    icon: data.icon || '/favicon.jpg',
+    badge: data.badge || '/favicon.jpg',
+    vibrate: [200, 100, 200],
+    tag: data.tag || 'irbid-notification-' + Date.now(),
+    renotify: true,
+    requireInteraction: true,
     data: {
-      url: data.url || '/'
+      url: targetUrl
     }
   };
 
   event.waitUntil(
-    self.registration.showNotification(data.title, options)
+    self.registration.showNotification(notificationTitle, options)
   );
 });
 
-// Handle notification click
+// Handle notification click to navigate to the target link
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const targetUrl = event.notification.data?.url || '/';
+  const rawUrl = event.notification.data?.url || '/notifications';
+  const targetUrl = rawUrl.startsWith('http') ? rawUrl : self.location.origin + (rawUrl.startsWith('/') ? rawUrl : '/' + rawUrl);
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      // Check if there is already a window/tab open with this URL or on the site
       for (let client of windowClients) {
         if (client.url === targetUrl && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      for (let client of windowClients) {
+        if (client.url.startsWith(self.location.origin) && 'focus' in client && 'navigate' in client) {
+          client.navigate(targetUrl);
           return client.focus();
         }
       }

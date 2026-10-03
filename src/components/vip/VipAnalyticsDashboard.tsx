@@ -10,7 +10,8 @@ import { Business, BusinessAnalytics } from '../../types';
 import { getDefaultAnalytics } from '../../lib/analyticsTracker';
 import { getJordanNow, getJordanDateISO } from '../../lib/jordanTime';
 import { db } from '../../lib/firebase';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { collection, getDocs, query, where, limit } from 'firebase/firestore';
+import { getCachedBusinesses } from '../../lib/dataCache';
 
 interface VipAnalyticsDashboardProps {
   business: Business;
@@ -39,16 +40,20 @@ export function VipAnalyticsDashboard({ business }: VipAnalyticsDashboardProps) 
   const [peakHours, setPeakHours] = useState('5:30 مساءً - 11:00 ليلاً');
 
   useEffect(() => {
-    // Fetch real market benchmarks from all businesses in DB
+    // Fetch market benchmarks efficiently from cache or small sample
     const fetchMarketData = async () => {
       try {
-        const snapshot = await getDocs(collection(db, 'businesses'));
+        let docsData: Business[] = getCachedBusinesses() || [];
+        if (docsData.length === 0 && db) {
+          const snapshot = await getDocs(query(collection(db, 'businesses'), limit(30)));
+          docsData = snapshot.docs.map(d => d.data() as Business);
+        }
+        
         let totalViews = 0;
         let totalInteractions = 0;
         let totalMenuViews = 0;
         
-        snapshot.docs.forEach(doc => {
-           const d = doc.data() as Business;
+        docsData.forEach(d => {
            const dViews = d.analytics?.views || d.views || 0;
            const dInteractions = (d.analytics?.whatsappClicks || 0) + (d.analytics?.callClicks || 0) + (d.analytics?.directionClicks || 0) + (d.analytics?.menuViews || 0);
            const dMenuViews = d.analytics?.menuViews || 0;
@@ -66,7 +71,7 @@ export function VipAnalyticsDashboard({ business }: VipAnalyticsDashboardProps) 
           avgMenuEngagement: Number(avgMenuEngagement.toFixed(1))
         });
       } catch (err) {
-        console.error('Error fetching market benchmarks', err);
+        console.warn('Market benchmark note:', err);
       }
     };
     fetchMarketData();

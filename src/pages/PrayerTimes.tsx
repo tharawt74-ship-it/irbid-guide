@@ -247,11 +247,11 @@ export function PrayerTimes() {
 
   const handleCopyTimes = () => {
     const dateText = selectedDate.toLocaleDateString('ar-JO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-    let text = `🕌 مواقيت الصلاة في إربد - الأردن\n📅 ${dateText}\n\n`;
+    let text = `مواقيت الصلاة في إربد - الأردن\n${dateText}\n\n`;
     timings.forEach(t => {
       text += `• ${t.nameAr}: ${t.formatted12h}\n`;
     });
-    text += `\n📍 نقلاً عن تطبيق "شو في بإربد؟"`;
+    text += `\nنقلاً عن تطبيق شو في بإربد`;
 
     navigator.clipboard.writeText(text);
     setCopied(true);
@@ -282,35 +282,31 @@ export function PrayerTimes() {
         canonicalUrl="https://shofibirbid.site/prayer-times"
       />
       {/* Top Banner Header */}
-      <div className="bg-gradient-to-br from-[#1a4d2e] via-[#133b22] to-[#0a2313] text-white pt-8 pb-16 px-4 sm:px-6 lg:px-8 relative overflow-hidden shadow-md">
+      <div className="bg-gradient-to-br from-[#1a4d2e] via-[#133b22] to-[#0a2313] text-white pt-6 pb-12 sm:pt-8 sm:pb-16 px-4 sm:px-6 lg:px-8 relative overflow-hidden shadow-md">
         {/* Background decorative mosque silhouette pattern */}
         <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#ff9f1c_1px,transparent_1px)] [background-size:16px_16px] pointer-events-none" />
         <div className="absolute -bottom-10 -left-10 w-64 h-64 bg-[#ff9f1c]/10 rounded-full blur-3xl pointer-events-none" />
 
-        <div className="max-w-5xl mx-auto relative z-10 space-y-6">
-          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-white/10 border border-white/20 backdrop-blur-md flex items-center justify-center text-[#ff9f1c] shadow-inner">
-                <Clock className="h-6 w-6" />
+        <div className="max-w-5xl mx-auto relative z-10 space-y-4 sm:space-y-6">
+          <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4 border-b border-white/10 pb-3 sm:pb-4">
+            <div className="flex items-center gap-2.5 sm:gap-3">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-white/10 border border-white/20 backdrop-blur-md flex items-center justify-center text-[#ff9f1c] shadow-inner shrink-0">
+                <Clock className="h-5 w-5 sm:h-6 sm:w-6" />
               </div>
               <div>
-                <div className="flex flex-wrap items-center gap-2 mb-1.5">
-                  <div className="inline-flex items-center gap-2 bg-emerald-500/25 border border-emerald-400/30 text-emerald-200 px-3 py-0.5 rounded-full text-xs font-bold">
-                    <MapPin className="h-3.5 w-3.5 text-[#ff9f1c]" />
-                    <span>إربد، الأردن (Asia/Amman - UTC+3)</span>
-                  </div>
-                  <div className="inline-flex items-center gap-1.5 bg-amber-500/20 border border-amber-400/30 text-amber-200 px-3 py-0.5 rounded-full text-xs font-bold">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-[#ff9f1c]" />
-                    <span>تقويم وزارة الأوقاف الشؤون والمقدسات الإسلامية</span>
+                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-1">
+                  <div className="inline-flex items-center gap-1.5 bg-emerald-500/25 border border-emerald-400/30 text-emerald-200 px-2.5 py-0.5 rounded-full text-[11px] sm:text-xs font-bold">
+                    <MapPin className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-[#ff9f1c]" />
+                    <span>إربد، الأردن</span>
                   </div>
                   {jordanTimeDisplay && (
-                    <div className="inline-flex items-center gap-1.5 bg-white/15 border border-white/20 text-white px-3 py-0.5 rounded-full text-xs font-mono font-bold">
-                      <Clock className="h-3.5 w-3.5 text-emerald-400 animate-pulse" />
-                      <span>ساعة الأردن الآن: {jordanTimeDisplay}</span>
+                    <div className="inline-flex items-center gap-1.5 bg-white/15 border border-white/20 text-white px-2.5 py-0.5 rounded-full text-[11px] sm:text-xs font-mono font-bold">
+                      <Clock className="h-3 w-3 text-emerald-400 animate-pulse" />
+                      <span>{jordanTimeDisplay}</span>
                     </div>
                   )}
                 </div>
-                <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-white">
+                <h1 className="text-xl sm:text-3xl md:text-4xl font-black text-white">
                   مواقيت الصلاة في إربد
                 </h1>
               </div>
@@ -319,33 +315,33 @@ export function PrayerTimes() {
             <div className="flex items-center gap-2">
               <button
                 onClick={handleCopyTimes}
-                className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white border border-white/20 px-3.5 py-2 rounded-xl text-xs font-bold transition-all backdrop-blur-md cursor-pointer"
+                className="inline-flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white border border-white/20 px-3 py-2 rounded-xl text-xs font-bold transition-all backdrop-blur-md cursor-pointer shrink-0"
                 title="مشاركة مواقيت اليوم"
               >
                 {copied ? <CheckCircle2 className="h-4 w-4 text-emerald-400" /> : <Share2 className="h-4 w-4" />}
-                <span>{copied ? 'تم النسخ!' : 'مشاركة المواقيت'}</span>
+                <span>{copied ? 'تم النسخ' : 'مشاركة المواقيت'}</span>
               </button>
             </div>
           </div>
 
           {/* Date Selector Navigation Bar */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-white/10 backdrop-blur-md border border-white/15 rounded-2xl p-3 sm:p-4 gap-4">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-white/10 backdrop-blur-md border border-white/15 rounded-2xl p-2.5 sm:p-4 gap-2.5 sm:gap-4">
+            <div className="flex items-center justify-between sm:justify-start gap-1.5 sm:gap-2 w-full sm:w-auto">
               <button
                 onClick={() => changeDateByDays(-1)}
-                className="p-2 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-colors cursor-pointer"
+                className="p-2 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-colors cursor-pointer shrink-0"
                 title="اليوم السابق"
               >
                 <ChevronRight className="h-5 w-5" />
               </button>
 
-              <div className="flex items-center gap-2 bg-white/15 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold text-white shadow-inner">
-                <CalendarIcon className="h-4 w-4 text-[#ff9f1c]" />
-                <span>
-                  {selectedDate.toLocaleDateString('ar-JO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+              <div className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 bg-white/15 px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold text-white shadow-inner truncate">
+                <CalendarIcon className="h-4 w-4 text-[#ff9f1c] shrink-0" />
+                <span className="truncate">
+                  {selectedDate.toLocaleDateString('ar-JO', { weekday: 'long', day: 'numeric', month: 'short' })}
                 </span>
                 {isToday(selectedDate) && (
-                  <span className="bg-[#ff9f1c] text-stone-900 font-black px-2 py-0.5 rounded-md text-[10px] shadow-xs">
+                  <span className="bg-[#ff9f1c] text-stone-900 font-black px-1.5 py-0.5 rounded text-[10px] shrink-0">
                     اليوم
                   </span>
                 )}
@@ -353,7 +349,7 @@ export function PrayerTimes() {
 
               <button
                 onClick={() => changeDateByDays(1)}
-                className="p-2 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-colors cursor-pointer"
+                className="p-2 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-colors cursor-pointer shrink-0"
                 title="اليوم التالي"
               >
                 <ChevronLeft className="h-5 w-5" />
@@ -362,46 +358,44 @@ export function PrayerTimes() {
               {!isToday(selectedDate) && (
                 <button
                   onClick={() => setSelectedDate(getJordanNow())}
-                  className="bg-[#ff9f1c] hover:bg-[#e88e13] text-stone-950 px-3 py-2 rounded-xl text-xs font-black transition-colors cursor-pointer"
+                  className="bg-[#ff9f1c] hover:bg-[#e88e13] text-stone-950 px-2.5 py-2 rounded-xl text-xs font-black transition-colors cursor-pointer shrink-0"
                 >
-                  العودة لليوم
+                  اليوم
                 </button>
               )}
             </div>
 
             {/* Hijri Date Display */}
-            {hijriDate ? (
-              <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-emerald-200 bg-emerald-950/40 px-3.5 py-2 rounded-xl border border-emerald-500/20">
-                <Sparkles className="h-4 w-4 text-[#ff9f1c]" />
-                <span>التاريخ الهجري: {hijriDate.day} {hijriDate.monthAr} {hijriDate.year} {hijriDate.designation}</span>
+            {hijriDate && (
+              <div className="flex items-center justify-center gap-2 text-xs font-bold text-emerald-200 bg-emerald-950/40 px-3 py-1.5 rounded-xl border border-emerald-500/20 text-center">
+                <Sparkles className="h-3.5 w-3.5 text-[#ff9f1c] shrink-0" />
+                <span>{hijriDate.day} {hijriDate.monthAr} {hijriDate.year} {hijriDate.designation}</span>
               </div>
-            ) : (
-              <div className="text-xs text-stone-300 font-medium">جاري تحديث التاريخ الهجري...</div>
             )}
           </div>
         </div>
       </div>
 
       {/* Main Content Area */}
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 relative z-20 space-y-8">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 -mt-6 sm:-mt-8 relative z-20 space-y-6 sm:space-y-8">
 
         {/* Live Next Prayer Countdown Card */}
         {nextPrayer && (
-          <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-xl border border-stone-200/80 relative overflow-hidden">
+          <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-8 shadow-xl border border-stone-200/80 relative overflow-hidden">
             <div className="absolute top-0 right-0 w-2 h-full bg-gradient-to-b from-[#1a4d2e] via-[#ff9f1c] to-[#1a4d2e]" />
             
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-              <div className="space-y-2">
-                <div className="inline-flex items-center gap-2 text-xs font-black text-[#1a4d2e] bg-[#1a4d2e]/10 px-3 py-1 rounded-full">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 sm:gap-6">
+              <div className="space-y-1.5 sm:space-y-2">
+                <div className="inline-flex items-center gap-1.5 text-xs font-black text-[#1a4d2e] bg-[#1a4d2e]/10 px-2.5 py-0.5 rounded-full">
                   <Clock className="h-3.5 w-3.5 text-[#ff9f1c]" />
                   <span>الصلاة القادمة في إربد</span>
                 </div>
                 
-                <div className="flex items-baseline gap-3">
-                  <h2 className="text-3xl sm:text-4xl font-black text-[#2d2a26]">
+                <div className="flex items-baseline gap-2.5 sm:gap-3">
+                  <h2 className="text-2xl sm:text-4xl font-black text-[#2d2a26]">
                     صلاة {nextPrayer.prayer.nameAr}
                   </h2>
-                  <span className="text-lg font-bold text-[#1a4d2e] bg-stone-100 px-3 py-1 rounded-xl">
+                  <span className="text-base sm:text-lg font-bold text-[#1a4d2e] bg-stone-100 px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-xl">
                     {nextPrayer.prayer.formatted12h}
                   </span>
                 </div>
@@ -409,18 +403,18 @@ export function PrayerTimes() {
               </div>
 
               {/* Countdown Digital Timer Box */}
-              <div className="bg-gradient-to-br from-stone-900 via-stone-800 to-black text-white p-5 sm:p-6 rounded-2xl shadow-lg flex flex-col items-center justify-center min-w-[240px] border border-stone-700">
+              <div className="bg-gradient-to-br from-stone-900 via-stone-800 to-black text-white p-4 sm:p-6 rounded-2xl shadow-lg flex flex-col items-center justify-center w-full sm:w-auto sm:min-w-[240px] border border-stone-700">
                 <span className="text-xs font-bold text-stone-400 mb-1">المتبقي على الأذان</span>
-                <div className="text-3xl sm:text-4xl font-mono font-black tracking-widest text-[#ff9f1c] drop-shadow-md">
+                <div className="text-2xl sm:text-4xl font-mono font-black tracking-widest text-[#ff9f1c] drop-shadow-md">
                   {nextPrayer.timeRemaining}
                 </div>
-                <span className="text-[10px] text-stone-400 mt-1">ساعة : دقيقة : ثانية</span>
+                <span className="text-[10px] text-stone-400 mt-0.5">ساعة : دقيقة : ثانية</span>
               </div>
             </div>
 
             {/* Time progress bar */}
-            <div className="mt-6 space-y-1.5">
-              <div className="w-full h-2.5 bg-stone-100 rounded-full overflow-hidden border border-stone-200">
+            <div className="mt-4 sm:mt-6 space-y-1.5">
+              <div className="w-full h-2 sm:h-2.5 bg-stone-100 rounded-full overflow-hidden border border-stone-200">
                 <div 
                   className="h-full bg-gradient-to-r from-[#1a4d2e] to-[#ff9f1c] rounded-full transition-all duration-1000"
                   style={{ width: `${nextPrayer.progressPercent}%` }}
@@ -430,14 +424,14 @@ export function PrayerTimes() {
           </div>
         )}
 
-        {/* Navigation Tabs */}
-        <div className="flex items-center gap-2 border-b border-stone-200 pb-2 overflow-x-auto">
+        {/* Navigation Tabs - Sticky On Mobile */}
+        <div className="sticky top-[62px] sm:top-[68px] z-20 flex items-center gap-2 overflow-x-auto bg-white/95 backdrop-blur-md p-1.5 sm:p-2 rounded-2xl shadow-xs border border-stone-200/80 scrollbar-none snap-x -mx-4 px-4 sm:mx-0 sm:px-2">
           <button
             onClick={() => setActiveTab('timings')}
-            className={`px-5 py-2.5 rounded-2xl text-xs sm:text-sm font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
+            className={`snap-start px-3.5 sm:px-5 py-2.5 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 min-h-[44px] shrink-0 active:scale-95 ${
               activeTab === 'timings' 
                 ? 'bg-[#1a4d2e] text-white shadow-md' 
-                : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'
+                : 'text-stone-600 hover:bg-stone-100'
             }`}
           >
             <Clock className="h-4 w-4" />
@@ -446,10 +440,10 @@ export function PrayerTimes() {
 
           <button
             onClick={() => setActiveTab('mosques')}
-            className={`px-5 py-2.5 rounded-2xl text-xs sm:text-sm font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
+            className={`snap-start px-3.5 sm:px-5 py-2.5 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 min-h-[44px] shrink-0 active:scale-95 ${
               activeTab === 'mosques' 
                 ? 'bg-[#1a4d2e] text-white shadow-md' 
-                : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'
+                : 'text-stone-600 hover:bg-stone-100'
             }`}
           >
             <Building className="h-4 w-4 text-[#ff9f1c]" />
@@ -458,10 +452,10 @@ export function PrayerTimes() {
 
           <button
             onClick={() => setActiveTab('athkar')}
-            className={`px-5 py-2.5 rounded-2xl text-xs sm:text-sm font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
+            className={`snap-start px-3.5 sm:px-5 py-2.5 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 min-h-[44px] shrink-0 active:scale-95 ${
               activeTab === 'athkar' 
                 ? 'bg-[#1a4d2e] text-white shadow-md' 
-                : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'
+                : 'text-stone-600 hover:bg-stone-100'
             }`}
           >
             <BookOpen className="h-4 w-4 text-emerald-400" />
@@ -493,13 +487,13 @@ export function PrayerTimes() {
             </div>
 
             {loading ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-4">
                 {[1, 2, 3, 4, 5, 6].map(n => (
-                  <div key={n} className="h-40 bg-stone-100 animate-pulse rounded-2xl border border-stone-200" />
+                  <div key={n} className="h-36 sm:h-40 bg-stone-100 animate-pulse rounded-2xl sm:rounded-3xl border border-stone-200" />
                 ))}
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-4">
                 {timings.map((timing) => {
                   const Icon = timing.icon;
                   const isNext = nextPrayer?.prayer.id === timing.id;
@@ -508,12 +502,12 @@ export function PrayerTimes() {
                   return (
                     <div
                       key={timing.id}
-                      className={`relative rounded-3xl p-5 flex flex-col justify-between transition-all duration-300 border ${
+                      className={`relative rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 flex flex-col justify-between transition-all duration-300 border ${
                         isNext 
-                          ? 'bg-gradient-to-b from-[#1a4d2e] to-[#133b22] text-white shadow-xl scale-105 border-[#ff9f1c] ring-2 ring-[#ff9f1c]/50' 
+                          ? 'bg-gradient-to-b from-[#1a4d2e] to-[#133b22] text-white shadow-xl sm:scale-105 border-[#ff9f1c] ring-2 ring-[#ff9f1c]/50' 
                           : isSunrise
                           ? 'bg-amber-50/70 text-amber-900 border-amber-200/80'
-                          : 'bg-white text-stone-800 border-stone-200 shadow-sm hover:shadow-md hover:border-[#1a4d2e]/40'
+                          : 'bg-white text-stone-800 border-stone-200 shadow-2xs hover:shadow-md hover:border-[#1a4d2e]/40'
                       }`}
                     >
                       {isNext && (
@@ -522,23 +516,23 @@ export function PrayerTimes() {
                         </div>
                       )}
 
-                      <div className="flex items-center justify-between mb-3">
-                        <span className={`text-sm font-black ${isNext ? 'text-white' : 'text-[#2d2a26]'}`}>
+                      <div className="flex items-center justify-between mb-2 sm:mb-3">
+                        <span className={`text-xs sm:text-sm font-black ${isNext ? 'text-white' : 'text-[#2d2a26]'}`}>
                           {timing.nameAr}
                         </span>
-                        <div className={`p-2 rounded-xl ${
+                        <div className={`p-1.5 sm:p-2 rounded-xl ${
                           isNext 
                             ? 'bg-white/15 text-[#ff9f1c]' 
                             : isSunrise 
                             ? 'bg-amber-200/60 text-amber-700' 
                             : 'bg-stone-100 text-[#1a4d2e]'
                         }`}>
-                          <Icon className="h-4 w-4" />
+                          <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                         </div>
                       </div>
 
-                      <div className="space-y-1 my-2">
-                        <div className={`text-xl sm:text-2xl font-black font-sans tracking-tight ${isNext ? 'text-[#ff9f1c]' : 'text-[#1a4d2e]'}`}>
+                      <div className="space-y-0.5 sm:space-y-1 my-1 sm:my-2">
+                        <div className={`text-base sm:text-2xl font-black font-sans tracking-tight ${isNext ? 'text-[#ff9f1c]' : 'text-[#1a4d2e]'}`}>
                           {timing.formatted12h}
                         </div>
                         <div className={`text-[10px] font-mono ${isNext ? 'text-stone-200' : 'text-stone-400'}`}>
@@ -546,7 +540,7 @@ export function PrayerTimes() {
                         </div>
                       </div>
 
-                      <p className={`text-[11px] line-clamp-1 ${isNext ? 'text-stone-200' : 'text-stone-400'}`}>
+                      <p className={`text-[10px] sm:text-[11px] line-clamp-1 ${isNext ? 'text-stone-200' : 'text-stone-400'}`}>
                         {timing.description}
                       </p>
                     </div>

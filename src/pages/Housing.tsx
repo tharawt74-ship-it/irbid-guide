@@ -16,11 +16,13 @@ import { ShareButton } from '../components/ShareButton';
 import { getWhatsAppUrl } from '../lib/contactHelper';
 import { WhatsApp3DIcon, Phone3DIcon } from '../components/common/PremiumContactButtons';
 import { SEO } from '../components/common/SEO';
-import { HousingItem, HomepageBanner } from '../types';
+import { HousingItem, HomepageBanner, InFeedPromoCard } from '../types';
 import { HousingFormModal } from '../components/housing/HousingFormModal';
 import { Calendar, Users } from 'lucide-react';
 import { BannerSlideshow } from '../components/BannerSlideshow';
 import { fetchPageBanners, DEFAULT_HOUSING_BANNERS } from '../lib/pageBanners';
+import { fetchPagePromoCards } from '../lib/promoCards';
+import { InFeedPromoCardItem } from '../components/common/InFeedPromoCardItem';
 import { SearchableSelect } from '../components/ui/SearchableSelect';
 import { IRBID_REGIONS_CATEGORIZED } from '../lib/categories';
 import { Pagination } from '../components/common/Pagination';
@@ -35,9 +37,11 @@ export function Housing() {
   const showHeader = useHeaderVisibility();
   const [housings, setHousings] = useState<HousingItem[]>([]);
   const [banners, setBanners] = useState<HomepageBanner[]>(DEFAULT_HOUSING_BANNERS);
+  const [promoCards, setPromoCards] = useState<InFeedPromoCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [stickySearchInput, setStickySearchInput] = useState('');
+  const [desktopSearchInput, setDesktopSearchInput] = useState('');
   const [activeCategory, setActiveCategory] = useState<'sale' | 'rent' | 'students' | 'roommates'>('rent');
   const [selectedDistrict, setSelectedDistrict] = useState<string>('الكل');
   const [minPrice, setMinPrice] = useState<string>('');
@@ -54,16 +58,25 @@ export function Housing() {
 
   const activeHousingCategoryRef = useRef<HTMLButtonElement | null>(null);
 
+  const scrollContainerToElement = (el: HTMLElement | null) => {
+    if (!el || !el.parentElement) return;
+    const container = el.parentElement;
+    const elRect = el.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+    const elCenter = elRect.left + elRect.width / 2;
+    const containerCenter = containerRect.left + containerRect.width / 2;
+    const scrollOffset = elCenter - containerCenter;
+
+    container.scrollBy({
+      left: scrollOffset,
+      behavior: 'smooth'
+    });
+  };
+
   // Auto scroll selected housing category tab into view
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (activeHousingCategoryRef.current) {
-        activeHousingCategoryRef.current.scrollIntoView({
-          behavior: 'smooth',
-          block: 'nearest',
-          inline: 'center'
-        });
-      }
+      scrollContainerToElement(activeHousingCategoryRef.current);
     }, 100);
     return () => clearTimeout(timer);
   }, [activeCategory]);
@@ -240,6 +253,7 @@ export function Housing() {
 
   useEffect(() => {
     loadHousings();
+    fetchPagePromoCards('housing').then(cards => setPromoCards(cards)).catch(() => {});
     fetchPageBanners(['سكنات', 'شقق', 'جامعة', 'اليرموك', 'التكنو'], DEFAULT_HOUSING_BANNERS, 'housing')
       .then(res => setBanners(res))
       .catch(() => setBanners(DEFAULT_HOUSING_BANNERS));
@@ -385,15 +399,7 @@ export function Housing() {
         if (!hasAllServices) return false;
       }
 
-      // 7. Search query text match
-      const matchesSearch = !searchQuery || 
-        h.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (h.location && h.location.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (h.description && h.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (h.ownerName && h.ownerName.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (h.services && h.services.some(s => s.toLowerCase().includes(searchQuery.toLowerCase())));
-
-      return matchesSearch;
+      return true;
     })
     .sort((a, b) => {
       // Keep Featured Ads on top (strictly matching non-expired status)
@@ -432,13 +438,7 @@ export function Housing() {
         if (!matchesUniv) return false;
       }
 
-      // 3. Search query
-      const matchesSearch = !searchQuery ||
-        (rm.name && rm.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (rm.university && rm.university.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (rm.description && rm.description.toLowerCase().includes(searchQuery.toLowerCase()));
-
-      return matchesSearch;
+      return true;
     });
 
   return (
@@ -461,7 +461,7 @@ export function Housing() {
       {/* MOBILE STICKY TOP APP BAR (Positioned Above Promotional Banner on Mobile) */}
       {/* ========================================================================= */}
       <div className={cn(
-        "lg:hidden sticky z-30 bg-white/95 backdrop-blur-md border-b border-stone-200/80 shadow-2xs -mx-4 sm:-mx-6 px-4 sm:px-6 py-2.5 space-y-2 transition-all duration-300",
+        "lg:hidden sticky z-30 bg-white/95 backdrop-blur-md border-b border-stone-200/80 shadow-2xs px-4 py-2.5 space-y-2 transition-all duration-300",
         showHeader ? "top-[62px] sm:top-[68px] md:top-[72px]" : "top-0"
       )}>
         {/* Row 1: Search Bar & Filter Sheet Button */}
@@ -637,24 +637,34 @@ export function Housing() {
         </div>
 
         {/* Search Input Bar */}
-        <div className="relative">
+        <form 
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (desktopSearchInput.trim()) {
+              navigate(`/search?q=${encodeURIComponent(desktopSearchInput.trim())}&tab=housing`);
+            }
+          }}
+          className="relative"
+        >
           <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            type="search"
+            enterKeyHint="search"
+            value={desktopSearchInput}
+            onChange={(e) => setDesktopSearchInput(e.target.value)}
             placeholder="ابحث بالسكن، الحي الجنوبي، شارع الجامعة، استوديو..."
-            className="w-full bg-white/10 backdrop-blur-md text-white placeholder:text-stone-300 border border-white/20 rounded-2xl px-4 py-3 pr-10 text-sm focus:outline-none focus:bg-white/20 transition-all shadow-inner"
+            className="w-full bg-white/10 backdrop-blur-md text-white placeholder:text-stone-300 border border-white/20 rounded-2xl px-4 py-3 pr-10 text-sm focus:outline-none focus:bg-white/20 transition-all shadow-inner [&::-webkit-search-cancel-button]:appearance-none"
           />
           <Search className="h-4 w-4 text-emerald-200 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-          {searchQuery && (
+          {desktopSearchInput && (
             <button 
-              onClick={() => setSearchQuery('')}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-300 hover:text-white p-1.5"
+              type="button"
+              onClick={() => setDesktopSearchInput('')}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-300 hover:text-white p-1.5 cursor-pointer"
             >
               <X className="h-4 w-4" />
             </button>
           )}
-        </div>
+        </form>
       </div>
 
       {/* Desktop Section Tab Switcher - Exactly 4 Categories */}
@@ -1376,21 +1386,21 @@ export function Housing() {
             ) : (
               <div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {filteredHousings
-                    .slice((currentPage - 1) * 15, currentPage * 15)
-                    .map((h) => {
+                  {(() => {
+                    const currentSlice = filteredHousings.slice((currentPage - 1) * 15, currentPage * 15);
+                    return currentSlice.flatMap((h, idx) => {
                       const isFeaturedHousing = h.isFeatured && (!h.featuredExpiryDate || h.featuredExpiryDate > Date.now());
-                      return (
-                      <div
-                        key={h.id}
-                        onClick={() => navigate(`/housing/${h.id}`)}
-                        className={cn(
-                          "bg-white rounded-3xl overflow-hidden transition-all flex flex-col justify-between group cursor-pointer",
-                          isFeaturedHousing
-                            ? "border-2 border-amber-400/90 ring-2 ring-amber-400/40 shadow-[0_0_22px_rgba(245,158,11,0.3)] hover:shadow-[0_0_35px_rgba(245,158,11,0.55)] hover:border-amber-400"
-                            : "border border-[#e5e1da] hover:border-[#1a4d2e]/40 hover:shadow-xl"
-                        )}
-                      >
+                      const housingCardNode = (
+                        <div
+                          key={h.id}
+                          onClick={() => navigate(`/housing/${h.id}`)}
+                          className={cn(
+                            "bg-white rounded-3xl overflow-hidden transition-all flex flex-col justify-between group cursor-pointer",
+                            isFeaturedHousing
+                              ? "border-2 border-amber-400/90 ring-2 ring-amber-400/40 shadow-[0_0_22px_rgba(245,158,11,0.3)] hover:shadow-[0_0_35px_rgba(245,158,11,0.55)] hover:border-amber-400"
+                              : "border border-[#e5e1da] hover:border-[#1a4d2e]/40 hover:shadow-xl"
+                          )}
+                        >
                         <div>
                           {/* Photo */}
                           <div className="relative aspect-[16/10] overflow-hidden bg-stone-100">
@@ -1521,7 +1531,18 @@ export function Housing() {
 
                       </div>
                     );
-                  })}
+
+                    const shouldInsertPromo0 = (idx === 2 || (idx === currentSlice.length - 1 && currentSlice.length < 3)) && promoCards[0];
+                    const shouldInsertPromo1 = (idx === 8) && promoCards[1];
+                    const promoToInsert = shouldInsertPromo0 ? (
+                      <InFeedPromoCardItem key={`promo_${promoCards[0].id}_${idx}`} card={promoCards[0]} />
+                    ) : shouldInsertPromo1 ? (
+                      <InFeedPromoCardItem key={`promo_${promoCards[1].id}_${idx}`} card={promoCards[1]} />
+                    ) : null;
+
+                    return promoToInsert ? [housingCardNode, promoToInsert] : [housingCardNode];
+                  });
+                })()}
                 </div>
 
                 <Pagination

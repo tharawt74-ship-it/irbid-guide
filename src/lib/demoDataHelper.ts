@@ -16,9 +16,17 @@ export interface AppConfig {
   priceBasic?: number;
   priceSilver?: number;
   priceGolden?: number;
-  priceSponsored?: number;
+  priceSponsored?: number; // Business Top Search
+  priceSponsoredProduct?: number; // Single Product Top Search
+  priceSponsoredMenu?: number; // Full Menu Top Search
+  priceSponsoredOffer?: number; // Single Offer Top Search
+  priceSponsoredOffersGroup?: number; // Multiple Offers Top Search
+  priceSponsoredJob?: number; // Single Job Top Search
+  priceSponsoredJobsGroup?: number; // Multiple Jobs Top Search
+  priceSponsoredAllInclusive?: number; // All-inclusive Top Search
   pricePushNotifications?: number;
   priceHomepageBanner?: number;
+  pricePromoCard?: number;
   priceMessaging1Month?: number;
   priceMessaging3Months?: number;
   priceMessaging6Months?: number;
@@ -35,8 +43,16 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   priceSilver: 5,
   priceGolden: 12,
   priceSponsored: 15,
+  priceSponsoredProduct: 7,
+  priceSponsoredMenu: 12,
+  priceSponsoredOffer: 6,
+  priceSponsoredOffersGroup: 12,
+  priceSponsoredJob: 8,
+  priceSponsoredJobsGroup: 14,
+  priceSponsoredAllInclusive: 25,
   pricePushNotifications: 10,
   priceHomepageBanner: 25,
+  pricePromoCard: 20,
   priceMessaging1Month: 5,
   priceMessaging3Months: 12,
   priceMessaging6Months: 20,

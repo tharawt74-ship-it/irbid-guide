@@ -7,14 +7,14 @@ import {
   Search as SearchIcon, X, Store, Briefcase, Building, Newspaper, 
   MapPin, Star, Clock, ChevronRight, Loader2, Flame, MenuSquare, 
   Percent, Building2, SlidersHorizontal, FilterX, ChevronDown, ChevronUp,
-  Stethoscope, Bus, Compass, Phone, ArrowLeftRight, Car
+  Stethoscope, Bus, Compass, Phone, ArrowLeftRight, Car, Crown
 } from 'lucide-react';
 import { Business, MenuItem, NewsArticle, JobOffer, HousingItem, TerminalItem, RouteItem, TaxiItem } from '../types';
 import { fetchTransportation } from '../lib/transportationService';
 import { TourismSpot } from './Tourism';
 import { getAppConfig, DEMO_SEED_DATA } from '../lib/demoDataHelper';
 import { normalizeArabic } from '../lib/arabicSearch';
-import { getBusinessVipStatus, compareBusinessesByTier } from '../lib/vipHelper';
+import { getBusinessVipStatus, compareBusinessesByTier, isItemCurrentlyFeatured, isBusinessCurrentlyFeatured } from '../lib/vipHelper';
 import { getLiveWorkingStatus } from '../lib/businessHoursHelper';
 import { SEO } from '../components/common/SEO';
 import { VerifiedBadge } from '../components/vip/VerifiedBadge';
@@ -42,6 +42,11 @@ interface OfferItem {
   isHot?: boolean;
   isStudent?: boolean;
   isDemo?: boolean;
+  isFeatured?: boolean;
+  isSponsored?: boolean;
+  isMenuFeatured?: boolean;
+  featuredStartDate?: number | null;
+  featuredExpiryDate?: number | null;
   createdAt?: number;
 }
 
@@ -54,6 +59,11 @@ interface MatchedProduct {
   category?: string;
   imageUrl?: string;
   badge?: string;
+  isFeatured?: boolean;
+  isSponsored?: boolean;
+  isMenuFeatured?: boolean;
+  featuredStartDate?: number | null;
+  featuredExpiryDate?: number | null;
   parentBusiness: Business;
 }
 
@@ -94,16 +104,25 @@ export function Search() {
   const [isHeaderExpanded, setIsHeaderExpanded] = useState(true);
   const activeTabRef = useRef<HTMLButtonElement | null>(null);
 
+  const scrollContainerToElement = (el: HTMLElement | null) => {
+    if (!el || !el.parentElement) return;
+    const container = el.parentElement;
+    const elRect = el.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+    const elCenter = elRect.left + elRect.width / 2;
+    const containerCenter = containerRect.left + containerRect.width / 2;
+    const scrollOffset = elCenter - containerCenter;
+
+    container.scrollBy({
+      left: scrollOffset,
+      behavior: 'smooth'
+    });
+  };
+
   // Auto-scroll active tab button into center view in mobile tabs carousel
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (activeTabRef.current) {
-        activeTabRef.current.scrollIntoView({
-          behavior: 'smooth',
-          block: 'nearest',
-          inline: 'center'
-        });
-      }
+      scrollContainerToElement(activeTabRef.current);
     }, 80);
     return () => clearTimeout(timer);
   }, [activeTab]);
@@ -266,7 +285,11 @@ export function Search() {
   // Submit search
   const triggerSearch = (queryStr: string, replaceHistory = false) => {
     const trimmed = queryStr.trim();
-    setSearchParams(trimmed ? { q: trimmed } : {}, { replace: replaceHistory });
+    const currentTab = searchParams.get('tab') || (activeTab !== 'all' ? activeTab : '');
+    const newParams: Record<string, string> = {};
+    if (trimmed) newParams.q = trimmed;
+    if (currentTab) newParams.tab = currentTab;
+    setSearchParams(newParams, { replace: replaceHistory });
   };
 
   const handleFormSubmit = (e: React.FormEvent) => {
@@ -460,9 +483,12 @@ export function Search() {
       }
     });
 
-    // Sort products based on parent business tier: Featured -> Golden VIP -> Rest
+    // Sort products based on featured priority first (صدارة البحث), then parent business tier
     const now = Date.now();
     return products.sort((a, b) => {
+      const featA = isItemCurrentlyFeatured(a, a.parentBusiness, now) ? 1 : 0;
+      const featB = isItemCurrentlyFeatured(b, b.parentBusiness, now) ? 1 : 0;
+      if (featB !== featA) return featB - featA;
       return compareBusinessesByTier(a.parentBusiness, b.parentBusiness, undefined, now);
     });
   }, [businesses, queryTokens, selectedLocation, selectedMainCategory, selectedSubCategory]);
@@ -475,7 +501,7 @@ export function Search() {
       if (b.name) bizMap.set(b.name.trim().toLowerCase(), b);
     });
 
-    return offers.filter(o => {
+    const list = offers.filter(o => {
       const parentBiz = (o.businessId && bizMap.get(o.businessId)) ||
                         (o.businessName && bizMap.get(String(o.businessName).trim().toLowerCase()));
       if (parentBiz) {
@@ -505,6 +531,17 @@ export function Search() {
 
       return isSearchMatch && isLocMatch && isCatMatch;
     });
+
+    // Sort offers: Featured first (صدارة البحث)
+    const now = Date.now();
+    return list.sort((a, b) => {
+      const parentA = (a.businessId && bizMap.get(a.businessId)) || (a.businessName && bizMap.get(String(a.businessName).trim().toLowerCase()));
+      const parentB = (b.businessId && bizMap.get(b.businessId)) || (b.businessName && bizMap.get(String(b.businessName).trim().toLowerCase()));
+      const featA = isItemCurrentlyFeatured(a, parentA, now) ? 1 : 0;
+      const featB = isItemCurrentlyFeatured(b, parentB, now) ? 1 : 0;
+      if (featB !== featA) return featB - featA;
+      return (b.createdAt || 0) - (a.createdAt || 0);
+    });
   }, [offers, businesses, queryTokens, selectedLocation, selectedMainCategory, selectedSubCategory]);
 
   // 4. FILTERED HOUSING
@@ -527,7 +564,10 @@ export function Search() {
 
   // 5. FILTERED JOBS
   const filteredJobs = useMemo(() => {
-    return jobs.filter(j => {
+    const bizMap = new Map<string, Business>();
+    businesses.forEach(b => { if (b.id) bizMap.set(b.id, b); });
+
+    const list = jobs.filter(j => {
       const isSearchMatch = queryTokens.length === 0 || queryTokens.every(token =>
         normalizeArabic(j.title || '').includes(token) ||
         normalizeArabic(j.company || '').includes(token) ||
@@ -541,7 +581,18 @@ export function Search() {
 
       return isSearchMatch && isLocMatch && isCatMatch;
     });
-  }, [jobs, queryTokens, selectedLocation, selectedMainCategory]);
+
+    // Sort jobs: Featured first (صدارة البحث)
+    const now = Date.now();
+    return list.sort((a, b) => {
+      const parentA = a.businessId ? bizMap.get(a.businessId) : null;
+      const parentB = b.businessId ? bizMap.get(b.businessId) : null;
+      const featA = isItemCurrentlyFeatured(a, parentA, now) ? 1 : 0;
+      const featB = isItemCurrentlyFeatured(b, parentB, now) ? 1 : 0;
+      if (featB !== featA) return featB - featA;
+      return (b.createdAt || 0) - (a.createdAt || 0);
+    });
+  }, [jobs, businesses, queryTokens, selectedLocation, selectedMainCategory]);
 
   // 6. FILTERED NEWS
   const filteredNews = useMemo(() => {
@@ -692,10 +743,7 @@ export function Search() {
               <input
                 type="search"
                 value={inputVal}
-                onChange={(e) => {
-                  setInputVal(e.target.value);
-                  triggerSearch(e.target.value, true);
-                }}
+                onChange={(e) => setInputVal(e.target.value)}
                 placeholder="ابحث عن أي شيء في إربد..."
                 className="w-full h-full bg-white border border-stone-200/90 rounded-2xl pr-10 pl-9 text-xs sm:text-sm font-bold text-stone-800 shadow-2xs focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all [&::-webkit-search-cancel-button]:appearance-none"
               />
@@ -807,10 +855,7 @@ export function Search() {
                 <input
                   type="search"
                   value={inputVal}
-                  onChange={(e) => {
-                    setInputVal(e.target.value);
-                    triggerSearch(e.target.value, true);
-                  }}
+                  onChange={(e) => setInputVal(e.target.value)}
                   placeholder="ابحث عن أي شيء في إربد..."
                   className="w-full h-full bg-stone-50 border border-stone-200/90 rounded-2xl pr-10 pl-9 text-xs font-bold text-stone-800 focus:outline-none focus:bg-white focus:border-emerald-500 transition-all [&::-webkit-search-cancel-button]:appearance-none"
                 />
@@ -963,7 +1008,8 @@ export function Search() {
                             <div className="flex flex-wrap items-center justify-end gap-1.5 min-w-0">
                               {isCurrentlyFeatured && (
                                 <span className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] bg-gradient-to-r from-amber-400 to-amber-500 text-amber-950 font-black px-2.5 py-0.5 rounded-full shadow-2xs border border-amber-300/60 shrink-0">
-                                  ⭐ ممول
+                                  <Crown className="h-3 w-3 fill-current text-amber-950" />
+                                  <span>ممول</span>
                                 </span>
                               )}
                               {vipInfo.isVip && (
@@ -1066,9 +1112,19 @@ export function Search() {
                   const storeUrl = p.parentBusiness.username && p.parentBusiness.username.trim() 
                     ? `/@${p.parentBusiness.username.trim()}?tab=menu` 
                     : `/business/${p.parentBusiness.id}?tab=menu`;
+                  const pIsFeat = isItemCurrentlyFeatured(p, p.parentBusiness);
 
                   return (
-                    <Link key={`${p.id}-${idx}`} to={storeUrl} className="bg-white rounded-2xl p-3.5 border border-stone-200 hover:border-amber-500/50 hover:shadow-md transition-all flex flex-col group h-full">
+                    <Link 
+                      key={`${p.id}-${idx}`} 
+                      to={storeUrl} 
+                      className={cn(
+                        "bg-white rounded-2xl p-3.5 transition-all flex flex-col group h-full relative overflow-hidden",
+                        pIsFeat
+                          ? "border-2 border-amber-400/90 ring-2 ring-amber-400/40 shadow-[0_0_20px_rgba(245,158,11,0.25)] hover:shadow-[0_0_28px_rgba(245,158,11,0.5)] hover:border-amber-400"
+                          : "border border-stone-200 hover:border-amber-500/50 hover:shadow-md"
+                      )}
+                    >
                       <div className="flex gap-3 h-full">
                         {p.imageUrl ? (
                           <img src={p.imageUrl} alt={p.name} className="w-[84px] h-[84px] rounded-xl object-cover border border-stone-100 shrink-0 shadow-2xs" />
@@ -1076,8 +1132,16 @@ export function Search() {
                           <div className="w-[84px] h-[84px] rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center text-stone-400 shrink-0 text-2xl shadow-2xs">🍲</div>
                         )}
                         <div className="flex flex-col flex-1 min-w-0">
-                          <h4 className="font-black text-sm text-stone-800 group-hover:text-amber-700 transition-colors line-clamp-1">{p.name}</h4>
-                          <p className="text-[11px] text-stone-500 line-clamp-2 mt-1 mb-2 leading-relaxed flex-1">{p.description}</p>
+                          <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                            {pIsFeat && (
+                              <span className="inline-flex items-center gap-1 text-[10px] bg-gradient-to-r from-amber-400 to-amber-500 text-amber-950 font-black px-2 py-0.5 rounded-full shadow-2xs border border-amber-300/60 shrink-0">
+                                <Crown className="h-3 w-3 fill-current text-amber-950" />
+                                <span>ممول</span>
+                              </span>
+                            )}
+                            <h4 className="font-black text-sm text-stone-800 group-hover:text-amber-700 transition-colors line-clamp-1">{p.name}</h4>
+                          </div>
+                          <p className="text-[11px] text-stone-500 line-clamp-2 mt-0.5 mb-2 leading-relaxed flex-1">{p.description}</p>
                           <div className="flex items-center justify-between mt-auto">
                             <span className="text-sm font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-lg">{p.price} د.أ</span>
                             <span className="text-[9px] bg-stone-100 text-stone-500 px-1.5 py-0.5 rounded-md truncate max-w-[80px]">{p.category || 'عام'}</span>
@@ -1114,31 +1178,53 @@ export function Search() {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
-                {filteredOffers.map(o => (
-                  <Link key={o.id} to="/offers" className="bg-white rounded-2xl overflow-hidden border border-stone-200 hover:border-red-500/50 hover:shadow-md transition-all flex flex-col group">
-                    <div className="relative aspect-[16/9] w-full bg-stone-100 overflow-hidden shrink-0">
-                      <img src={o.image || 'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&q=80&w=800'} alt={o.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                      <div className="absolute top-3 right-3 bg-red-600 text-white font-black text-xs px-3 py-1.5 rounded-full shadow-md flex items-center gap-1.5">
-                        <Flame className="h-4 w-4 animate-pulse" />
-                        <span>خصم %{o.discountPercentage}</span>
-                      </div>
-                    </div>
-                    <div className="p-4 flex-1 flex flex-col justify-between">
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] bg-red-50 text-red-700 px-2 py-0.5 rounded-md font-bold">{o.category}</span>
-                          <span className="text-[10px] text-stone-500 font-bold flex items-center gap-1"><Clock className="h-3 w-3" /> {o.expiresIn}</span>
+                {filteredOffers.map(o => {
+                  const parentBiz = (o.businessId && businesses.find(b => b.id === o.businessId)) || (o.businessName && businesses.find(b => b.name?.trim().toLowerCase() === String(o.businessName).trim().toLowerCase()));
+                  const oIsFeat = isItemCurrentlyFeatured(o, parentBiz);
+
+                  return (
+                    <Link 
+                      key={o.id} 
+                      to="/offers" 
+                      className={cn(
+                        "bg-white rounded-2xl overflow-hidden transition-all flex flex-col group relative",
+                        oIsFeat
+                          ? "border-2 border-amber-400/90 ring-2 ring-amber-400/40 shadow-[0_0_20px_rgba(245,158,11,0.25)] hover:shadow-[0_0_28px_rgba(245,158,11,0.5)] hover:border-amber-400"
+                          : "border border-stone-200 hover:border-red-500/50 hover:shadow-md"
+                      )}
+                    >
+                      <div className="relative aspect-[16/9] w-full bg-stone-100 overflow-hidden shrink-0">
+                        <img src={o.image || 'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&q=80&w=800'} alt={o.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                        <div className="absolute top-3 right-3 flex items-center gap-1.5 z-10 flex-wrap">
+                          {oIsFeat && (
+                            <span className="bg-gradient-to-r from-amber-400 to-yellow-500 text-yellow-950 text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest shadow-md flex items-center gap-1 w-fit border border-amber-300/60">
+                              <Crown className="h-3 w-3 fill-current text-amber-950" />
+                              <span>ممول</span>
+                            </span>
+                          )}
+                          <div className="bg-red-600 text-white font-black text-xs px-3 py-1.5 rounded-full shadow-md flex items-center gap-1.5">
+                            <Flame className="h-4 w-4 animate-pulse" />
+                            <span>خصم %{o.discountPercentage}</span>
+                          </div>
                         </div>
-                        <h4 className="font-black text-base text-stone-800 line-clamp-1 group-hover:text-red-600 transition-colors">{o.title}</h4>
-                        <p className="text-xs text-stone-500 line-clamp-2 leading-relaxed">{o.description}</p>
                       </div>
-                      <div className="border-t border-stone-100 mt-4 pt-3 flex items-center justify-between text-[11px] font-bold">
-                        <span className="text-stone-700 font-black truncate pr-2 flex-1"><span className="text-stone-400 font-medium">مقدم من:</span> {o.businessName}</span>
-                        <span className="text-red-600 flex items-center gap-1 group-hover:translate-x-1 transition-transform shrink-0">التفاصيل <ChevronRight className="h-3 w-3 rotate-180" /></span>
+                      <div className="p-4 flex-1 flex flex-col justify-between">
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] bg-red-50 text-red-700 px-2 py-0.5 rounded-md font-bold">{o.category}</span>
+                            <span className="text-[10px] text-stone-500 font-bold flex items-center gap-1"><Clock className="h-3 w-3" /> {o.expiresIn}</span>
+                          </div>
+                          <h4 className="font-black text-base text-stone-800 line-clamp-1 group-hover:text-red-600 transition-colors">{o.title}</h4>
+                          <p className="text-xs text-stone-500 line-clamp-2 leading-relaxed">{o.description}</p>
+                        </div>
+                        <div className="border-t border-stone-100 mt-4 pt-3 flex items-center justify-between text-[11px] font-bold">
+                          <span className="text-stone-700 font-black truncate pr-2 flex-1"><span className="text-stone-400 font-medium">مقدم من:</span> {o.businessName}</span>
+                          <span className="text-red-600 flex items-center gap-1 group-hover:translate-x-1 transition-transform shrink-0">التفاصيل <ChevronRight className="h-3 w-3 rotate-180" /></span>
+                        </div>
                       </div>
-                    </div>
-                  </Link>
-                ))}
+                    </Link>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -1195,7 +1281,8 @@ export function Search() {
                               <div className="flex flex-wrap items-center justify-end gap-1.5 min-w-0">
                                 {isCurrentlyFeatured && (
                                   <span className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] bg-gradient-to-r from-amber-400 to-amber-500 text-amber-950 font-black px-2.5 py-0.5 rounded-full shadow-2xs border border-amber-300/60 shrink-0">
-                                    ⭐ ممول
+                                    <Crown className="h-3 w-3 fill-current text-amber-950" />
+                                    <span>ممول</span>
                                   </span>
                                 )}
                                 {vipInfo.isVip && (
@@ -1328,23 +1415,45 @@ export function Search() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredJobs.map(j => (
-                  <Link key={j.id} to="/jobs" className="bg-white rounded-2xl p-5 border border-stone-200 hover:border-teal-500/50 hover:shadow-md transition-all flex flex-col group">
-                    <div className="flex items-center justify-between gap-2 mb-3">
-                      <span className="bg-stone-100 text-stone-600 text-[10px] font-bold px-2.5 py-1 rounded-lg">{j.category}</span>
-                      <span className="bg-teal-50 text-teal-700 text-[10px] font-bold px-2.5 py-1 rounded-lg">{j.jobType}</span>
-                    </div>
-                    <h4 className="font-black text-base text-stone-800 line-clamp-1 group-hover:text-teal-700 transition-colors">{j.title}</h4>
-                    <div className="flex items-center gap-1.5 text-xs text-stone-500 mt-2 font-bold">
-                      <Building2 className="h-4 w-4 text-stone-400" /> <span>{j.company}</span>
-                    </div>
-                    <p className="text-xs text-stone-500 line-clamp-2 mt-3 leading-relaxed flex-1">{j.description}</p>
-                    <div className="border-t border-stone-100 mt-4 pt-3 flex items-center justify-between text-xs font-bold">
-                      <span className="text-stone-500 flex items-center gap-1"><MapPin className="h-3.5 w-3.5 text-stone-400" /> {j.location}</span>
-                      <span className="text-teal-600 flex items-center gap-1 group-hover:translate-x-1 transition-transform">قدّم الآن <ChevronRight className="h-3.5 w-3.5 rotate-180" /></span>
-                    </div>
-                  </Link>
-                ))}
+                {filteredJobs.map(j => {
+                  const parentBiz = j.businessId ? businesses.find(b => b.id === j.businessId) : null;
+                  const jIsFeat = isItemCurrentlyFeatured(j, parentBiz);
+
+                  return (
+                    <Link 
+                      key={j.id} 
+                      to="/jobs" 
+                      className={cn(
+                        "bg-white rounded-2xl p-5 transition-all flex flex-col group relative",
+                        jIsFeat
+                          ? "border-2 border-amber-400/90 ring-2 ring-amber-400/40 shadow-[0_0_20px_rgba(245,158,11,0.25)] hover:shadow-[0_0_28px_rgba(245,158,11,0.5)] hover:border-amber-400"
+                          : "border border-stone-200 hover:border-teal-500/50 hover:shadow-md"
+                      )}
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-3">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {jIsFeat && (
+                            <span className="bg-gradient-to-r from-amber-400 to-yellow-500 text-yellow-950 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-widest shadow-md flex items-center gap-1 w-fit border border-amber-300/60 shrink-0">
+                              <Crown className="h-3 w-3 fill-current text-amber-950" />
+                              <span>ممول</span>
+                            </span>
+                          )}
+                          <span className="bg-stone-100 text-stone-600 text-[10px] font-bold px-2.5 py-1 rounded-lg">{j.category}</span>
+                          <span className="bg-teal-50 text-teal-700 text-[10px] font-bold px-2.5 py-1 rounded-lg">{j.jobType}</span>
+                        </div>
+                      </div>
+                      <h4 className="font-black text-base text-stone-800 line-clamp-1 group-hover:text-teal-700 transition-colors">{j.title}</h4>
+                      <div className="flex items-center gap-1.5 text-xs text-stone-500 mt-2 font-bold">
+                        <Building2 className="h-4 w-4 text-stone-400" /> <span>{j.company}</span>
+                      </div>
+                      <p className="text-xs text-stone-500 line-clamp-2 mt-3 leading-relaxed flex-1">{j.description}</p>
+                      <div className="border-t border-stone-100 mt-4 pt-3 flex items-center justify-between text-xs font-bold">
+                        <span className="text-stone-500 flex items-center gap-1"><MapPin className="h-3.5 w-3.5 text-stone-400" /> {j.location}</span>
+                        <span className="text-teal-600 flex items-center gap-1 group-hover:translate-x-1 transition-transform">قدّم الآن <ChevronRight className="h-3.5 w-3.5 rotate-180" /></span>
+                      </div>
+                    </Link>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -1613,10 +1722,7 @@ export function Search() {
           <input
             type="search"
             value={inputVal}
-            onChange={(e) => {
-              setInputVal(e.target.value);
-              triggerSearch(e.target.value, true);
-            }}
+            onChange={(e) => setInputVal(e.target.value)}
             placeholder="ابحث في إربد..."
             className="w-full h-full bg-transparent pr-11 pl-12 text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/50 rounded-full transition-all [&::-webkit-search-cancel-button]:appearance-none"
           />

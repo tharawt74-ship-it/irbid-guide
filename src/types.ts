@@ -16,6 +16,10 @@ export interface MenuItem {
   imageUrl?: string;
   isPopular?: boolean;
   isAvailable?: boolean;
+  isFeatured?: boolean; // Sponsored / Search Priority
+  isSponsored?: boolean; // Sponsored / Search Priority
+  featuredStartDate?: number | null;
+  featuredExpiryDate?: number | null;
   badge?: 'popular' | 'new' | 'spicy' | 'vegetarian' | 'none'; // World-class badge tags
   options?: string[]; // Customized choices or add-ons (backward compatible)
   versions?: MenuItemVersion[]; // New: Multiple versions / sizes / add-on tiers with custom pricing
@@ -561,6 +565,10 @@ export interface JobOffer {
   contactEmail?: string;
   howToApply?: string;
   isUrgent?: boolean;
+  isFeatured?: boolean; // Sponsored / Search Priority
+  isSponsored?: boolean; // Sponsored / Search Priority
+  featuredStartDate?: number | null;
+  featuredExpiryDate?: number | null;
   status?: 'active' | 'closed' | 'pending';
   createdAt: number;
   userId?: string;
@@ -581,6 +589,10 @@ export interface JobOpening {
   contactEmail?: string;
   postedAt: string;
   isUrgent?: boolean;
+  isFeatured?: boolean;
+  isSponsored?: boolean;
+  featuredStartDate?: number | null;
+  featuredExpiryDate?: number | null;
 }
 
 export interface AttachedPostItem {
@@ -627,12 +639,17 @@ export interface MarketingRequest {
   scheduledNotes?: string;
   createdAt: number;
   // Custom fields added for forms
+  phone?: string;
+  contactPhone?: string;
   contactWhatsapp?: string;
   durationWeeks?: string;
   publishTimeOption?: 'immediately' | 'scheduled';
   publishStartDate?: string;
   targetKeywords?: string;
   notes?: string;
+  sponsoredTargetType?: 'business' | 'single_product' | 'full_menu' | 'single_offer' | 'multiple_offers' | 'single_job' | 'multiple_jobs' | 'all_inclusive';
+  sponsoredEntityId?: string;
+  sponsoredEntityName?: string;
   notificationTitle?: string;
   notificationBody?: string;
   targetLink?: string;
@@ -652,6 +669,43 @@ export interface MarketingRequest {
   buttonText?: string;
   buttonLink?: string;
   badgeText?: string;
+  // In-Feed Promotional Card custom fields
+  promoCardTargetPage?: 'home' | 'offers' | 'products' | 'medical' | 'jobs' | 'housing';
+  promoCardTargetType?: 'business' | 'medical' | 'product' | 'offer' | 'job' | 'housing' | 'custom';
+  promoCardMediaType?: 'image' | 'video';
+  promoCardImageUrl?: string;
+  promoCardVideoUrl?: string;
+  promoCardLayout?: 'standard' | 'full';
+  promoCardMediaFit?: 'crop' | 'fit' | 'fill' | 'pad';
+  promoCardContentDisplay?: 'always' | 'hover';
+}
+
+export interface InFeedPromoCard {
+  id: string;
+  targetPage: 'home' | 'offers' | 'products' | 'medical' | 'jobs' | 'housing';
+  targetType?: 'business' | 'medical' | 'product' | 'offer' | 'job' | 'housing' | 'custom';
+  targetEntityId?: string;
+  targetEntityName?: string;
+  title: string;
+  subtitle?: string;
+  description?: string;
+  mediaType: 'image' | 'video';
+  imageUrl?: string;
+  videoUrl?: string;
+  badgeText?: string;
+  buttonText?: string;
+  buttonLink?: string;
+  businessId?: string;
+  businessName?: string;
+  businessLogo?: string;
+  active: boolean;
+  createdAt: number;
+  startDate?: number;
+  expiryDate?: number;
+  marketingRequestId?: string;
+  promoCardLayout?: 'standard' | 'full';
+  promoCardMediaFit?: 'crop' | 'fit' | 'fill' | 'pad';
+  promoCardContentDisplay?: 'always' | 'hover';
 }
 
 export interface AppNotification {

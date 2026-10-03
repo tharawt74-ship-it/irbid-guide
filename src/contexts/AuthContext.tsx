@@ -293,31 +293,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // ignore
         }
 
-        // Background non-blocking profile sync to Firestore
-        const userDocRef = doc(db, 'users', user.uid);
-        setDoc(userDocRef, {
-          uid: user.uid,
-          email: userEmail,
-          displayName: user.displayName || userEmail.split('@')[0] || 'مستخدم إربد',
-          role: computedRole,
-          status: profileData?.status || 'active',
-          statusReason: profileData?.statusReason || '',
-          createdAt: profileData?.createdAt || Date.now(),
-          lastLoginAt: Date.now(),
-          isMerchant: userBizList.length > 0,
-          merchantBusinessIds: userBizList.map(b => b.id),
-        }, { merge: true }).catch(err => {
-          console.warn("Could not sync user profile to firestore:", err);
-        });
+        // Throttled background profile sync to Firestore (prevents write quota exhaustion on navigation)
+        const lastSyncTime = profileData?.lastLoginAt || 0;
+        const needsRoleUpdate = profileData?.role !== computedRole || (profileData?.isMerchant !== (userBizList.length > 0));
+        const shouldSyncProfile = !profileData || needsRoleUpdate || (Date.now() - lastSyncTime > 6 * 60 * 60 * 1000);
 
-        if (isAdminRole) {
-          setDoc(doc(db, 'admins', user.uid), {
+        if (shouldSyncProfile) {
+          const userDocRef = doc(db, 'users', user.uid);
+          setDoc(userDocRef, {
             uid: user.uid,
             email: userEmail,
-            updatedAt: Date.now()
+            displayName: user.displayName || userEmail.split('@')[0] || 'مستخدم إربد',
+            role: computedRole,
+            status: profileData?.status || 'active',
+            statusReason: profileData?.statusReason || '',
+            createdAt: profileData?.createdAt || Date.now(),
+            lastLoginAt: Date.now(),
+            isMerchant: userBizList.length > 0,
+            merchantBusinessIds: userBizList.map(b => b.id),
           }, { merge: true }).catch(err => {
-            console.warn("Could not sync admin document to firestore:", err);
+            console.warn("Could not sync user profile to firestore:", err);
           });
+
+          if (isAdminRole) {
+            setDoc(doc(db, 'admins', user.uid), {
+              uid: user.uid,
+              email: userEmail,
+              updatedAt: Date.now()
+            }, { merge: true }).catch(err => {
+              console.warn("Could not sync admin document to firestore:", err);
+            });
+          }
         }
 
         const fullProfile: UserProfile = {

@@ -4,7 +4,7 @@ import {
   Check, Sparkles, Crown, MapPin, 
   ArrowLeft, Phone, Building2, Plus, ArrowRight,
   Tv, TrendingUp, Bell, Video, Smartphone,
-  Store, Stethoscope, Gift, ShieldCheck, HeartPulse
+  Store, Stethoscope, Gift, ShieldCheck, HeartPulse, LayoutGrid
 } from 'lucide-react';
 import { SEO } from '../components/common/SEO';
 import { useSystemSettings } from '../contexts/SystemSettingsContext';
@@ -44,6 +44,16 @@ const getMarketingServicesData = (config: any) => [
     whatsappText: 'أرغب في إرسال إشعار ترويجي جماعي فوري لجميع مستخدمي المنصة للإعلان عن محلي.',
     colorClass: 'bg-amber-50 text-amber-700 border-amber-200',
     iconColor: 'text-amber-600'
+  },
+  {
+    id: 'promo_card',
+    title: 'بطاقة ترويجية مدمجة بالقوائم (In-Feed)',
+    price: `${config?.pricePromoCard ?? 20} د.أ / أسبوع`,
+    description: 'إضافة بطاقة ترويجية متكاملة تظهر مباشرة بين بطاقات المحلات أو العروض أو المنتجات مع فيديو أو صورة تعريفيّة وزر حجز مباشر.',
+    icon: LayoutGrid,
+    whatsappText: 'أرغب في حجز خدمة البطاقة الترويجية المدمجة (In-Feed) لمحلي التجاري.',
+    colorClass: 'bg-amber-50/50 text-amber-950 border border-amber-200',
+    iconColor: 'text-amber-700'
   }
 ];
 
@@ -77,6 +87,16 @@ const getMedicalMarketingServicesData = (config: any) => [
     whatsappText: 'أرغب في إرسال إشعار ترويجي جماعي لمستخدمي المنصة للإعلان عن حملة فحص أو افتتاح قسم جديد.',
     colorClass: 'bg-amber-50 text-amber-700 border-amber-200',
     iconColor: 'text-amber-600'
+  },
+  {
+    id: 'medical_promo_card',
+    title: 'بطاقة ترويجية مدمجة بالدليل الطبي (In-Feed)',
+    price: `${config?.pricePromoCard ?? 20} د.أ / أسبوع`,
+    description: 'إضافة بطاقة ترويجية متكاملة تظهر مباشرة بين بطاقات المنشآت الطبية مع فيديو أو صورة تعريفيّة وزر تواصل وحجز مباشر.',
+    icon: LayoutGrid,
+    whatsappText: 'أرغب في حجز خدمة البطاقة الترويجية المدمجة (In-Feed) لعيادتي/مركزي الطبي.',
+    colorClass: 'bg-amber-50/50 text-amber-950 border border-amber-200',
+    iconColor: 'text-amber-700'
   }
 ];
 
@@ -310,8 +330,8 @@ export function Pricing() {
               }`}
             >
               <span>الدفع السنوي</span>
-              <span className="bg-amber-400 text-[#2d2a26] text-[9px] px-1.5 py-0.5 rounded-full font-black animate-pulse whitespace-nowrap">
-                وفر 48% 🔥
+              <span className="bg-amber-400 text-[#2d2a26] text-[9px] px-1.5 py-0.5 rounded-full font-black whitespace-nowrap">
+                وفر 48%
               </span>
             </button>
           </div>
@@ -323,53 +343,53 @@ export function Pricing() {
       {/* ========================================================= */}
       {sectorTab === 'commercial' && (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch max-w-4xl mx-auto px-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8 items-stretch max-w-4xl mx-auto px-4">
             {subscriptionPlans.map((plan) => (
               <div 
                 key={plan.id}
-                className={`rounded-3xl border p-6 sm:p-8 flex flex-col justify-between shadow-xs hover:shadow-md transition-all relative ${
+                className={`rounded-2xl sm:rounded-3xl border p-5 sm:p-8 flex flex-col justify-between shadow-xs hover:shadow-md transition-all relative ${
                   plan.popular 
                     ? 'bg-white border-[#ff9f1c] ring-2 ring-[#ff9f1c]/20 lg:-mt-4' 
                     : 'bg-white border-[#e5e1da] hover:border-[#1a4d2e]/30'
                 }`}
               >
                 {plan.popular && (
-                  <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-gradient-to-r from-red-600 via-orange-500 to-amber-500 text-white px-4 py-1.5 rounded-full text-[10px] sm:text-xs font-black shadow-md flex items-center gap-1.5 whitespace-nowrap">
+                  <div className="absolute -top-3.5 sm:-top-4 left-1/2 -translate-x-1/2 bg-gradient-to-r from-red-600 via-orange-500 to-amber-500 text-white px-3.5 sm:px-4 py-1 sm:py-1.5 rounded-full text-[10px] sm:text-xs font-black shadow-md flex items-center gap-1.5 whitespace-nowrap">
                     <Crown className="h-3.5 w-3.5" />
                     <span>الأكثر طلباً ومبيعاً لدعم المبيعات</span>
                   </div>
                 )}
                 
-                <div className="space-y-6">
-                  <div className="space-y-2">
+                <div className="space-y-5 sm:space-y-6">
+                  <div className="space-y-1.5 sm:space-y-2">
                     <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black ${plan.badgeColor}`}>
                       <MapPin className="h-3.5 w-3.5" />
                       <span>{plan.badge}</span>
                     </div>
-                    <h2 className="text-2xl font-black text-[#2d2a26]">{plan.name}</h2>
+                    <h2 className="text-xl sm:text-2xl font-black text-[#2d2a26]">{plan.name}</h2>
                   </div>
                   
                   {plan.id === 'basic' ? (
                     <div className="space-y-3">
                       <div className="space-y-1">
                         <div className="flex items-baseline gap-1 text-[#2d2a26]">
-                          <span className="text-3xl font-black">سعر رمزي جداً</span>
+                          <span className="text-2xl sm:text-3xl font-black">سعر رمزي جداً</span>
                           <span className="text-xs font-bold text-stone-500 mr-1">/ تفعيل للأبد</span>
                         </div>
                         <p className="text-[10px] text-amber-700 font-extrabold bg-amber-50 px-2 py-1 rounded inline-block border border-amber-200/60">
-                          ✓ تفعيل فوري مخصص عبر الواتساب
+                          تفعيل فوري مخصص عبر الواتساب
                         </p>
                       </div>
 
                       {/* Highlighted Welcome Gift Box */}
-                      <div className="bg-gradient-to-r from-amber-50 via-orange-50/70 to-amber-50 border border-amber-300/80 rounded-2xl p-4 flex items-center gap-3.5 shadow-3xs">
+                      <div className="bg-gradient-to-r from-amber-50 via-orange-50/70 to-amber-50 border border-amber-300/80 rounded-2xl p-3.5 sm:p-4 flex items-center gap-3 sm:gap-3.5 shadow-3xs">
                         <div className="w-10 h-10 rounded-xl bg-amber-600 text-white flex items-center justify-center shrink-0 shadow-xs">
                           <Gift className="h-5 w-5" />
                         </div>
                         <div>
                           <div className="text-xs font-black text-amber-950 flex items-center gap-1.5">
                             <span>هدية انضمام استثنائية</span>
-                            <span className="bg-amber-600 text-white text-[9px] px-2 py-0.5 rounded-full font-black">مجاناً 🎁</span>
+                            <span className="bg-amber-600 text-white text-[9px] px-2 py-0.5 rounded-full font-black">مجاناً</span>
                           </div>
                           <p className="text-[11px] font-extrabold text-amber-800 leading-snug mt-1">
                             شهر مجاني تجريبي لباقة الـ VIP للمنشآت والمحلات المضافة جديد لأول مرة على موقع شو في بإربد!
@@ -382,24 +402,24 @@ export function Pricing() {
                       {billingCycle === 'monthly' ? (
                         <div className="space-y-1">
                           <div className="flex items-baseline gap-1 text-[#2d2a26]">
-                            <span className="text-4xl font-black">19</span>
-                            <span className="text-lg font-bold">د.أ</span>
-                            <span className="text-sm font-medium text-stone-500 mr-1">/ شهرياً</span>
+                            <span className="text-3xl sm:text-4xl font-black">19</span>
+                            <span className="text-base sm:text-lg font-bold">د.أ</span>
+                            <span className="text-xs sm:text-sm font-medium text-stone-500 mr-1">/ شهرياً</span>
                           </div>
                           <p className="text-[10px] text-stone-400 font-bold">التكلفة السنوية الإجمالية: 228 د.أ</p>
                         </div>
                       ) : (
                         <div className="space-y-1">
                           <div className="flex items-baseline gap-1 text-[#2d2a26]">
-                            <span className="text-4xl font-black">9.9</span>
-                            <span className="text-lg font-bold">د.أ</span>
+                            <span className="text-3xl sm:text-4xl font-black">9.9</span>
+                            <span className="text-base sm:text-lg font-bold">د.أ</span>
                             <span className="text-xs font-bold text-stone-500 mr-1">/ شهرياً (بالدفع السنوي)</span>
                           </div>
                           <div className="flex flex-col gap-1">
                             <p className="text-[11px] text-emerald-600 font-extrabold bg-emerald-50 px-2 py-0.5 rounded-lg inline-block self-start">
-                              🔥 ما يعادل بالسنة 119 د.أ فقط كاملة
+                              ما يعادل بالسنة 119 د.أ فقط كاملة
                             </p>
-                            <p className="text-[10px] text-stone-400 font-bold">لقد وفرت 109 د.أ سنوياً مقارنة بالدفع الشهري!</p>
+                            <p className="text-[10px] text-stone-400 font-bold">لقد وفرت 109 د.أ سنوياً مقارنة بالدفع الشهري</p>
                           </div>
                         </div>
                       )}
@@ -407,15 +427,15 @@ export function Pricing() {
                   )}
 
                   <div className="border-t border-[#e5e1da] pt-4">
-                    <h3 className="text-xs font-black text-stone-400 uppercase tracking-wider mb-4">
+                    <h3 className="text-xs font-black text-stone-400 uppercase tracking-wider mb-3.5 sm:mb-4">
                       الميزات المشمولة:
                     </h3>
-                    <ul className="space-y-3.5 text-xs sm:text-sm text-stone-700">
+                    <ul className="space-y-3 sm:space-y-3.5 text-xs sm:text-sm text-stone-700">
                       {((plan.id === 'golden' && plan.features.length <= 8) ? [
                         ...plan.features,
-                        'معرض الصور المتطور وأجواء المحل الاستكشافية 📸',
-                        'الرسائل والمحادثات الحية والمباشرة مع الزبائن 💬',
-                        'تضمين فيديوهات ريلز (Reels) ترويجية بداخل صفحتك 🎬'
+                        'معرض الصور المتطور وأجواء المحل الاستكشافية',
+                        'الرسائل والمحادثات الحية والمباشرة مع الزبائن',
+                        'تضمين فيديوهات ريلز (Reels) ترويجية بداخل صفحتك'
                       ] : plan.features).map((feature, fIdx) => (
                         <li key={fIdx} className="flex items-start gap-2.5">
                           <div className="p-1 bg-emerald-100 text-emerald-700 rounded-lg shrink-0 mt-0.5">
@@ -428,10 +448,10 @@ export function Pricing() {
                   </div>
                 </div>
 
-                <div className="pt-8 mt-auto">
+                <div className="pt-6 sm:pt-8 mt-auto">
                   <button 
                     onClick={() => handlePlanAction(plan.id)}
-                    className={`w-full py-3 sm:py-4 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs ${
+                    className={`w-full py-3 sm:py-4 rounded-xl sm:rounded-2xl font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs min-h-[48px] active:scale-[0.98] ${
                       plan.popular 
                         ? 'bg-[#1a4d2e] text-white hover:bg-[#133b22]' 
                         : 'bg-stone-50 text-stone-700 border border-stone-200 hover:bg-stone-100'
@@ -446,30 +466,30 @@ export function Pricing() {
           </div>
 
           {/* Commercial Marketing Services */}
-          <div className="max-w-7xl mx-auto px-4 pt-8">
-            <div className="bg-stone-50/70 border border-stone-200/60 rounded-3xl p-6 sm:p-10 space-y-8">
-              <div className="text-center max-w-2xl mx-auto space-y-3">
+          <div className="max-w-7xl mx-auto px-4 pt-6 sm:pt-8">
+            <div className="bg-stone-50/70 border border-stone-200/60 rounded-2xl sm:rounded-3xl p-4 sm:p-10 space-y-6 sm:space-y-8">
+              <div className="text-center max-w-2xl mx-auto space-y-2.5 sm:space-y-3">
                 <div className="inline-flex items-center gap-1.5 bg-[#1a4d2e]/10 text-[#1a4d2e] px-3.5 py-1 rounded-full text-xs font-black border border-[#1a4d2e]/20">
                   <Sparkles className="h-3.5 w-3.5" />
                   <span>خدمات ترويجية إضافية - حسب الطلب</span>
                 </div>
-                <h2 className="text-2xl sm:text-3xl font-black text-[#2d2a26]">
-                  🛍️ خدمات تسويقية تدفع عند الشراء فقط
+                <h2 className="text-xl sm:text-3xl font-black text-[#2d2a26]">
+                  خدمات تسويقية تدفع عند الشراء فقط
                 </h2>
                 <p className="text-stone-500 text-xs sm:text-sm leading-relaxed">
                   عزز مبيعاتك واكتسب مئات الزبائن الجدد فوراً من خلال حلولنا الترويجية المخصصة. هذه الخدمات تدفع <span className="font-bold text-stone-800 underline">مرة واحدة عند الطلب وليست باقة اشتراك دورية</span>.
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                 {MARKETING_SERVICES_DATA.map((service) => {
                   const IconComp = service.icon;
                   return (
                     <div 
                       key={service.id}
-                      className="bg-white border border-stone-200/80 rounded-2xl p-5 hover:border-[#1a4d2e] hover:shadow-md transition-all flex flex-col justify-between"
+                      className="bg-white border border-stone-200/80 rounded-2xl p-4 sm:p-5 hover:border-[#1a4d2e] hover:shadow-md transition-all flex flex-col justify-between"
                     >
-                      <div className="space-y-4">
+                      <div className="space-y-3 sm:space-y-4">
                         <div className="flex items-center justify-between">
                           <div className={`p-2.5 rounded-xl ${service.colorClass}`}>
                             <IconComp className="h-5 w-5 stroke-[2.5]" />
@@ -485,10 +505,10 @@ export function Pricing() {
                         </div>
                       </div>
 
-                      <div className="pt-5 mt-4 border-t border-stone-100">
+                      <div className="pt-4 sm:pt-5 mt-3 sm:mt-4 border-t border-stone-100">
                         <button
                           onClick={() => handleMarketingServiceAction(service.whatsappText)}
-                          className="w-full py-2.5 sm:py-3 bg-stone-50 text-stone-800 border border-stone-200 hover:bg-[#1a4d2e] hover:text-white hover:border-[#1a4d2e] rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                          className="w-full py-2.5 sm:py-3 bg-stone-50 text-stone-800 border border-stone-200 hover:bg-[#1a4d2e] hover:text-white hover:border-[#1a4d2e] rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs min-h-[44px] active:scale-[0.98]"
                         >
                           <span>اطلب الخدمة الآن</span>
                           <ArrowLeft className="h-3.5 w-3.5" />
@@ -508,37 +528,37 @@ export function Pricing() {
       {/* ========================================================= */}
       {sectorTab === 'medical' && (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch max-w-4xl mx-auto px-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8 items-stretch max-w-4xl mx-auto px-4">
             {/* 1. Medical Basic Plan */}
-            <div className="rounded-3xl border border-[#e5e1da] bg-white p-6 sm:p-8 flex flex-col justify-between shadow-xs hover:border-emerald-600/40 hover:shadow-md transition-all relative">
-              <div className="space-y-6">
-                <div className="space-y-2">
+            <div className="rounded-2xl sm:rounded-3xl border border-[#e5e1da] bg-white p-5 sm:p-8 flex flex-col justify-between shadow-xs hover:border-emerald-600/40 hover:shadow-md transition-all relative">
+              <div className="space-y-5 sm:space-y-6">
+                <div className="space-y-1.5 sm:space-y-2">
                   <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-stone-100 text-stone-700">
                     <MapPin className="h-3.5 w-3.5 text-stone-500" />
                     <span>التواجد والتعريف الطبي</span>
                   </div>
-                  <h2 className="text-2xl font-black text-[#2d2a26]">الباقة الأساسية الطبية</h2>
+                  <h2 className="text-xl sm:text-2xl font-black text-[#2d2a26]">الباقة الأساسية الطبية</h2>
                 </div>
 
                 <div className="space-y-1">
                   <div className="flex items-baseline gap-1 text-[#2d2a26]">
-                    <span className="text-3xl font-black">سعر رمزي جداً</span>
+                    <span className="text-2xl sm:text-3xl font-black">سعر رمزي جداً</span>
                     <span className="text-xs font-bold text-stone-500 mr-1">/ تفعيل للأبد</span>
                   </div>
                   <p className="text-[10px] text-emerald-700 font-extrabold bg-emerald-50 px-2 py-1 rounded inline-block border border-emerald-200/60">
-                    ✓ تفعيل دائم مع هدية انضمام ترحيبية خاصة
+                    تفعيل دائم مع هدية انضمام ترحيبية خاصة
                   </p>
                 </div>
 
                 {/* Highlighted Welcome Gift Box */}
-                <div className="bg-gradient-to-r from-emerald-50 via-teal-50/70 to-emerald-50 border border-emerald-300/80 rounded-2xl p-4 flex items-center gap-3.5 shadow-3xs">
+                <div className="bg-gradient-to-r from-emerald-50 via-teal-50/70 to-emerald-50 border border-emerald-300/80 rounded-2xl p-3.5 sm:p-4 flex items-center gap-3 sm:gap-3.5 shadow-3xs">
                   <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
                     <Gift className="h-5 w-5" />
                   </div>
                   <div>
                     <div className="text-xs font-black text-emerald-950 flex items-center gap-1.5">
                       <span>هدية انضمام استثنائية</span>
-                      <span className="bg-emerald-600 text-white text-[9px] px-2 py-0.5 rounded-full font-black">مجاناً 🎁</span>
+                      <span className="bg-emerald-600 text-white text-[9px] px-2 py-0.5 rounded-full font-black">مجاناً</span>
                     </div>
                     <p className="text-[11px] font-extrabold text-emerald-800 leading-snug mt-1">
                       شهر مجاني تجريبي لباقة الـ VIP للمنشآت المضافة جديد لأول مرة على موقع شو في بإربد!
@@ -547,10 +567,10 @@ export function Pricing() {
                 </div>
 
                 <div className="border-t border-[#e5e1da] pt-4">
-                  <h3 className="text-xs font-black text-stone-400 uppercase tracking-wider mb-4">
+                  <h3 className="text-xs font-black text-stone-400 uppercase tracking-wider mb-3.5 sm:mb-4">
                     الميزات المشمولة:
                   </h3>
-                  <ul className="space-y-3.5 text-xs sm:text-sm text-stone-700">
+                  <ul className="space-y-3 sm:space-y-3.5 text-xs sm:text-sm text-stone-700">
                     <li className="flex items-start gap-2.5">
                       <div className="p-1 bg-emerald-100 text-emerald-700 rounded-lg shrink-0 mt-0.5">
                         <Check className="h-3.5 w-3.5 stroke-[3]" />
@@ -597,10 +617,10 @@ export function Pricing() {
                 </div>
               </div>
 
-              <div className="pt-8 mt-auto">
+              <div className="pt-6 sm:pt-8 mt-auto">
                 <button 
                   onClick={() => handlePlanAction('basic')}
-                  className="w-full py-3 sm:py-4 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs bg-stone-50 text-stone-800 border border-stone-200 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-300"
+                  className="w-full py-3 sm:py-4 rounded-xl sm:rounded-2xl font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs bg-stone-50 text-stone-800 border border-stone-200 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-300 min-h-[48px] active:scale-[0.98]"
                 >
                   <span>سجل الآن بالباقة الأساسية</span>
                   <ArrowLeft className="h-4 w-4" />
@@ -609,118 +629,118 @@ export function Pricing() {
             </div>
 
             {/* 2. Medical Golden VIP Plan */}
-            <div className="rounded-3xl border border-emerald-500 ring-2 ring-emerald-500/25 bg-white p-6 sm:p-8 flex flex-col justify-between shadow-md hover:shadow-lg transition-all relative lg:-mt-4">
-              <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white px-4 py-1.5 rounded-full text-[10px] sm:text-xs font-black shadow-md flex items-center gap-1.5 whitespace-nowrap">
+            <div className="rounded-2xl sm:rounded-3xl border border-emerald-500 ring-2 ring-emerald-500/25 bg-white p-5 sm:p-8 flex flex-col justify-between shadow-md hover:shadow-lg transition-all relative lg:-mt-4">
+              <div className="absolute -top-3.5 sm:-top-4 left-1/2 -translate-x-1/2 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white px-3.5 sm:px-4 py-1 sm:py-1.5 rounded-full text-[10px] sm:text-xs font-black shadow-md flex items-center gap-1.5 whitespace-nowrap">
                 <Crown className="h-3.5 w-3.5 text-amber-300" />
                 <span>الخيار الأكثر ثقة واعتماداً للعيادات والمراكز المتميزة</span>
               </div>
 
-              <div className="space-y-6">
-                <div className="space-y-2">
+              <div className="space-y-5 sm:space-y-6">
+                <div className="space-y-1.5 sm:space-y-2">
                   <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-emerald-100 text-emerald-800">
                     <ShieldCheck className="h-3.5 w-3.5 text-emerald-700" />
-                    <span>العيادة الرقمية المتكاملة 👑</span>
+                    <span>العيادة الرقمية المتكاملة</span>
                   </div>
-                  <h2 className="text-2xl font-black text-[#2d2a26]">الباقة الذهبية الطبية VIP</h2>
+                  <h2 className="text-xl sm:text-2xl font-black text-[#2d2a26]">الباقة الذهبية الطبية VIP</h2>
                 </div>
 
                 <div className="space-y-2">
                   {billingCycle === 'monthly' ? (
                     <div className="space-y-1">
                       <div className="flex items-baseline gap-1 text-[#2d2a26]">
-                        <span className="text-4xl font-black">19</span>
-                        <span className="text-lg font-bold">د.أ</span>
-                        <span className="text-sm font-medium text-stone-500 mr-1">/ شهرياً</span>
+                        <span className="text-3xl sm:text-4xl font-black">19</span>
+                        <span className="text-base sm:text-lg font-bold">د.أ</span>
+                        <span className="text-xs sm:text-sm font-medium text-stone-500 mr-1">/ شهرياً</span>
                       </div>
                       <p className="text-[10px] text-stone-400 font-bold">التكلفة السنوية الإجمالية: 228 د.أ</p>
                     </div>
                   ) : (
                     <div className="space-y-1">
                       <div className="flex items-baseline gap-1 text-[#2d2a26]">
-                        <span className="text-4xl font-black">9.9</span>
-                        <span className="text-lg font-bold">د.أ</span>
+                        <span className="text-3xl sm:text-4xl font-black">9.9</span>
+                        <span className="text-base sm:text-lg font-bold">د.أ</span>
                         <span className="text-xs font-bold text-stone-500 mr-1">/ شهرياً (بالدفع السنوي)</span>
                       </div>
                       <div className="flex flex-col gap-1">
                         <p className="text-[11px] text-emerald-600 font-extrabold bg-emerald-50 px-2 py-0.5 rounded-lg inline-block self-start">
-                          🔥 ما يعادل بالسنة 119 د.أ فقط كاملة
+                          ما يعادل بالسنة 119 د.أ فقط كاملة
                         </p>
-                        <p className="text-[10px] text-stone-400 font-bold">لقد وفرت 109 د.أ سنوياً مقارنة بالدفع الشهري!</p>
+                        <p className="text-[10px] text-stone-400 font-bold">لقد وفرت 109 د.أ سنوياً مقارنة بالدفع الشهري</p>
                       </div>
                     </div>
                   )}
                 </div>
 
                 <div className="border-t border-[#e5e1da] pt-4">
-                  <h3 className="text-xs font-black text-stone-400 uppercase tracking-wider mb-4">
+                  <h3 className="text-xs font-black text-stone-400 uppercase tracking-wider mb-3.5 sm:mb-4">
                     ميزات المنظومة الطبية المتقدمة:
                   </h3>
-                  <ul className="space-y-3.5 text-xs sm:text-sm text-stone-700">
+                  <ul className="space-y-3 sm:space-y-3.5 text-xs sm:text-sm text-stone-700">
                     <li className="flex items-start gap-2.5">
                       <div className="p-1 bg-emerald-100 text-emerald-700 rounded-lg shrink-0 mt-0.5">
                         <Check className="h-3.5 w-3.5 stroke-[3]" />
                       </div>
-                      <span className="font-bold text-emerald-900">شارة التوثيق والاعتماد الطبية الرسمية (Verified Medical Facility ✓)</span>
+                      <span className="font-bold text-emerald-900">شارة التوثيق والاعتماد الطبية الرسمية (Verified Medical Facility)</span>
                     </li>
                     <li className="flex items-start gap-2.5">
                       <div className="p-1 bg-emerald-100 text-emerald-700 rounded-lg shrink-0 mt-0.5">
                         <Check className="h-3.5 w-3.5 stroke-[3]" />
                       </div>
-                      <span className="font-bold text-stone-800">محرك حجز المواعيد الطبي المسبق واستقبال طلبات الكشف المباشرة 📅</span>
+                      <span className="font-bold text-stone-800">محرك حجز المواعيد الطبي المسبق واستقبال طلبات الكشف المباشرة</span>
                     </li>
                     <li className="flex items-start gap-2.5">
                       <div className="p-1 bg-emerald-100 text-emerald-700 rounded-lg shrink-0 mt-0.5">
                         <Check className="h-3.5 w-3.5 stroke-[3]" />
                       </div>
-                      <span className="font-bold text-stone-800">دليل شبكات وشركات التأمين الصحي والنقابات والخصومات المعتمدة 🛡️</span>
+                      <span className="font-bold text-stone-800">دليل شبكات وشركات التأمين الصحي والنقابات والخصومات المعتمدة</span>
                     </li>
                     <li className="flex items-start gap-2.5">
                       <div className="p-1 bg-emerald-100 text-emerald-700 rounded-lg shrink-0 mt-0.5">
                         <Check className="h-3.5 w-3.5 stroke-[3]" />
                       </div>
-                      <span className="font-medium text-stone-700">كتالوج الإجراءات والخدمات الطبية والفحوصات مع تفاصيل الأسعار 📋</span>
+                      <span className="font-medium text-stone-700">كتالوج الإجراءات والخدمات الطبية والفحوصات مع تفاصيل الأسعار</span>
                     </li>
                     <li className="flex items-start gap-2.5">
                       <div className="p-1 bg-emerald-100 text-emerald-700 rounded-lg shrink-0 mt-0.5">
                         <Check className="h-3.5 w-3.5 stroke-[3]" />
                       </div>
-                      <span className="font-medium text-stone-700">دليل الكادر الطبي والاستشاريين مع التخصصات والشهادات والخبرات 👨‍⚕️</span>
+                      <span className="font-medium text-stone-700">دليل الكادر الطبي والاستشاريين مع التخصصات والشهادات والخبرات</span>
                     </li>
                     <li className="flex items-start gap-2.5">
                       <div className="p-1 bg-emerald-100 text-emerald-700 rounded-lg shrink-0 mt-0.5">
                         <Check className="h-3.5 w-3.5 stroke-[3]" />
                       </div>
-                      <span className="font-medium text-stone-700">استعراض التجهيزات والتقنيات والأجهزة الطبية المتطورة بالعيادة 🔬</span>
+                      <span className="font-medium text-stone-700">استعراض التجهيزات والتقنيات والأجهزة الطبية المتطورة بالعيادة</span>
                     </li>
                     <li className="flex items-start gap-2.5">
                       <div className="p-1 bg-emerald-100 text-emerald-700 rounded-lg shrink-0 mt-0.5">
                         <Check className="h-3.5 w-3.5 stroke-[3]" />
                       </div>
-                      <span className="font-medium text-stone-700">نافذة ترويجية طبية منبثقة (أطباء زائرون، باقات فحص دوري، إعلانات) ⚡</span>
+                      <span className="font-medium text-stone-700">نافذة ترويجية طبية منبثقة (أطباء زائرون، باقات فحص دوري، إعلانات)</span>
                     </li>
                     <li className="flex items-start gap-2.5">
                       <div className="p-1 bg-emerald-100 text-emerald-700 rounded-lg shrink-0 mt-0.5">
                         <Check className="h-3.5 w-3.5 stroke-[3]" />
                       </div>
-                      <span className="font-medium text-stone-700">حسابات مخصصة لموظفي الاستقبال والسكرتارية لإدارة المواعيد 👥</span>
+                      <span className="font-medium text-stone-700">حسابات مخصصة لموظفي الاستقبال والسكرتارية لإدارة المواعيد</span>
                     </li>
                     <li className="flex items-start gap-2.5">
                       <div className="p-1 bg-emerald-100 text-emerald-700 rounded-lg shrink-0 mt-0.5">
                         <Check className="h-3.5 w-3.5 stroke-[3]" />
                       </div>
-                      <span className="font-medium text-stone-700">لوحة إحصائيات متقدمة لتحليل نقرات الحجز والمكالمات والاهتمامات 📊</span>
+                      <span className="font-medium text-stone-700">لوحة إحصائيات متقدمة لتحليل نقرات الحجز والمكالمات والاهتمامات</span>
                     </li>
                     <li className="flex items-start gap-2.5">
                       <div className="p-1 bg-emerald-100 text-emerald-700 rounded-lg shrink-0 mt-0.5">
                         <Check className="h-3.5 w-3.5 stroke-[3]" />
                       </div>
-                      <span className="font-bold text-stone-800">أولوية الصدارة في نتائج البحث الطبي وترشيحات المساعد الذكي 🌟</span>
+                      <span className="font-bold text-stone-800">أولوية الصدارة في نتائج البحث الطبي وترشيحات المساعد الذكي</span>
                     </li>
                     <li className="flex items-start gap-2.5">
                       <div className="p-1 bg-emerald-100 text-emerald-700 rounded-lg shrink-0 mt-0.5">
                         <Check className="h-3.5 w-3.5 stroke-[3]" />
                       </div>
-                      <span className="font-medium text-stone-700">معرض الصور المتطور لأجواء العيادة ومرافق المركز 📸</span>
+                      <span className="font-medium text-stone-700">معرض الصور المتطور لأجواء العيادة ومرافق المركز</span>
                     </li>
                     <li className="flex items-start gap-2.5">
                       <div className="p-1 bg-emerald-100 text-emerald-700 rounded-lg shrink-0 mt-0.5">
@@ -732,10 +752,10 @@ export function Pricing() {
                 </div>
               </div>
 
-              <div className="pt-8 mt-auto">
+              <div className="pt-6 sm:pt-8 mt-auto">
                 <button 
                   onClick={() => handlePlanAction('golden')}
-                  className="w-full py-3 sm:py-4 rounded-2xl font-black flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md bg-[#1a4d2e] hover:bg-[#133b22] text-white"
+                  className="w-full py-3 sm:py-4 rounded-xl sm:rounded-2xl font-black flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md bg-[#1a4d2e] hover:bg-[#133b22] text-white min-h-[48px] active:scale-[0.98]"
                 >
                   <span>ابدأ الآن - الباقة الذهبية VIP الطبية</span>
                   <ArrowLeft className="h-4 w-4" />

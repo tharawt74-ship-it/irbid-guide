@@ -1,0 +1,185 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { lazy, Suspense } from 'react';
+import { BrowserRouter, Routes, Route } from 'react-router';
+import { AuthProvider } from './contexts/AuthContext';
+import { NotificationsProvider } from './contexts/NotificationsContext';
+import { CartProvider } from './contexts/CartContext';
+import { ConfirmProvider } from './contexts/ConfirmContext';
+import { Layout } from './components/layout/Layout';
+import { ScrollToTop } from './components/ScrollToTop';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
+import { SystemSettingsProvider } from './contexts/SystemSettingsContext';
+import { ProtectedRoute } from './components/common/ProtectedRoute';
+import { Loader2 } from 'lucide-react';
+
+// Eagerly load critical Home and Auth pages for instant loading
+import { Home } from './pages/Home';
+import { Login } from './pages/Login';
+import { Register } from './pages/Register';
+import { Verify } from './pages/Verify';
+import { ResetPassword } from './pages/ResetPassword';
+import { NotFound } from './pages/NotFound';
+
+// Helper for resilient lazy component loading
+function lazyWithRetry<T extends React.ComponentType<any>>(
+ factory: () => Promise<{ default: T }>
+) {
+ return lazy(async () => {
+ try {
+ return await factory();
+ } catch (error: any) {
+ const pageKey = 'lazy_retry_' + window.location.pathname;
+ if (!sessionStorage.getItem(pageKey)) {
+ sessionStorage.setItem(pageKey, 'true');
+ window.location.reload();
+ }
+ throw error;
+ }
+ });
+}
+
+// Lazy load secondary pages
+const BusinessDetail = lazyWithRetry(() => import('./pages/BusinessDetail').then(m => ({ default: m.default || m.BusinessDetail })));
+const Contact = lazyWithRetry(() => import('./pages/Contact').then(m => ({ default: m.Contact })));
+const AdminDashboard = lazyWithRetry(() => import('./pages/AdminDashboard').then(m => ({ default: (m as any).default || m.AdminDashboard })));
+const Profile = lazyWithRetry(() => import('./pages/Profile').then(m => ({ default: m.default || m.Profile })));
+const ProfileSettings = lazyWithRetry(() => import('./pages/ProfileSettings').then(m => ({ default: (m as any).default || m.ProfileSettings })));
+const Offers = lazyWithRetry(() => import('./pages/Offers').then(m => ({ default: m.default || m.Offers })));
+const OfferDetail = lazyWithRetry(() => import('./pages/OfferDetail').then(m => ({ default: m.OfferDetail })));
+const Housing = lazyWithRetry(() => import('./pages/Housing').then(m => ({ default: m.Housing })));
+const HousingDetail = lazyWithRetry(() => import('./pages/HousingDetail').then(m => ({ default: m.HousingDetail })));
+const Tourism = lazyWithRetry(() => import('./pages/Tourism').then(m => ({ default: m.Tourism })));
+const News = lazyWithRetry(() => import('./pages/News').then(m => ({ default: m.News })));
+const Pricing = lazyWithRetry(() => import('./pages/Pricing').then(m => ({ default: m.Pricing })));
+const Jobs = lazyWithRetry(() => import('./pages/Jobs').then(m => ({ default: m.default || m.Jobs })));
+const NotificationsPage = lazyWithRetry(() => import('./pages/NotificationsPage').then(m => ({ default: m.NotificationsPage })));
+const Messages = lazyWithRetry(() => import('./pages/Messages').then(m => ({ default: m.Messages })));
+const PrayerTimes = lazyWithRetry(() => import('./pages/PrayerTimes').then(m => ({ default: m.PrayerTimes })));
+const Transportation = lazyWithRetry(() => import('./pages/Transportation').then(m => ({ default: m.Transportation })));
+const Terms = lazyWithRetry(() => import('./pages/Terms').then(m => ({ default: m.Terms })));
+const Privacy = lazyWithRetry(() => import('./pages/Privacy').then(m => ({ default: m.Privacy })));
+const AboutUs = lazyWithRetry(() => import('./pages/AboutUs').then(m => ({ default: m.AboutUs })));
+const CartPage = lazyWithRetry(() => import('./pages/CartPage').then(m => ({ default: m.CartPage })));
+const Search = lazyWithRetry(() => import('./pages/Search').then(m => ({ default: m.Search })));
+const Medical = lazyWithRetry(() => import('./pages/Medical').then(m => ({ default: m.default })));
+const AddMedicalFacility = lazyWithRetry(() => import('./pages/AddMedicalFacility').then(m => ({ default: m.AddMedicalFacility })));
+const MerchantScannerPage = lazyWithRetry(() => import('./pages/MerchantScannerPage').then(m => ({ default: m.MerchantScannerPage })));
+const BusinessMenuOffers = lazyWithRetry(() => import('./pages/BusinessMenuOffers'));
+const LiveOrdersPage = lazyWithRetry(() => import('./pages/LiveOrdersPage'));
+const Products = lazyWithRetry(() => import('./pages/Products').then(m => ({ default: m.default || m.Products })));
+const ProductDetail = lazyWithRetry(() => import('./pages/ProductDetail').then(m => ({ default: m.default || m.ProductDetail })));
+const MenuCatalogPage = lazyWithRetry(() => import('./pages/MenuCatalogPage'));
+const ReviewLandingPage = lazyWithRetry(() => import('./pages/ReviewLandingPage').then(m => ({ default: m.ReviewLandingPage })));
+
+export default function App() {
+ return (
+ <ErrorBoundary>
+ <SystemSettingsProvider>
+ <AuthProvider>
+ <NotificationsProvider>
+ <CartProvider>
+ <ConfirmProvider>
+ <BrowserRouter>
+ <ScrollToTop />
+ <Suspense fallback={null}>
+ <Routes>
+ {/* Standalone Fullscreen Merchant QR Scanner (No Navbar/Header) */}
+ <Route path="/merchant/scanner" element={<MerchantScannerPage />} />
+
+ {/* Standalone Fullscreen Merchant Menu and Offers Platform */}
+ <Route path="/business/:id/menu-offers" element={<BusinessMenuOffers />} />
+ <Route path="/b/:id/menu-offers" element={<BusinessMenuOffers />} />
+
+ {/* Standalone Public Review Landing Page for Scanned QR Posters */}
+ <Route path="/rate/:id" element={<ReviewLandingPage />} />
+ <Route path="/review/:id" element={<ReviewLandingPage />} />
+ <Route path="/b/:id/rate" element={<ReviewLandingPage />} />
+ <Route path="/business/:id/rate" element={<ReviewLandingPage />} />
+
+ <Route path="/" element={<Layout />}>
+ <Route index element={<Home />} />
+ <Route path="admin" element={
+ <ProtectedRoute requireStaff={true}>
+ <AdminDashboard />
+ </ProtectedRoute>
+ } />
+ <Route path="profile" element={
+ <ProtectedRoute>
+ <Profile />
+ </ProtectedRoute>
+ } />
+ <Route path="profile/live-orders" element={
+ <ProtectedRoute>
+ <LiveOrdersPage />
+ </ProtectedRoute>
+ } />
+ <Route path="profile/settings" element={
+ <ProtectedRoute>
+ <ProfileSettings />
+ </ProtectedRoute>
+ } />
+ <Route path="settings" element={
+ <ProtectedRoute>
+ <ProfileSettings />
+ </ProtectedRoute>
+ } />
+ <Route path="notifications" element={<NotificationsPage />} />
+ <Route path="messages" element={
+ <ProtectedRoute>
+ <Messages />
+ </ProtectedRoute>
+ } />
+ <Route path="cart" element={<CartPage />} />
+ <Route path="search" element={<Search />} />
+ <Route path="medical" element={<Medical />} />
+ <Route path="medical/add" element={<AddMedicalFacility />} />
+ <Route path="medical/register" element={<AddMedicalFacility />} />
+ <Route path="add-medical" element={<AddMedicalFacility />} />
+ <Route path="add-medical-facility" element={<AddMedicalFacility />} />
+ <Route path="business/:id" element={<BusinessDetail />} />
+ <Route path="b/:id" element={<BusinessDetail />} />
+ <Route path="news" element={<News />} />
+ <Route path="news/:id" element={<News />} />
+ <Route path="jobs" element={<Jobs />} />
+ <Route path="products" element={<Products />} />
+ <Route path="products/:id" element={<ProductDetail />} />
+ <Route path="product/:id" element={<ProductDetail />} />
+ <Route path="menu-catalog" element={<Products />} />
+ <Route path="catalog" element={<Products />} />
+ <Route path="menus" element={<Products />} />
+ <Route path="offers" element={<Offers />} />
+ <Route path="offers/:id" element={<OfferDetail />} />
+ <Route path="housing" element={<Housing />} />
+ <Route path="housing/:id" element={<HousingDetail />} />
+ <Route path="tourism" element={<Tourism />} />
+ <Route path="tourism/:id" element={<Tourism />} />
+ <Route path="transportation" element={<Transportation />} />
+ <Route path="prayer-times" element={<PrayerTimes />} />
+ <Route path="packages" element={<Pricing />} />
+ <Route path="pricing" element={<Pricing />} />
+ <Route path="contact" element={<Contact />} />
+ <Route path="terms" element={<Terms />} />
+ <Route path="privacy" element={<Privacy />} />
+ <Route path="about" element={<AboutUs />} />
+ <Route path="login" element={<Login />} />
+ <Route path="register" element={<Register />} />
+ <Route path="verify" element={<Verify />} />
+ <Route path="reset-password" element={<ResetPassword />} />
+ <Route path=":id" element={<BusinessDetail />} />
+ <Route path="*" element={<NotFound />} />
+ </Route>
+ </Routes>
+ </Suspense>
+ </BrowserRouter>
+ </ConfirmProvider>
+ </CartProvider>
+ </NotificationsProvider>
+ </AuthProvider>
+ </SystemSettingsProvider>
+ </ErrorBoundary>
+ );
+}

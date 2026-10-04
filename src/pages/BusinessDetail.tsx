@@ -1,0 +1,6901 @@
+import { useConfirm } from '../contexts/ConfirmContext';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import { useParams, Link, useLocation, useNavigate } from 'react-router';
+import DOMPurify from 'dompurify';
+import { doc, getDoc, collection, query, where, getDocs, addDoc, updateDoc, limit, onSnapshot } from 'firebase/firestore';
+import { db } from '../lib/firebase';
+import { Business, Review, WorkingHours, JobOffer } from '../types';
+import { useAuth } from '../contexts/AuthContext';
+import { 
+  MapPin, Phone, Star, ArrowRight, MessageSquare, 
+  User as UserIcon, Store, Share2, Copy, Check, 
+  Clock, ShieldCheck, Tag, Info, Sparkles,
+  ExternalLink, EyeOff, Settings, Edit3, X, CheckCircle,
+  Crown, BarChart3, UtensilsCrossed, Lock as LockIcon, Percent, Globe, Facebook, Instagram, Twitter, Youtube, Smartphone, Send,
+  Video, Play, Trash2, Plus, Camera, Image as ImageIcon, ArrowLeft, ChevronLeft, ChevronRight, ChevronDown,
+  Briefcase, Building2, Flame, DollarSign, Award, Users, Calendar, Stethoscope, HeartPulse, Activity,
+  Pill, Shield, Gift, Settings2, QrCode, Truck, Banknote, CreditCard, Newspaper, Megaphone,
+  AlertTriangle
+} from 'lucide-react';
+import { BusinessNewsTab } from '../components/business/BusinessNewsTab';
+import { JobFormModal } from '../components/jobs/JobFormModal';
+import { CoverVideoPlayer } from '../components/common/CoverVideoPlayer';
+import { isMethodSelected } from '../components/ui/PaymentMethodsSelector';
+import { cn } from '../lib/utils';
+import { handleFirestoreError, OperationType } from '../lib/firestoreHelper';
+import { formatDistanceToNow } from 'date-fns';
+import { ar } from 'date-fns/locale';
+import { getGoogleMapsEmbedUrl, getGoogleMapsActionUrls, extractCoordsOrEmbedFromUrl } from '../lib/googleReviewsHelper';
+import { DigitalMenuView } from '../components/vip/DigitalMenuView';
+import { DigitalMenuManagerModal } from '../components/vip/DigitalMenuManagerModal';
+import { VipAnalyticsDashboard } from '../components/vip/VipAnalyticsDashboard';
+import { VipAnalyticsModal } from '../components/vip/VipAnalyticsModal';
+import { VipUpgradeRequestModal } from '../components/vip/VipUpgradeRequestModal';
+import { VipWelcomePopupModal } from '../components/vip/VipWelcomePopupModal';
+import { VipPopupManagerModal } from '../components/vip/VipPopupManagerModal';
+import { MediaRenderer } from '../components/common/MediaRenderer';
+import { ImageUploader } from '../components/ui/ImageUploader';
+import { VerifiedBadge } from '../components/vip/VerifiedBadge';
+import { getBusinessVipStatus } from '../lib/vipHelper';
+import { compressAndSanitizeFirestorePayload } from '../lib/firestoreHelper';
+import { getWhatsAppUrl, formatBusinessWhatsAppMessage } from '../lib/contactHelper';
+import { ShareButton } from '../components/ShareButton';
+import { getCachedBusinessDetail, setCachedBusinessDetail, invalidateCache, updateBusinessMenuItemsInCache } from '../lib/dataCache';
+import { BusinessCard } from '../components/BusinessCard';
+import { submitReviewAtomically } from '../utils/firestoreTransactions';
+import { DEMO_SEED_DATA } from '../lib/demoDataHelper';
+import { trackBusinessInteraction } from '../lib/analyticsTracker';
+import { SEO } from '../components/common/SEO';
+import { getJordanNow } from '../lib/jordanTime';
+import { 
+  isBotSubmission, 
+  checkSubmissionRateLimit, 
+  recordSubmissionTime, 
+  sanitizeInput, 
+  executeReCaptcha, 
+  containsUrlOrLink, 
+  stripUrlsAndLinks,
+  getDeviceFingerprint,
+  checkReviewRateLimit,
+  recordReviewSubmission
+} from '../lib/security';
+import { NotFound } from './NotFound';
+import { WhatsApp3DIcon, WhatsAppIcon, Phone3DIcon } from '../components/common/PremiumContactButtons';
+import { WorkingHoursEditor, ALL_DAYS, parseInitialDays } from '../components/ui/WorkingHoursEditor';
+import { isMedicalBusiness, getMedicalProfile, isStaffTabEligible } from '../lib/medicalHelper';
+import { MedicalBusinessDetailView } from '../components/medical/MedicalBusinessDetailView';
+import { MedicalAppointmentModal } from '../components/medical/MedicalAppointmentModal';
+import { saveUserReward, findExistingRewardForBusiness, fetchUserRewards, UserReward } from '../lib/rewardHelper';
+import { MedicalInsurancesTab } from '../components/medical/MedicalInsurancesTab';
+import { MedicalStaffTab } from '../components/medical/MedicalStaffTab';
+import { isTodayWorkingDay, ARABIC_DAYS_MAP, formatTimeToArabic } from '../lib/businessHoursHelper';
+import { useSystemSettings } from '../contexts/SystemSettingsContext';
+
+function getLiveWorkingStatus(hours?: WorkingHours) {
+  if (!hours || (!hours.isOpen24Hours && !hours.openTime && !hours.closeTime)) {
+    return {
+      status: "مفتوح الآن 🟢",
+      subText: "متاح طوال اليوم للزوار",
+      isOpen: true,
+      countdownText: ""
+    };
+  }
+  if (hours.isCustomClosed) {
+    return {
+      status: "مغلق مؤقتاً 🔴",
+      subText: "المنشأة مغلقة مؤقتاً",
+      isOpen: false,
+      countdownText: ""
+    };
+  }
+
+  if (hours.isCustomOpen) {
+    return {
+      status: "مفتوح مؤقتاً 🟢",
+      subText: "المنشأة مفتوحة مؤقتاً",
+      isOpen: true,
+      countdownText: ""
+    };
+  }
+  
+  const isWorkingDay = isTodayWorkingDay(hours);
+
+  if (!isWorkingDay) {
+    return {
+      status: "مغلق اليوم 🔴",
+      subText: "يوم عطلة للمنشأة",
+      isOpen: false,
+      countdownText: "يفتح في يوم العمل القادم"
+    };
+  }
+
+  if (hours.isOpen24Hours) {
+    return {
+      status: "مفتوح الآن 🟢",
+      subText: "مفتوح على مدار 24 ساعة",
+      isOpen: true,
+      countdownText: ""
+    };
+  }
+
+  const openTime = hours.openTime || "09:00";
+  const closeTime = hours.closeTime || "23:00";
+
+  let [openH, openM] = openTime.split(':').map(Number);
+  let [closeH, closeM] = closeTime.split(':').map(Number);
+
+  // Auto-correct common mistake where Arab users select 12:00 (Noon) thinking it's 12 Midnight.
+  // If closing time is exactly 12:00 and open time is before 12, assume they meant midnight (24:00/00:00).
+  if (closeH === 12 && closeM === 0 && openH < 12) {
+    closeH = 23;
+    closeM = 59;
+  }
+
+  const now = getJordanNow();
+  const currentH = now.getHours();
+  const currentM = now.getMinutes();
+
+  const currentMinutes = currentH * 60 + currentM;
+  const openMinutes = openH * 60 + openM;
+  let closeMinutes = closeH * 60 + closeM;
+
+  // Handle overnight closing (e.g. closes at 02:00 AM)
+  let isOvernight = false;
+  if (closeMinutes < openMinutes) {
+    closeMinutes += 24 * 60;
+    isOvernight = true;
+  }
+
+  let isOpen = false;
+  let minutesUntilChange = 0;
+
+  if (isOvernight) {
+    if (currentMinutes >= openMinutes || currentMinutes < (closeMinutes % (24 * 60))) {
+      isOpen = true;
+      const adjustedCurrent = currentMinutes < openMinutes ? currentMinutes + 24 * 60 : currentMinutes;
+      minutesUntilChange = closeMinutes - adjustedCurrent;
+    } else {
+      isOpen = false;
+      minutesUntilChange = openMinutes - currentMinutes;
+    }
+  } else {
+    if (currentMinutes >= openMinutes && currentMinutes < closeMinutes) {
+      isOpen = true;
+      minutesUntilChange = closeMinutes - currentMinutes;
+    } else {
+      isOpen = false;
+      if (currentMinutes < openMinutes) {
+        minutesUntilChange = openMinutes - currentMinutes;
+      } else {
+        minutesUntilChange = (openMinutes + 24 * 60) - currentMinutes;
+      }
+    }
+  }
+
+  const hoursLeft = Math.floor(minutesUntilChange / 60);
+  const minsLeft = minutesUntilChange % 60;
+
+  let countdownText = "";
+  if (isOpen) {
+    if (hoursLeft > 0) {
+      countdownText = `يغلق بعد ${hoursLeft} ساعة و ${minsLeft} دقيقة`;
+    } else {
+      countdownText = `يغلق بعد ${minsLeft} دقيقة فقط ⚠️`;
+    }
+  } else {
+    if (hoursLeft > 0) {
+      countdownText = `يفتح بعد ${hoursLeft} ساعة و ${minsLeft} دقيقة`;
+    } else {
+      countdownText = `يفتح بعد ${minsLeft} دقيقة`;
+    }
+  }
+
+  return {
+    status: isOpen ? "مفتوح الآن 🟢" : "مغلق حالياً 🔴",
+    subText: `ساعات العمل: من ${openTime} إلى ${closeTime}`,
+    isOpen,
+    countdownText
+  };
+}
+
+export function BusinessDetail() {
+  const { confirm } = useConfirm();
+  const { id } = useParams<{ id: string }>();
+  const { currentUser, isAdmin } = useAuth();
+  const { globalSettings } = useSystemSettings();
+  const location = useLocation();
+  const navigate = useNavigate();
+  
+  const [business, setBusiness] = useState<Business | null>(null);
+  const vipInfo = getBusinessVipStatus(business);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [similarBusinesses, setSimilarBusinesses] = useState<Business[]>([]);
+  const [loadingSimilar, setLoadingSimilar] = useState(false);
+  
+  const [newRating, setNewRating] = useState(5);
+  const [newComment, setNewComment] = useState('');
+  const [submittingReview, setSubmittingReview] = useState(false);
+  const queryTab = useMemo(() => {
+    try {
+      const sp = new URLSearchParams(location.search);
+      const t = sp.get('tab');
+      return (t === 'products' || t === 'menu') ? 'menu' : (t || null);
+    } catch {
+      return null;
+    }
+  }, [location.search]);
+  const [activeTab, setActiveTab] = useState(queryTab || 'about');
+  const [newsCount, setNewsCount] = useState<number>(0);
+  const [isCoverExpanded, setIsCoverExpanded] = useState(false);
+  const [coverImageFailed, setCoverImageFailed] = useState(false);
+  const tabsAnchorRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (queryTab) {
+      const vipTabs = ['menu', 'products', 'offers', 'news', 'reels', 'gallery', 'analytics'];
+      if (business && !vipInfo.isVip && vipTabs.includes(queryTab)) {
+        setActiveTab('about');
+        return;
+      }
+      setActiveTab(queryTab);
+      requestAnimationFrame(() => {
+        if (tabsAnchorRef.current) {
+          const anchorTop = tabsAnchorRef.current.getBoundingClientRect().top + window.scrollY;
+          const headerOffset = window.innerWidth < 640 ? 72 : window.innerWidth < 1024 ? 76 : 85;
+          const targetY = Math.max(0, anchorTop - headerOffset);
+          window.scrollTo({
+            top: targetY,
+            behavior: 'smooth'
+          });
+        }
+      });
+    }
+  }, [queryTab, business, vipInfo.isVip]);
+
+  const handleTabChange = (tab: string) => {
+    const vipTabs = ['menu', 'products', 'offers', 'news', 'reels', 'gallery', 'analytics'];
+    if (business && !vipInfo.isVip && vipTabs.includes(tab)) {
+      setActiveTab('about');
+      return;
+    }
+    setActiveTab(tab);
+    
+    // Smooth scroll user to the top of the selected tab / content area
+    requestAnimationFrame(() => {
+      if (tabsAnchorRef.current) {
+        const anchorTop = tabsAnchorRef.current.getBoundingClientRect().top + window.scrollY;
+        // Keep comfortable offset so tab bar is visible right under layout header or at top of screen
+        const headerOffset = window.innerWidth < 640 ? 72 : window.innerWidth < 1024 ? 76 : 85;
+        const targetY = Math.max(0, anchorTop - headerOffset);
+        
+        window.scrollTo({
+          top: targetY,
+          behavior: 'smooth'
+        });
+      }
+    });
+  };
+
+  const [error, setError] = useState('');
+  const [copiedPhone, setCopiedPhone] = useState(false);
+  const [shareSuccess, setShareSuccess] = useState(false);
+  const [asyncEmbedMapUrl, setAsyncEmbedMapUrl] = useState<string>('');
+  
+  const [showHeader, setShowHeader] = useState(true);
+
+  useEffect(() => {
+    const handleHeaderVisibility = (e: Event) => {
+      const customEvent = e as CustomEvent<{ visible: boolean }>;
+      if (customEvent.detail && typeof customEvent.detail.visible === 'boolean') {
+        setShowHeader(customEvent.detail.visible);
+      }
+    };
+
+    window.addEventListener('app-header-visibility', handleHeaderVisibility);
+
+    let lastY = window.scrollY;
+    let ticking = false;
+    const handleScroll = () => {
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          const currentY = window.scrollY;
+          if (window.innerWidth < 1024) {
+            if (currentY > lastY && currentY > 80) {
+              setShowHeader(false);
+            } else if (currentY < lastY) {
+              setShowHeader(true);
+            }
+          } else {
+            setShowHeader(true);
+          }
+          lastY = currentY;
+          ticking = false;
+        });
+        ticking = true;
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      window.removeEventListener('app-header-visibility', handleHeaderVisibility);
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, []);
+
+  const [liveStatus, setLiveStatus] = useState(() => getLiveWorkingStatus(business?.workingHours));
+
+  useEffect(() => {
+    if (!business) return;
+    setLiveStatus(getLiveWorkingStatus(business.workingHours));
+    
+    const interval = setInterval(() => {
+      setLiveStatus(getLiveWorkingStatus(business.workingHours));
+    }, 15000); // Check/update status every 15 seconds for responsiveness
+    
+    return () => clearInterval(interval);
+  }, [business?.workingHours, business?.id]);
+
+  useEffect(() => {
+    if (!business?.googlePlaceUrl || !business.googlePlaceUrl.trim()) {
+      setAsyncEmbedMapUrl('');
+      return;
+    }
+
+    const immediate = getGoogleMapsEmbedUrl(business);
+    if (immediate) {
+      setAsyncEmbedMapUrl(immediate);
+      return;
+    }
+
+    const rawUrl = business.googlePlaceUrl.trim();
+    if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) {
+      const cacheKey = `resolved_map_embed_${rawUrl}`;
+      try {
+        const cached = sessionStorage.getItem(cacheKey);
+        if (cached) {
+          setAsyncEmbedMapUrl(cached);
+          return;
+        }
+      } catch (e) {}
+
+      let isMounted = true;
+      fetch(`/api/resolve-map-url?url=${encodeURIComponent(rawUrl)}`)
+        .then(res => res.json())
+        .then(data => {
+          if (!isMounted) return;
+          if (data.lat && data.lng) {
+            const embed = `https://maps.google.com/maps?q=${data.lat},${data.lng}&hl=ar&z=16&output=embed`;
+            setAsyncEmbedMapUrl(embed);
+            try { sessionStorage.setItem(cacheKey, embed); } catch (e) {}
+          } else if (data.query) {
+            const embed = `https://maps.google.com/maps?q=${encodeURIComponent(data.query + ' إربد')}&hl=ar&z=16&output=embed`;
+            setAsyncEmbedMapUrl(embed);
+            try { sessionStorage.setItem(cacheKey, embed); } catch (e) {}
+          } else if (data.finalUrl) {
+            const parsed = extractCoordsOrEmbedFromUrl(data.finalUrl);
+            if (parsed) {
+              setAsyncEmbedMapUrl(parsed);
+              try { sessionStorage.setItem(cacheKey, parsed); } catch (e) {}
+            }
+          }
+        })
+        .catch(err => {
+          console.warn('Error resolving short map url:', err);
+        });
+
+      return () => {
+        isMounted = false;
+      };
+    }
+  }, [business?.googlePlaceUrl]);
+
+  // Custom Feature Modals & Form States
+  const isMedical = useMemo(() => isMedicalBusiness(business), [business]);
+  const isStaffEligible = useMemo(() => isMedical && isStaffTabEligible(business), [isMedical, business]);
+  const isPharmacy = useMemo(() => {
+    if (!business) return false;
+    const cat = business.category || '';
+    const sub = business.subCategory || '';
+    const name = business.name || '';
+    return business.facilityType === 'pharmacy' || 
+           cat.includes('صيدل') || 
+           sub.includes('صيدل') || 
+           name.includes('صيدلية') || 
+           name.includes('صيدليات');
+  }, [business]);
+  const pharmacyWhatsAppUrl = useMemo(() => {
+    const raw = business?.socialLinks?.whatsapp || business?.whatsapp || business?.phone || '';
+    if (!raw) return '';
+    let clean = raw.replace(/[^0-9]/g, '');
+    if (clean.startsWith('07')) {
+      clean = '962' + clean.substring(1);
+    }
+    return `https://wa.me/${clean}?text=${encodeURIComponent('مرحباً، أود الاستفسار عن توفر دواء أو إرسال وصفة طبية للصيدلية عبر منصة شو في بإربد.')}`;
+  }, [business?.socialLinks?.whatsapp, business?.whatsapp, business?.phone]);
+  const medicalProfile = useMemo(() => getMedicalProfile(business), [business]);
+  const [isMedicalBookingOpen, setIsMedicalBookingOpen] = useState(false);
+  const [activeOffers, setActiveOffers] = useState<any[]>([]);
+  const [activeJobs, setActiveJobs] = useState<JobOffer[]>([]);
+  const [selectedDetailJob, setSelectedDetailJob] = useState<JobOffer | null>(null);
+  const [isOfferModalOpen, setIsOfferModalOpen] = useState(false);
+  const [isAddJobModalOpen, setIsAddJobModalOpen] = useState(false);
+  const [newOfferForm, setNewOfferForm] = useState({
+    title: '',
+    discountType: 'percentage', // 'percentage' | 'fixed'
+    discountPercentage: '10%',
+    oldPrice: '',
+    newPrice: '',
+    code: '',
+    durationMode: 'days', // 'hours' | 'days' | 'date_range' | 'recurring_weekly'
+    durationHours: '24',
+    durationDays: '7',
+    startDate: '',
+    endDate: '',
+    recurringDays: [] as string[],
+    expiresIn: 'لفترة محدودة',
+    description: '',
+    phone: '',
+    whatsapp: '',
+    image: '',
+    isHot: false,
+    isStudent: false,
+    selectedScope: 'none' as 'none' | 'all' | 'categories' | 'custom',
+    selectedCategories: [] as string[],
+    selectedMenuItemIds: [] as string[]
+  });
+
+  // Extract unique menu categories for category discount scope
+  const menuCategories = useMemo(() => {
+    if (!business?.menuItems || business.menuItems.length === 0) return [];
+    const catSet = new Set<string>();
+    if (business.menuCategories) {
+      business.menuCategories.forEach(c => catSet.add(c));
+    }
+    business.menuItems.forEach(i => {
+      catSet.add(i.category || 'عام');
+    });
+    return Array.from(catSet);
+  }, [business?.menuItems, business?.menuCategories]);
+
+  // Bulk discount flag (if menu, categories, or multiple items chosen)
+  const isBulkDiscount = newOfferForm.selectedScope === 'all' || 
+    newOfferForm.selectedScope === 'categories' || 
+    (newOfferForm.selectedScope === 'custom' && newOfferForm.selectedMenuItemIds.length > 1);
+
+  // Available item images for gallery selector
+  const availableMenuImages = useMemo(() => {
+    if (!business?.menuItems || business.menuItems.length === 0) return [];
+    const selectedSet = new Set(newOfferForm.selectedMenuItemIds);
+    const itemsWithImages = business.menuItems.filter(i => !!i.imageUrl);
+    if (selectedSet.size > 0) {
+      const selectedImages = itemsWithImages.filter(i => selectedSet.has(i.id));
+      if (selectedImages.length > 0) return selectedImages;
+    }
+    return itemsWithImages;
+  }, [business?.menuItems, newOfferForm.selectedMenuItemIds]);
+
+  useEffect(() => {
+    // Attempt parsing of numeric prices
+    const cleanNumber = (val: string) => {
+      if (!val) return NaN;
+      const parsed = parseFloat(val.replace(/[^\d.]/g, ''));
+      return parsed;
+    };
+
+    const oldVal = cleanNumber(newOfferForm.oldPrice);
+    const newVal = cleanNumber(newOfferForm.newPrice);
+
+    if (!isNaN(oldVal) && !isNaN(newVal) && oldVal > newVal && oldVal > 0) {
+      if (newOfferForm.discountType === 'percentage') {
+        const pct = Math.round(((oldVal - newVal) / oldVal) * 100);
+        setNewOfferForm(prev => ({
+          ...prev,
+          discountPercentage: `${pct}%`
+        }));
+      } else {
+        const diff = (oldVal - newVal).toFixed(1).replace(/\.0$/, '');
+        setNewOfferForm(prev => ({
+          ...prev,
+          discountPercentage: `${diff} د.أ`
+        }));
+      }
+    }
+  }, [newOfferForm.oldPrice, newOfferForm.newPrice, newOfferForm.discountType]);
+  const [submittingOffer, setSubmittingOffer] = useState(false);
+
+  // VIP Reels states
+  const [isAddReelOpen, setIsAddReelOpen] = useState(false);
+  const [newReelUrl, setNewReelUrl] = useState('');
+  const [newReelTitle, setNewReelTitle] = useState('');
+  const [submittingReel, setSubmittingReel] = useState(false);
+  const [fullScreenReelUrl, setFullScreenReelUrl] = useState<string | null>(null);
+
+  // VIP Photo Gallery states
+  const [newGalleryUrl, setNewGalleryUrl] = useState('');
+  const [newGalleryCaption, setNewGalleryCaption] = useState('');
+  const [submittingGalleryImage, setSubmittingGalleryImage] = useState(false);
+  const [showTrialGalleryLimitPopup, setShowTrialGalleryLimitPopup] = useState(false);
+  const [fullScreenImageUrl, setFullScreenImageUrl] = useState<string | null>(null);
+  const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
+
+  // Suggest an Edit modal state
+  const [isEditSuggestionOpen, setIsEditSuggestionOpen] = useState(false);
+  const [suggestForm, setSuggestForm] = useState({
+    phone: '',
+    address: '',
+    workingHours: '',
+    notes: ''
+  });
+  const [submittingSuggestion, setSubmittingSuggestion] = useState(false);
+  const [suggestionSuccess, setSuggestionSuccess] = useState(false);
+
+  // Report Review modal state
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [selectedReviewForReport, setSelectedReviewForReport] = useState<any | null>(null);
+  const [reportReason, setReportReason] = useState('تقييم كيدي/غير حقيقي');
+  const [submittingReport, setSubmittingReport] = useState(false);
+  const [reportSuccess, setReportSuccess] = useState(false);
+
+  // Owner reply inline state
+  const [replyTextMap, setReplyTextMap] = useState<Record<string, string>>({});
+  const [replyActiveId, setReplyActiveId] = useState<string | null>(null);
+  const [submittingReply, setSubmittingReply] = useState(false);
+
+  // Reviews Sorting, Filtering, and Pagination States
+  const [reviewSortOrder, setReviewSortOrder] = useState<'newest' | 'highest' | 'lowest'>('newest');
+  const [reviewRatingFilter, setReviewRatingFilter] = useState<number>(0); // 0 means All
+  const [reviewCurrentPage, setReviewCurrentPage] = useState<number>(1);
+
+  // Edit / Privacy Modal State for Business Owner
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [showDeliveryModal, setShowDeliveryModal] = useState(false);
+  const [isGiftCodeCustomizationOpen, setIsGiftCodeCustomizationOpen] = useState(false);
+  const [isGiftCodeStatsOpen, setIsGiftCodeStatsOpen] = useState(false);
+  const [awardedGiftCode, setAwardedGiftCode] = useState<{ code: string; discountPercent: number; businessName: string } | null>(null);
+  const [editForm, setEditForm] = useState<Partial<Business>>({});
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [updateSuccess, setUpdateSuccess] = useState(false);
+  const [existingUserReward, setExistingUserReward] = useState<any>(null);
+  const [isClaimingReward, setIsClaimingReward] = useState(false);
+
+  // Check if current user already has a reward for this business
+  useEffect(() => {
+    async function checkUserReward() {
+      if (!currentUser || !id) {
+        setExistingUserReward(null);
+        return;
+      }
+      try {
+        const found = await findExistingRewardForBusiness(currentUser.uid, id);
+        setExistingUserReward(found);
+      } catch (err) {
+        console.warn("Could not check existing reward:", err);
+      }
+    }
+    checkUserReward();
+  }, [currentUser, id]);
+
+  // VIP Feature Modals for Business Owner
+  const [isMenuManagerOpen, setIsMenuManagerOpen] = useState(false);
+  const [isAnalyticsModalOpen, setIsAnalyticsModalOpen] = useState(false);
+  const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
+  const [isVipWelcomePopupOpen, setIsVipWelcomePopupOpen] = useState(false);
+  const [isVipPopupManagerOpen, setIsVipPopupManagerOpen] = useState(false);
+  const [hpValue, setHpValue] = useState('');
+  const [familyBranches, setFamilyBranches] = useState<Business[]>([]);
+  const [isBranchDropdownOpen, setIsBranchDropdownOpen] = useState(false);
+  const [isWeeklyHoursModalOpen, setIsWeeklyHoursModalOpen] = useState(false);
+
+  useEffect(() => {
+    let unsubLiveBiz = () => {};
+    async function fetchData() {
+      setCoverImageFailed(false);
+      if (!db || !id) {
+        setLoading(false);
+        return;
+      }
+
+      // Check instant cache for immediate render
+      const cached = getCachedBusinessDetail(id);
+      if (cached) {
+        setBusiness(cached);
+        setLoading(false);
+      }
+      
+      try {
+        let docSnap: any = null;
+        let actualId = id;
+        const cleanParam = id.startsWith('@') ? id.substring(1).trim().toLowerCase() : id.trim().toLowerCase();
+
+        // 1. Try finding by Firestore Doc ID
+        try {
+          const docRef = doc(db, 'businesses', id);
+          const snap = await getDoc(docRef);
+          if (snap.exists()) {
+            docSnap = snap;
+            actualId = snap.id;
+          }
+        } catch {
+          // If id is not a standard doc id format, ignore and fallback to username query
+        }
+
+        // 2. Fallback to querying by custom social username
+        if (!docSnap || !docSnap.exists()) {
+          const qUsername = query(collection(db, 'businesses'), where('username', '==', cleanParam), limit(1));
+          const usernameSnap = await getDocs(qUsername);
+          if (!usernameSnap.empty) {
+            docSnap = usernameSnap.docs[0];
+            actualId = docSnap.id;
+          }
+        }
+        
+        if (docSnap && docSnap.exists()) {
+          const bizData = docSnap.data();
+
+          if (!bizData.name || bizData.name.trim() === '') {
+            bizData.name = '';
+          }
+
+          // Check if store is hidden by owner
+          if (bizData.isHidden && currentUser?.uid !== bizData.userId && !isAdmin) {
+            setBusiness(null);
+            setError('تم إخفاء صفحة هذا المحل مؤقتاً بواسطة المالك.');
+            setLoading(false);
+            return;
+          }
+
+          // Check if store is not approved yet (pending or rejected)
+          if ((bizData.status === 'pending' || bizData.status === 'rejected') && currentUser?.uid !== bizData.userId && !isAdmin) {
+            setBusiness(null);
+            setError('هذه الصفحة بانتظار مراجعة إدارة منصة شو في بإربد والموافقة عليها قبل النشر.');
+            setLoading(false);
+            return;
+          }
+
+          const fullBiz = { id: docSnap.id, ...bizData } as Business;
+          setBusiness(fullBiz);
+          setCachedBusinessDetail(id, fullBiz);
+          setLoading(false);
+
+          // Real-time synchronization of the business document (menu items availability, info, etc.)
+          try {
+            unsubLiveBiz = onSnapshot(doc(db, 'businesses', actualId), (liveSnap) => {
+              if (liveSnap.exists()) {
+                const liveData = liveSnap.data();
+                setBusiness(prev => {
+                  if (!prev) return null;
+                  const merged = { ...prev, ...liveData, id: liveSnap.id } as Business;
+                  setCachedBusinessDetail(actualId, merged);
+                  setCachedBusinessDetail(id, merged);
+                  if (Array.isArray(liveData.menuItems)) {
+                    updateBusinessMenuItemsInCache(actualId, liveData.menuItems);
+                  }
+                  return merged;
+                });
+              }
+            }, (snapErr) => {
+              console.warn("Real-time business sync warning:", snapErr);
+            });
+          } catch (e) {
+            console.warn("Could not attach live business listener:", e);
+          }
+          
+          // Track view interaction in database (deduplicated per device; excluded for owner and admins)
+          trackBusinessInteraction(actualId, 'view', {
+            isOwner: Boolean(currentUser?.uid && bizData.userId && currentUser.uid === bizData.userId),
+            currentUserId: currentUser?.uid,
+            ownerId: bizData.userId,
+            isAdmin: Boolean(isAdmin)
+          });
+          
+          // Fetch reviews, offers, and jobs in parallel (clean single queries without duplicates)
+          const targetIds = Array.from(new Set([actualId, id, cleanParam].filter(Boolean)));
+          const [reviewsSnap, offersSnap, jobsSnap] = await Promise.all([
+            getDocs(query(collection(db, 'reviews'), where('businessId', 'in', targetIds))),
+            getDocs(query(collection(db, 'offers'), where('businessId', 'in', targetIds))),
+            getDocs(query(collection(db, 'jobs'), where('businessId', '==', actualId))).catch(() => ({ forEach: () => {} } as any))
+          ]);
+
+          const fetchedReviews: Review[] = [];
+          reviewsSnap.forEach((docSnapItem) => {
+            fetchedReviews.push({ id: docSnapItem.id, ...docSnapItem.data() } as Review);
+          });
+          fetchedReviews.sort((a, b) => b.createdAt - a.createdAt);
+          setReviews(fetchedReviews);
+
+          // Real-time synchronization of ratings: ensure database document has 100% accurate rating matching real reviews
+          if (!bizData.isDemo) {
+            const valid = fetchedReviews.filter(r => r && typeof r.rating === 'number' && !isNaN(r.rating) && r.rating > 0);
+            if (valid.length === 0) {
+              // If no valid reviews exist, make sure business rating is clean 0
+              if (bizData.rating !== 0 || (bizData.reviewCount && bizData.reviewCount > 0)) {
+                updateDoc(doc(db, 'businesses', actualId), { rating: 0, reviewCount: 0 }).catch(() => {});
+                setBusiness(prev => prev ? { ...prev, rating: 0, reviewCount: 0 } : null);
+              }
+            } else {
+              const sum = valid.reduce((acc, curr) => acc + curr.rating, 0);
+              const realAvg = Number((sum / valid.length).toFixed(1));
+              if (bizData.rating !== realAvg || bizData.reviewCount !== valid.length) {
+                updateDoc(doc(db, 'businesses', actualId), { rating: realAvg, reviewCount: valid.length }).catch(() => {});
+                setBusiness(prev => prev ? { ...prev, rating: realAvg, reviewCount: valid.length } : null);
+              }
+            }
+          }
+
+          const loadedOffers: any[] = [];
+          offersSnap.forEach(oDoc => loadedOffers.push({ id: oDoc.id, ...oDoc.data() }));
+          loadedOffers.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+          setActiveOffers(loadedOffers);
+
+          const loadedJobs: JobOffer[] = [];
+          jobsSnap.forEach((jDoc: any) => loadedJobs.push({ id: jDoc.id, ...jDoc.data() } as JobOffer));
+          loadedJobs.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+          setActiveJobs(loadedJobs);
+
+        } else {
+          // Demo seed fallback if id is a demo business
+          const demoFound = (DEMO_SEED_DATA.businesses || []).find((b, idx) => `demo-${idx}` === id || `demo-sim-${idx}` === id || b.name === id || (b as any).id === id || (b as any).username === cleanParam);
+          if (demoFound) {
+            const demoBiz = {
+              id,
+              ...demoFound,
+              reviewCount: (demoFound as any).reviewCount ?? (demoFound as any).reviewsCount ?? 0,
+              createdAt: demoFound.createdAt || Date.now(),
+              userId: 'demo'
+            } as unknown as Business;
+            setBusiness(demoBiz);
+            setCachedBusinessDetail(id, demoBiz);
+
+            // Fetch real database reviews left on this demo business page
+            try {
+              const demoIds = Array.from(new Set([id, cleanParam].filter(Boolean)));
+              const [reviewsSnap, offersSnap, jobsSnap] = await Promise.all([
+                getDocs(query(collection(db, 'reviews'), where('businessId', 'in', demoIds))),
+                getDocs(query(collection(db, 'offers'), where('businessId', 'in', demoIds))),
+                getDocs(query(collection(db, 'jobs'), where('businessId', 'in', demoIds)))
+              ]);
+
+              const fetchedReviews: Review[] = [];
+              reviewsSnap.forEach((docSnapItem) => {
+                fetchedReviews.push({ id: docSnapItem.id, ...docSnapItem.data() } as Review);
+              });
+              fetchedReviews.sort((a, b) => b.createdAt - a.createdAt);
+              setReviews(fetchedReviews);
+              
+              if (fetchedReviews.length > 0) {
+                // Update review count based on real reviews in database
+                setBusiness(prev => prev ? {
+                  ...prev,
+                  reviewCount: fetchedReviews.length
+                } : null);
+              }
+
+              const fetchedOffers: any[] = [];
+              offersSnap.forEach((docSnapItem) => {
+                fetchedOffers.push({ id: docSnapItem.id, ...docSnapItem.data() });
+              });
+              fetchedOffers.sort((a, b) => b.createdAt - a.createdAt);
+              setActiveOffers(fetchedOffers);
+
+              // Populate demo jobs matching this business + real jobs
+              const demoJobs = (DEMO_SEED_DATA.jobs || [])
+                .filter(j => j.company === demoFound.name)
+                .map((j, idx) => ({ id: `demo-job-${idx}`, ...j } as JobOffer));
+                
+              const fetchedJobs: JobOffer[] = [];
+              jobsSnap.forEach((docSnapItem) => {
+                fetchedJobs.push({ id: docSnapItem.id, ...docSnapItem.data() } as JobOffer);
+              });
+              fetchedJobs.sort((a, b) => b.createdAt - a.createdAt);
+              setActiveJobs([...fetchedJobs, ...demoJobs]);
+
+            } catch (rErr) {
+              console.warn("Could not load database extra data for demo business:", rErr);
+            }
+          } else {
+            setBusiness(null);
+            setError('المحل غير موجود أو تم حذفه.');
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching business details:", err);
+        setError('حدث خطأ أثناء جلب التفاصيل.');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchData();
+    return () => {
+      unsubLiveBiz();
+    };
+  }, [id, currentUser, isAdmin]);
+
+  // Fetch all branches connected to this business (root parent + child branches)
+  useEffect(() => {
+    async function fetchFamilyBranches() {
+      if (!db || !business) {
+        setFamilyBranches([]);
+        return;
+      }
+
+      const rootId = business.parentBusinessId || business.id;
+      try {
+        const familyMap = new Map<string, Business>();
+
+        // 1. Root Business Document
+        if (business.id === rootId) {
+          familyMap.set(business.id, business);
+        } else {
+          try {
+            const rootSnap = await getDoc(doc(db, 'businesses', rootId));
+            if (rootSnap.exists()) {
+              const rootData = { id: rootSnap.id, ...rootSnap.data() } as Business;
+              if (!rootData.isHidden) {
+                familyMap.set(rootSnap.id, rootData);
+              }
+            }
+          } catch (rErr) {
+            console.warn("Could not fetch root business doc:", rErr);
+          }
+        }
+
+        // 2. Child Branches where parentBusinessId == rootId
+        try {
+          const qBranches = query(
+            collection(db, 'businesses'),
+            where('parentBusinessId', '==', rootId)
+          );
+          const snap = await getDocs(qBranches);
+          snap.forEach(docSnap => {
+            const bData = { id: docSnap.id, ...docSnap.data() } as Business;
+            if (!bData.isHidden) {
+              familyMap.set(docSnap.id, bData);
+            }
+          });
+        } catch (bErr) {
+          console.warn("Could not fetch child branches:", bErr);
+        }
+
+        const allBranches = Array.from(familyMap.values());
+        // Sort: Root business first, then child branches
+        allBranches.sort((a, b) => {
+          if (a.id === rootId) return -1;
+          if (b.id === rootId) return 1;
+          return (a.district || a.address || a.name).localeCompare(b.district || b.address || b.name, 'ar');
+        });
+
+        setFamilyBranches(allBranches);
+      } catch (err) {
+        console.error("Error fetching family branches:", err);
+      }
+    }
+
+    fetchFamilyBranches();
+  }, [business?.id, business?.parentBusinessId]);
+
+  // Fetch 3 random similar businesses belonging to the same category
+  useEffect(() => {
+    async function fetchSimilar() {
+      if (!business || !business.category) {
+        setSimilarBusinesses([]);
+        return;
+      }
+
+      setLoadingSimilar(true);
+      try {
+        let matching: Business[] = [];
+        
+        if (db) {
+          try {
+            const q = query(
+              collection(db, 'businesses'),
+              where('category', '==', business.category || '')
+            );
+            const snap = await getDocs(q);
+            snap.forEach((d) => {
+              if (d.id !== business.id) {
+                matching.push({ id: d.id, ...d.data() } as Business);
+              }
+            });
+          } catch (e) {
+            console.warn('Error querying matching category businesses from firestore:', e);
+          }
+        }
+
+        // If fewer than 3, fallback or supplement with demo businesses of same category
+        if (matching.length < 3) {
+          const demoMatches = (DEMO_SEED_DATA.businesses || [])
+            .filter(b => b.category === business.category && b.name !== business.name)
+            .map((b, idx) => ({
+              id: `demo-sim-${idx}`,
+              ...b,
+              reviewCount: (b as any).reviewCount ?? (b as any).reviewsCount ?? 0,
+              createdAt: b.createdAt || Date.now(),
+              userId: 'demo'
+            } as unknown as Business));
+          
+          demoMatches.forEach(dm => {
+            if (!matching.some(m => m.name === dm.name) && dm.name !== business.name) {
+              matching.push(dm);
+            }
+          });
+        }
+
+        // Filter out current business
+        const filtered = matching.filter(b => b.id !== business.id && b.name !== business.name);
+
+        // Randomize businesses and take up to 3
+        const shuffled = [...filtered].sort(() => 0.5 - Math.random());
+        setSimilarBusinesses(shuffled.slice(0, 3));
+      } catch (err) {
+        console.error('Error in fetchSimilar:', err);
+      } finally {
+        setLoadingSimilar(false);
+      }
+    }
+
+    fetchSimilar();
+  }, [business?.id, business?.category, business?.name]);
+
+  useEffect(() => {
+    const vipTabs = ['menu', 'products', 'offers', 'news', 'reels', 'gallery', 'analytics'];
+    if (business && !vipInfo.isVip && vipTabs.includes(activeTab)) {
+      setActiveTab('about');
+    } else if (business && isMedical && activeTab === 'offers') {
+      setActiveTab('about');
+    }
+  }, [business?.id, vipInfo.isVip, isMedical, activeTab]);
+
+  // Automatic VIP Welcome Popup Trigger for visitors (Displays 1 out of every 5 visits: 1st, 6th, 11th, etc.)
+  useEffect(() => {
+    if (!business || !vipInfo.isVip) return;
+    const popupConfig = business.vipPopup;
+    if (popupConfig?.enabled && (popupConfig.videoUrl || popupConfig.imageUrl || popupConfig.title || popupConfig.description)) {
+      const visitsKey = `welcome_popup_visit_count_${business.id}`;
+
+      try {
+        let visits = 0;
+        const storedVisits = localStorage.getItem(visitsKey);
+        visits = storedVisits ? parseInt(storedVisits, 10) : 0;
+
+        // Increment visit count on every page mount
+        const currentVisit = visits + 1;
+        localStorage.setItem(visitsKey, currentVisit.toString());
+
+        // Show only on the 1st, 6th, 11th, 16th, etc. visits (i.e. once every 5 visits)
+        const shouldShowThisVisit = (currentVisit - 1) % 5 === 0;
+
+        if (shouldShowThisVisit) {
+          const timer = setTimeout(() => {
+            setIsVipWelcomePopupOpen(true);
+          }, 600);
+          return () => clearTimeout(timer);
+        }
+      } catch (err) {
+        // Fallback in case storage options are disabled/restricted
+        const timer = setTimeout(() => {
+          setIsVipWelcomePopupOpen(true);
+        }, 600);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [business?.id, business?.vipPopup?.enabled, business?.vipPopup?.videoUrl, business?.vipPopup?.imageUrl, business?.vipPopup?.title, business?.vipPopup?.description]);
+
+  const isOwner = Boolean(
+    currentUser && business && (
+      business.userId === currentUser.uid ||
+      (business.ownerId && business.ownerId === currentUser.uid) ||
+      (currentUser.email && business.ownerEmail && currentUser.email.toLowerCase() === business.ownerEmail.toLowerCase()) ||
+      isAdmin
+    )
+  );
+
+  // Synchronize business contact info with the global mobile bottom navigation
+  useEffect(() => {
+    if (business) {
+      const whatsappUrl = (isMedical && isPharmacy && pharmacyWhatsAppUrl) 
+        ? pharmacyWhatsAppUrl 
+        : getWhatsAppUrl(business.phone, formatBusinessWhatsAppMessage(business.name));
+      
+      const computedMapsUrl = getGoogleMapsActionUrls(business).viewUrl;
+      const fallbackMapsUrl = business.name 
+        ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(business.name + ' إربد')}` 
+        : undefined;
+
+      window.dispatchEvent(new CustomEvent('shofi-business-nav-data', {
+        detail: {
+          phone: business.phone || '',
+          whatsappUrl: whatsappUrl || '',
+          googleMapsUrl: computedMapsUrl || fallbackMapsUrl || '',
+          businessId: business.id,
+          userId: business.userId,
+          isOwner,
+          isAdmin: Boolean(isAdmin)
+        }
+      }));
+    }
+    return () => {
+      window.dispatchEvent(new CustomEvent('shofi-business-nav-data', { detail: null }));
+    };
+  }, [business, isMedical, isPharmacy, pharmacyWhatsAppUrl, isOwner, isAdmin]);
+
+  const handleOpenEditModal = () => {
+    if (!business) return;
+    setEditForm({
+      name: business.name,
+      category: business.category,
+      description: business.description,
+      address: business.address,
+      phone: business.phone || '',
+      imageUrl: business.imageUrl || '',
+      logoUrl: business.logoUrl || '',
+      googlePlaceUrl: business.googlePlaceUrl || '',
+      hideSiteReviews: Boolean(business.hideSiteReviews),
+      giftCodeEnabled: Boolean(business.giftCodeEnabled),
+      giftCodeMinStars: business.giftCodeMinStars || 1,
+      giftCodeLimitType: business.giftCodeLimitType || 'unlimited',
+      giftCodeTotalLimit: business.giftCodeTotalLimit || 100,
+      giftCodeDiscountPercent: business.giftCodeDiscountPercent || 10,
+      giftCodeValidityDays: business.giftCodeValidityDays || 30,
+      giftCodeStartDate: business.giftCodeStartDate || '',
+      giftCodeEndDate: business.giftCodeEndDate || '',
+      giftCodeGrantedCount: business.giftCodeGrantedCount || 0,
+      giftCodeUserLimit: business.giftCodeUserLimit || 'once',
+      giftCodeMaxPerUser: business.giftCodeMaxPerUser || 1,
+      workingHours: business.workingHours || {
+        isOpen24Hours: false,
+        openTime: "09:00",
+        closeTime: "23:00",
+        days: "طوال أيام الأسبوع",
+        isCustomClosed: false
+      }
+    });
+    setIsEditModalOpen(true);
+    setUpdateSuccess(false);
+  };
+
+  const handleSaveBusinessSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!business || !db || !isOwner) {
+      alert("غير مصرح لك بتعديل بيانات هذا المحل!");
+      return;
+    }
+
+    setIsUpdating(true);
+    try {
+      const docRef = doc(db, 'businesses', business.id);
+      const updatedFields = {
+        name: editForm.name || business.name,
+        category: editForm.category || business.category,
+        description: editForm.description || business.description,
+        address: editForm.address || business.address,
+        phone: editForm.phone || '',
+        imageUrl: editForm.imageUrl || '',
+        logoUrl: editForm.logoUrl || '',
+        googlePlaceUrl: editForm.googlePlaceUrl?.trim() || '',
+        hideSiteReviews: Boolean(editForm.hideSiteReviews),
+        giftCodeEnabled: Boolean(editForm.giftCodeEnabled),
+        giftCodeMinStars: Number(editForm.giftCodeMinStars ?? 1),
+        giftCodeLimitType: editForm.giftCodeLimitType || 'unlimited',
+        giftCodeTotalLimit: Number(editForm.giftCodeTotalLimit ?? 100),
+        giftCodeDiscountPercent: Number(editForm.giftCodeDiscountPercent ?? 10),
+        giftCodeValidityDays: Number(editForm.giftCodeValidityDays ?? 30),
+        giftCodeStartDate: editForm.giftCodeStartDate || '',
+        giftCodeEndDate: editForm.giftCodeEndDate || '',
+        giftCodeGrantedCount: Number(editForm.giftCodeGrantedCount ?? 0),
+        giftCodeUserLimit: editForm.giftCodeUserLimit || 'once',
+        giftCodeMaxPerUser: Number(editForm.giftCodeMaxPerUser ?? 1),
+        workingHours: editForm.workingHours || null,
+      };
+
+      const sanitizedPayload = await compressAndSanitizeFirestorePayload(updatedFields, true);
+      await updateDoc(docRef, sanitizedPayload);
+      invalidateCache();
+
+      setBusiness({
+        ...business,
+        ...updatedFields
+      });
+
+      setUpdateSuccess(true);
+      setTimeout(() => {
+        setIsEditModalOpen(false);
+        setUpdateSuccess(false);
+      }, 1500);
+    } catch (err) {
+      console.error("Error updating business settings:", err);
+      alert("حدث خطأ أثناء حفظ التعديلات.");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleCopyPhone = () => {
+    if (!business?.phone) return;
+    navigator.clipboard.writeText(business.phone);
+    setCopiedPhone(true);
+    setTimeout(() => setCopiedPhone(false), 2000);
+  };
+
+  const handleShare = async () => {
+    if (business?.id) {
+      trackBusinessInteraction(business.id, 'share', {
+        isOwner,
+        currentUserId: currentUser?.uid,
+        ownerId: business.userId,
+        isAdmin: Boolean(isAdmin)
+      });
+    }
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: business?.name || 'شو في بإربد؟',
+          text: business?.description || '',
+          url: window.location.href,
+        });
+      } catch {
+        navigator.clipboard.writeText(window.location.href);
+        setShareSuccess(true);
+        setTimeout(() => setShareSuccess(false), 2000);
+      }
+    } else {
+      navigator.clipboard.writeText(window.location.href);
+      setShareSuccess(true);
+      setTimeout(() => setShareSuccess(false), 2000);
+    }
+  };
+
+  const getEmbedUrl = (url: string): string | null => {
+    if (!url) return null;
+    const cleaned = url.trim();
+
+    // YouTube Shorts / Standard
+    if (cleaned.includes('youtube.com/shorts/') || cleaned.includes('youtu.be/')) {
+      let videoId = '';
+      if (cleaned.includes('shorts/')) {
+        const parts = cleaned.split('shorts/');
+        videoId = parts[1]?.split(/[?#]/)[0] || '';
+      } else {
+        const parts = cleaned.split('youtu.be/');
+        videoId = parts[1]?.split(/[?#]/)[0] || '';
+      }
+      if (videoId) {
+        return `https://www.youtube.com/embed/${videoId}`;
+      }
+    } else if (cleaned.includes('youtube.com/watch')) {
+      try {
+        const urlObj = new URL(cleaned);
+        const videoId = urlObj.searchParams.get('v');
+        if (videoId) {
+          return `https://www.youtube.com/embed/${videoId}`;
+        }
+      } catch {
+        // Fallback
+      }
+    }
+
+    // Instagram Reels / Posts
+    if (cleaned.includes('instagram.com/reel/') || cleaned.includes('instagram.com/p/')) {
+      let code = '';
+      if (cleaned.includes('/reel/')) {
+        code = cleaned.split('/reel/')[1]?.split('/')[0] || '';
+      } else if (cleaned.includes('/p/')) {
+        code = cleaned.split('/p/')[1]?.split('/')[0] || '';
+      }
+      if (code) {
+        return `https://www.instagram.com/reel/${code}/embed/?theme=dark&hidecaption=true`;
+      }
+    }
+
+    // Facebook Reels / Videos
+    if (cleaned.includes('facebook.com/') || cleaned.includes('fb.watch/')) {
+      return `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(cleaned)}&show_text=0&width=380`;
+    }
+
+    return null;
+  };
+
+  const handleSaveReel = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!business || !db || !newReelUrl.trim()) return;
+
+    setSubmittingReel(true);
+    try {
+      const docRef = doc(db, 'businesses', business.id);
+      const newReel = {
+        id: Math.random().toString(36).substring(2, 9),
+        url: newReelUrl.trim(),
+        title: newReelTitle.trim() || 'فيديو ريلز تفاعلي',
+        createdAt: Date.now()
+      };
+      
+      const currentReels = business.reels || [];
+      const updatedReels = [newReel, ...currentReels];
+
+      const reelsPayload = await compressAndSanitizeFirestorePayload({ reels: updatedReels }, true);
+      await updateDoc(docRef, reelsPayload);
+
+      setBusiness({
+        ...business,
+        reels: updatedReels
+      });
+
+      setNewReelUrl('');
+      setNewReelTitle('');
+      setIsAddReelOpen(false);
+    } catch (err) {
+      console.error("Error adding reel:", err);
+      alert("حدث خطأ أثناء حفظ الفيديو.");
+    } finally {
+      setSubmittingReel(false);
+    }
+  };
+
+  const handleDeleteReel = async (reelId: string) => {
+    if (!business || !db) return;
+    if (!(await confirm({ message: "هل أنت متأكد من حذف هذا الفيديو؟" }))) return;
+
+    try {
+      const docRef = doc(db, 'businesses', business.id);
+      const updatedReels = (business.reels || []).filter(r => r.id !== reelId);
+
+      await updateDoc(docRef, { reels: updatedReels });
+
+      setBusiness({
+        ...business,
+        reels: updatedReels
+      });
+    } catch (err) {
+      console.error("Error deleting reel:", err);
+      alert("حدث خطأ أثناء حذف الفيديو.");
+    }
+  };
+
+  const handleAddGalleryImage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!business || !db || !newGalleryUrl.trim()) return;
+
+    setSubmittingGalleryImage(true);
+    try {
+      const currentGallery = business.gallery || [];
+      if (vipInfo.isVip && vipInfo.isTrial && currentGallery.length >= 3) {
+        setShowTrialGalleryLimitPopup(true);
+        setSubmittingGalleryImage(false);
+        return;
+      }
+
+      const docRef = doc(db, 'businesses', business.id);
+      const newItem = {
+        url: newGalleryUrl.trim(),
+        caption: newGalleryCaption.trim() || 'صورة من زوايا المحل والجو العام',
+        createdAt: Date.now()
+      };
+
+      const updatedGallery = [newItem, ...currentGallery];
+
+      const galleryPayload = await compressAndSanitizeFirestorePayload({ gallery: updatedGallery }, true);
+      await updateDoc(docRef, galleryPayload);
+
+      setBusiness({
+        ...business,
+        gallery: updatedGallery as any
+      });
+
+      setNewGalleryUrl('');
+      setNewGalleryCaption('');
+    } catch (err) {
+      console.error("Error adding gallery image:", err);
+      alert("حدث خطأ أثناء إضافة الصورة لمعرض المحل.");
+    } finally {
+      setSubmittingGalleryImage(false);
+    }
+  };
+
+  const handleDeleteGalleryImage = async (imageUrlToDelete: string) => {
+    if (!business || !db) return;
+    if (!(await confirm({ message: "هل أنت متأكد من حذف هذه الصورة من معرض المحل؟" }))) return;
+
+    try {
+      const docRef = doc(db, 'businesses', business.id);
+      const currentGallery = business.gallery || [];
+      const updatedGallery = currentGallery.filter((item: any) => {
+        const itemUrl = typeof item === 'string' ? item : item?.url;
+        return itemUrl !== imageUrlToDelete;
+      });
+
+      await updateDoc(docRef, { gallery: updatedGallery });
+
+      setBusiness({
+        ...business,
+        gallery: updatedGallery
+      });
+    } catch (err) {
+      console.error("Error deleting gallery image:", err);
+      alert("حدث خطأ أثناء حذف الصورة.");
+    }
+  };
+
+  const awardRewardToUser = async (targetBiz: Business, currentUid: string) => {
+    const rawBizName = targetBiz.name || 'IRBID';
+    const cleanBizName = rawBizName
+      .replace(/[^\w\s]/gi, '')
+      .trim()
+      .split(/\s+/)[0]
+      .toUpperCase() || 'IRBID';
+    const randomSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
+    const discountVal = Number(targetBiz.giftCodeDiscountPercent || 15);
+    const generatedCode = `${cleanBizName}-${discountVal}-${randomSuffix}`;
+    const validityDays = Number(targetBiz.giftCodeValidityDays || 30);
+    const createdAt = Date.now();
+    const expiresAt = createdAt + (validityDays * 24 * 60 * 60 * 1000);
+    const rewardId = 'rew_' + Math.random().toString(36).substring(2, 10) + '_' + Date.now();
+
+    const rewardObj: UserReward = {
+      id: rewardId,
+      userId: currentUid,
+      businessId: targetBiz.id,
+      businessName: targetBiz.name,
+      code: generatedCode,
+      discountPercent: discountVal,
+      createdAt: createdAt,
+      expiresAt: expiresAt,
+      used: false
+    };
+
+    // Save across all tiers (user profile doc in Firestore, localStorage, and attempt user_rewards collection)
+    await saveUserReward(rewardObj);
+
+    setExistingUserReward(rewardObj);
+
+    if (db) {
+      try {
+        const newGrantedCount = (Number(targetBiz.giftCodeGrantedCount) || 0) + 1;
+        const bRef = doc(db, 'businesses', targetBiz.id);
+        await updateDoc(bRef, {
+          giftCodeGrantedCount: newGrantedCount
+        });
+        setBusiness(prev => prev ? {
+          ...prev,
+          giftCodeGrantedCount: newGrantedCount
+        } : null);
+      } catch (countErr) {
+        console.warn("Non-fatal: count increment error:", countErr);
+      }
+    }
+
+    // Trigger the presentation popup immediately!
+    setAwardedGiftCode({
+      code: generatedCode,
+      discountPercent: discountVal,
+      businessName: targetBiz.name
+    });
+
+    try {
+      invalidateCache();
+    } catch {}
+  };
+
+  const handleClaimRetroactiveReward = async () => {
+    if (!currentUser || !business || !db) return;
+    setIsClaimingReward(true);
+    try {
+      let targetBiz = business;
+      try {
+        const freshSnap = await getDoc(doc(db, 'businesses', business.id || id!));
+        if (freshSnap.exists()) {
+          targetBiz = { id: freshSnap.id, ...freshSnap.data() } as Business;
+        }
+      } catch (e) {}
+
+      await awardRewardToUser(targetBiz, currentUser.uid);
+    } catch (err) {
+      console.error("Error claiming reward:", err);
+      alert("حدث خطأ أثناء استلام كود الخصم، يرجى المحاولة مرة أخرى.");
+    } finally {
+      setIsClaimingReward(false);
+    }
+  };
+
+  const handleSubmitReview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser || !id || !db || !newComment.trim()) return;
+
+    // Strict no-links policy in reviews
+    if (containsUrlOrLink(newComment)) {
+      alert('عذراً، يمنع إدراج الروابط أو عناوين المواقع الإلكترونية في التقييمات نهائياً. التقييم مخصص للملاحظات والآراء النصية فقط.');
+      return;
+    }
+
+    // 1. Honeypot check (Bot protection)
+    if (isBotSubmission(hpValue)) {
+      // Trick the bot silently
+      setNewComment('');
+      setNewRating(5);
+      return;
+    }
+
+    // 2. Enhanced Rate limit check (Prevention of review spamming)
+    const targetBizId = business?.id || id || 'unknown_biz';
+    const rateLimit = checkReviewRateLimit(targetBizId);
+    if (!rateLimit.allowed) {
+      alert(rateLimit.reason || 'يرجى الانتظار قبل إضافة تقييم جديد لحماية المنصة من التعليقات المتكررة.');
+      return;
+    }
+
+    setSubmittingReview(true);
+    try {
+      // 2.1 Database-level 24-hour review check (Strict protection against multi-device/multi-browser same-account rating)
+      if (currentUser && db) {
+        const qUserReview = query(
+          collection(db, 'reviews'),
+          where('businessId', '==', targetBizId),
+          where('userId', '==', currentUser.uid)
+        );
+        const userReviewSnap = await getDocs(qUserReview);
+        const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+        const now = Date.now();
+        let hasRecentReview = false;
+        let newestReviewTime = 0;
+        
+        userReviewSnap.forEach(docSnap => {
+          const rev = docSnap.data();
+          if (rev.createdAt) {
+            const diff = now - rev.createdAt;
+            if (diff < TWENTY_FOUR_HOURS) {
+              hasRecentReview = true;
+              if (rev.createdAt > newestReviewTime) {
+                newestReviewTime = rev.createdAt;
+              }
+            }
+          }
+        });
+        
+        if (hasRecentReview) {
+          const remainingHours = Math.ceil((TWENTY_FOUR_HOURS - (now - newestReviewTime)) / (60 * 60 * 1000));
+          alert(`لقد قمت بإضافة تقييم لهذا المحل مؤخراً باستخدام هذا الحساب. حفاظاً على مصداقية التقييمات، يمكنك إضافة تقييم جديد بعد ${remainingHours} ساعة.`);
+          setSubmittingReview(false);
+          return;
+        }
+      }
+
+      // 2.5 Google reCAPTCHA Enterprise check
+      let recaptchaToken = '';
+      try {
+        recaptchaToken = await executeReCaptcha('review_submit');
+      } catch (rcError) {
+        console.warn("reCAPTCHA execution fallback:", rcError);
+      }
+
+      // 2.6 Device Fingerprinting
+      const deviceFingerprint = await getDeviceFingerprint();
+
+      const cleanComment = stripUrlsAndLinks(sanitizeInput(newComment.trim()));
+      if (!cleanComment) {
+        alert('عذراً، يمنع إدراج الروابط في التقييمات. التقييم مخصص للملاحظات والآراء النصية فقط.');
+        setSubmittingReview(false);
+        return;
+      }
+
+      const rawUserName = currentUser.displayName || currentUser.email?.split('@')[0] || 'مستخدم';
+      const cleanUserName = stripUrlsAndLinks(sanitizeInput(rawUserName)) || 'مستخدم';
+
+      const reviewData = {
+        businessId: targetBizId,
+        userId: currentUser.uid,
+        userName: cleanUserName,
+        rating: newRating,
+        comment: cleanComment,
+        deviceFingerprint,
+        recaptchaToken: recaptchaToken || 'token_generated',
+        createdAt: Date.now()
+      };
+      
+      let newReviewId = 'rev-' + Date.now();
+      if (db) {
+        try {
+          const atomicRes = await submitReviewAtomically(db, targetBizId, {
+            userId: currentUser.uid,
+            userName: cleanUserName,
+            rating: newRating,
+            comment: cleanComment,
+            deviceFingerprint,
+            recaptchaToken: recaptchaToken || 'token_generated',
+            createdAt: Date.now()
+          });
+
+          newReviewId = atomicRes.reviewId;
+          if (business) {
+            setBusiness(prev => prev ? {
+              ...prev,
+              rating: atomicRes.newAverageRating,
+              reviewCount: atomicRes.newReviewCount
+            } : null);
+          }
+        } catch (atomicErr) {
+          console.error("Atomic review error, falling back:", atomicErr);
+          const docRef = await addDoc(collection(db, 'reviews'), reviewData);
+          newReviewId = docRef.id;
+        }
+      }
+
+      recordReviewSubmission(targetBizId);
+      const updatedReviews = [{ id: newReviewId, ...reviewData } as Review, ...reviews];
+      setReviews(updatedReviews);
+
+      // 4. Record successful submission timestamp for rate limiting
+      recordSubmissionTime('review_submit');
+
+      // --- Gift Code Reward Check ---
+      // Fetch fresh business document directly from Firestore so stale React state / cache never stops the reward
+      let targetBiz = business;
+      if (db && (business?.id || id)) {
+        try {
+          const freshSnap = await getDoc(doc(db, 'businesses', business?.id || id));
+          if (freshSnap.exists()) {
+            targetBiz = { id: freshSnap.id, ...freshSnap.data() } as Business;
+          }
+        } catch (freshErr) {
+          console.warn("Could not fetch fresh business for gift code check:", freshErr);
+        }
+      }
+
+      const isGiftEnabled = Boolean(
+        targetBiz && (
+          targetBiz.giftCodeEnabled === true || 
+          (targetBiz as any).giftCodeEnabled === 'true'
+        )
+      );
+
+      if (targetBiz && isGiftEnabled) {
+        let isEligible = true;
+        
+        // 1. Min Stars check
+        const minStars = Number(targetBiz.giftCodeMinStars || 1);
+        if (newRating < minStars) {
+          isEligible = false;
+        }
+        
+        // 2. Dates check (Forgiving & timezone-safe)
+        const now = new Date();
+        const localTodayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        const utcTodayStr = now.toISOString().split('T')[0];
+
+        if (targetBiz.giftCodeStartDate) {
+          const startStr = targetBiz.giftCodeStartDate.split('T')[0];
+          // Only invalidate if BOTH local and UTC are strictly before the start date
+          if (localTodayStr < startStr && utcTodayStr < startStr) {
+            isEligible = false;
+          }
+        }
+        if (targetBiz.giftCodeEndDate) {
+          const endStr = targetBiz.giftCodeEndDate.split('T')[0];
+          // Only invalidate if BOTH local and UTC are strictly after the end date
+          if (localTodayStr > endStr && utcTodayStr > endStr) {
+            isEligible = false;
+          }
+        }
+        
+        // 3. Limit check (total codes)
+        if (targetBiz.giftCodeLimitType === 'limited') {
+          const granted = Number(targetBiz.giftCodeGrantedCount || 0);
+          const limitTotal = Number(targetBiz.giftCodeTotalLimit || 100);
+          if (granted >= limitTotal) {
+            isEligible = false;
+          }
+        }
+
+        // 4. Per-User limit check
+        const userLimit = targetBiz.giftCodeUserLimit || 'once';
+        if (userLimit === 'once') {
+          const alreadyClaimed = await findExistingRewardForBusiness(currentUser.uid, targetBiz.id);
+          if (alreadyClaimed) {
+            isEligible = false;
+          }
+        } else if (userLimit === 'custom') {
+          const allUserRewards = await fetchUserRewards(currentUser.uid);
+          const countForThisBiz = allUserRewards.filter(r => r.businessId === targetBiz.id).length;
+          const maxPerUser = Number(targetBiz.giftCodeMaxPerUser || 1);
+          if (countForThisBiz >= maxPerUser) {
+            isEligible = false;
+          }
+        }
+        // If 'per_review', isEligible remains true!
+        
+        // 5. Award the Code & QR! (Works whether user is customer OR business owner testing)
+        if (isEligible) {
+          await awardRewardToUser(targetBiz, currentUser.uid);
+        }
+      }
+
+      setNewComment('');
+      setNewRating(5);
+    } catch (err) {
+      console.error("Error adding review:", err);
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
+
+  const handleAddOffer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!db || !business || !newOfferForm.title) return;
+
+    // 1. Honeypot check (Bot protection)
+    if (isBotSubmission(hpValue)) {
+      setIsOfferModalOpen(false);
+      return;
+    }
+
+    // 2. Rate limit check (Prevention of spamming)
+    const rateLimit = checkSubmissionRateLimit('offer_submit', 60);
+    if (!rateLimit.allowed) {
+      alert(`يرجى الانتظار ${rateLimit.timeLeft} ثانية قبل إضافة عرض ترويجي آخر لتفادي التكرار والسبام.`);
+      return;
+    }
+
+    setSubmittingOffer(true);
+    try {
+      let computedExpiresIn = newOfferForm.expiresIn || 'لفترة محدودة';
+      let expiresAt: number | null = null;
+
+      if (newOfferForm.durationMode === 'hours') {
+        const hours = parseFloat(newOfferForm.durationHours) || 24;
+        computedExpiresIn = `لمدة ${hours} ساعة`;
+        expiresAt = Date.now() + hours * 3600 * 1000;
+      } else if (newOfferForm.durationMode === 'days') {
+        const days = parseFloat(newOfferForm.durationDays) || 7;
+        computedExpiresIn = `لمدة ${days} يوم/أيام`;
+        expiresAt = Date.now() + days * 24 * 3600 * 1000;
+      } else if (newOfferForm.durationMode === 'date_range') {
+        if (newOfferForm.startDate && newOfferForm.endDate) {
+          computedExpiresIn = `من ${newOfferForm.startDate} إلى ${newOfferForm.endDate}`;
+          expiresAt = new Date(newOfferForm.endDate).getTime() + 24 * 3600 * 1000 - 1;
+        } else {
+          computedExpiresIn = 'لفترة محدودة';
+        }
+      } else if (newOfferForm.durationMode === 'recurring_weekly') {
+        if (newOfferForm.recurringDays && newOfferForm.recurringDays.length > 0) {
+          computedExpiresIn = `متكرر كل: ${newOfferForm.recurringDays.join('، ')}`;
+        } else {
+          computedExpiresIn = 'متكرر أيام الأسبوع';
+        }
+      }
+
+      // Pick default cover image from gallery if not manually set
+      const defaultImg = (availableMenuImages && availableMenuImages.length > 0) 
+        ? availableMenuImages[0].imageUrl 
+        : 'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&q=80&w=800';
+
+      const offerData: Record<string, any> = {
+        title: sanitizeInput(newOfferForm.title),
+        businessName: business.name,
+        businessId: business.id,
+        category: business.category,
+        discountType: newOfferForm.discountType || 'percentage',
+        discountPercentage: sanitizeInput(newOfferForm.discountPercentage) || '10%',
+        expiresIn: computedExpiresIn,
+        durationMode: newOfferForm.durationMode,
+        durationHours: newOfferForm.durationHours,
+        durationDays: newOfferForm.durationDays,
+        startDate: newOfferForm.startDate || '',
+        endDate: newOfferForm.endDate || '',
+        recurringDays: newOfferForm.recurringDays || [],
+        description: sanitizeInput(newOfferForm.description || ''),
+        location: business.district ? `${business.district} - ${business.address}` : business.address,
+        phone: sanitizeInput(newOfferForm.phone || business.phone || ''),
+        whatsapp: sanitizeInput(newOfferForm.whatsapp || business.phone || ''),
+        image: newOfferForm.image || defaultImg,
+        isHot: Boolean(newOfferForm.isHot),
+        isStudent: Boolean(newOfferForm.isStudent),
+        targetMenuItems: newOfferForm.selectedMenuItemIds || [],
+        selectedScope: newOfferForm.selectedScope || 'none',
+        selectedCategories: newOfferForm.selectedCategories || [],
+        applyToAllMenu: newOfferForm.selectedScope === 'all',
+        createdAt: Date.now()
+      };
+
+      if (newOfferForm.oldPrice) offerData.oldPrice = sanitizeInput(newOfferForm.oldPrice);
+      if (newOfferForm.newPrice) offerData.newPrice = sanitizeInput(newOfferForm.newPrice);
+      if (newOfferForm.code) offerData.code = sanitizeInput(newOfferForm.code);
+      if (expiresAt) offerData.expiresAt = expiresAt;
+
+      // Apply discounts to selected menu items if applicable
+      if (business.menuItems && business.menuItems.length > 0 && newOfferForm.selectedMenuItemIds.length > 0) {
+        const selectedSet = new Set(newOfferForm.selectedMenuItemIds);
+        const cleanNumber = (val: string) => {
+          if (!val) return NaN;
+          const match = val.match(/[\d.]+/);
+          return match ? parseFloat(match[0]) : NaN;
+        };
+
+        const oldVal = cleanNumber(newOfferForm.oldPrice);
+        const newVal = cleanNumber(newOfferForm.newPrice);
+        const pctVal = cleanNumber(newOfferForm.discountPercentage);
+
+        const updatedMenuItems = business.menuItems.map(item => {
+          if (!selectedSet.has(item.id)) return item;
+
+          const basePriceNum = parseFloat(item.price) || 0;
+          const origPriceNum = parseFloat(item.originalPrice || '') || basePriceNum;
+          if (origPriceNum <= 0) return item;
+
+          let newCalculatedPrice = item.price;
+          let newOrigPrice = item.originalPrice || item.price;
+
+          if (!isBulkDiscount && !isNaN(oldVal) && !isNaN(newVal) && oldVal > newVal && newOfferForm.selectedMenuItemIds.length === 1) {
+            newCalculatedPrice = newVal.toString();
+            newOrigPrice = oldVal.toString();
+          } else if (!isNaN(pctVal) && pctVal > 0 && pctVal < 100) {
+            const discounted = origPriceNum * (1 - pctVal / 100);
+            newCalculatedPrice = discounted.toFixed(2).replace(/\.00$/, '');
+            newOrigPrice = origPriceNum.toString();
+          }
+
+          return {
+            ...item,
+            originalPrice: newOrigPrice,
+            price: newCalculatedPrice
+          };
+        });
+
+        try {
+          const bizRef = doc(db, 'businesses', business.id);
+          const sanitizedPayload = await compressAndSanitizeFirestorePayload({ menuItems: updatedMenuItems }, true);
+          await updateDoc(bizRef, sanitizedPayload);
+          setBusiness(prev => prev ? { ...prev, menuItems: updatedMenuItems } : null);
+        } catch (mErr) {
+          console.error("Error updating menu items with discounts:", mErr);
+        }
+      }
+
+      // Sanitize and save offer document to Firestore
+      const sanitizedOfferPayload = await compressAndSanitizeFirestorePayload(offerData, true);
+      const docRef = await addDoc(collection(db, 'offers'), sanitizedOfferPayload);
+      setActiveOffers(prev => [{ id: docRef.id, ...sanitizedOfferPayload }, ...prev]);
+      
+      // Record successful submission timestamp for rate limiting
+      recordSubmissionTime('offer_submit');
+
+      setIsOfferModalOpen(false);
+      setNewOfferForm({
+        title: '',
+        discountType: 'percentage',
+        discountPercentage: '10%',
+        oldPrice: '',
+        newPrice: '',
+        code: '',
+        durationMode: 'days',
+        durationHours: '24',
+        durationDays: '7',
+        startDate: '',
+        endDate: '',
+        recurringDays: [],
+        expiresIn: 'لفترة محدودة',
+        description: '',
+        phone: '',
+        whatsapp: '',
+        image: '',
+        isHot: false,
+        isStudent: false,
+        selectedScope: 'none',
+        selectedCategories: [],
+        selectedMenuItemIds: []
+      });
+      alert('تم نشر العرض الترويجي في المنصة بنجاح! 🎉');
+    } catch (err) {
+      console.error("Error adding offer:", err);
+      alert('حدث خطأ أثناء نشر العرض. يرجى المحاولة مرة أخرى.');
+    } finally {
+      setSubmittingOffer(false);
+    }
+  };
+
+  const handleSuggestEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!db || !business) return;
+
+    // 1. Honeypot check (Bot protection)
+    if (isBotSubmission(hpValue)) {
+      setIsEditSuggestionOpen(false);
+      setSuggestForm({ phone: '', address: '', workingHours: '', notes: '' });
+      return;
+    }
+
+    // 2. Rate limit check (Prevention of spamming)
+    const rateLimit = checkSubmissionRateLimit('suggest_submit', 30);
+    if (!rateLimit.allowed) {
+      alert(`يرجى الانتظار ${rateLimit.timeLeft} ثانية قبل اقتراح تعديل آخر لحماية البيانات.`);
+      return;
+    }
+
+    setSubmittingSuggestion(true);
+    try {
+      const suggestionData = {
+        businessId: business.id,
+        businessName: business.name,
+        userId: currentUser?.uid || 'guest',
+        userName: currentUser?.displayName || 'زائر مجهول',
+        userEmail: currentUser?.email || 'guest@shofieirbid.com',
+        suggestedChanges: {
+          phone: suggestForm.phone ? sanitizeInput(suggestForm.phone) : undefined,
+          address: suggestForm.address ? sanitizeInput(suggestForm.address) : undefined,
+          workingHours: suggestForm.workingHours ? sanitizeInput(suggestForm.workingHours) : undefined,
+          notes: suggestForm.notes ? sanitizeInput(suggestForm.notes) : undefined
+        },
+        status: 'pending',
+        createdAt: Date.now()
+      };
+      await addDoc(collection(db, 'edit_suggestions'), suggestionData);
+      
+      // 4. Record successful submission timestamp for rate limiting
+      recordSubmissionTime('suggest_submit');
+
+      setSuggestionSuccess(true);
+      setTimeout(() => {
+        setIsEditSuggestionOpen(false);
+        setSuggestionSuccess(false);
+        setSuggestForm({ phone: '', address: '', workingHours: '', notes: '' });
+      }, 2500);
+    } catch (err) {
+      console.error("Error submitting suggestion:", err);
+    } finally {
+      setSubmittingSuggestion(false);
+    }
+  };
+
+  const handleReportReview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!db || !selectedReviewForReport || !business) return;
+
+    // 1. Honeypot check (Bot protection)
+    if (isBotSubmission(hpValue)) {
+      setIsReportModalOpen(false);
+      setSelectedReviewForReport(null);
+      return;
+    }
+
+    // 2. Rate limit check (Prevention of spamming)
+    const rateLimit = checkSubmissionRateLimit('report_submit', 30);
+    if (!rateLimit.allowed) {
+      alert(`يرجى الانتظار ${rateLimit.timeLeft} ثانية قبل تقديم بلاغ آخر لحماية المنصة.`);
+      return;
+    }
+
+    setSubmittingReport(true);
+    try {
+      const reportData = {
+        reviewId: selectedReviewForReport.id,
+        businessId: business.id,
+        businessName: business.name,
+        reviewComment: selectedReviewForReport.comment,
+        reviewAuthorName: selectedReviewForReport.userName,
+        reason: sanitizeInput(reportReason),
+        reportedByUid: currentUser?.uid || 'guest',
+        reportedByEmail: currentUser?.email || 'guest@shofieirbid.com',
+        status: 'pending',
+        createdAt: Date.now()
+      };
+      await addDoc(collection(db, 'review_reports'), reportData);
+      
+      // 4. Record successful submission timestamp for rate limiting
+      recordSubmissionTime('report_submit');
+
+      setReportSuccess(true);
+      setTimeout(() => {
+        setIsReportModalOpen(false);
+        setReportSuccess(false);
+        setSelectedReviewForReport(null);
+        setReportReason('تقييم كيدي/غير حقيقي');
+      }, 2500);
+    } catch (err) {
+      console.error("Error reporting review:", err);
+    } finally {
+      setSubmittingReport(false);
+    }
+  };
+
+  const handleSaveOwnerReply = async (reviewId: string) => {
+    if (!db || !business || !currentUser) return;
+    if (!vipInfo.isVip) {
+      setIsUpgradeModalOpen(true);
+      return;
+    }
+    const replyText = replyTextMap[reviewId]?.trim();
+    if (!replyText) return;
+
+    if (containsUrlOrLink(replyText)) {
+      alert('عذراً، يمنع إدراج الروابط أو المواقع الإلكترونية في الردود. الرد مخصص للنصوص والتوضيحات فقط.');
+      return;
+    }
+
+    setSubmittingReply(true);
+    try {
+      const reviewRef = doc(db, 'reviews', reviewId);
+      const replyData = {
+        text: stripUrlsAndLinks(sanitizeInput(replyText)),
+        createdAt: Date.now(),
+        authorName: business.name,
+        authorUid: currentUser.uid
+      };
+      await updateDoc(reviewRef, {
+        reply: replyData
+      });
+
+      // Update reviews local state
+      setReviews(prev => prev.map(rev => {
+        if (rev.id === reviewId) {
+          return { ...rev, reply: replyData };
+        }
+        return rev;
+      }));
+
+      setReplyActiveId(null);
+    } catch (err) {
+      console.error("Error saving owner reply:", err);
+    } finally {
+      setSubmittingReply(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-[50vh]">
+        <div className="relative w-16 h-16">
+          <div className="absolute inset-0 rounded-full border-4 border-[#e5e1da]"></div>
+          <div className="absolute inset-0 rounded-full border-4 border-[#1a4d2e] border-t-transparent animate-spin"></div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !business) {
+    return <NotFound />;
+  }
+
+  const hideSite = Boolean(business?.hideSiteReviews);
+  const { viewUrl: googleMapsUrl } = business ? getGoogleMapsActionUrls(business) : { viewUrl: '' };
+  const immediateEmbedMapUrl = business ? getGoogleMapsEmbedUrl(business) : '';
+  const embedMapUrl = asyncEmbedMapUrl || immediateEmbedMapUrl;
+
+  // Calculate actual site rating average strictly from verified reviews in database or initial business document
+  const validReviews = reviews.filter(r => r && typeof r.rating === 'number' && !isNaN(r.rating) && r.rating > 0);
+  let calculatedRating: string | null = null;
+  if (validReviews.length > 0) {
+    const sum = validReviews.reduce((acc, curr) => acc + curr.rating, 0);
+    const avg = sum / validReviews.length;
+    calculatedRating = isNaN(avg) ? null : avg.toFixed(1);
+  } else if (business && typeof business.rating === 'number' && !isNaN(business.rating) && business.rating > 0) {
+    calculatedRating = Number(business.rating).toFixed(1);
+  }
+
+  const activeReviewCount = validReviews.length > 0 
+    ? validReviews.length 
+    : (business?.reviewCount || (business as any)?.reviewsCount || 0);
+
+  const renderSocialMediaButtons = (links?: Business['socialLinks']) => {
+    if (!links) return null;
+    const entries = Object.entries(links).filter(([_, l]) => l && typeof l === 'string' && l.trim() !== '');
+    if (entries.length === 0) return null;
+
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        {entries.map(([platform, rawLink]) => {
+          if (!rawLink) return null;
+          const link = rawLink.trim();
+          let href = link;
+          if (!link.startsWith("http://") && !link.startsWith("https://")) {
+            if (platform === "facebook") href = `https://facebook.com/${link}`;
+            else if (platform === "instagram") href = `https://instagram.com/${link.replace('@', '')}`;
+            else if (platform === "tiktok") href = `https://tiktok.com/@${link.replace('@', '')}`;
+            else if (platform === "snapchat") href = `https://snapchat.com/add/${link.replace('@', '')}`;
+            else if (platform === "telegram") href = `https://t.me/${link.replace('@', '')}`;
+            else if (platform === "x") href = `https://x.com/${link.replace('@', '')}`;
+            else if (platform === "youtube") href = `https://youtube.com/@${link.replace('@', '')}`;
+            else if (platform === "whatsapp") href = `https://wa.me/${link.replace(/[^0-9]/g, '')}`;
+            else if (platform === "website") href = `https://${link}`;
+          }
+
+          let Icon: any = Globe;
+          let colorClass = "text-stone-700 bg-stone-100 hover:bg-stone-200 border-stone-200";
+          let label = "الموقع";
+
+          if (platform === "facebook") {
+            Icon = Facebook;
+            colorClass = "text-blue-600 bg-blue-50 hover:bg-blue-100 border-blue-200";
+            label = "فيسبوك";
+          } else if (platform === "instagram") {
+            Icon = Instagram;
+            colorClass = "text-pink-600 bg-pink-50 hover:bg-pink-100 border-pink-200";
+            label = "إنستغرام";
+          } else if (platform === "tiktok") {
+            Icon = Smartphone;
+            colorClass = "text-stone-900 bg-stone-100 hover:bg-stone-200 border-stone-300";
+            label = "تيك توك";
+          } else if (platform === "snapchat") {
+            Icon = Smartphone;
+            colorClass = "text-yellow-700 bg-yellow-50 hover:bg-yellow-100 border-yellow-200";
+            label = "سناب شات";
+          } else if (platform === "telegram") {
+            Icon = Send;
+            colorClass = "text-sky-600 bg-sky-50 hover:bg-sky-100 border-sky-200";
+            label = "تلغرام";
+          } else if (platform === "x") {
+            Icon = Twitter;
+            colorClass = "text-stone-800 bg-stone-100 hover:bg-stone-200 border-stone-300";
+            label = "منصة X";
+          } else if (platform === "youtube") {
+            Icon = Youtube;
+            colorClass = "text-red-600 bg-red-50 hover:bg-red-100 border-red-200";
+            label = "يوتيوب";
+          } else if (platform === "whatsapp") {
+            Icon = WhatsAppIcon;
+            colorClass = "text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border-emerald-200";
+            label = "واتساب";
+          }
+
+          return (
+            <a
+              key={platform}
+              href={href}
+              target="_blank"
+              rel="noreferrer"
+              title={label}
+              aria-label={label}
+              onClick={() => { if (business?.id) trackBusinessInteraction(business.id, platform as any); }}
+              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-2xl flex items-center justify-center border transition-all duration-200 shadow-2xs hover:scale-110 active:scale-95 ${colorClass}`}
+            >
+              <Icon className="h-4 w-4 sm:h-4.5 sm:w-4.5" />
+            </a>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const hasSocialLinks = Boolean(
+    business?.socialLinks &&
+    Object.values(business.socialLinks).some(link => link && typeof link === 'string' && link.trim() !== '')
+  );
+
+  // Reviews sorting, filtering and pagination computations
+  const filteredReviews = reviews.filter((review) => {
+    if (reviewRatingFilter === 0) return true;
+    return review.rating >= reviewRatingFilter;
+  });
+
+  const sortedReviews = [...filteredReviews].sort((a, b) => {
+    if (reviewSortOrder === 'newest') {
+      return b.createdAt - a.createdAt;
+    }
+    if (reviewSortOrder === 'highest') {
+      return b.rating - a.rating;
+    }
+    if (reviewSortOrder === 'lowest') {
+      return a.rating - b.rating;
+    }
+    return 0;
+  });
+
+  const reviewsPerPage = 7;
+  const totalReviewPages = Math.ceil(sortedReviews.length / reviewsPerPage);
+  const activeReviewPage = Math.min(Math.max(1, reviewCurrentPage), totalReviewPages || 1);
+
+  const paginatedReviews = sortedReviews.slice(
+    (activeReviewPage - 1) * reviewsPerPage,
+    activeReviewPage * reviewsPerPage
+  );
+
+  const handlePageChange = (page: number) => {
+    setReviewCurrentPage(page);
+    const element = document.getElementById('reviews-section-header');
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
+  const handleScrollToReviews = () => {
+    setActiveTab('about');
+    setTimeout(() => {
+      const element = document.getElementById('reviews-section') || 
+                      document.getElementById('reviews-section-header') || 
+                      document.getElementById('tab-reviews');
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
+  };
+
+  // Helper function to render tab buttons list
+  const renderTabButtons = () => (
+    <>
+      {isMedical ? (
+        <>
+          <button 
+            onClick={() => handleTabChange('about')}
+            className={`whitespace-nowrap transition-all flex items-center gap-1.5 snap-start font-bold text-sm md:text-base py-3 sm:py-3.5 md:py-4 px-1 md:px-0 border-b-2 shrink-0 ${
+              activeTab === 'about' 
+                ? 'border-b-[#1a4d2e] text-[#1a4d2e] font-black' 
+                : 'border-b-transparent text-stone-500 hover:text-stone-900'
+            }`}
+          >
+            {isPharmacy ? <Pill className="h-4 w-4 text-emerald-700" /> : <Stethoscope className="h-4 w-4 text-emerald-700" />}
+            <span>{isPharmacy ? 'الملف الصيدلاني' : 'الملف الطبي'}</span>
+          </button>
+          <button 
+            onClick={() => handleTabChange('insurances')}
+            className={`whitespace-nowrap transition-all flex items-center gap-1.5 snap-start font-bold text-sm md:text-base py-3 sm:py-3.5 md:py-4 px-1 md:px-0 border-b-2 shrink-0 ${
+              activeTab === 'insurances' 
+                ? 'border-b-blue-600 text-blue-700 font-black' 
+                : 'border-b-transparent text-stone-500 hover:text-stone-900'
+            }`}
+          >
+            <Shield className="h-4 w-4 text-blue-600" />
+            <span>شركات التأمين والنقابات</span>
+            {medicalProfile.insurances && medicalProfile.insurances.length > 0 && (
+              <span className="bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded-full font-bold">
+                {medicalProfile.insurances.length}
+              </span>
+            )}
+          </button>
+          {isStaffEligible && medicalProfile.showMedicalStaff !== false && (
+            <button 
+              onClick={() => handleTabChange('staff')}
+              className={`whitespace-nowrap transition-all flex items-center gap-1.5 snap-start font-bold text-sm md:text-base py-3 sm:py-3.5 md:py-4 px-1 md:px-0 border-b-2 shrink-0 ${
+                activeTab === 'staff' 
+                  ? 'border-b-[#1a4d2e] text-[#1a4d2e] font-black' 
+                  : 'border-b-transparent text-stone-500 hover:text-stone-900'
+              }`}
+            >
+              <Users className="h-4 w-4 text-emerald-700" />
+              <span>{isPharmacy ? 'الكادر الصيدلاني' : 'الكادر الطبي'}</span>
+              {medicalProfile.doctorsList && medicalProfile.doctorsList.length > 0 && (
+                <span className="bg-emerald-100 text-emerald-800 text-xs px-2 py-0.5 rounded-full font-bold">
+                  {medicalProfile.doctorsList.length}
+                </span>
+              )}
+            </button>
+          )}
+        </>
+      ) : (
+        <button 
+          onClick={() => handleTabChange('about')}
+          className={`whitespace-nowrap transition-all flex items-center gap-1.5 snap-start font-bold text-sm md:text-base py-3 sm:py-3.5 md:py-4 px-1 md:px-0 border-b-2 shrink-0 ${
+            activeTab === 'about' 
+              ? 'border-b-[#1a4d2e] text-[#1a4d2e] font-black' 
+              : 'border-b-transparent text-stone-500 hover:text-stone-900'
+          }`}
+        >
+          <Info className="h-4 w-4" />
+          <span>عن المحل</span>
+        </button>
+      )}
+
+      {vipInfo.isVip && (
+        <button 
+          onClick={() => handleTabChange('menu')}
+          className={`whitespace-nowrap transition-all flex items-center gap-1.5 snap-start font-bold text-sm md:text-base py-3 sm:py-3.5 md:py-4 px-1 md:px-0 border-b-2 shrink-0 ${
+            activeTab === 'menu' || activeTab === 'products'
+              ? 'border-b-[#1a4d2e] text-[#1a4d2e] font-black' 
+              : 'border-b-transparent text-stone-500 hover:text-stone-900'
+          }`}
+        >
+          {isMedical ? (
+            <Activity className="h-4 w-4 text-[#1a4d2e]" />
+          ) : (
+            <UtensilsCrossed className="h-4 w-4 text-[#1a4d2e]" />
+          )}
+          <span>{isMedical ? 'الخدمات والأسعار' : 'المنيو والكتالوج الرقمي'}</span>
+          {business.menuItems && business.menuItems.length > 0 && (
+            <span className="bg-[#1a4d2e]/10 text-[#1a4d2e] text-xs px-2 py-0.5 rounded-full font-bold">
+              {business.menuItems.length}
+            </span>
+          )}
+        </button>
+      )}
+
+      {((business.category || "").includes('سكنات') || (business.category || "").includes('شقق') || (business.category || "").includes('عقارات')) && (
+        <button 
+          onClick={() => handleTabChange('specs')}
+          className={`whitespace-nowrap transition-all flex items-center gap-1.5 snap-start font-bold text-sm md:text-base py-3 sm:py-3.5 md:py-4 px-1 md:px-0 border-b-2 shrink-0 ${
+            activeTab === 'specs' 
+              ? 'border-b-[#1a4d2e] text-[#1a4d2e] font-black' 
+              : 'border-b-transparent text-stone-500 hover:text-stone-900'
+          }`}
+        >
+          <Sparkles className="h-4 w-4 text-amber-500" />
+          <span>مواصفات السكن</span>
+        </button>
+      )}
+
+      {vipInfo.isVip && !isMedical && (
+        <button 
+          onClick={() => handleTabChange('offers')}
+          className={`whitespace-nowrap transition-all flex items-center gap-1.5 snap-start font-bold text-sm md:text-base py-3 sm:py-3.5 md:py-4 px-1 md:px-0 border-b-2 shrink-0 ${
+            activeTab === 'offers' 
+              ? 'border-b-red-600 text-red-600 font-black' 
+              : 'border-b-transparent text-stone-500 hover:text-red-600'
+          }`}
+        >
+          <Tag className="h-4 w-4 text-red-500" />
+          <span>العروض والخصومات</span>
+        </button>
+      )}
+
+      <button 
+        onClick={() => handleTabChange('jobs')}
+        className={`whitespace-nowrap transition-all flex items-center gap-1.5 snap-start font-bold text-sm md:text-base py-3 sm:py-3.5 md:py-4 px-1 md:px-0 border-b-2 shrink-0 ${
+          activeTab === 'jobs' 
+            ? 'border-b-[#1a4d2e] text-[#1a4d2e] font-black' 
+            : 'border-b-transparent text-stone-500 hover:text-stone-900'
+        }`}
+      >
+        <Briefcase className="h-4 w-4 text-[#1a4d2e]" />
+        <span>وظائف شاغرة</span>
+        {activeJobs.length > 0 && (
+          <span className="bg-[#1a4d2e]/10 text-[#1a4d2e] text-xs px-2 py-0.5 rounded-full font-bold">
+            {activeJobs.length}
+          </span>
+        )}
+      </button>
+
+      {/* VIP ONLY: LATEST NEWS / POSTS TAB */}
+      {vipInfo.isVip && (
+        <button 
+          onClick={() => handleTabChange('news')}
+          className={`whitespace-nowrap transition-all flex items-center gap-1.5 snap-start font-bold text-sm md:text-base py-3 sm:py-3.5 md:py-4 px-1 md:px-0 border-b-2 shrink-0 ${
+            activeTab === 'news' 
+              ? 'border-b-amber-600 text-amber-800 font-black' 
+              : 'border-b-transparent text-stone-500 hover:text-amber-700'
+          }`}
+        >
+          <Newspaper className="h-4 w-4 text-amber-600" />
+          <span>آخر الأخبار</span>
+          {newsCount > 0 && (
+            <span className="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded-full font-bold">
+              {newsCount}
+            </span>
+          )}
+        </button>
+      )}
+
+      {vipInfo.isVip && (
+        <button 
+          onClick={() => handleTabChange('reels')}
+          className={`whitespace-nowrap transition-all flex items-center gap-1.5 snap-start font-bold text-sm md:text-base py-3 sm:py-3.5 md:py-4 px-1 md:px-0 border-b-2 shrink-0 ${
+            activeTab === 'reels' 
+              ? 'border-b-purple-600 text-purple-700 font-black' 
+              : 'border-b-transparent text-stone-500 hover:text-purple-600'
+          }`}
+        >
+          <Video className="h-4 w-4 text-purple-500" />
+          <span>{isMedical ? 'ريلزت' : 'ريلزات المحل'}</span>
+          {business.reels && business.reels.length > 0 && (
+            <span className="bg-purple-100 text-purple-700 text-xs px-2 py-0.5 rounded-full font-bold">
+              {business.reels.length}
+            </span>
+          )}
+        </button>
+      )}
+
+      {vipInfo.isVip && (
+        <button 
+          onClick={() => handleTabChange('gallery')}
+          className={`whitespace-nowrap transition-all flex items-center gap-1.5 snap-start font-bold text-sm md:text-base py-3 sm:py-3.5 md:py-4 px-1 md:px-0 border-b-2 shrink-0 ${
+            activeTab === 'gallery' 
+              ? 'border-b-emerald-600 text-emerald-700 font-black' 
+              : 'border-b-transparent text-stone-500 hover:text-emerald-600'
+          }`}
+        >
+          <Camera className="h-4 w-4 text-emerald-500" />
+          <span>{isMedical ? 'معرض الصور' : 'صور وجو المحل'}</span>
+          {business.gallery && business.gallery.length > 0 && (
+            <span className="bg-emerald-100 text-emerald-700 text-xs px-2 py-0.5 rounded-full font-bold">
+              {business.gallery.length}
+            </span>
+          )}
+        </button>
+      )}
+
+      {isOwner && (
+        vipInfo.isVip ? (
+          <button 
+            onClick={() => handleTabChange('analytics')}
+            className={`whitespace-nowrap transition-all flex items-center gap-1.5 snap-start font-bold text-sm md:text-base py-3 sm:py-3.5 md:py-4 px-1 md:px-0 border-b-2 shrink-0 ${
+              activeTab === 'analytics' 
+                ? 'border-b-amber-500 text-amber-700 font-black' 
+                : 'border-b-transparent text-stone-500 hover:text-amber-800'
+            }`}
+          >
+            <BarChart3 className="h-4 w-4 text-amber-600" />
+            <span>لوحة التحليلات VIP</span>
+          </button>
+        ) : (
+          <button 
+            onClick={() => setIsUpgradeModalOpen(true)}
+            className="whitespace-nowrap transition-all flex items-center gap-1.5 snap-start font-black text-sm md:text-base py-3 sm:py-3.5 md:py-4 px-1 md:px-0 border-b-2 border-b-transparent text-amber-700 hover:text-amber-800 cursor-pointer shrink-0" 
+          >
+            <Crown className="h-4 w-4 fill-amber-500 text-amber-600" />
+            <span>ترقية المحل لـ VIP</span>
+          </button>
+        )
+      )}
+    </>
+  );
+
+  return (
+    <div className="w-full space-y-6 sm:space-y-8 pb-24 md:pb-12">
+      {/* SEO & Geo AI Optimization for Local Store */}
+      {business && (
+        <SEO 
+          title={business.name}
+          description={`${business.name} في ${business.district || 'إربد'}، ${business.address || 'محافظة إربد'}. ${business.description || 'اكتشف تقييمات، ساعات العمل، أرقام التواصل، وقائمة المنتجات والعروض.'}`}
+          keywords={[
+            business.name, 
+            `${business.name} إربد`, 
+            `${business.category} إربد`, 
+            business.district ? `${business.category} ${business.district}` : 'محلات إربد',
+            'إربد', 
+            'اربد', 
+            'دليل إربد'
+          ]}
+          ogImage={business.imageUrl || 'https://shofibirbid.site/ogimage.jpg'}
+          ogType="business.business"
+          canonicalUrl={typeof window !== 'undefined' ? window.location.href : undefined}
+          schemaData={{
+            "@context": "https://schema.org",
+            "@type": "LocalBusiness",
+            "@id": typeof window !== 'undefined' ? window.location.href : `https://shofibirbid.site/b/${business.id}`,
+            "name": business.name,
+            "image": business.imageUrl || 'https://shofibirbid.site/ogimage.jpg',
+            "description": business.description || `صفحة ${business.name} على دليل شو في بإربد الشامل.`,
+            "telephone": business.phone || business.socialLinks?.whatsapp || undefined,
+            "address": {
+              "@type": "PostalAddress",
+              "streetAddress": business.address || business.district || "إربد",
+              "addressLocality": "إربد",
+              "addressRegion": "محافظة إربد",
+              "addressCountry": "JO"
+            },
+            "geo": {
+              "@type": "GeoCoordinates",
+              "latitude": 32.5568,
+              "longitude": 35.8469
+            },
+            "aggregateRating": business.rating && business.reviewCount ? {
+              "@type": "AggregateRating",
+              "ratingValue": business.rating,
+              "reviewCount": Math.max(1, business.reviewCount)
+            } : undefined
+          }}
+        />
+      )}
+
+      {/* Hidden Store Notice for Owner / Admin */}
+      {business?.isHidden && (isOwner || isAdmin) && (
+        <div className="bg-amber-50 border-2 border-amber-300 text-amber-900 px-4 py-3 rounded-2xl flex items-center justify-between gap-3 text-xs font-bold shadow-xs">
+          <div className="flex items-center gap-2">
+            <EyeOff className="h-5 w-5 text-amber-600 shrink-0" />
+            <div>
+              <p className="font-black text-sm text-amber-950">تنبيه المالك: صفحة المحل مخفية حالياً 🔒</p>
+              <p className="text-amber-800 text-xs">هذا المحل غير مرئي للزوار العاديين ولن يظهر في نتائج البحث حتى تعيد تفعيله.</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleOpenEditModal}
+            className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-black transition-colors shrink-0 cursor-pointer"
+          >
+            تعديل الظهور
+          </button>
+        </div>
+      )}
+
+
+
+      {error ? (
+        <div className="bg-red-50 text-red-700 p-4 rounded-xl font-medium">{error}</div>
+      ) : business && (
+        <>
+          {/* Main Hero Header */}
+          <div className="bg-white rounded-2xl sm:rounded-3xl lg:rounded-[32px] border border-[#e5e1da] shadow-xs relative">
+            {/* 1. Cover Image Section */}
+            <div className={`w-full bg-stone-100 relative rounded-t-2xl sm:rounded-t-3xl lg:rounded-t-[32px] overflow-hidden transition-all duration-500 ease-in-out ${isCoverExpanded ? 'h-64 sm:h-96 md:h-[480px] lg:h-[560px]' : 'h-44 sm:h-60 md:h-[280px] lg:h-[320px]'}`}>
+              {business.coverVideoUrl ? (
+                <CoverVideoPlayer
+                  videoUrl={business.coverVideoUrl}
+                  posterImage={business.coverImage || business.imageUrl}
+                  autoPlay={true}
+                  isExpanded={isCoverExpanded}
+                  onToggleExpand={() => setIsCoverExpanded(prev => !prev)}
+                  className="w-full h-full object-cover"
+                />
+              ) : (!coverImageFailed && business.coverImage) ? (
+                <img 
+                  src={business.coverImage} 
+                  alt={business.name} 
+                  onError={() => setCoverImageFailed(true)}
+                  className="w-full h-full object-cover"
+                />
+              ) : (!coverImageFailed && business.imageUrl && !business.imageUrl.includes('photo-1555396273') && !business.imageUrl.includes('photo-1517248135467') && !business.imageUrl.includes('photo-1629909613654')) ? (
+                <img 
+                  src={business.imageUrl} 
+                  alt={business.name} 
+                  onError={() => setCoverImageFailed(true)}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="absolute inset-0 w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-[#e5e5e5] via-[#dcdcdc] to-[#bebebe] overflow-hidden select-none">
+                  {/* Premium subtle diagonal metallic glare */}
+                  <div className="absolute inset-0 bg-linear-to-tr from-transparent via-white/15 to-transparent pointer-events-none rotate-12 scale-150" />
+                  
+                  {globalSettings.logoUrl || '/logo.png' ? (
+                    <img 
+                      src={globalSettings.logoUrl || '/logo.png'} 
+                      alt="Site Logo" 
+                      className="h-16 sm:h-20 md:h-24 lg:h-28 w-auto object-contain grayscale opacity-45 contrast-150 brightness-50 select-none pointer-events-none relative z-10"
+                    />
+                  ) : isMedical ? (
+                    <Stethoscope className="h-16 w-16 md:h-24 md:w-24 text-stone-500/40 relative z-10" />
+                  ) : (
+                    <Store className="h-16 w-16 md:h-24 md:w-24 text-stone-500/40 relative z-10" />
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* 2. Details & Profile Picture Section */}
+            <div className="relative px-4 pb-5 sm:px-6 md:px-8 sm:pb-6">
+              {/* Profile Picture & Badges/Ratings (overlaps Cover Image) */}
+              <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-4 relative z-20">
+                <div className="flex items-end gap-3 sm:gap-4 min-w-0">
+                  {/* Circular Profile Picture / Logo with Instagram/Facebook Story ring for Vip Welcome Popup */}
+                  {vipInfo.isVip && business.vipPopup?.enabled ? (
+                    <div 
+                      onClick={() => setIsVipWelcomePopupOpen(true)}
+                      className="relative group cursor-pointer shrink-0 z-30 -mt-12 sm:-mt-16 lg:-mt-16"
+                      title="انقر لمشاهدة ستوري العرض الترحيبي والتفاعلي للمحل"
+                    >
+                      {/* Premium Story Ring Gradient Wrapper */}
+                      <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-3xl p-[3px] bg-gradient-to-tr from-amber-400 via-rose-500 to-[#1a4d2e] shadow-md hover:shadow-lg transition-all duration-300 transform group-hover:scale-105 active:scale-95 flex items-center justify-center">
+                        {/* Inner Spacing / Gap like Instagram */}
+                        <div className="w-full h-full rounded-[21px] bg-white p-[3px] flex items-center justify-center overflow-hidden">
+                          <div className="w-full h-full rounded-2xl overflow-hidden bg-white flex items-center justify-center">
+                            {business.logoUrl && !business.logoUrl.includes('photo-1594212699903') ? (
+                              <img 
+                                src={business.logoUrl} 
+                                alt={`${business.name || ''} Logo`} 
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <div className="w-full h-full bg-gradient-to-br from-[#1a4d2e] to-emerald-600 flex items-center justify-center text-white font-black text-2xl sm:text-4xl shadow-inner select-none">
+                                {(business.name || 'م').trim().charAt(0)}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Default Regular Profile Picture */
+                    <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-2xl border-4 border-white shadow-md bg-white flex items-center justify-center overflow-hidden shrink-0 -mt-12 sm:-mt-16 lg:-mt-16">
+                      {business.logoUrl && !business.logoUrl.includes('photo-1594212699903') ? (
+                        <img 
+                          src={business.logoUrl} 
+                          alt={`${business.name || ''} Logo`} 
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-gradient-to-br from-[#1a4d2e] to-emerald-600 flex items-center justify-center text-white font-black text-2xl sm:text-4xl shadow-inner select-none">
+                          {(business.name || 'م').trim().charAt(0)}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Badges/Category for desktop/large screens (beside profile picture: lg:block) */}
+                  <div className="hidden lg:block pb-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="bg-[#ff9f1c]/10 text-[#ff9f1c] border border-[#ff9f1c]/20 px-3 py-0.5 rounded-full text-xs font-bold">
+                        {business.category}
+                      </span>
+                      <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 px-3 py-0.5 rounded-full text-xs font-semibold flex items-center gap-1">
+                        <ShieldCheck className="h-3.5 w-3.5" />
+                        معتمد في إربد
+                      </span>
+                      {!isMedical && business.deliveryAvailable && (
+                        <button
+                          onClick={() => setShowDeliveryModal(true)}
+                          className="bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-100 px-3 py-0.5 rounded-full text-xs font-semibold flex items-center gap-1 transition-all hover:scale-102 cursor-pointer shadow-3xs"
+                          title="عرض المناطق المشمولة بالتوصيل"
+                        >
+                          <Truck className="h-3.5 w-3.5 text-blue-600 animate-bounce" style={{ animationDuration: '3s' }} />
+                          <span>توفر التوصيل (عرض المناطق)</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Rating card below cover section (Solid Golden Orange Rectangle) */}
+                <div className="hidden sm:block shrink-0 self-end">
+                  {hideSite ? (
+                    <div className="flex items-center gap-2 bg-stone-50 px-3.5 py-2 rounded-xl text-stone-500 font-bold border border-stone-100">
+                      <EyeOff className="h-3.5 w-3.5 text-stone-400" />
+                      <span className="text-xs">التقييمات معطلة من صاحب المحل</span>
+                    </div>
+                  ) : (
+                    <div 
+                      onClick={handleScrollToReviews}
+                      className="flex items-center gap-2.5 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2.5 rounded-2xl border border-amber-400/80 shadow-md transition-all cursor-pointer hover:scale-[1.02] active:scale-95"
+                      title="الانتقال إلى قسم التقييمات"
+                    >
+                      <Star className="h-5 w-5 fill-white text-white shrink-0" />
+                      <span className="text-base font-black leading-none text-white tracking-wide">
+                        {calculatedRating ? `${calculatedRating} (${activeReviewCount})` : `جديد (${activeReviewCount})`}
+                      </span>
+                      <ChevronDown className="h-4 w-4 text-white shrink-0 mr-0.5 animate-bounce" style={{ animationDuration: '2.5s' }} />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Business Name, Status & Address Block (Mobile-optimized layout) */}
+              <div className="space-y-3 mt-2">
+                {/* Mobile Badges/Category */}
+                <div className="flex flex-wrap items-center gap-1.5 sm:hidden">
+                  <span className="bg-[#ff9f1c]/10 text-[#ff9f1c] border border-[#ff9f1c]/25 px-2.5 py-0.5 rounded-md text-[10px] font-black">
+                    {business.category}
+                  </span>
+                  <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 px-2.5 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-0.5">
+                    <ShieldCheck className="h-3 w-3" />
+                    معتمد في إربد
+                  </span>
+                </div>
+
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h1 className="text-xl sm:text-3xl md:text-4xl font-black tracking-tight text-stone-900 break-words">
+                        {business.name}
+                      </h1>
+                      {vipInfo.isVip && (
+                        <VerifiedBadge size="lg" businessName={business.name} />
+                      )}
+                    </div>
+
+                    {/* Tablet Badges Row (Tablet Only: sm:flex lg:hidden - on a single line) */}
+                    <div className="hidden sm:flex lg:hidden flex-nowrap items-center gap-2 overflow-x-auto scrollbar-hide py-1">
+                      <span className="bg-[#ff9f1c]/10 text-[#ff9f1c] border border-[#ff9f1c]/20 px-3 py-0.5 rounded-full text-xs font-bold shrink-0 whitespace-nowrap">
+                        {business.category}
+                      </span>
+                      <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 px-3 py-0.5 rounded-full text-xs font-semibold flex items-center gap-1 shrink-0 whitespace-nowrap">
+                        <ShieldCheck className="h-3.5 w-3.5" />
+                        معتمد في إربد
+                      </span>
+                      {!isMedical && business.deliveryAvailable && (
+                        <button
+                          onClick={() => setShowDeliveryModal(true)}
+                          className="bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-100 px-3 py-0.5 rounded-full text-xs font-semibold flex items-center gap-1 transition-all hover:scale-102 cursor-pointer shadow-3xs shrink-0 whitespace-nowrap"
+                          title="عرض المناطق المشمولة بالتوصيل"
+                        >
+                          <Truck className="h-3.5 w-3.5 text-blue-600 animate-bounce" style={{ animationDuration: '3s' }} />
+                          <span>توفر التوصيل (عرض المناطق)</span>
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                      {business.address && (
+                        <p className="flex items-center gap-1 text-xs sm:text-sm font-medium text-stone-500">
+                          <MapPin className="h-3.5 w-3.5 shrink-0 text-[#ff9f1c]" />
+                          <span>{business.address}</span>
+                        </p>
+                      )}
+                      <span className={`hidden sm:inline-flex text-[10px] font-black px-2 py-0.5 rounded-md border items-center gap-1 ${
+                        (business.workingHours?.isCustomOpen || (liveStatus.isOpen && !business.workingHours?.isCustomClosed))
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                          : 'bg-red-50 text-red-700 border-red-200'
+                      }`}>
+                        <span className={`h-1.5 w-1.5 rounded-full ${(business.workingHours?.isCustomOpen || (liveStatus.isOpen && !business.workingHours?.isCustomClosed)) ? 'bg-emerald-500' : 'bg-red-500'} animate-pulse`}></span>
+                        <span>
+                          {business.workingHours?.isCustomOpen 
+                            ? 'مفتوح مؤقتاً' 
+                            : business.workingHours?.isCustomClosed 
+                              ? 'مغلق مؤقتاً' 
+                              : (liveStatus.isOpen ? 'مفتوح الآن' : 'مغلق حالياً')}
+                        </span>
+                      </span>
+                    </div>
+
+                    {/* Social Media Links in Hero Header */}
+                    {hasSocialLinks && (
+                      <div className="pt-2 flex flex-wrap items-center gap-2">
+                        <span className="text-[11px] font-bold text-stone-500 flex items-center gap-1.5 pl-1">
+                          <Globe className="h-3.5 w-3.5 text-[#1a4d2e]" />
+                          <span>التواصل والتواصل الاجتماعي:</span>
+                        </span>
+                        {renderSocialMediaButtons(business.socialLinks)}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Mobile Quick Action Buttons Bar (Mobile Only: sm:hidden) */}
+                <div className="block sm:hidden pt-3 border-t border-stone-100">
+                  <div className="grid grid-cols-3 gap-2">
+                    {/* 1. Quick Call Button */}
+                    <a
+                      href={`tel:${business.phone}`}
+                      onClick={() => { if (business?.id) trackBusinessInteraction(business.id, 'call', { isOwner, currentUserId: currentUser?.uid, ownerId: business.userId, isAdmin: Boolean(isAdmin) }); }}
+                      className="flex flex-col items-center justify-center gap-1 bg-[#1a4d2e] active:bg-[#133c23] text-white py-2.5 px-2 rounded-xl shadow-xs transition-transform active:scale-95 text-center min-h-[52px]"
+                    >
+                      <Phone className="h-4.5 w-4.5 text-emerald-300" />
+                      <span className="text-[11px] font-black">اتصال</span>
+                    </a>
+
+                    {/* 2. Quick WhatsApp Button */}
+                    <a
+                      href={getWhatsAppUrl(business.socialLinks?.whatsapp || business.whatsapp || business.phone, formatBusinessWhatsAppMessage(business.name))}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={() => { if (business?.id) trackBusinessInteraction(business.id, 'whatsapp', { isOwner, currentUserId: currentUser?.uid, ownerId: business.userId, isAdmin: Boolean(isAdmin) }); }}
+                      className="flex flex-col items-center justify-center gap-1 bg-[#25D366] active:bg-[#1EBE5D] text-white py-2.5 px-2 rounded-xl shadow-xs transition-transform active:scale-95 text-center min-h-[52px]"
+                    >
+                      <WhatsApp3DIcon className="h-4.5 w-4.5 text-white" />
+                      <span className="text-[11px] font-black">واتساب</span>
+                    </a>
+
+                    {/* 3. Quick Directions / Booking / Chat Button */}
+                    {isMedical ? (
+                      <button
+                        type="button"
+                        onClick={() => setIsMedicalBookingOpen(true)}
+                        className="flex flex-col items-center justify-center gap-1 bg-gradient-to-br from-blue-600 to-indigo-700 active:from-blue-700 active:to-indigo-800 text-white py-2.5 px-2 rounded-xl shadow-xs transition-transform active:scale-95 text-center min-h-[52px] cursor-pointer"
+                      >
+                        <Calendar className="h-4.5 w-4.5 text-blue-200" />
+                        <span className="text-[11px] font-black">حجز موعد</span>
+                      </button>
+                    ) : googleMapsUrl ? (
+                      <a
+                        href={googleMapsUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={() => { if (business?.id) trackBusinessInteraction(business.id, 'direction', { isOwner, currentUserId: currentUser?.uid, ownerId: business.userId, isAdmin: Boolean(isAdmin) }); }}
+                        className="flex flex-col items-center justify-center gap-1 bg-stone-900 active:bg-black text-white py-2.5 px-2 rounded-xl shadow-xs transition-transform active:scale-95 text-center min-h-[52px]"
+                      >
+                        <MapPin className="h-4.5 w-4.5 text-[#ff9f1c]" />
+                        <span className="text-[11px] font-black">الاتجاهات</span>
+                      </a>
+                    ) : (currentUser && currentUser.uid !== business.userId) ? (
+                      <Link
+                        to={`/chat?recipient=${business.userId}&businessId=${business.id}`}
+                        className="flex flex-col items-center justify-center gap-1 bg-stone-100 active:bg-stone-200 text-stone-800 py-2.5 px-2 rounded-xl shadow-xs transition-transform active:scale-95 text-center min-h-[52px] cursor-pointer border border-stone-200"
+                      >
+                        <MessageSquare className="h-4.5 w-4.5 text-[#1a4d2e]" />
+                        <span className="text-[11px] font-black">مراسلة</span>
+                      </Link>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleShare}
+                        className="flex flex-col items-center justify-center gap-1 bg-stone-100 active:bg-stone-200 text-stone-800 py-2.5 px-2 rounded-xl shadow-xs transition-transform active:scale-95 text-center min-h-[52px] cursor-pointer border border-stone-200"
+                      >
+                        <Share2 className="h-4.5 w-4.5 text-[#1a4d2e]" />
+                        <span className="text-[11px] font-black">{shareSuccess ? 'تم النسخ' : 'مشاركة'}</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Mobile Quick Key Info & Share Buttons Bar (Mobile Only: sm:hidden) */}
+                <div className="block sm:hidden pt-2">
+                  <div className={`grid gap-1.5 sm:gap-2 text-center ${(!isMedical && business.deliveryAvailable) || (isMedical && googleMapsUrl) ? "grid-cols-4" : "grid-cols-3"}`}>
+                    {/* 1. Working Hours Status Button (Green / Red / Yellow) */}
+                    {(() => {
+                      const isTempClosed = Boolean(business.workingHours?.isCustomClosed);
+                      const isTempOpen = Boolean(business.workingHours?.isCustomOpen);
+                      const isOpen = (liveStatus.isOpen || isTempOpen) && !isTempClosed;
+                      
+                      const btnBg = isTempClosed 
+                        ? 'bg-amber-500 active:bg-amber-600 text-stone-950 border-amber-600 font-black'
+                        : isTempOpen
+                        ? 'bg-emerald-600 active:bg-emerald-700 text-white border-emerald-700 font-black'
+                        : isOpen 
+                        ? 'bg-emerald-600 active:bg-emerald-700 text-white border-emerald-700 font-black'
+                        : 'bg-rose-600 active:bg-rose-700 text-white border-rose-700 font-black';
+
+                      const statusLabel = isTempClosed 
+                        ? 'مغلق مؤقتاً' 
+                        : isTempOpen
+                        ? 'مفتوح مؤقتاً'
+                        : isOpen 
+                        ? 'مفتوح الآن' 
+                        : 'مغلق حالياً';
+
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => setIsWeeklyHoursModalOpen(true)}
+                          className={`flex flex-col items-center justify-center gap-1 py-2.5 px-1 rounded-xl shadow-xs border transition-transform active:scale-95 min-h-[52px] min-w-0 cursor-pointer ${btnBg}`}
+                          title="انقر لاستعراض جدول مواعيد الدوام الأسبوعي الكامل"
+                        >
+                          <Clock className="h-4.5 w-4.5 shrink-0" />
+                          <span className="text-[11px] font-black truncate max-w-full">
+                            {statusLabel}
+                          </span>
+                        </button>
+                      );
+                    })()}
+
+                    {/* 2. Ratings Button (Moved to mobile buttons row) */}
+                    <button
+                      type="button"
+                      onClick={handleScrollToReviews}
+                      className="flex flex-col items-center justify-center gap-1 bg-amber-50/90 active:bg-amber-100 text-amber-900 border border-amber-200/90 py-2.5 px-1 rounded-xl shadow-xs transition-transform active:scale-95 text-center min-h-[52px] min-w-0 cursor-pointer"
+                    >
+                      <Star className="h-4.5 w-4.5 text-amber-500 fill-amber-400 shrink-0" />
+                      <span className="text-[11px] font-black truncate max-w-full">
+                        {calculatedRating ? `${calculatedRating} (${activeReviewCount})` : 'جديد'}
+                      </span>
+                    </button>
+
+                    {/* 3. Rectangular Delivery Button (for stores with delivery) */}
+                    {!isMedical && business.deliveryAvailable && (
+                      <button
+                        type="button"
+                        onClick={() => setShowDeliveryModal(true)}
+                        className="flex flex-col items-center justify-center gap-1 bg-blue-50 active:bg-blue-100 text-blue-900 border border-blue-200/90 py-2.5 px-1 rounded-xl shadow-xs transition-transform active:scale-95 text-center min-h-[52px] min-w-0 cursor-pointer"
+                        title="عرض المناطق المشمولة بالتوصيل"
+                      >
+                        <Truck className="h-4.5 w-4.5 text-blue-600 shrink-0 animate-bounce" style={{ animationDuration: '3s' }} />
+                        <span className="text-[11px] font-black truncate max-w-full">
+                          توفر التوصيل
+                        </span>
+                      </button>
+                    )}
+
+                    {/* 4. Black Directions Button (ONLY for Medical when googleMapsUrl is present) */}
+                    {isMedical && googleMapsUrl && (
+                      <a
+                        href={googleMapsUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={() => { if (business?.id) trackBusinessInteraction(business.id, 'direction', { isOwner, currentUserId: currentUser?.uid, ownerId: business.userId, isAdmin: Boolean(isAdmin) }); }}
+                        className="flex flex-col items-center justify-center gap-1 bg-stone-900 active:bg-black text-white border border-stone-950 py-2.5 px-1 rounded-xl shadow-xs transition-transform active:scale-95 min-h-[52px] min-w-0"
+                      >
+                        <MapPin className="h-4.5 w-4.5 text-[#ff9f1c] shrink-0" />
+                        <span className="text-[11px] font-black truncate max-w-full">
+                          الاتجاهات
+                        </span>
+                      </a>
+                    )}
+
+                    {/* 5. Mobile Share Button */}
+                    <button
+                      type="button"
+                      onClick={handleShare}
+                      className="flex flex-col items-center justify-center gap-1 bg-stone-100 hover:bg-stone-200 active:bg-stone-300 text-stone-800 border border-stone-200/90 py-2.5 px-1 rounded-xl shadow-xs transition-transform active:scale-95 text-center min-h-[52px] min-w-0 cursor-pointer"
+                    >
+                      <Share2 className="h-4.5 w-4.5 text-[#1a4d2e] shrink-0" />
+                      <span className="text-[11px] font-black truncate max-w-full">
+                        {shareSuccess ? 'تم النسخ' : 'مشاركة'}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Multi-Branch Dropdown Selector for Visitors */}
+                {familyBranches.length > 1 && (
+                  <div className="mt-4 pt-3 border-t border-stone-100">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-l from-[#1a4d2e]/5 via-stone-50 to-amber-500/5 border border-[#1a4d2e]/20 rounded-2xl p-3.5 sm:p-4">
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-2 bg-[#1a4d2e]/10 text-[#1a4d2e] rounded-xl shrink-0">
+                          <Building2 className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 text-stone-900 font-black text-xs sm:text-sm">
+                            <span>أفرع المحل ({familyBranches.length} أفرع متاحة)</span>
+                          </div>
+                          <p className="text-[11px] text-stone-500 font-bold">
+                            اختر الفرع للانتقال واستعراض صفحته الخاصة
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Dropdown Menu Button */}
+                      <button
+                        type="button"
+                        onClick={() => setIsBranchDropdownOpen(true)}
+                        className="w-full sm:w-auto px-4 py-2.5 bg-white border border-[#1a4d2e]/30 hover:border-[#1a4d2e] rounded-xl shadow-xs text-stone-900 font-black text-xs sm:text-sm flex items-center justify-between gap-3 transition-all cursor-pointer hover:bg-emerald-50/50"
+                      >
+                        <div className="flex items-center gap-2 truncate">
+                          <MapPin className="h-4 w-4 text-[#ff9f1c] shrink-0" />
+                          <span className="truncate">{business.name}</span>
+                          {business.district && (
+                            <span className="text-[10px] bg-stone-100 text-stone-600 px-2 py-0.5 rounded-md font-bold shrink-0">
+                              {business.district}
+                            </span>
+                          )}
+                          {vipInfo.isVip && (
+                            <Crown className="h-3.5 w-3.5 text-amber-500 fill-amber-500 shrink-0" />
+                          )}
+                        </div>
+                        <ChevronDown className="h-4 w-4 text-stone-500 shrink-0" />
+                      </button>
+
+                      {/* Portal Dropdown / Sheet */}
+                      {isBranchDropdownOpen && createPortal(
+                        <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-stone-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+                          {/* Backdrop click to close */}
+                          <div 
+                            className="absolute inset-0" 
+                            onClick={() => setIsBranchDropdownOpen(false)} 
+                          />
+
+                          {/* Branch Selector Card */}
+                          <div className="relative w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl border border-stone-200 overflow-hidden z-10 animate-in slide-in-from-bottom-5 duration-200 max-h-[85vh] flex flex-col">
+                            {/* Header */}
+                            <div className="p-4 sm:p-5 bg-gradient-to-l from-[#1a4d2e] to-emerald-800 text-white flex items-center justify-between shrink-0">
+                              <div className="flex items-center gap-2.5">
+                                <div className="p-2 bg-white/10 rounded-xl">
+                                  <Building2 className="h-5 w-5 text-amber-300" />
+                                </div>
+                                <div>
+                                  <h3 className="font-black text-sm sm:text-base">اختر فرع المحل</h3>
+                                  <p className="text-xs text-emerald-100 font-medium">
+                                    يتوفر {familyBranches.length} أفرع لهذا المحل
+                                  </p>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setIsBranchDropdownOpen(false)}
+                                className="p-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+                              >
+                                <X className="h-5 w-5" />
+                              </button>
+                            </div>
+
+                            {/* Branches List */}
+                            <div className="p-3 sm:p-4 overflow-y-auto space-y-2">
+                              {familyBranches.map(b => {
+                                const isCurrent = b.id === business.id;
+                                const bVip = getBusinessVipStatus(b);
+
+                                return (
+                                  <button
+                                    key={b.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setIsBranchDropdownOpen(false);
+                                      if (!isCurrent) {
+                                        navigate(`/business/${b.id}`);
+                                      }
+                                    }}
+                                    className={`w-full text-right p-3 sm:p-3.5 rounded-2xl text-xs sm:text-sm font-bold transition-all flex items-center justify-between gap-3 border cursor-pointer ${
+                                      isCurrent
+                                        ? 'bg-[#1a4d2e] text-white border-[#1a4d2e] shadow-md'
+                                        : 'bg-stone-50 hover:bg-emerald-50 text-stone-900 border-stone-200 hover:border-emerald-300'
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                      <div className={`p-2 rounded-xl shrink-0 ${isCurrent ? 'bg-white/15 text-amber-300' : 'bg-white text-[#ff9f1c] shadow-2xs border border-stone-100'}`}>
+                                        <MapPin className="h-4 w-4" />
+                                      </div>
+                                      <div className="min-w-0">
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                          <span className="font-black truncate">{b.name}</span>
+                                          {bVip.isVip && (
+                                            <Crown className={`h-3.5 w-3.5 shrink-0 ${isCurrent ? 'text-amber-300 fill-amber-300' : 'text-amber-500 fill-amber-500'}`} />
+                                          )}
+                                        </div>
+                                        {(b.district || b.address) && (
+                                          <p className={`text-[11px] truncate mt-0.5 font-medium ${isCurrent ? 'text-emerald-100' : 'text-stone-500'}`}>
+                                            {b.district} {b.address ? `- ${b.address}` : ''}
+                                          </p>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    <div className="shrink-0 flex items-center gap-2">
+                                      {isCurrent ? (
+                                        <span className="bg-amber-400 text-stone-950 text-[10px] sm:text-[11px] px-2.5 py-1 rounded-lg font-black shadow-2xs">
+                                          الفرع الحالي
+                                        </span>
+                                      ) : (
+                                        <span className="text-stone-400 flex items-center gap-0.5 text-xs font-bold group-hover:text-emerald-700">
+                                          زيارة
+                                          <ChevronLeft className="h-4 w-4" />
+                                        </span>
+                                      )}
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>,
+                        document.body
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Anchor for scrolling to top of tabs/content */}
+          <div ref={tabsAnchorRef} className="scroll-mt-20 md:scroll-mt-24" />
+
+          {/* Standalone Floating Sticky Tabs Bar Card (Tablet & Desktop Only: hidden sm:block) - Spans Full Width Matching Cover Section */}
+          <div className={cn(
+            "hidden sm:block bg-white rounded-2xl sm:rounded-3xl border border-[#e5e1da] shadow-xs transition-all duration-300 mb-6 sm:mb-8",
+            "sticky z-30",
+            showHeader ? "sm:top-[68px] md:top-[74px]" : "top-2"
+          )}>
+            <div 
+              className="flex overflow-x-auto gap-5 sm:gap-6 md:gap-8 scrollbar-hide px-4 sm:px-6 md:px-8 snap-x snap-mandatory bg-white rounded-2xl sm:rounded-3xl" 
+              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+            >
+              {renderTabButtons()}
+            </div>
+          </div>
+
+          {/* Desktop/Laptop 2-Column Grid Layout */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8 items-start">
+            
+            {/* Right Side: Primary Content and Reviews (lg:col-span-2) */}
+            <div className="lg:col-span-2 space-y-6 sm:space-y-8">
+
+              {/* Tab Content Box (Mobile Attached Header, Tablet/Desktop Pure Content Body) */}
+              <div className="bg-white rounded-2xl sm:rounded-3xl border border-[#e5e1da] shadow-xs">
+                
+                {/* Mobile Only Attached Sticky Tabs Bar Header */}
+                <div className={cn(
+                  "block sm:hidden bg-white border-b border-[#e5e1da] rounded-t-2xl transition-all duration-200",
+                  "sticky z-30",
+                  showHeader ? "top-[62px]" : "top-0"
+                )}>
+                  <div 
+                    className="flex overflow-x-auto gap-4 scrollbar-hide px-3.5 snap-x snap-mandatory bg-white rounded-t-2xl" 
+                    style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                  >
+                    {renderTabButtons()}
+                  </div>
+                </div>
+
+                {/* Tab Content Body */}
+                <div className="p-4 sm:p-6 md:p-8">
+                {activeTab === 'about' && (
+                  isMedical ? (
+                    <MedicalBusinessDetailView 
+                      business={business} 
+                      medicalProfile={medicalProfile} 
+                      onOpenBookingModal={() => setIsMedicalBookingOpen(true)} 
+                      onNavigateToInsurances={() => handleTabChange('insurances')}
+                      onNavigateToServices={() => handleTabChange('menu')}
+                      onNavigateToStaff={() => handleTabChange('staff')}
+                    />
+                  ) : (
+                    <div className="space-y-6">
+                      <div>
+                        <h2 className="text-lg sm:text-xl font-bold text-[#2d2a26] mb-3 flex items-center gap-2">
+                          <Info className="h-5 w-5 text-[#1a4d2e]" />
+                          نبذة عن المحل والخدمات
+                        </h2>
+                        {business.description && /<[a-z][\s\S]*>/i.test(business.description) ? (
+                          <div 
+                            className="text-stone-600 text-base sm:text-lg leading-relaxed break-words space-y-3 font-medium select-text [&_strong]:font-black [&_strong]:text-stone-900 [&_em]:italic [&_ul]:list-disc [&_ul]:list-inside [&_ul]:mr-4 [&_ul]:space-y-1.5 [&_ul]:my-2 [&_ol]:list-decimal [&_ol]:list-inside [&_ol]:mr-4 [&_ol]:space-y-1.5 [&_ol]:my-2 [&_li]:text-stone-700 [&_li]:font-medium [&_span]:inline-block [&_u]:underline"
+                            dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(business.description) }}
+                          />
+                        ) : (
+                          <div className="text-stone-600 text-base sm:text-lg leading-relaxed whitespace-pre-line break-words select-text font-medium">
+                            {business.description || "لا يوجد وصف متوفر حالياً لهذا المحل."}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* About Media (Video or Image for all accounts) */}
+                      {(() => {
+                        const rawUrl = (business.aboutMedia?.url || business.aboutVideoUrl || business.aboutImageUrl || '').trim();
+                        const rawType = business.aboutMedia?.type || (business.aboutVideoUrl ? 'video' : business.aboutImageUrl ? 'image' : null);
+                        const mediaCaption = business.aboutMedia?.caption;
+
+                        if (!rawUrl) return null;
+
+                        const isKnownVideo = rawUrl.includes('youtube') || 
+                          rawUrl.includes('youtu.be') || 
+                          rawUrl.includes('vimeo') || 
+                          rawUrl.includes('reel') || 
+                          rawUrl.includes('tiktok') || 
+                          rawUrl.includes('facebook') ||
+                          rawUrl.includes('drive.google.com') ||
+                          /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(rawUrl);
+
+                        const mediaType: 'video' | 'image' = rawType || (isKnownVideo ? 'video' : 'image');
+
+                        return (
+                          <div className="pt-5 border-t border-[#e5e1da]/60 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <h3 className="text-sm sm:text-base font-black text-stone-800 flex items-center gap-2">
+                                {mediaType === 'video' ? (
+                                  <>
+                                    <Video className="h-4 w-4 text-[#1a4d2e]" />
+                                    <span>{mediaCaption || 'مقطع فيديو تعريفي عن المحل'}</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <ImageIcon className="h-4 w-4 text-[#1a4d2e]" />
+                                    <span>{mediaCaption || 'صورة تعريفية عن المحل'}</span>
+                                  </>
+                                )}
+                              </h3>
+                              {mediaType === 'video' && (
+                                <span className="text-[11px] bg-[#1a4d2e]/10 text-[#1a4d2e] font-bold px-2.5 py-0.5 rounded-md">
+                                  مشغل فيديو تفاعلي
+                                </span>
+                              )}
+                            </div>
+
+                            <MediaRenderer
+                              type={mediaType}
+                              url={rawUrl}
+                              caption={undefined}
+                              aspectRatio="video"
+                              className="w-full rounded-2xl overflow-hidden shadow-xs border border-stone-200/80"
+                            />
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )
+                )}
+
+                {activeTab === 'insurances' && isMedical && (
+                  <MedicalInsurancesTab
+                    business={business}
+                    medicalProfile={medicalProfile}
+                    onBackToAbout={() => handleTabChange('about')}
+                    onOpenBooking={!isPharmacy ? () => setIsMedicalBookingOpen(true) : undefined}
+                  />
+                )}
+
+                {activeTab === 'staff' && isMedical && (
+                  <MedicalStaffTab
+                    business={business}
+                    medicalProfile={medicalProfile}
+                    onBackToAbout={() => handleTabChange('about')}
+                    onOpenBooking={!isPharmacy ? () => setIsMedicalBookingOpen(true) : undefined}
+                  />
+                )}
+
+                {(activeTab === 'menu' || activeTab === 'products') && vipInfo.isVip && (
+                  <DigitalMenuView
+                    business={business}
+                    isOwner={isOwner && vipInfo.isVip}
+                    onOpenManageMenu={() => setIsMenuManagerOpen(true)}
+                  />
+                )}
+
+                {activeTab === 'specs' && (
+                  <div className="py-12 text-center bg-stone-50/70 rounded-2xl border border-dashed border-[#e5e1da]">
+                    <div className="w-14 h-14 bg-indigo-50 text-indigo-700 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                      <Sparkles className="h-7 w-7" />
+                    </div>
+                    <h3 className="text-lg font-bold text-stone-800 mb-1">مواصفات السكن والخدمات</h3>
+                    <p className="text-stone-500 text-sm max-w-sm mx-auto">
+                      استعراض تفصيلي لعدد الغرف، المرافق، السعر الشهري وشروط التأمين.
+                    </p>
+                  </div>
+                )}
+
+                {activeTab === 'offers' && !isMedical && vipInfo.isVip && (
+                  <div className="space-y-6">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-stone-100 pb-4">
+                      <div>
+                        <h3 className="text-lg font-bold text-stone-900">العروض الترويجية والخصومات الحصرية</h3>
+                        <p className="text-xs text-stone-500">العروض والصفقات النشطة حالياً لدى هذا المحل</p>
+                      </div>
+                    </div>
+
+                    {/* Broad action button for owner */}
+                    {isOwner && (
+                      <div className="pt-1">
+                        {vipInfo.isVip ? (
+                          <button
+                            type="button"
+                            onClick={() => setIsOfferModalOpen(true)}
+                            className="w-full py-4 px-6 bg-gradient-to-r from-[#1a4d2e] via-emerald-800 to-[#1a4d2e] hover:from-emerald-800 hover:to-emerald-700 text-white font-black text-sm sm:text-base rounded-2xl sm:rounded-3xl shadow-md hover:shadow-lg transition-all duration-300 flex items-center justify-center cursor-pointer active:scale-[0.99] border border-emerald-700/60"
+                          >
+                            <span className="tracking-wide">إضافة عرض جديد</span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setIsUpgradeModalOpen(true)}
+                            className="w-full py-4 px-6 bg-gradient-to-r from-amber-600 via-amber-700 to-amber-800 hover:from-amber-700 hover:to-amber-900 text-white font-black text-sm sm:text-base rounded-2xl sm:rounded-3xl shadow-md hover:shadow-lg transition-all duration-300 flex items-center justify-center cursor-pointer active:scale-[0.99] border border-amber-500/60"
+                          >
+                            <span className="tracking-wide">نشر العروض (حصري لباقة VIP)</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {activeOffers.length === 0 ? (
+                      <div className="py-12 text-center bg-red-50/40 rounded-2xl border border-dashed border-red-200 p-6 space-y-4">
+                        <div className="w-14 h-14 bg-red-100 text-red-600 rounded-2xl flex items-center justify-center mx-auto">
+                          <Tag className="h-7 w-7" />
+                        </div>
+                        <h4 className="text-base font-bold text-red-800">لا توجد عروض نشطة حالياً</h4>
+                        <p className="text-stone-500 text-xs max-w-sm mx-auto">
+                          لم يقم هذا المحل بإدراج خصومات ترويجية في هذه الفترة. ترقبوا الإعلانات القادمة!
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {activeOffers.map((offer) => (
+                          <div
+                            key={offer.id}
+                            className="bg-white rounded-2xl border border-stone-200/90 overflow-hidden shadow-xs hover:shadow-md transition-all duration-300 flex flex-col justify-between group"
+                          >
+                            {/* Offer Image Header */}
+                            <div className="relative h-48 sm:h-52 w-full overflow-hidden bg-stone-100 shrink-0">
+                              <img
+                                src={offer.image || business?.coverImage || business?.image || 'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&q=80&w=800'}
+                                alt={offer.title}
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                              />
+                              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+                              
+                              {/* Discount & Special Status Badges */}
+                              <div className="absolute top-3 right-3 z-10 flex flex-wrap items-center gap-1.5">
+                                <span className="bg-amber-400 text-stone-900 font-black text-xs px-3 py-1 rounded-xl border border-amber-300 shadow-md">
+                                  خصم {offer.discountPercentage}
+                                </span>
+                                {offer.isHot && (
+                                  <span className="bg-red-600 text-white font-black text-xs px-2.5 py-1 rounded-xl shadow-md">
+                                    عاجل
+                                  </span>
+                                )}
+                                {offer.isStudent && (
+                                  <span className="bg-sky-600 text-white font-black text-xs px-2.5 py-1 rounded-xl shadow-md">
+                                    طلاب
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Expiration Tag */}
+                              {offer.expiresIn && (
+                                <div className="absolute bottom-3 right-3 z-10">
+                                  <span className="text-[10px] font-bold text-white bg-black/60 backdrop-blur-xs border border-white/20 px-2.5 py-1 rounded-lg flex items-center gap-1 shadow-xs">
+                                    <Clock className="h-3 w-3 text-orange-300" />
+                                    <span>{offer.expiresIn}</span>
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="p-4 sm:p-5 space-y-3 flex-1 flex flex-col justify-between">
+                              <div className="space-y-2">
+                                <h4 className="text-base font-black text-stone-900 leading-snug group-hover:text-amber-700 transition-colors">
+                                  {offer.title}
+                                </h4>
+                                
+                                {offer.description && (
+                                  <p className="text-xs text-stone-600 line-clamp-2 leading-relaxed">
+                                    {offer.description}
+                                  </p>
+                                )}
+
+                                {(offer.newPrice || offer.oldPrice) && (
+                                  <div className="flex items-baseline gap-2 bg-emerald-50/80 px-3 py-1.5 rounded-xl border border-emerald-100 w-fit">
+                                    {offer.newPrice && (
+                                      <span className="text-base font-black text-emerald-800">{offer.newPrice}</span>
+                                    )}
+                                    {offer.oldPrice && (
+                                      <span className="text-xs text-stone-400 line-through">{offer.oldPrice}</span>
+                                    )}
+                                  </div>
+                                )}
+
+                                {offer.code && (
+                                  <div className="bg-amber-50/60 border border-amber-200/80 p-2 rounded-xl flex items-center justify-between">
+                                    <span className="text-[11px] font-bold text-stone-700">الكود: <code className="bg-white px-2 py-0.5 rounded text-amber-900 font-mono font-black border border-amber-300">{offer.code}</code></span>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(offer.code);
+                                        alert("تم نسخ كود الخصم: " + offer.code);
+                                      }}
+                                      className="bg-white hover:bg-stone-50 text-stone-700 text-[10px] font-bold px-2.5 py-1 rounded-lg border border-stone-200 transition-colors shadow-2xs"
+                                    >
+                                      نسخ الكود
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="pt-3 border-t border-stone-100 flex items-center gap-2">
+                                <a
+                                  href={getWhatsAppUrl(offer.whatsapp || offer.phone || business.phone || '', `مرحباً، أود الاستفسار عن عرضكم: ${offer.title}`)}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="flex-1 inline-flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white py-2 px-3 rounded-xl text-xs font-bold transition-colors shadow-2xs"
+                                >
+                                  <WhatsAppIcon className="h-3.5 w-3.5" />
+                                  <span>استفسار واتساب</span>
+                                </a>
+                                <Link
+                                  to={`/offers/${offer.id}`}
+                                  className="bg-stone-100 hover:bg-stone-200 text-stone-800 py-2 px-3 rounded-xl text-xs font-bold transition-colors flex items-center gap-1"
+                                >
+                                  <span>التفاصيل</span>
+                                  <ChevronLeft className="h-3.5 w-3.5" />
+                                </Link>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {activeTab === 'news' && vipInfo.isVip && (
+                  <BusinessNewsTab 
+                    business={business} 
+                    isOwner={isOwner || isAdmin} 
+                    onNewsCountChange={(count) => setNewsCount(count)}
+                    offers={activeOffers}
+                    jobs={activeJobs}
+                    onSelectTab={(tab) => handleTabChange(tab as any)}
+                  />
+                )}
+
+                {activeTab === 'reels' && (
+                  vipInfo.isVip ? (
+                    <div className="space-y-6 text-right">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-stone-200 pb-4">
+                        <div>
+                          <h3 className="text-lg font-black text-[#2d2a26] flex items-center gap-2">
+                            <Video className="h-5 w-5 text-purple-600" />
+                            <span>{isMedical ? 'ريلزت' : 'ريلزات وفيديوهات المحل التفاعلية'}</span>
+                          </h3>
+                          <p className="text-xs text-stone-500">
+                            {isMedical 
+                              ? 'شاهد المقاطع الطبية والتوعوية والإرشادات واللقطات التعريفية' 
+                              : 'شاهد اللقطات والفيديوهات الحصرية لهذا المحل لتعيش التجربة التفاعلية'}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* BROAD ACTION BUTTON & EXPANDING FORM FOR REELS */}
+                      {isOwner && (
+                        <div className="space-y-4">
+                          {!isAddReelOpen && (
+                            <button
+                              type="button"
+                              onClick={() => setIsAddReelOpen(true)}
+                              className="w-full py-4 px-6 bg-gradient-to-r from-purple-800 via-indigo-900 to-purple-800 hover:from-purple-900 hover:to-indigo-950 text-white font-black text-sm sm:text-base rounded-2xl sm:rounded-3xl shadow-md hover:shadow-lg transition-all duration-300 flex items-center justify-center cursor-pointer active:scale-[0.99] border border-purple-600/50"
+                            >
+                              <span className="tracking-wide">{isMedical ? 'إضافة فيديو ريلزت جديد' : 'إضافة فيديو ريلز جديد'}</span>
+                            </button>
+                          )}
+
+                          {/* Add Reel Form */}
+                          {isAddReelOpen && (
+                            <form onSubmit={handleSaveReel} className="bg-white border-2 border-purple-300 p-5 sm:p-7 rounded-3xl space-y-4 shadow-lg animate-in fade-in zoom-in-98 duration-200">
+                              <div className="flex items-center justify-between border-b border-stone-100 pb-2">
+                                <h4 className="text-sm font-black text-stone-900 flex items-center gap-2">
+                                  <Sparkles className="h-4 w-4 text-purple-600" />
+                                  <span>{isMedical ? 'إضافة فيديو ريلزت جديد' : 'إضافة فيديو ترويجي جديد (ريلز)'}</span>
+                                </h4>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setIsAddReelOpen(false);
+                                    setNewReelUrl('');
+                                    setNewReelTitle('');
+                                  }}
+                                  className="text-stone-400 hover:text-stone-600 p-1 cursor-pointer"
+                                >
+                                  <X className="h-4 w-4" />
+                                </button>
+                              </div>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                  <label className="block text-xs font-bold text-stone-700">عنوان توضيحي للفيديو</label>
+                                  <input 
+                                    type="text"
+                                    value={newReelTitle}
+                                    onChange={(e) => setNewReelTitle(e.target.value)}
+                                    placeholder={isMedical ? "مثال: نصيحة طبية، جولة داخل العيادة، أو شرح إجراء علاجي" : "مثال: استعراض تشكيلة الملابس الجديدة أو أجواء المحل"}
+                                    className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-stone-200 bg-stone-50 focus:bg-white focus:outline-none focus:border-purple-600 text-right font-medium"
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="block text-xs font-bold text-stone-700">رابط الفيديو (فيسبوك، إنستغرام، يوتيوب شورتس)</label>
+                                  <input 
+                                    type="url"
+                                    required
+                                    value={newReelUrl}
+                                    onChange={(e) => setNewReelUrl(e.target.value)}
+                                    placeholder="https://www.instagram.com/reel/..."
+                                    className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-stone-200 bg-stone-50 focus:bg-white focus:outline-none focus:border-purple-600 text-left font-mono"
+                                    style={{ direction: 'ltr' }}
+                                  />
+                                </div>
+                              </div>
+                              
+                              <div className="bg-purple-50 text-purple-950 p-3.5 rounded-2xl text-[11px] leading-relaxed border border-purple-200 flex items-start gap-2">
+                                <Sparkles className="h-4 w-4 text-purple-600 shrink-0 mt-0.5" />
+                                <p>
+                                  <strong>ملاحظة للمنشأة:</strong> يدعم النظام روابط الفيديوهات من 
+                                  <span className="font-bold"> فيسبوك ريلز</span>، 
+                                  <span className="font-bold"> إنستغرام ريلز</span>، و 
+                                  <span className="font-bold"> يوتيوب شورتس (YouTube Shorts)</span>. يتم تضمين الفيديو تلقائياً بشكل جذاب للزوار.
+                                </p>
+                              </div>
+
+                              <div className="flex items-center gap-2 justify-end pt-2 border-t border-stone-100">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setIsAddReelOpen(false);
+                                    setNewReelUrl('');
+                                    setNewReelTitle('');
+                                  }}
+                                  className="px-4 py-2.5 rounded-xl text-xs font-bold text-stone-600 bg-stone-100 hover:bg-stone-200 transition-colors cursor-pointer"
+                                >
+                                  إلغاء
+                                </button>
+                                <button
+                                  type="submit"
+                                  disabled={submittingReel}
+                                  className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2.5 rounded-xl text-xs font-black transition-all shadow-md flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                                >
+                                  {submittingReel ? 'جاري الحفظ...' : 'حفظ ونشر الفيديو 🎉'}
+                                </button>
+                              </div>
+                            </form>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Reels Grid */}
+                      {(!business.reels || business.reels.length === 0) ? (
+                        <div className="py-14 text-center bg-stone-50/50 rounded-2xl border border-dashed border-stone-200 p-6 space-y-4">
+                          <div className="w-14 h-14 bg-purple-50 text-purple-600 rounded-2xl flex items-center justify-center mx-auto">
+                            <Video className="h-6 w-6" />
+                          </div>
+                          <h4 className="text-base font-bold text-stone-800">
+                            {isMedical ? 'لا توجد فيديوهات ريلزت منشورة بعد' : 'لا توجد ريلزات ترويجية للمحل بعد'}
+                          </h4>
+                          <p className="text-stone-500 text-xs max-w-sm mx-auto">
+                            {isOwner 
+                              ? (isMedical ? "قم بإضافة أول فيديو ريلزت لنشر التوعية والتعريف بخدمات المنشأة الطبية!" : "قم بإضافة أول فيديو ريلز لعرض منتجاتك وجذب العملاء بطريقة مرئية وتفاعلية مذهلة!") 
+                              : (isMedical ? "لم تقم المنشأة الطبية بنشر فيديوهات ريلزت بعد." : "لم يقم صاحب المحل بإضافة لقطات ريلز تفاعلية بعد.")}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+                          {business.reels.map((reel) => {
+                            const embedUrl = getEmbedUrl(reel.url);
+                            const isInstagram = reel.url.includes('instagram.com');
+                            return (
+                              <div key={reel.id} className="bg-white rounded-3xl border border-[#e5e1da] overflow-hidden shadow-xs hover:shadow-md transition-all duration-300 flex flex-col justify-between p-4 space-y-4">
+                                {/* Vertical Video Container */}
+                                <div className="relative w-full aspect-[9/16] rounded-2xl overflow-hidden bg-black border border-stone-200/60 shadow-inner group">
+                                  {embedUrl ? (
+                                    <div className="absolute inset-0 w-full h-full overflow-hidden rounded-2xl">
+                                      <iframe 
+                                        src={embedUrl} 
+                                        className="w-full h-full absolute"
+                                        allowFullScreen
+                                        allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
+                                        style={isInstagram ? {
+                                          border: 'none', 
+                                          overflow: 'hidden',
+                                          position: 'absolute',
+                                          top: '-55px',
+                                          left: '-2px',
+                                          width: 'calc(100% + 4px)',
+                                          height: 'calc(100% + 245px)',
+                                          pointerEvents: 'auto'
+                                        } : { 
+                                          border: 'none', 
+                                          overflow: 'hidden',
+                                          position: 'absolute',
+                                          inset: 0,
+                                          width: '100%',
+                                          height: '100%'
+                                        }}
+                                        scrolling="no"
+                                      ></iframe>
+                                      {isInstagram && (
+                                        <div className="absolute inset-0 bg-transparent pointer-events-none rounded-2xl ring-1 ring-inset ring-black/10"></div>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-5 text-stone-400 space-y-3 bg-stone-900">
+                                      <Video className="h-10 w-10 text-stone-600" />
+                                      <p className="text-xs">يتوفر رابط تشغيل خارجي فقط</p>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Reel Footer Info */}
+                                <div className="space-y-3 text-right">
+                                  <h4 className="font-bold text-xs text-stone-800 line-clamp-2 leading-relaxed">
+                                    {reel.title}
+                                  </h4>
+                                  
+                                  <div className="flex flex-col gap-2 pt-1 border-t border-stone-100">
+                                    {embedUrl && (
+                                      <button
+                                        onClick={() => setFullScreenReelUrl(embedUrl)}
+                                        className="w-full inline-flex items-center justify-center gap-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 py-2 px-3 rounded-xl text-xs font-black transition-colors cursor-pointer"
+                                      >
+                                        <Play className="h-3.5 w-3.5 fill-purple-700 text-purple-700" />
+                                        <span>مشاهدة شاشة كاملة</span>
+                                      </button>
+                                    )}
+
+                                    <a
+                                      href={reel.url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="w-full inline-flex items-center justify-center gap-1.5 bg-stone-50 hover:bg-stone-100 text-stone-700 border border-stone-200 py-2 px-3 rounded-xl text-xs font-bold transition-colors"
+                                    >
+                                      <ExternalLink className="h-3.5 w-3.5" />
+                                      <span>مشاهدة على المنصة الأصلية</span>
+                                    </a>
+
+                                    {isOwner && (
+                                      <button
+                                        onClick={() => handleDeleteReel(reel.id)}
+                                        className="w-full inline-flex items-center justify-center gap-1.5 bg-red-50 hover:bg-red-100 text-red-600 py-1.5 px-3 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                        <span>حذف الفيديو</span>
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="py-14 text-center bg-gradient-to-b from-amber-50/50 to-stone-50 rounded-2xl border border-dashed border-amber-200 p-6">
+                      <div className="w-14 h-14 bg-amber-100 text-amber-700 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                        <Crown className="h-7 w-7 fill-amber-500 text-amber-600" />
+                      </div>
+                      <h3 className="text-lg font-black text-stone-800 mb-1">
+                        {isMedical ? 'منصة ريلزت الطبية التفاعلية 🎬' : 'منصة ريلزات المحل التفاعلية 🎬'}
+                      </h3>
+                      <p className="text-stone-600 text-sm max-w-md mx-auto mb-5">
+                        {isMedical 
+                          ? 'عرض فيديوهات ريلزت الطبية والتوعوية من فيسبوك وإنستغرام ويوتيوب متاح حصرياً للمنشآت الطبية المشتركة في الباقة الذهبية VIP.'
+                          : 'عرض فيديوهات ريلز ترويجية من فيسبوك وإنستغرام ويوتيوب شورتس متاح حصرياً للمشتركين في الباقة الذهبية VIP لتقديم تجربة تسوق تفاعلية تضاعف الطلبات!'}
+                      </p>
+                      {isOwner && (
+                        <button
+                          type="button"
+                          onClick={() => setIsUpgradeModalOpen(true)}
+                          className="inline-flex items-center gap-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs font-black px-5 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
+                        >
+                          <Crown className="h-4 w-4 fill-white" />
+                          <span>{isMedical ? 'ترقية المنشأة إلى VIP لتفعيل ريلزت' : 'ترقية محلك إلى VIP لتفعيل ريلزاتك'}</span>
+                        </button>
+                      )}
+                    </div>
+                  )
+                )}
+
+                {activeTab === 'analytics' && isOwner && vipInfo.isVip && (
+                  <VipAnalyticsDashboard business={business} isOwner={true} />
+                )}
+
+                {activeTab === 'jobs' && (
+                  <div className="space-y-6">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-stone-100 pb-4">
+                      <div>
+                        <h3 className="text-lg font-bold text-stone-900">الوظائف والفرص الشاغرة لدى المحل</h3>
+                        <p className="text-xs text-stone-500">تقديم الطلبات والتواصل المباشر مع شؤون الموظفين</p>
+                      </div>
+                      <Link
+                        to="/jobs"
+                        className="inline-flex items-center justify-center gap-2 bg-stone-100 hover:bg-stone-200 text-stone-700 px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-xs"
+                      >
+                        <Briefcase className="h-4 w-4 text-[#1a4d2e]" />
+                        <span>عرض كافة وظائف إربد</span>
+                      </Link>
+                    </div>
+
+                    {/* BROAD ACTION BUTTON FOR JOBS */}
+                    {isOwner && (
+                      <div className="pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setIsAddJobModalOpen(true)}
+                          className="w-full py-4 px-6 bg-gradient-to-r from-[#1a4d2e] via-emerald-800 to-[#1a4d2e] hover:from-emerald-800 hover:to-emerald-700 text-white font-black text-sm sm:text-base rounded-2xl sm:rounded-3xl shadow-md hover:shadow-lg transition-all duration-300 flex items-center justify-center cursor-pointer active:scale-[0.99] border border-emerald-700/60"
+                        >
+                          <span className="tracking-wide">إضافة وظيفة شاغرة جديدة</span>
+                        </button>
+                      </div>
+                    )}
+
+                    {activeJobs.length === 0 ? (
+                      <div className="py-12 text-center bg-stone-50/70 rounded-2xl border border-dashed border-stone-200 p-6 space-y-4">
+                        <div className="w-14 h-14 bg-stone-100 text-stone-400 rounded-2xl flex items-center justify-center mx-auto">
+                          <Briefcase className="h-7 w-7" />
+                        </div>
+                        <h4 className="text-base font-bold text-stone-700">لا توجد شواغر معلنة حالياً</h4>
+                        <p className="text-stone-500 text-xs max-w-sm mx-auto">
+                          لم يقم هذا المحل بنشر وظائف شاغرة حالياً. يمكنك متابعة الصفحة لتبقى على اطلاع بجديد الوظائف!
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                        {activeJobs.map((job) => (
+                          <div
+                            key={job.id}
+                            onClick={() => setSelectedDetailJob(job)}
+                            className="bg-stone-50/50 rounded-2xl p-5 border border-stone-200/80 hover:border-[#1a4d2e]/40 hover:shadow-md transition-all duration-300 flex flex-col justify-between group relative cursor-pointer text-right"
+                          >
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="bg-stone-100 text-stone-700 text-[10px] font-bold px-2 py-0.5 rounded-md">
+                                  {job.category}
+                                </span>
+                                {job.isUrgent && (
+                                  <span className="bg-red-50 text-red-600 border border-red-200 text-[9px] font-black px-2 py-0.5 rounded-full flex items-center gap-1 shrink-0 animate-pulse">
+                                    <Flame className="h-3 w-3 fill-red-600" />
+                                    شاغر عاجل
+                                  </span>
+                                )}
+                              </div>
+
+                              <div>
+                                <h4 className="font-black text-base text-[#2d2a26] group-hover:text-[#1a4d2e] transition-colors line-clamp-1">
+                                  {job.title}
+                                </h4>
+                                <div className="flex items-center gap-1 text-[11px] font-bold text-stone-500 mt-0.5">
+                                  <Building2 className="h-3 w-3 text-[#ff9f1c] shrink-0" />
+                                  <span className="truncate">{job.company}</span>
+                                </div>
+                              </div>
+
+                              <p className="text-stone-600 text-xs leading-relaxed line-clamp-2">
+                                {job.description}
+                              </p>
+
+                              <div className="pt-2 border-t border-stone-100 space-y-1 text-xs text-stone-500">
+                                <div className="flex items-center gap-1.5">
+                                  <MapPin className="h-3.5 w-3.5 text-stone-400 shrink-0" />
+                                  <span className="truncate">{job.location}</span>
+                                </div>
+                                {job.workHours && (
+                                  <div className="flex items-center gap-1.5 text-stone-600 font-bold">
+                                    <Clock className="h-3.5 w-3.5 text-sky-600 shrink-0" />
+                                    <span className="truncate">{job.workHours}</span>
+                                  </div>
+                                )}
+                                {job.salary && (
+                                  <div className="text-emerald-700 font-black">
+                                    الراتب: {job.salary}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {activeTab === 'gallery' && (
+                  vipInfo.isVip ? (
+                    <div className="space-y-6 text-right">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-stone-200 pb-4">
+                        <div>
+                          <h3 className="text-lg font-black text-[#2d2a26] flex items-center gap-2">
+                            <Camera className="h-5 w-5 text-emerald-600" />
+                            <span>{isMedical ? 'معرض الصور' : 'صور وجو المحل من الداخل والخارج'}</span>
+                          </h3>
+                          <p className="text-xs text-stone-500">
+                            {isMedical 
+                              ? 'استعرض مرافق المنشأة، غرف الفحص، الأجهزة والبيئة الطبية المريحة' 
+                              : 'استعرض المعرض الحقيقي لتعيش تفاصيل وأجواء المكان بالكامل'}
+                          </p>
+                        </div>
+                        {isOwner && (
+                          <div className="bg-stone-50 border border-stone-200 p-2.5 rounded-xl text-[11px] font-bold text-stone-600 flex items-center gap-1.5">
+                            <Crown className="h-3.5 w-3.5 text-amber-500 fill-amber-500" />
+                            <span>بصفتك المالك، يمكنك إدارة المعرض أدناه</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Owner Add Photo Section */}
+                      {isOwner && (
+                        <form onSubmit={handleAddGalleryImage} className="bg-stone-50 border border-stone-200 p-5 rounded-2xl space-y-4 animate-in fade-in duration-200">
+                          <h4 className="text-xs font-black text-stone-800 uppercase tracking-wider flex items-center gap-1">
+                            <Plus className="h-3.5 w-3.5 text-emerald-600" />
+                            <span>{isMedical ? 'إضافة صورة جديدة لمعرض الصور والمرافق' : 'إضافة صورة جديدة للمعرض والجو العام'}</span>
+                          </h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-1 md:col-span-2">
+                              <ImageUploader
+                                label={isMedical ? "صورة المنشأة أو العيادة (رفع ملف من الجهاز أو اختيار رابط)" : "صورة المعرض (رفع ملف من الجهاز أو اختيار رابط)"}
+                                folder="gallery"
+                                value={newGalleryUrl}
+                                onChange={(url) => setNewGalleryUrl(url)}
+                                aspectRatio="cover"
+                                placeholder={isMedical ? "اختر صورة العيادة أو المرفق الطبي من جهازك" : "اختر صورة للمعرض من جهازك"}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="block text-xs font-bold text-stone-700">وصف الصورة (التعليق)</label>
+                              <input 
+                                type="text"
+                                value={newGalleryCaption}
+                                onChange={(e) => setNewGalleryCaption(e.target.value)}
+                                placeholder={isMedical ? "مثال: غرفة المعاينة، جهاز التصوير، صالة انتظار المراجعين" : "مثال: جلسات الطابق الثاني الهادئة أو تفاصيل الديكور الخارجي"}
+                                className="w-full text-xs px-3.5 py-2 rounded-xl border border-stone-200 bg-white focus:outline-none focus:border-emerald-600 text-right"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 justify-end pt-1">
+                            <button
+                              type="submit"
+                              disabled={submittingGalleryImage || !newGalleryUrl.trim()}
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-xl text-xs font-black transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+                            >
+                              {submittingGalleryImage ? 'جاري الإضافة...' : 'إضافة الصورة ونشرها'}
+                            </button>
+                          </div>
+                        </form>
+                      )}
+
+                      {/* Photo Gallery 3D Slideshow */}
+                      {(() => {
+                        const galleryItems = business.gallery && business.gallery.length > 0 
+                          ? business.gallery 
+                          : [
+                              ...(isMedical
+                                ? [
+                                    { url: 'https://images.unsplash.com/photo-1629909613654-28e377c37b09?auto=format&fit=crop&q=80&w=800', caption: 'صالة الاستقبال والانتظار المجهزة لراحة المراجعين' },
+                                    { url: 'https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&q=80&w=800', caption: 'عيادة الفحص السريري المجهزة بأحدث المستلزمات الطبية' },
+                                    { url: 'https://images.unsplash.com/photo-1579684385127-1ef15d508118?auto=format&fit=crop&q=80&w=800', caption: 'الأجهزة والتقنيات التشخيصية والعلاجية المعتمدة' },
+                                    { url: 'https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?auto=format&fit=crop&q=80&w=800', caption: 'بيئة صحية معقمة ومطابقة لأعلى معايير السلامة والجودة' }
+                                  ]
+                                : ((business.category || '').includes('مطاعم') || (business.category || '').includes('كافيهات') || (business.category || '').includes('أكل') || (business.category || '').includes('حلويات')
+                                ? [
+                                    { url: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&q=80&w=800', caption: 'صالة الاستقبال الرئيسية والترتيب الأنيق للمكان' },
+                                    { url: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&q=80&w=800', caption: 'جلسات عائلية مريحة وراقية للأفراد والمجموعات' },
+                                    { url: 'https://images.unsplash.com/photo-1552566626-52f8b828add9?auto=format&fit=crop&q=80&w=800', caption: 'زوايا المحل الهادئة وإضاءة تمنح الدفء والراحة لرواد المكان' },
+                                    { url: 'https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&q=80&w=800', caption: 'الجلسات الخارجية اللطيفة للاستمتاع بالهواء الطلق المبهج' }
+                                  ]
+                                : (business.category || '').includes('سكنات') || (business.category || '').includes('شقق') || (business.category || '').includes('عقارات')
+                                ? [
+                                    { url: 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?auto=format&fit=crop&q=80&w=800', caption: 'غرفة معيشة مؤثثة بالكامل ومكيفة مخصصة للطلاب' },
+                                    { url: 'https://images.unsplash.com/photo-1598928506311-c55ded91a20c?auto=format&fit=crop&q=80&w=800', caption: 'غرفة دراسة ونوم هادئة ومكيفة لضمان التركيز والإنتاجية' },
+                                    { url: 'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&q=80&w=800', caption: 'مطبخ مجهز بالكامل بكافة الخدمات والأدوات الأساسية' },
+                                    { url: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&q=80&w=800', caption: 'مرافق صحية حديثة ونظيفة ومطهرة بشكل مستمر' }
+                                  ]
+                                : (business.category || '').includes('ملابس') || (business.category || '').includes('أزياء') || (business.category || '').includes('تسوق') || (business.category || '').includes('أحذية')
+                                ? [
+                                    { url: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&q=80&w=800', caption: 'صالة عرض الأزياء الأنيقة والمنظمة بشكل متكامل' },
+                                    { url: 'https://images.unsplash.com/photo-1479064555552-3ef4979f8908?auto=format&fit=crop&q=80&w=800', caption: 'تشكيلات وتصاميم عصرية جاهزة ترضي كافة الأذواق الراقية' },
+                                    { url: 'https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&q=80&w=800', caption: 'واجهة العرض الأنيقة وجو التسوق الممتع والرحب' }
+                                  ]
+                                : [
+                                    { url: 'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&q=80&w=800', caption: 'زوايا المنشأة وجلساتها الهادئة لاستقبال الزوار والعملاء' },
+                                    { url: 'https://images.unsplash.com/photo-1497215728101-856f4ea42174?auto=format&fit=crop&q=80&w=800', caption: 'مساحات الاستقبال والراحة المصممة بعناية لخدمتكم' },
+                                    { url: 'https://images.unsplash.com/photo-1497366811353-6870744d04b2?auto=format&fit=crop&q=80&w=800', caption: 'البيئة العصرية المجهزة بأحدث المرافق والخدمات المتنوعة' }
+                                  ]
+                              ))
+                            ];
+
+                        // Ensure current slide index is within bounds of possibly updated gallery items
+                        const activeIndex = currentSlideIndex >= galleryItems.length ? 0 : currentSlideIndex;
+
+                        return (
+                          <div className="space-y-6">
+                            {business.gallery && business.gallery.length === 0 && (
+                              <div className="bg-emerald-50 text-emerald-950 p-3.5 rounded-2xl text-[11px] leading-relaxed border border-emerald-100/50 flex items-start gap-2 text-right">
+                                <Sparkles className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5 animate-pulse" />
+                                <p>
+                                  <strong>مظهر تجريبي مميز:</strong> يعرض النظام حالياً صوراً تفاعلية منسقة لتعكس طابع المحل بشكل احترافي، بصفته مشتركاً مميزاً بـ VIP. يمكنك البدء في رفع صورك الخاصة لتستبدل الصور الافتراضية فوراً.
+                                </p>
+                              </div>
+                            )}
+
+                            {/* 3D Stacked Slideshow Stage */}
+                            <div className="relative h-[220px] sm:h-[320px] md:h-[380px] w-full flex items-center justify-center overflow-hidden py-2 select-none">
+                              {galleryItems.map((item: any, idx: number) => {
+                                const itemUrl = typeof item === 'string' ? item : item?.url;
+                                const itemCaption = typeof item === 'string' ? 'صورة من زوايا المحل والجو العام' : (item?.caption || 'صورة من زوايا المحل والجو العام');
+                                
+                                // Determine 3D layout position
+                                let position = "inactive"; // inactive, center, prev, next
+                                if (idx === activeIndex) {
+                                  position = "center";
+                                } else if (idx === (activeIndex - 1 + galleryItems.length) % galleryItems.length) {
+                                  position = "prev";
+                                } else if (idx === (activeIndex + 1) % galleryItems.length) {
+                                  position = "next";
+                                }
+
+                                // Style mapping based on position for stacked deck effect
+                                let cardStyle = "opacity-0 scale-75 z-0 translate-x-0 pointer-events-none invisible";
+                                if (position === "center") {
+                                  cardStyle = "opacity-100 scale-100 z-30 translate-x-0 cursor-pointer pointer-events-auto shadow-2xl border-2 border-emerald-500/10";
+                                } else if (position === "prev") {
+                                  cardStyle = "opacity-35 scale-80 z-10 -translate-x-[25%] sm:-translate-x-[35%] cursor-pointer pointer-events-auto hover:opacity-55";
+                                } else if (position === "next") {
+                                  cardStyle = "opacity-35 scale-80 z-10 translate-x-[25%] sm:translate-x-[35%] cursor-pointer pointer-events-auto hover:opacity-55";
+                                }
+
+                                // Avoid doubling on dual-item gallery
+                                if (galleryItems.length === 2 && idx !== activeIndex) {
+                                  cardStyle = "opacity-35 scale-80 z-10 translate-x-[25%] sm:translate-x-[35%] cursor-pointer pointer-events-auto hover:opacity-55";
+                                }
+
+                                return (
+                                  <div
+                                    key={idx}
+                                    onClick={() => {
+                                      if (position === "center") {
+                                        setFullScreenImageUrl(itemUrl);
+                                      } else {
+                                        setCurrentSlideIndex(idx);
+                                      }
+                                    }}
+                                    className={`absolute w-[72%] sm:w-[62%] max-w-lg aspect-video bg-white rounded-2xl border border-stone-200/80 overflow-hidden transition-all duration-500 ease-in-out transform flex flex-col ${cardStyle}`}
+                                  >
+                                    <div className="relative w-full h-full bg-stone-100 overflow-hidden">
+                                      <img 
+                                        src={itemUrl} 
+                                        alt={itemCaption} 
+                                        className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
+                                        referrerPolicy="no-referrer"
+                                      />
+                                      {position === "center" && (
+                                        <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 hover:opacity-100 transition-opacity duration-300 flex items-end p-4">
+                                          <span className="bg-white/95 text-stone-800 text-[10px] sm:text-xs font-black px-3 py-1.5 rounded-lg shadow-md flex items-center gap-1">
+                                            <ImageIcon className="h-3.5 w-3.5 text-emerald-600" />
+                                            عرض الصورة كاملة 🔍
+                                          </span>
+                                        </div>
+                                      )}
+
+                                      {/* Owner Delete Button */}
+                                      {isOwner && business.gallery && business.gallery.length > 0 && position === "center" && (
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleDeleteGalleryImage(itemUrl);
+                                            setCurrentSlideIndex(0);
+                                          }}
+                                          className="absolute top-3 right-3 bg-red-600/95 hover:bg-red-700 text-white p-2 rounded-xl shadow-md transition-all z-40 cursor-pointer"
+                                          title="حذف الصورة"
+                                        >
+                                          <Trash2 className="h-4 w-4" />
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+
+                              {/* Navigation Controls */}
+                              {galleryItems.length > 1 && (
+                                <>
+                                  {/* Right Chevron (Arabic Previous - Right to Left) */}
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setCurrentSlideIndex((prev) => (prev - 1 + galleryItems.length) % galleryItems.length);
+                                    }}
+                                    className="absolute right-2 sm:right-6 bg-white/90 hover:bg-white text-stone-800 p-2.5 sm:p-3 rounded-full shadow-lg border border-stone-100 z-40 transition-transform transform hover:scale-110 active:scale-95 cursor-pointer flex items-center justify-center"
+                                    aria-label="الصورة السابقة"
+                                  >
+                                    <ChevronRight className="h-5 w-5 sm:h-6 sm:w-6 text-stone-700 stroke-[2.5]" />
+                                  </button>
+
+                                  {/* Left Chevron (Arabic Next - Left to Right) */}
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setCurrentSlideIndex((prev) => (prev + 1) % galleryItems.length);
+                                    }}
+                                    className="absolute left-2 sm:left-6 bg-white/90 hover:bg-white text-stone-800 p-2.5 sm:p-3 rounded-full shadow-lg border border-stone-100 z-40 transition-transform transform hover:scale-110 active:scale-95 cursor-pointer flex items-center justify-center"
+                                    aria-label="الصورة التالية"
+                                  >
+                                    <ChevronLeft className="h-5 w-5 sm:h-6 sm:w-6 text-stone-700 stroke-[2.5]" />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+
+                            {/* Active Caption & Dot Indicators */}
+                            {galleryItems.length > 0 && (
+                              <div className="space-y-4 max-w-lg mx-auto text-center pt-2">
+                                <div className="bg-emerald-50/40 border border-emerald-100/50 p-4 rounded-2xl shadow-xs transition-all duration-300">
+                                  <p className="text-sm sm:text-base font-bold text-stone-800 leading-relaxed text-center">
+                                    {(() => {
+                                      const currentItem = galleryItems[activeIndex];
+                                      return typeof currentItem === 'string' 
+                                        ? 'صورة من زوايا المحل والجو العام' 
+                                        : (currentItem?.caption || 'صورة من زوايا المحل والجو العام');
+                                    })()}
+                                  </p>
+                                  <span className="inline-block text-[10px] text-stone-500 font-bold mt-1.5 bg-white/80 border border-stone-100 px-2.5 py-0.5 rounded-full">
+                                    الصورة {activeIndex + 1} من {galleryItems.length}
+                                  </span>
+                                </div>
+
+                                {galleryItems.length > 1 && (
+                                  <div className="flex items-center justify-center gap-1.5 pb-2">
+                                    {galleryItems.map((_, idx) => (
+                                      <button
+                                        key={idx}
+                                        type="button"
+                                        onClick={() => setCurrentSlideIndex(idx)}
+                                        className={`h-2 rounded-full transition-all duration-300 cursor-pointer ${
+                                          idx === activeIndex 
+                                            ? 'w-6 bg-emerald-600' 
+                                            : 'w-2 bg-stone-300 hover:bg-stone-400'
+                                        }`}
+                                        title={`الانتقال للصورة ${idx + 1}`}
+                                      />
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  ) : (
+                    <div className="py-14 text-center bg-gradient-to-b from-amber-50/50 to-stone-50 rounded-2xl border border-dashed border-amber-200 p-6 space-y-4 text-right">
+                      <div className="w-14 h-14 bg-amber-100 text-amber-700 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                        <Crown className="h-7 w-7 fill-amber-500 text-amber-600" />
+                      </div>
+                      <h3 className="text-xl font-black text-stone-800 mb-1 text-center">
+                        {isMedical ? 'معرض الصور والمرافق الطبية (VIP)' : 'معرض صور وجو المحل (VIP)'}
+                      </h3>
+                      <p className="text-stone-600 text-sm max-w-md mx-auto leading-relaxed text-center">
+                        {isMedical 
+                          ? 'ميزة حصرية وخاصة بالمنشآت الطبية المشتركة بالباقة الذهبية VIP! تتيح للمراجعين والمرضى استكشاف غرف الكشف، الأجهزة الطبية، ومرافق المنشأة قبل الزيارة.'
+                          : 'ميزة حصرية وخاصة بمشتركي الباقة الذهبية VIP! تتيح هذه الميزة لزبائن إربد استكشاف أجواء محلك، تفاصيل الجلسات، جودة الديكور والبيئة المحيطة من الداخل والخارج قبل الحضور الفعلي.'}
+                      </p>
+                      
+                      {/* Blurred gallery mockup */}
+                      <div className="grid grid-cols-2 gap-4 max-w-lg mx-auto opacity-30 select-none pointer-events-none filter blur-xs py-2">
+                        <div className="aspect-video bg-stone-300 rounded-xl"></div>
+                        <div className="aspect-video bg-stone-300 rounded-xl"></div>
+                      </div>
+
+                      {isOwner ? (
+                        <div className="pt-2 text-center">
+                          <button
+                            type="button"
+                            onClick={() => setIsUpgradeModalOpen(true)}
+                            className="inline-flex items-center gap-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs font-black px-6 py-3 rounded-xl shadow-md transition-all cursor-pointer"
+                          >
+                            <Crown className="h-4 w-4 fill-white" />
+                            <span>{isMedical ? 'ترقية المنشأة إلى VIP لتفعيل معرض الصور' : 'ترقية هذا المحل إلى VIP لتفعيل معرض الصور الخاص بك'}</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <p className="text-stone-400 text-xs italic text-center">
+                          {isMedical ? 'لم تقم المنشأة بتفعيل الباقة الذهبية لعرض الصور والمرافق بعد.' : 'لم يقم هذا المحل بتفعيل الباقة الذهبية لعرض الصور بعد.'}
+                        </p>
+                      )}
+                    </div>
+                  )
+                )}
+                </div>
+              </div>
+
+              {/* Reviews Section: Platform Community Reviews Only (Exclusively in About / Medical Profile tab) */}
+              {activeTab === 'about' && (
+                <div className="space-y-6">
+                
+                {hideSite ? (
+                  <div className="bg-white p-8 sm:p-10 rounded-2xl sm:rounded-3xl border border-[#e5e1da] text-center space-y-4 shadow-xs">
+                    <div className="w-16 h-16 bg-stone-100 text-stone-500 rounded-full flex items-center justify-center mx-auto">
+                      <EyeOff className="h-8 w-8" />
+                    </div>
+                    <h3 className="text-xl font-bold text-[#2d2a26]">التقييمات معطلة لهذا النشاط التجاري</h3>
+                    <p className="text-stone-500 text-sm max-w-md mx-auto leading-relaxed">
+                      قام صاحب هذا المحل باختيار إخفاء التقييمات والتعليقات. يمكنك التواصل مع المحل عبر الهاتف أو زيارة موقعه مباشرة.
+                    </p>
+                    {isOwner && (
+                      <div className="pt-2">
+                        <button
+                          onClick={handleOpenEditModal}
+                          className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#1a4d2e] text-white rounded-xl text-sm font-bold hover:bg-[#133b22] transition-colors shadow-xs"
+                        >
+                          <Settings className="h-4 w-4" />
+                          <span>تعديل خيارات ظهور التقييمات</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    {/* Reviews Header */}
+                    <div id="reviews-section-header" className="bg-white p-5 sm:p-6 rounded-2xl sm:rounded-3xl border border-[#e5e1da] shadow-xs flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <MessageSquare className="h-6 w-6 text-[#1a4d2e]" />
+                        <h2 className="text-xl sm:text-2xl font-bold text-[#2d2a26]">تقييمات وآراء الزوار</h2>
+                      </div>
+                      
+                      <div className="flex items-center gap-2 bg-emerald-50 text-[#1a4d2e] font-bold text-xs sm:text-sm px-3.5 py-1.5 rounded-xl border border-emerald-200">
+                        <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                        <span>{calculatedRating ? `${calculatedRating} من 5` : 'لا توجد تقييمات'}</span>
+                        <span className="text-stone-400 mr-1 font-normal">({reviews.length} تقييم)</span>
+                      </div>
+                    </div>
+
+                    {/* Retroactive Reward Claim Banner if user already reviewed and hasn't claimed yet */}
+                    {currentUser && !existingUserReward && business && (business.giftCodeEnabled === true || (business as any).giftCodeEnabled === 'true') && reviews.some(r => r.userId === currentUser.uid && r.rating >= (business.giftCodeMinStars || 1)) && (
+                      <div className="bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-emerald-500/10 border-2 border-emerald-500/30 p-5 rounded-2xl sm:rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
+                        <div className="flex items-center gap-3 text-right">
+                          <div className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-md">
+                            <Gift className="h-6 w-6 animate-pulse" />
+                          </div>
+                          <div>
+                            <h4 className="font-black text-stone-900 text-sm sm:text-base">
+                              تهانينا! تقييمك المعتمد مؤهل للحصول على كود خصم ورمز QR مجاني 🎉
+                            </h4>
+                            <p className="text-xs text-stone-600 font-medium mt-0.5">
+                              لقد قمت بتقييم {business.name} مسبقاً. اضغط على الزر لاستلام بطاقتك ورمز الـ QR فوراً!
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleClaimRetroactiveReward}
+                          disabled={isClaimingReward}
+                          className="shrink-0 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                        >
+                          <QrCode className="h-4 w-4" />
+                          <span>{isClaimingReward ? 'جاري تجهيز الكود...' : 'استلام رمز QR وكود الخصم 🎁'}</span>
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Already claimed reward notification badge */}
+                    {existingUserReward && (
+                      <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl flex items-center justify-between gap-3 text-right">
+                        <div className="flex items-center gap-2.5">
+                          <CheckCircle className="h-5 w-5 text-emerald-600 shrink-0" />
+                          <div>
+                            <span className="text-xs font-bold text-stone-900 block">
+                              لديك كود خصم ورمز QR فعال لهذا المحل ({existingUserReward.discountPercent}% خصم)!
+                            </span>
+                            <span className="text-[11px] font-mono text-emerald-700 font-bold">
+                              الكود: {existingUserReward.code}
+                            </span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setAwardedGiftCode({
+                            code: existingUserReward.code,
+                            discountPercent: existingUserReward.discountPercent,
+                            businessName: business?.name || ''
+                          })}
+                          className="px-3 py-1.5 bg-white border border-emerald-300 text-emerald-800 rounded-lg text-xs font-bold hover:bg-emerald-100/50 transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+                        >
+                          <QrCode className="h-3.5 w-3.5" />
+                          <span>عرض الـ QR</span>
+                        </button>
+                      </div>
+                    )}
+                    
+                    {/* Add Review Form */}
+                    {currentUser ? (
+                      <form onSubmit={handleSubmitReview} className="bg-white p-6 sm:p-8 rounded-2xl sm:rounded-3xl border border-[#e5e1da] shadow-xs space-y-5">
+                        {/* Honeypot field - 100% hidden from humans, bots will fill it */}
+                        <div className="absolute opacity-0 -z-50 pointer-events-none" style={{ width: 0, height: 0, overflow: 'hidden' }}>
+                          <label htmlFor="review_website_hp">لا تقم بتعبئة هذا الحقل إذا كنت بشراً</label>
+                          <input
+                            type="text"
+                            id="review_website_hp"
+                            name="review_website_hp"
+                            tabIndex={-1}
+                            autoComplete="off"
+                            value={hpValue}
+                            onChange={(e) => setHpValue(e.target.value)}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+                          <h3 className="text-lg font-bold text-[#2d2a26]">أضف تقييمك ورأيك في المحل</h3>
+                          <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+                            تقييم معتمد
+                          </span>
+                        </div>
+                        
+                        <div>
+                          <label className="block text-sm font-bold text-stone-600 mb-2">ما هو تقييمك العام؟</label>
+                          <div className="flex items-center gap-1 sm:gap-2">
+                            {[1, 2, 3, 4, 5].map((star) => (
+                              <button
+                                key={star}
+                                type="button"
+                                onClick={() => setNewRating(star)}
+                                className="p-1 focus:outline-none transition-transform hover:scale-110 active:scale-95"
+                              >
+                                <Star className={cn("h-7 w-7 sm:h-8 sm:w-8 transition-colors", star <= newRating ? "fill-yellow-400 text-yellow-400" : "text-stone-200")} />
+                              </button>
+                            ))}
+                            <span className="text-sm font-bold text-stone-600 mr-2">
+                              ({newRating} من 5 نجوم)
+                            </span>
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <label htmlFor="comment" className="block text-sm font-bold text-stone-600">رأيك بالتفصيل</label>
+                          </div>
+                          <textarea
+                            id="comment"
+                            rows={3}
+                            required
+                            className={`block w-full p-4 border rounded-2xl focus:ring-2 outline-none transition-all resize-none text-[#2d2a26] text-base ${
+                              containsUrlOrLink(newComment)
+                                ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-500/20 bg-rose-50/20'
+                                : 'border-[#e5e1da] focus:ring-[#1a4d2e]/20 focus:border-[#1a4d2e]'
+                            }`}
+                            placeholder="اكتب تعليقك، ملاحظاتك عن الخدمة، الجودة، أو الأسعار..."
+                            value={newComment}
+                            onChange={(e) => setNewComment(e.target.value)}
+                          ></textarea>
+                          {containsUrlOrLink(newComment) && (
+                            <div className="mt-2.5 p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold rounded-xl flex items-center gap-2 animate-in fade-in">
+                              <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
+                              <span>عذراً، يمنع إدراج الروابط والمواقع الإلكترونية في التقييم نهائياً (مسموح بالنصوص فقط).</span>
+                            </div>
+                          )}
+                        </div>
+                        
+                        <div className="flex justify-end">
+                          <button
+                            type="submit"
+                            disabled={submittingReview || !newComment.trim() || containsUrlOrLink(newComment)}
+                            className="w-full sm:w-auto px-7 py-3 bg-[#1a4d2e] text-white rounded-xl font-bold hover:bg-[#133b22] focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-xs"
+                          >
+                            {submittingReview ? 'جاري النشر...' : 'نشر التقييم في المنصة'}
+                          </button>
+                        </div>
+                      </form>
+                    ) : (
+                      <div className="bg-white p-6 sm:p-8 rounded-2xl sm:rounded-3xl border border-[#e5e1da] text-center flex flex-col items-center justify-center">
+                        <div className="bg-stone-100 p-3.5 rounded-full mb-3 text-stone-500">
+                          <UserIcon className="h-6 w-6" />
+                        </div>
+                        <h3 className="text-lg font-bold text-[#2d2a26] mb-1">هل جربت هذا المكان؟</h3>
+                        <p className="text-stone-500 text-sm mb-4 max-w-sm">سجل دخولك لتتمكن من إضافة تقييمك ورأيك للآخرين على منصة شو في بإربد.</p>
+                        <Link to="/login" state={{ from: location.pathname + location.search }} className="px-6 py-2.5 bg-[#1a4d2e] text-white rounded-xl font-bold hover:bg-[#133b22] transition-colors text-sm shadow-xs">
+                          تسجيل الدخول للتقييم
+                        </Link>
+                      </div>
+                    )}
+
+                    {/* Sorting & Smart Filtering Controls */}
+                    {reviews.length > 0 && (
+                      <div className="bg-stone-50 border border-[#e5e1da] p-4 rounded-2xl flex flex-col sm:flex-row gap-4 items-center justify-between text-right">
+                        {/* Rating Filter Tabs */}
+                        <div className="w-full sm:w-auto flex flex-col gap-1.5">
+                          <span className="text-xs font-bold text-stone-500">فلترة حسب التقييم:</span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {[
+                              { label: 'الكل', value: 0 },
+                              { label: '5 نجوم', value: 5 },
+                              { label: '4 نجوم فأكثر', value: 4 },
+                              { label: '3 نجوم فأكثر', value: 3 },
+                              { label: 'نجمتان فأكثر', value: 2 },
+                              { label: 'نجمة فأكثر', value: 1 }
+                            ].map((tab) => (
+                              <button
+                                key={tab.value}
+                                type="button"
+                                onClick={() => {
+                                  setReviewRatingFilter(tab.value);
+                                  setReviewCurrentPage(1); // Reset page on filter change
+                                }}
+                                className={`text-xs px-3.5 py-2 rounded-xl font-bold transition-all border cursor-pointer ${
+                                  reviewRatingFilter === tab.value
+                                    ? 'bg-[#1a4d2e] border-[#1a4d2e] text-white shadow-xs'
+                                    : 'bg-white border-[#e5e1da] text-stone-700 hover:bg-stone-100'
+                                }`}
+                              >
+                                {tab.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Sorting Dropdown */}
+                        <div className="w-full sm:w-auto flex flex-col gap-1.5 self-stretch sm:self-auto">
+                          <span className="text-xs font-bold text-stone-500">ترتيب التقييمات:</span>
+                          <div className="relative">
+                            <select
+                              value={reviewSortOrder}
+                              onChange={(e) => {
+                                setReviewSortOrder(e.target.value as any);
+                                setReviewCurrentPage(1);
+                              }}
+                              className="w-full sm:w-[180px] bg-white border border-[#e5e1da] rounded-xl px-3 py-2 text-xs font-bold text-stone-700 focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]/20 focus:border-[#1a4d2e] cursor-pointer appearance-none text-right pr-2 pl-8"
+                            >
+                              <option value="newest">الأحدث أولاً</option>
+                              <option value="highest">الأعلى تقييماً أولاً</option>
+                              <option value="lowest">الأقل تقييماً أولاً</option>
+                            </select>
+                            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-stone-500">
+                              <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                                <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/>
+                              </svg>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Site Platform Reviews Stream */}
+                    <div className="space-y-4">
+                      {reviews.length === 0 ? (
+                        <div className="text-center py-12 text-stone-500 bg-white rounded-2xl sm:rounded-3xl border border-[#e5e1da] border-dashed">
+                          لا توجد تقييمات على المنصة بعد. كن أول من يضيف تقييماً لهذا المحل!
+                        </div>
+                      ) : sortedReviews.length === 0 ? (
+                        <div className="text-center py-12 text-stone-500 bg-white rounded-2xl sm:rounded-3xl border border-[#e5e1da] border-dashed space-y-3">
+                          <p>لا توجد تقييمات مطابقة للخيارات المحددة.</p>
+                          <button
+                            onClick={() => {
+                              setReviewRatingFilter(0);
+                              setReviewSortOrder('newest');
+                              setReviewCurrentPage(1);
+                            }}
+                            className="text-xs font-bold text-[#1a4d2e] underline hover:text-[#133b22]"
+                          >
+                            عرض جميع التقييمات
+                          </button>
+                        </div>
+                      ) : (
+                        paginatedReviews.map((review) => (
+                          <div key={review.id} className="bg-white p-5 sm:p-6 rounded-2xl sm:rounded-3xl border border-[#e5e1da] shadow-xs space-y-3">
+                            <div className="flex justify-between items-start gap-3">
+                              <div className="flex items-center gap-3">
+                                <div className="h-10 w-10 bg-[#1a4d2e]/10 text-[#1a4d2e] rounded-xl flex items-center justify-center font-bold text-base shrink-0">
+                                  {(review.userName || 'م').charAt(0)}
+                                </div>
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-bold text-[#2d2a26] text-base">{stripUrlsAndLinks(review.userName) || 'عضو زائر'}</span>
+                                    <span className="text-[10px] bg-emerald-50 text-emerald-800 font-bold px-2 py-0.5 rounded-md border border-emerald-100">
+                                      عضو المنصة
+                                    </span>
+                                  </div>
+                                  <div className="text-xs text-stone-400 mt-0.5">
+                                    {formatDistanceToNow(review.createdAt, { addSuffix: true, locale: ar })}
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              <div className="flex items-center gap-2 shrink-0">
+                                <div className="flex items-center gap-1 bg-stone-50 border border-[#e5e1da] px-2.5 py-1 rounded-lg">
+                                  <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
+                                  <span className="text-xs font-bold text-stone-700">{review.rating}</span>
+                                </div>
+                                
+                                {/* Report review button */}
+                                {currentUser && currentUser.uid !== review.userId && (
+                                  <button
+                                    onClick={() => {
+                                      setSelectedReviewForReport(review);
+                                      setIsReportModalOpen(true);
+                                    }}
+                                    className="p-1.5 hover:bg-red-50 text-stone-400 hover:text-red-600 rounded-lg transition-colors cursor-pointer"
+                                    title="إبلاغ عن تقييم كيدي"
+                                  >
+                                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                    </svg>
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                            
+                            <p className="text-stone-700 text-base leading-relaxed bg-[#fdfcfb] p-3.5 rounded-xl border border-stone-100 break-words">
+                              {stripUrlsAndLinks(review.comment)}
+                            </p>
+
+                            {/* Existing Owner Reply */}
+                            {review.reply && (
+                              <div className="bg-emerald-50/75 border-r-4 border-[#1a4d2e] p-4 rounded-l-2xl mt-3 space-y-1">
+                                <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-800">
+                                  <Store className="h-3.5 w-3.5" />
+                                  <span>رد المنشأة ({review.reply.authorName}):</span>
+                                </div>
+                                <p className="text-stone-700 text-sm leading-relaxed">{stripUrlsAndLinks(review.reply.text)}</p>
+                              </div>
+                            )}
+
+                            {/* Owner Reply Form / Control */}
+                            {isOwner && (
+                              <div className="mt-2.5 pt-2 flex items-center justify-end border-t border-dashed border-stone-100">
+                                {vipInfo.isVip ? (
+                                  replyActiveId === review.id ? (
+                                    <div className="w-full space-y-2">
+                                      <textarea
+                                        rows={2}
+                                        className={`block w-full p-3 border rounded-xl focus:ring-2 focus:ring-[#1a4d2e]/20 focus:border-[#1a4d2e] outline-none text-sm resize-none ${
+                                          containsUrlOrLink(replyTextMap[review.id])
+                                            ? 'border-rose-400 bg-rose-50/20'
+                                            : 'border-[#e5e1da]'
+                                        }`}
+                                        placeholder="اكتب رد صاحب العمل هنا بكل لباقة (نصوص فقط دون روابط)..."
+                                        value={replyTextMap[review.id] || ''}
+                                        onChange={(e) => setReplyTextMap(prev => ({ ...prev, [review.id]: e.target.value }))}
+                                      />
+                                      {containsUrlOrLink(replyTextMap[review.id]) && (
+                                        <p className="text-[11px] text-rose-600 font-bold">عذراً، يمنع إدراج الروابط في الردود.</p>
+                                      )}
+                                      <div className="flex justify-end gap-2">
+                                        <button
+                                          onClick={() => setReplyActiveId(null)}
+                                          className="px-3.5 py-1.5 bg-stone-100 text-stone-700 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                                        >
+                                          إلغاء
+                                        </button>
+                                        <button
+                                          onClick={() => handleSaveOwnerReply(review.id)}
+                                          disabled={submittingReply || !(replyTextMap[review.id] || '').trim() || containsUrlOrLink(replyTextMap[review.id])}
+                                          className="px-4 py-1.5 bg-[#1a4d2e] text-white rounded-lg text-xs font-bold disabled:opacity-50 transition-colors cursor-pointer"
+                                        >
+                                          {submittingReply ? 'جاري الحفظ...' : 'حفظ الرد'}
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      onClick={() => {
+                                        setReplyActiveId(review.id);
+                                        setReplyTextMap(prev => ({ ...prev, [review.id]: review.reply?.text || '' }));
+                                      }}
+                                      className="inline-flex items-center gap-1 text-xs font-bold text-[#1a4d2e] hover:underline cursor-pointer"
+                                    >
+                                      <Edit3 className="h-3.5 w-3.5" />
+                                      <span>{review.reply ? 'تعديل رد صاحب العمل' : 'الرد على هذا التقييم كصاحب عمل'}</span>
+                                    </button>
+                                  )
+                                ) : (
+                                  <button
+                                    onClick={() => setIsUpgradeModalOpen(true)}
+                                    className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 px-3 py-1.5 rounded-xl border border-amber-200 transition-colors cursor-pointer"
+                                    title="ميزة الرد الرسمي على تقييمات الزبائن متاحة حصرياً للباقة الذهبية VIP"
+                                  >
+                                    <LockIcon className="h-3.5 w-3.5 text-amber-600" />
+                                    <span>الرد الرسمي على التقييمات (حصري للباقة الذهبية VIP) 👑</span>
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ))
+                      )}
+
+                      {/* Pagination Controls */}
+                      {totalReviewPages > 1 && (
+                        <div className="flex items-center justify-center gap-2 pt-6 border-t border-[#e5e1da]">
+                          {/* Previous Button (Points to Right in RTL) */}
+                          <button
+                            type="button"
+                            disabled={activeReviewPage === 1}
+                            onClick={() => handlePageChange(activeReviewPage - 1)}
+                            className="p-2.5 border border-[#e5e1da] bg-white rounded-xl text-stone-700 hover:bg-stone-50 disabled:opacity-40 disabled:hover:bg-white transition-all cursor-pointer flex items-center justify-center"
+                            title="الصفحة السابقة"
+                          >
+                            <ChevronRight className="h-4 w-4" />
+                          </button>
+
+                          {/* Page Numbers */}
+                          {Array.from({ length: totalReviewPages }).map((_, idx) => {
+                            const pageNumber = idx + 1;
+                            return (
+                              <button
+                                key={pageNumber}
+                                type="button"
+                                onClick={() => handlePageChange(pageNumber)}
+                                className={`h-9 w-9 rounded-xl font-bold text-xs transition-all flex items-center justify-center border cursor-pointer ${
+                                  activeReviewPage === pageNumber
+                                    ? 'bg-[#1a4d2e] border-[#1a4d2e] text-white shadow-xs'
+                                    : 'bg-white border-[#e5e1da] text-stone-700 hover:bg-stone-50'
+                                }`}
+                              >
+                                {pageNumber}
+                              </button>
+                            );
+                          })}
+
+                          {/* Next Button (Points to Left in RTL) */}
+                          <button
+                            type="button"
+                            disabled={activeReviewPage === totalReviewPages}
+                            onClick={() => handlePageChange(activeReviewPage + 1)}
+                            className="p-2.5 border border-[#e5e1da] bg-white rounded-xl text-stone-700 hover:bg-stone-50 disabled:opacity-40 disabled:hover:bg-white transition-all cursor-pointer flex items-center justify-center"
+                            title="الصفحة التالية"
+                          >
+                            <ChevronLeft className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+                </div>
+              )}
+            </div>
+
+            {/* Left Side: Sticky Information & Location Action Box (lg:col-span-1) */}
+            <div className="space-y-6 lg:sticky lg:top-28">
+
+              {/* Quick Contact & Action Card */}
+              <div className="bg-white rounded-3xl border border-stone-200/80 p-6 shadow-[0_8px_30px_rgb(0,0,0,0.03)] space-y-6">
+                <div className="flex items-center justify-between border-b border-stone-100 pb-4">
+                  <h3 className="text-lg font-extrabold text-stone-900 flex items-center gap-2.5">
+                    <span className="p-1.5 bg-[#1a4d2e]/10 text-[#1a4d2e] rounded-lg">
+                      <Phone className="h-5 w-5" />
+                    </span>
+                    معلومات التواصل السريع
+                  </h3>
+                </div>
+
+                {/* Call & WhatsApp Buttons */}
+                {business?.phone ? (
+                  <div className="space-y-3">
+                    {/* Medical Quick Appointment Booking Button (Not for Pharmacies) */}
+                    {isMedical && !isPharmacy && (
+                      <button
+                        type="button"
+                        onClick={() => setIsMedicalBookingOpen(true)}
+                        className="w-full flex items-center justify-center gap-2 bg-gradient-to-l from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-stone-950 py-3.5 px-4 rounded-xl font-black text-sm transition-all shadow-md hover:shadow-lg cursor-pointer transform hover:scale-[1.01] active:scale-98"
+                      >
+                        <Calendar className="h-4.5 w-4.5 text-stone-950" />
+                        <span>احجز موعد كشفية واستشارة</span>
+                      </button>
+                    )}
+
+                    {/* Pharmacy Quick WhatsApp / Order Button */}
+                    {isMedical && isPharmacy && (
+                      pharmacyWhatsAppUrl ? (
+                        <a
+                          href={pharmacyWhatsAppUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="w-full flex items-center justify-center gap-2 bg-gradient-to-l from-emerald-600 to-[#1a4d2e] hover:from-emerald-700 hover:to-[#133b22] text-white py-3.5 px-4 rounded-xl font-black text-sm transition-all shadow-md hover:shadow-lg cursor-pointer"
+                        >
+                          <Pill className="h-4.5 w-4.5 text-emerald-200" />
+                          <span>طلب دواء أو استفسار عبر واتساب</span>
+                        </a>
+                      ) : (
+                        <a
+                          href={`tel:${business.phone}`}
+                          className="w-full flex items-center justify-center gap-2 bg-gradient-to-l from-emerald-600 to-[#1a4d2e] hover:from-emerald-700 hover:to-[#133b22] text-white py-3.5 px-4 rounded-xl font-black text-sm transition-all shadow-md hover:shadow-lg cursor-pointer"
+                        >
+                          <Phone className="h-4.5 w-4.5 text-emerald-200" />
+                          <span>اتصال مباشر بالصيدلية</span>
+                        </a>
+                      )
+                    )}
+
+                    {/* Live Direct Chat Button */}
+                    {business.userId && (
+                      currentUser ? (
+                        <Link
+                          to={`/messages?businessId=${business.id}`}
+                          className="w-full flex items-center justify-center gap-2.5 bg-gradient-to-r from-emerald-600 via-[#1a4d2e] to-[#133c23] hover:from-emerald-700 hover:to-[#0f2b18] text-white py-3.5 px-4 rounded-xl font-black text-sm sm:text-base transition-all shadow-md hover:shadow-lg hover:scale-[1.01] active:scale-[0.99] border border-emerald-500/30 cursor-pointer text-center"
+                        >
+                          <MessageSquare className="h-5 w-5 text-emerald-300 fill-emerald-300/20 shrink-0 animate-pulse" />
+                          <span>راسل المحل مباشرة</span>
+                          <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
+                        </Link>
+                      ) : (
+                        <Link
+                          to="/login"
+                          state={{ from: location.pathname + location.search }}
+                          className="w-full flex items-center justify-center gap-2.5 bg-gradient-to-r from-emerald-600 via-[#1a4d2e] to-[#133c23] hover:from-emerald-700 hover:to-[#0f2b18] text-white py-3.5 px-4 rounded-xl font-black text-sm sm:text-base transition-all shadow-md hover:shadow-lg hover:scale-[1.01] active:scale-[0.99] border border-emerald-500/30 cursor-pointer text-center"
+                        >
+                          <MessageSquare className="h-5 w-5 text-emerald-300 fill-emerald-300/20 shrink-0 animate-pulse" />
+                          <span>راسل المحل مباشرة</span>
+                          <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
+                        </Link>
+                      )
+                    )}
+
+                    {/* Contact Buttons Row (WhatsApp & Call side-by-side for elegant design) */}
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <a
+                        href={getWhatsAppUrl(business.phone, formatBusinessWhatsAppMessage(business.name))}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={() => { if (business?.id) trackBusinessInteraction(business.id, 'whatsapp', { isOwner, currentUserId: currentUser?.uid, ownerId: business.userId, isAdmin: Boolean(isAdmin) }); }}
+                        className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-3 px-3 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-sm hover:shadow-md transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer text-center"
+                      >
+                        <WhatsApp3DIcon className="h-4.5 w-4.5 text-white shrink-0" />
+                        <span>واتساب مباشر</span>
+                      </a>
+
+                      <a
+                        href={`tel:${business.phone}`}
+                        onClick={() => { if (business?.id) trackBusinessInteraction(business.id, 'call', { isOwner, currentUserId: currentUser?.uid, ownerId: business.userId, isAdmin: Boolean(isAdmin) }); }}
+                        className="flex items-center justify-center gap-2 bg-[#1a4d2e] hover:bg-[#133c23] text-white py-3 px-3 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-sm hover:shadow-md transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer text-center"
+                      >
+                        <Phone3DIcon className="h-4.5 w-4.5 text-white shrink-0" />
+                        <span>اتصال هاتفي</span>
+                      </a>
+                    </div>
+                    
+                    <button
+                      onClick={handleCopyPhone}
+                      className="w-full flex items-center justify-center gap-2 bg-stone-50 hover:bg-stone-100 text-stone-700 py-2.5 px-4 rounded-xl font-semibold text-xs transition-all border border-stone-200/60 cursor-pointer"
+                    >
+                      {copiedPhone ? (
+                        <>
+                          <Check className="h-3.5 w-3.5 text-green-600" />
+                          <span className="text-green-600">تم نسخ الرقم!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="h-3.5 w-3.5 text-stone-500" />
+                          <span>نسخ رقم الهاتف: <span dir="ltr" className="font-mono font-bold mr-1">{business.phone.replace(/\s+/g, '')}</span></span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="text-sm text-stone-500 bg-stone-50 p-4 rounded-xl text-center border border-dashed border-stone-200">
+                    رقم الهاتف غير متاح حالياً
+                  </div>
+                )}
+
+                {/* Social Links */}
+                {hasSocialLinks && (
+                  <div className="pt-4 border-t border-stone-100 space-y-2.5">
+                    <h4 className="text-xs font-bold text-stone-600 flex items-center gap-1.5">
+                      <Globe className="h-3.5 w-3.5 text-[#1a4d2e]" />
+                      <span>حسابات المحل الرسمية</span>
+                    </h4>
+                    <div className="bg-stone-50/50 p-2 rounded-xl border border-stone-100">
+                      {renderSocialMediaButtons(business.socialLinks)}
+                    </div>
+                  </div>
+                )}
+
+                {/* Details Section (Address, Delivery, Hours) */}
+                <div className="space-y-4 pt-3 border-t border-stone-100">
+                  
+                  {/* Address Details */}
+                  <div className="flex items-start gap-3.5 text-sm group/item">
+                    <div className="p-2.5 bg-stone-50 text-[#1a4d2e] rounded-xl shrink-0 mt-0.5 border border-stone-100 group-hover/item:bg-emerald-50 group-hover/item:text-emerald-800 transition-colors">
+                      <MapPin className="h-4 w-4" />
+                    </div>
+                    <div className="space-y-1">
+                      <span className="font-bold text-stone-800 block">العنوان والموقع:</span>
+                      <span className="text-stone-600 block break-words leading-relaxed">{business.address || "إربد"}</span>
+                    </div>
+                  </div>
+
+                  {/* Payment Methods Section (Between Address and Delivery) */}
+                  {(() => {
+                    const methods = business.paymentMethods || business.medicalProfile?.paymentMethods || ['كاش', 'فيزا', 'كليك'];
+                    const hasCash = isMethodSelected(methods, 'كاش');
+                    const hasVisa = isMethodSelected(methods, 'فيزا');
+                    const hasCliq = isMethodSelected(methods, 'كليك');
+
+                    if (!hasCash && !hasVisa && !hasCliq) return null;
+
+                    return (
+                      <div className="flex items-start gap-3.5 text-sm group/item">
+                        <div className="p-2.5 bg-emerald-50/70 text-emerald-800 rounded-xl shrink-0 mt-0.5 border border-emerald-100/50">
+                          <CreditCard className="h-4 w-4" />
+                        </div>
+                        <div className="space-y-1.5 min-w-0">
+                          <span className="font-bold text-stone-800 block">خيارات الدفع المتاحة:</span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {hasCash && (
+                              <span className="bg-emerald-50 text-emerald-900 text-[11px] font-black px-2.5 py-1 rounded-lg border border-emerald-200/80 flex items-center gap-1.5 shadow-2xs">
+                                <Banknote className="h-3.5 w-3.5 text-emerald-600" />
+                                <span>كاش</span>
+                              </span>
+                            )}
+                            {hasVisa && (
+                              <span className="bg-blue-50 text-blue-900 text-[11px] font-black px-2.5 py-1 rounded-lg border border-blue-200/80 flex items-center gap-1.5 shadow-2xs">
+                                <CreditCard className="h-3.5 w-3.5 text-blue-600" />
+                                <span>فيزا</span>
+                              </span>
+                            )}
+                            {hasCliq && (
+                              <span className="bg-purple-50 text-purple-900 text-[11px] font-black px-2.5 py-1 rounded-lg border border-purple-200/80 flex items-center gap-1.5 shadow-2xs">
+                                <Smartphone className="h-3.5 w-3.5 text-purple-600" />
+                                <span>كليك</span>
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Delivery Available (Added between Address and Working Hours) */}
+                  {!isMedical && business.deliveryAvailable && (
+                    <div className="flex items-start gap-3.5 text-sm group/item">
+                      <div className="p-2.5 bg-blue-50/70 text-blue-700 rounded-xl shrink-0 mt-0.5 border border-blue-100/50 group-hover/item:bg-blue-100 group-hover/item:text-blue-800 transition-colors">
+                        <Truck className="h-4 w-4" />
+                      </div>
+                      <div className="space-y-1">
+                        <span className="font-bold text-stone-800 block">خدمة التوصيل:</span>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <button
+                            onClick={() => setShowDeliveryModal(true)}
+                            className="bg-blue-100 text-blue-800 text-[11px] font-black px-2.5 py-0.5 rounded-md border border-blue-200/60 flex items-center gap-1 hover:bg-blue-200 transition-all cursor-pointer shadow-3xs"
+                            title="عرض المناطق المشمولة بالتوصيل"
+                          >
+                            <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
+                            التوصيل متوفر (المناطق المشمولة)
+                          </button>
+                          <span className="text-xs text-stone-500">
+                            {business.deliveryRegions ? 'مناطق محددة' : 'جميع مناطق إربد'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* State & Working Hours */}
+                  <div className="flex items-start gap-3.5 text-sm group/item">
+                    <div className={`p-2.5 rounded-xl shrink-0 mt-0.5 border transition-colors ${
+                      liveStatus.isOpen 
+                        ? 'bg-emerald-50/70 text-emerald-700 border-emerald-100/50 group-hover/item:bg-emerald-100 group-hover/item:text-emerald-800' 
+                        : 'bg-red-50/70 text-red-700 border-red-100/50 group-hover/item:bg-red-100 group-hover/item:text-red-800'
+                    }`}>
+                      <Clock className={`h-4 w-4 ${liveStatus.isOpen ? 'animate-pulse' : ''}`} />
+                    </div>
+                    <div className="space-y-1">
+                      <span className="font-bold text-stone-800 block">الحالة وساعات العمل:</span>
+                      <div className="flex flex-col gap-1.5">
+                        <span className={`font-black text-xs px-2.5 py-0.5 rounded-md w-fit flex items-center gap-1.5 ${
+                          liveStatus.isOpen 
+                            ? 'bg-emerald-100/80 text-emerald-800 border border-emerald-200/60' 
+                            : 'bg-red-100/80 text-red-800 border border-red-200/60'
+                        }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${liveStatus.isOpen ? 'bg-emerald-600 animate-pulse' : 'bg-red-600'}`} />
+                          {liveStatus.status}
+                        </span>
+                        {liveStatus.countdownText && (
+                          <span className="text-xs font-bold text-stone-700 flex items-center gap-1 bg-amber-50 text-amber-800 px-2.5 py-0.5 rounded-md border border-amber-100/60 w-fit">
+                            <span>⏱️</span>
+                            <span>{liveStatus.countdownText}</span>
+                          </span>
+                        )}
+                        <span className="text-xs text-stone-600 font-medium">
+                          {liveStatus.subText}
+                        </span>
+                        {business.workingHours?.days && (
+                          <span className="text-xs text-stone-500 flex items-center gap-1">
+                            <span>🗓️</span>
+                            <span>{business.workingHours.days}</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Interactive Map Embed Frame */}
+                  {Boolean(embedMapUrl) && (
+                    <div className="mt-4 rounded-2xl overflow-hidden border border-stone-200 shadow-sm bg-stone-100 relative group/map">
+                      <iframe
+                        title={`خريطة ${business.name}`}
+                        width="100%"
+                        height="180"
+                        className="w-full h-44 border-0 block group-hover/map:opacity-95 transition-opacity"
+                        loading="lazy"
+                        allowFullScreen
+                        referrerPolicy="no-referrer-when-downgrade"
+                        src={embedMapUrl}
+                      ></iframe>
+                      
+                      <div className="p-2.5 bg-white flex items-center justify-between border-t border-stone-200">
+                        <span className="text-[11px] font-bold text-stone-600 flex items-center gap-1">
+                          <MapPin className="h-3.5 w-3.5 text-red-500" />
+                          <span>موقع المحل على الخريطة</span>
+                        </span>
+                        {googleMapsUrl && (
+                          <a
+                            href={googleMapsUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={() => { if (business?.id) trackBusinessInteraction(business.id, 'direction', { isOwner, currentUserId: currentUser?.uid, ownerId: business.userId, isAdmin: Boolean(isAdmin) }); }}
+                            className="text-[11px] font-black text-blue-600 hover:text-blue-700 flex items-center gap-0.5 transition-colors"
+                          >
+                            <span>تكبير الخريطة</span>
+                            <ExternalLink className="h-2.5 w-2.5" />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Direct Map Action Button */}
+                {Boolean(googleMapsUrl) && (
+                  <div className="pt-1">
+                    <a
+                      href={googleMapsUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={() => { if (business?.id) trackBusinessInteraction(business.id, 'direction', { isOwner, currentUserId: currentUser?.uid, ownerId: business.userId, isAdmin: Boolean(isAdmin) }); }}
+                      className="w-full flex items-center justify-center gap-2 bg-stone-900 hover:bg-black text-white py-3.5 px-4 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-xs hover:shadow-md transform hover:-translate-y-0.5 active:translate-y-0"
+                    >
+                      <MapPin className="h-4.5 w-4.5 text-[#ff9f1c]" />
+                      <span>فتح الموقع والاتجاهات على الخريطة</span>
+                    </a>
+                  </div>
+                )}
+
+                {/* Public Suggest an Edit */}
+                <div className="pt-3 border-t border-dashed border-stone-200">
+                  <button
+                    onClick={() => {
+                      setSuggestForm({
+                        phone: business.phone || '',
+                        address: business.address || '',
+                        workingHours: 'مفتوح يومياً للزوار',
+                        notes: ''
+                      });
+                      setIsEditSuggestionOpen(true);
+                    }}
+                    className="w-full flex items-center justify-center gap-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 py-2.5 px-4 rounded-xl font-bold text-xs transition-colors cursor-pointer"
+                  >
+                    <Edit3 className="h-3.5 w-3.5 text-stone-500" />
+                    <span>اقتراح تعديل في معلومات المحل</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Verified Badge info */}
+              <div className="bg-[#1a4d2e]/5 border border-[#1a4d2e]/15 rounded-2xl p-4 sm:p-5 text-sm text-stone-700 space-y-2">
+                <div className="flex items-center gap-2 font-bold text-[#1a4d2e]">
+                  <ShieldCheck className="h-5 w-5" />
+                  <span>دليل موثوق في إربد</span>
+                </div>
+                <p className="text-xs text-stone-600 leading-relaxed">
+                  يتم التحقق من بيانات المحلات دورياً لتوفير معلومات دقيقة لأهل إربد وزوارها.
+                </p>
+              </div>
+
+            </div>
+
+          </div>
+
+          {/* Similar Businesses Section - محلات مشابهة */}
+          <div className="pt-8 sm:pt-12 border-t border-[#e5e1da]/80 space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 bg-[#1a4d2e]/10 text-[#1a4d2e] rounded-xl">
+                    <Store className="h-5 w-5" />
+                  </div>
+                  <h2 className="text-2xl sm:text-3xl font-black text-[#2d2a26]">
+                    محلات مشابهة
+                  </h2>
+                </div>
+                <p className="text-sm text-stone-500 mt-1 font-medium">
+                  استكشف محلات وأماكن أخرى مشابهة ضمن تصنيف <span className="font-bold text-[#1a4d2e]">"{business.category}"</span> في إربد
+                </p>
+              </div>
+
+              <Link
+                to={`/?category=${encodeURIComponent(business.category)}`}
+                className="inline-flex items-center gap-2 text-xs sm:text-sm font-bold text-[#1a4d2e] hover:text-[#133b22] bg-[#1a4d2e]/5 hover:bg-[#1a4d2e]/10 px-4 py-2 rounded-xl transition-colors shrink-0 self-start sm:self-auto"
+              >
+                <span>عرض جميع محلات {business.category}</span>
+                <ArrowRight className="h-4 w-4 rotate-180" />
+              </Link>
+            </div>
+
+            {loadingSimilar ? (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {[1, 2, 3].map(n => (
+                  <div key={n} className="h-64 bg-stone-100 animate-pulse rounded-3xl border border-stone-200"></div>
+                ))}
+              </div>
+            ) : similarBusinesses.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {similarBusinesses.map(simBiz => (
+                  <BusinessCard key={simBiz.id} business={simBiz} />
+                ))}
+              </div>
+            ) : (
+              <div className="bg-stone-50 rounded-2xl p-8 text-center border border-dashed border-stone-200">
+                <Store className="h-10 w-10 text-stone-300 mx-auto mb-2" />
+                <p className="text-stone-500 font-bold text-sm">لا توجد محلات مشابهة أخرى في هذا القسم حالياً</p>
+                <Link
+                  to="/"
+                  className="inline-block mt-3 text-xs font-bold text-[#1a4d2e] hover:underline"
+                >
+                  تصفح كافة الأقسام والمحلات في إربد
+                </Link>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+          {/* Business Owner Quick Edit / Privacy Settings Modal */}
+          {isEditModalOpen && typeof document !== 'undefined' && createPortal(
+            <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 overflow-y-auto" dir="rtl">
+              <div className="bg-white rounded-t-[32px] sm:rounded-3xl max-w-xl w-full max-h-[88vh] flex flex-col overflow-y-auto p-5 sm:p-8 shadow-2xl border border-stone-200 sm:my-auto relative animate-in slide-in-from-bottom-8 sm:zoom-in-95 duration-200">
+                {/* Mobile Drag Indicator */}
+                <div className="w-12 h-1 bg-stone-200 rounded-full mx-auto -mt-1 mb-3 sm:hidden" />
+                
+                {/* Header */}
+                <div className="flex items-center justify-between border-b border-stone-100 pb-4 mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-[#1a4d2e]/10 text-[#1a4d2e] flex items-center justify-center">
+                      <Settings className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold text-[#2d2a26]">تعديل بيانات المحل والتقييمات</h3>
+                      <p className="text-xs text-stone-500">التحكم في بيانات المحل وخيارات خصوصية التقييمات</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setIsEditModalOpen(false)}
+                    className="p-2 text-stone-400 hover:text-stone-600 rounded-xl hover:bg-stone-100 transition-colors"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+
+                {updateSuccess ? (
+                  <div className="py-8 text-center space-y-3">
+                    <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto">
+                      <CheckCircle className="h-8 w-8" />
+                    </div>
+                    <h4 className="text-lg font-bold text-stone-900">تم حفظ التعديلات بنجاح!</h4>
+                    <p className="text-sm text-stone-500">تم تحديث بيانات المحل مباشرة.</p>
+                  </div>
+                ) : (
+                  <form onSubmit={handleSaveBusinessSettings} className="space-y-5">
+                    
+                    {/* Basic Info */}
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-xs font-bold text-stone-700 mb-1.5">اسم المحل / النشاط التجاري</label>
+                        <input
+                          type="text"
+                          required
+                          value={editForm.name || ''}
+                          onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                          className="w-full px-4 py-2.5 rounded-xl border border-[#e5e1da] focus:ring-2 focus:ring-[#1a4d2e]/20 focus:border-[#1a4d2e] outline-none text-sm font-medium"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-stone-700 mb-1.5">رقم الهاتف للتواصل السريع</label>
+                        <input
+                          type="text"
+                          value={editForm.phone || ''}
+                          onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                          className="w-full px-4 py-2.5 rounded-xl border border-[#e5e1da] focus:ring-2 focus:ring-[#1a4d2e]/20 focus:border-[#1a4d2e] outline-none text-sm font-medium"
+                          placeholder="079XXXXXXX"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-stone-700 mb-1.5">العنوان بالتفصيل</label>
+                        <input
+                          type="text"
+                          value={editForm.address || ''}
+                          onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
+                          className="w-full px-4 py-2.5 rounded-xl border border-[#e5e1da] focus:ring-2 focus:ring-[#1a4d2e]/20 focus:border-[#1a4d2e] outline-none text-sm font-medium"
+                          placeholder="إربد - شارع الجامعة..."
+                        />
+                      </div>
+
+                      {/* Google Maps Location URL */}
+                      <div>
+                        <label className="block text-xs font-bold text-stone-700 mb-1.5">
+                          رابط موقع المحل على الخريطة (Google Maps)
+                        </label>
+                        <input
+                          type="url"
+                          dir="ltr"
+                          value={editForm.googlePlaceUrl || ''}
+                          onChange={(e) => setEditForm({ ...editForm, googlePlaceUrl: e.target.value })}
+                          className="w-full px-4 py-2.5 rounded-xl border border-[#e5e1da] focus:ring-2 focus:ring-[#1a4d2e]/20 focus:border-[#1a4d2e] outline-none text-xs font-medium text-stone-800"
+                          placeholder="https://maps.app.goo.gl/..."
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <ImageUploader
+                            label="صورة غلاف المحل (رفع ملف من الجهاز)"
+                            folder="businesses"
+                            value={editForm.imageUrl || ''}
+                            onChange={(url) => setEditForm({ ...editForm, imageUrl: url })}
+                            aspectRatio="cover"
+                            placeholder="اختر صورة الغلاف من جهازك"
+                          />
+                        </div>
+
+                        <div>
+                          <ImageUploader
+                            label="شعار / لوجو المحل (رفع ملف من الجهاز)"
+                            folder="logos"
+                            value={editForm.logoUrl || ''}
+                            onChange={(url) => setEditForm({ ...editForm, logoUrl: url })}
+                            aspectRatio="square"
+                            placeholder="اختر اللوجو من جهازك"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-stone-700 mb-1.5">نبذة عن المحل</label>
+                        <textarea
+                          rows={3}
+                          value={editForm.description || ''}
+                          onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                          className="w-full px-4 py-2.5 rounded-xl border border-[#e5e1da] focus:ring-2 focus:ring-[#1a4d2e]/20 focus:border-[#1a4d2e] outline-none text-sm font-medium resize-none"
+                          placeholder="اكتب نبذة تعريفية بالخدمات والمنتجات..."
+                        />
+                      </div>
+
+                      {/* Live Working Hours Subsection */}
+                      <WorkingHoursEditor
+                        workingHours={editForm.workingHours || {}}
+                        onChange={(wh) => setEditForm(prev => ({ ...prev, workingHours: wh }))}
+                        showVacationToggle={true}
+                      />
+                    </div>
+
+                    {/* Review Visibility Privacy Options */}
+                    <div className="p-4 bg-stone-50 rounded-2xl border border-stone-200/80 space-y-3">
+                      <div className="flex items-center gap-2 font-bold text-stone-800 text-sm">
+                        <EyeOff className="h-4 w-4 text-stone-600" />
+                        <span>خيارات خصوصية وظهور التقييمات</span>
+                      </div>
+
+                      <div className="space-y-2.5 pt-1">
+                        {/* Hide Site Reviews */}
+                        <label className="flex items-start gap-3 p-3 bg-white rounded-xl border border-stone-200 cursor-pointer hover:border-emerald-500 transition-colors">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(editForm.hideSiteReviews)}
+                            onChange={(e) => setEditForm({ ...editForm, hideSiteReviews: e.target.checked })}
+                            className="mt-0.5 h-4 w-4 rounded text-[#1a4d2e] focus:ring-[#1a4d2e] border-stone-300"
+                          />
+                          <div className="text-xs">
+                            <span className="font-bold text-stone-800 block">إخفاء تقييمات وتعليقات الموقع</span>
+                            <span className="text-stone-500 block mt-0.5">عند تفعيل هذا الخيار، لن يتمكن الزوار من إضافة تقييمات ولن تظهر التعليقات في صفحة المحل.</span>
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Gift Code Promotion Section */}
+                    <div className="p-4 bg-emerald-50/50 rounded-2xl border border-emerald-100 space-y-3">
+                      <div className="flex items-center justify-between border-b border-emerald-100 pb-2">
+                        <div className="flex items-center gap-2 font-bold text-emerald-900 text-sm">
+                          <Gift className="h-4 w-4 text-emerald-700" />
+                          <span>برنامج مكافآت تقييمات الزوار</span>
+                        </div>
+                        
+                        {/* Toggle switch */}
+                        <button
+                          type="button"
+                          onClick={() => setEditForm(prev => ({ ...prev, giftCodeEnabled: !prev.giftCodeEnabled }))}
+                          className={cn(
+                            "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-emerald-500/20",
+                            editForm.giftCodeEnabled ? "bg-emerald-600" : "bg-stone-200"
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-xs ring-0 transition duration-200 ease-in-out",
+                              editForm.giftCodeEnabled ? "translate-x-[-20px]" : "translate-x-0"
+                            )}
+                          />
+                        </button>
+                      </div>
+
+                      <p className="text-xs text-stone-600 leading-relaxed">
+                        عند تفعيل هذا البرنامج، سيحصل الزوار الذين يكتبون تقييماً معتمداً لنشاطك على كود خصم فوري ومميز كهدية تقديراً لهم!
+                      </p>
+
+                      {editForm.giftCodeEnabled && (
+                        <div className="flex flex-wrap items-center gap-2.5 pt-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setIsGiftCodeCustomizationOpen(true)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-colors shadow-xs"
+                          >
+                            <Settings2 className="h-3.5 w-3.5" />
+                            <span>تخصيص شروط وأكواد الخصم</span>
+                          </button>
+                          
+                          <button
+                            type="button"
+                            onClick={() => setIsGiftCodeStatsOpen(true)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-emerald-800 border border-emerald-200 rounded-lg text-xs font-bold hover:bg-emerald-50 transition-colors"
+                          >
+                            <BarChart3 className="h-3.5 w-3.5" />
+                            <span>عرض إحصائيات الأكواد</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center justify-end gap-3 pt-3 border-t border-stone-100">
+                      <button
+                        type="button"
+                        onClick={() => setIsEditModalOpen(false)}
+                        className="px-5 py-2.5 rounded-xl border border-stone-200 text-stone-600 text-xs font-bold hover:bg-stone-50 transition-colors"
+                      >
+                        إلغاء
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={isUpdating}
+                        className="px-6 py-2.5 rounded-xl bg-[#1a4d2e] text-white text-xs font-bold hover:bg-[#133b22] disabled:opacity-50 transition-colors shadow-xs"
+                      >
+                        {isUpdating ? 'جاري الحفظ...' : 'حفظ التعديلات'}
+                      </button>
+                    </div>
+
+                  </form>
+                )}
+
+              </div>
+            </div>,
+            document.body
+          )}
+
+          {/* Review Gift Code Customization Modal */}
+          {isGiftCodeCustomizationOpen && typeof document !== 'undefined' && createPortal(
+            <div className="fixed inset-0 z-[200000] bg-stone-950/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 overflow-hidden" dir="rtl">
+              <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-md w-full max-h-[88dvh] sm:max-h-[85vh] shadow-2xl border border-stone-200 relative animate-in zoom-in-95 duration-200 text-right flex flex-col my-0 sm:my-auto overflow-hidden">
+                
+                {/* Mobile Drag Indicator */}
+                <div className="w-12 h-1.5 bg-stone-300 rounded-full mx-auto my-2 sm:hidden shrink-0" />
+
+                {/* Header */}
+                <div className="flex items-center justify-between border-b border-stone-100 p-4 sm:p-5 shrink-0 bg-white">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
+                      <Gift className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base sm:text-lg font-bold text-stone-900">تخصيص مكافآت التقييمات</h3>
+                      <p className="text-xs text-stone-500 font-medium">حدد شروط الحصول على كود الهدية وقيمة الخصم</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsGiftCodeCustomizationOpen(false)}
+                    className="p-2 text-stone-400 hover:text-stone-600 rounded-xl hover:bg-stone-100 transition-colors shrink-0 cursor-pointer"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+
+                {/* Scrollable Body */}
+                <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
+                  {/* Min stars eligibility */}
+                  <div>
+                    <label className="block text-xs font-bold text-stone-700 mb-2">من يستحق الحصول على كود خصم؟</label>
+                    <select
+                      value={editForm.giftCodeMinStars || 1}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, giftCodeMinStars: Number(e.target.value) }))}
+                      className="w-full px-4 py-2.5 rounded-xl border border-stone-200 bg-white text-sm font-medium focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-none transition-all"
+                    >
+                      <option value={1}>أي شخص يقيم المحل (نجمة واحدة فأكثر)</option>
+                      <option value={3}>التقييمات الجيدة والممتازة (3 نجوم فأكثر)</option>
+                      <option value={4}>التقييمات الرائعة والممتازة (4 نجوم فأكثر)</option>
+                      <option value={5}>التقييمات المثالية فقط (5 نجوم)</option>
+                    </select>
+                  </div>
+
+                  {/* Code Limit Type */}
+                  <div>
+                    <label className="block text-xs font-bold text-stone-700 mb-2">كم إجمالي عدد الأكواد المتاحة في الحملة؟</label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setEditForm(prev => ({ ...prev, giftCodeLimitType: 'unlimited' }))}
+                        className={cn(
+                          "py-2.5 px-4 rounded-xl border text-xs font-bold transition-all text-center cursor-pointer",
+                          editForm.giftCodeLimitType === 'unlimited'
+                            ? "bg-emerald-50 border-emerald-500 text-emerald-800 shadow-xs"
+                            : "bg-white border-stone-200 text-stone-600 hover:bg-stone-50"
+                        )}
+                      >
+                        عدد لا نهائي ♾️
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditForm(prev => ({ ...prev, giftCodeLimitType: 'limited' }))}
+                        className={cn(
+                          "py-2.5 px-4 rounded-xl border text-xs font-bold transition-all text-center cursor-pointer",
+                          editForm.giftCodeLimitType === 'limited'
+                            ? "bg-emerald-50 border-emerald-500 text-emerald-800 shadow-xs"
+                            : "bg-white border-stone-200 text-stone-600 hover:bg-stone-50"
+                        )}
+                      >
+                        إجمالي محدد 🔢
+                      </button>
+                    </div>
+
+                    {editForm.giftCodeLimitType === 'limited' && (
+                      <div className="mt-3">
+                        <label className="block text-[11px] font-bold text-stone-500 mb-1">الحد الأقصى لإجمالي الأكواد في الحملة</label>
+                        <input
+                          type="number"
+                          min={1}
+                          required
+                          value={editForm.giftCodeTotalLimit || 100}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, giftCodeTotalLimit: Math.max(1, Number(e.target.value)) }))}
+                          className="w-full px-4 py-2.5 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-none text-sm font-bold"
+                          placeholder="مثال: 150"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Limit per User Account */}
+                  <div className="bg-stone-50 p-3.5 rounded-2xl border border-stone-200/80 space-y-2.5">
+                    <label className="block text-xs font-bold text-stone-800">
+                      كم مرة (الحد الأقصى) سيُمنح كود الخصم للحساب الواحد؟ 👤
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setEditForm(prev => ({ ...prev, giftCodeUserLimit: 'once' }))}
+                        className={cn(
+                          "p-2.5 rounded-xl border text-xs font-bold transition-all text-right flex items-start gap-2 cursor-pointer",
+                          editForm.giftCodeUserLimit === 'once' || !editForm.giftCodeUserLimit
+                            ? "bg-emerald-50 border-emerald-500 text-emerald-950 ring-1 ring-emerald-500/30"
+                            : "bg-white border-stone-200 text-stone-600 hover:bg-stone-100"
+                        )}
+                      >
+                        <div className={cn(
+                          "w-4 h-4 rounded-full border mt-0.5 shrink-0 flex items-center justify-center text-[10px]",
+                          editForm.giftCodeUserLimit === 'once' || !editForm.giftCodeUserLimit
+                            ? "border-emerald-600 bg-emerald-600 text-white"
+                            : "border-stone-300"
+                        )}>
+                          {(editForm.giftCodeUserLimit === 'once' || !editForm.giftCodeUserLimit) && "✓"}
+                        </div>
+                        <div>
+                          <span className="block font-black text-xs">كود واحد فقط للحساب الواحد</span>
+                          <span className="text-[10px] text-stone-500 block mt-0.5 font-normal">
+                            كود خصم وحيد مدى الحياة بغض النظر عن عدد التقييمات
+                          </span>
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setEditForm(prev => ({ ...prev, giftCodeUserLimit: 'per_review' }))}
+                        className={cn(
+                          "p-2.5 rounded-xl border text-xs font-bold transition-all text-right flex items-start gap-2 cursor-pointer",
+                          editForm.giftCodeUserLimit === 'per_review'
+                            ? "bg-emerald-50 border-emerald-500 text-emerald-950 ring-1 ring-emerald-500/30"
+                            : "bg-white border-stone-200 text-stone-600 hover:bg-stone-100"
+                        )}
+                      >
+                        <div className={cn(
+                          "w-4 h-4 rounded-full border mt-0.5 shrink-0 flex items-center justify-center text-[10px]",
+                          editForm.giftCodeUserLimit === 'per_review'
+                            ? "border-emerald-600 bg-emerald-600 text-white"
+                            : "border-stone-300"
+                        )}>
+                          {editForm.giftCodeUserLimit === 'per_review' && "✓"}
+                        </div>
+                        <div>
+                          <span className="block font-black text-xs">كود جديد لكل تقييم</span>
+                          <span className="text-[10px] text-stone-500 block mt-0.5 font-normal">
+                            يحصل العميل على كود خصم مع كل تقييم جديد يضعه
+                          </span>
+                        </div>
+                      </button>
+                    </div>
+
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setEditForm(prev => ({ ...prev, giftCodeUserLimit: 'custom' }))}
+                        className={cn(
+                          "w-full p-2.5 rounded-xl border text-xs font-bold transition-all text-right flex items-center justify-between cursor-pointer",
+                          editForm.giftCodeUserLimit === 'custom'
+                            ? "bg-emerald-50 border-emerald-500 text-emerald-950 ring-1 ring-emerald-500/30"
+                            : "bg-white border-stone-200 text-stone-600 hover:bg-stone-100"
+                        )}
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className={cn(
+                            "w-4 h-4 rounded-full border shrink-0 flex items-center justify-center text-[10px]",
+                            editForm.giftCodeUserLimit === 'custom'
+                              ? "border-emerald-600 bg-emerald-600 text-white"
+                              : "border-stone-300"
+                          )}>
+                            {editForm.giftCodeUserLimit === 'custom' && "✓"}
+                          </div>
+                          <span className="font-black text-xs">تحديد عدد أقصى مخصص للحساب</span>
+                        </div>
+                        <span className="text-[11px] text-stone-500 font-normal">
+                          مثال: 2 أو 3 كودات كحد أعلى
+                        </span>
+                      </button>
+
+                      {editForm.giftCodeUserLimit === 'custom' && (
+                        <div className="mt-2.5 pr-6">
+                          <label className="block text-[11px] font-bold text-stone-600 mb-1">
+                            الحد الأقصى لعدد الأكواد الممنوحة للحساب الواحد:
+                          </label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={20}
+                            value={editForm.giftCodeMaxPerUser || 2}
+                            onChange={(e) => setEditForm(prev => ({ ...prev, giftCodeMaxPerUser: Math.max(1, Number(e.target.value)) }))}
+                            className="w-32 px-3 py-1.5 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-none text-xs font-bold bg-white"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                   {/* Discount percentage */}
+                  <div>
+                    <label className="block text-xs font-bold text-stone-700 mb-1.5">كم نسبة الخصم للهدية؟</label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min={1}
+                        max={100}
+                        required
+                        value={editForm.giftCodeDiscountPercent || 10}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, giftCodeDiscountPercent: Math.min(100, Math.max(1, Number(e.target.value))) }))}
+                        className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-none text-sm font-bold animate-none"
+                        placeholder="مثال: 15"
+                      />
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-stone-400 font-bold">
+                        %
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Gift code validity in days */}
+                  <div>
+                    <label className="block text-xs font-bold text-stone-700 mb-1.5">مدة صلاحية الكود الممنوح (بالأيام)</label>
+                    <input
+                      type="number"
+                      min={1}
+                      required
+                      value={editForm.giftCodeValidityDays || 30}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, giftCodeValidityDays: Math.max(1, Number(e.target.value)) }))}
+                      className="w-full px-4 py-2.5 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-none text-sm font-bold animate-none"
+                      placeholder="مثال: 30"
+                    />
+                    <p className="text-[10px] text-stone-400 mt-1 font-bold">
+                      تحدد عدد الأيام المتاحة للزائر لاستخدام الكوبون بدءاً من تاريخ حصوله عليه.
+                    </p>
+                  </div>
+
+                  {/* Timing duration */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-stone-700">فترة صلاحية العرض (اختياري)</span>
+                      {(editForm.giftCodeStartDate || editForm.giftCodeEndDate) && (
+                        <button
+                          type="button"
+                          onClick={() => setEditForm(prev => ({ ...prev, giftCodeStartDate: '', giftCodeEndDate: '' }))}
+                          className="text-[10px] text-red-500 hover:underline font-bold"
+                        >
+                          إلغاء التواريخ (متاح دائماً)
+                        </button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-bold text-stone-500 mb-1">بدء التفعيل (اختياري)</label>
+                        <input
+                          type="date"
+                          value={editForm.giftCodeStartDate || ''}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, giftCodeStartDate: e.target.value }))}
+                          className="w-full px-3 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-none text-xs font-bold text-stone-800"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-stone-500 mb-1">انتهاء التفعيل (اختياري)</label>
+                        <input
+                          type="date"
+                          value={editForm.giftCodeEndDate || ''}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, giftCodeEndDate: e.target.value }))}
+                          className="w-full px-3 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-none text-xs font-bold text-stone-800"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-stone-400 font-bold">
+                      اترك الحقلين فارغين ليعمل برنامج الخصم بشكل دائم ودون تقيد بتاريخ انتهاء.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Sticky Action Footer */}
+                <div className="p-4 sm:px-6 bg-stone-50/90 border-t border-stone-100 shrink-0 sticky bottom-0 z-10">
+                  <button
+                    type="button"
+                    onClick={() => setIsGiftCodeCustomizationOpen(false)}
+                    className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Check className="h-4 w-4" />
+                    <span>تأكيد وحفظ التخصيص مؤقتاً</span>
+                  </button>
+                </div>
+
+              </div>
+            </div>,
+            document.body
+          )}
+
+          {/* Review Gift Code Stats Modal */}
+          {isGiftCodeStatsOpen && typeof document !== 'undefined' && createPortal(
+            <div className="fixed inset-0 z-[200000] bg-stone-950/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 overflow-hidden" dir="rtl">
+              <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-md w-full max-h-[88dvh] sm:max-h-[85vh] shadow-2xl border border-stone-200 relative animate-in zoom-in-95 duration-200 text-right flex flex-col my-0 sm:my-auto overflow-hidden">
+                
+                {/* Mobile Drag Indicator */}
+                <div className="w-12 h-1.5 bg-stone-300 rounded-full mx-auto my-2 sm:hidden shrink-0" />
+
+                {/* Header */}
+                <div className="flex items-center justify-between border-b border-stone-100 p-4 sm:p-5 shrink-0 bg-white">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
+                      <BarChart3 className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base sm:text-lg font-bold text-stone-900">إحصائيات حملة مكافآت التقييمات</h3>
+                      <p className="text-xs text-stone-500 font-medium">نظرة عامة على الأكواد الممنوحة وأداء البرنامج</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsGiftCodeStatsOpen(false)}
+                    className="p-2 text-stone-400 hover:text-stone-600 rounded-xl hover:bg-stone-100 transition-colors shrink-0 cursor-pointer"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+
+                {/* Scrollable Content */}
+                <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+                  {/* Stats Grid */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-stone-50 p-4 rounded-2xl border border-stone-100 text-center">
+                      <span className="text-xs text-stone-500 font-bold block mb-1">إجمالي الأكواد المتاحة</span>
+                      <span className="text-2xl font-black text-[#1a4d2e]">
+                        {editForm.giftCodeLimitType === 'unlimited' ? '♾️ غير محدود' : editForm.giftCodeTotalLimit || 100}
+                      </span>
+                    </div>
+
+                    <div className="bg-emerald-50/50 p-4 rounded-2xl border border-emerald-100 text-center">
+                      <span className="text-xs text-emerald-800 font-bold block mb-1">الأكواد الممنوحة حتى الآن</span>
+                      <span className="text-2xl font-black text-emerald-700">
+                        {editForm.giftCodeGrantedCount || 0}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Progress Indicator for Limited campaigns */}
+                  {editForm.giftCodeLimitType === 'limited' && (
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-xs font-bold text-stone-600">
+                        <span>نسبة استهلاك الأكواد</span>
+                        <span>{Math.round(((editForm.giftCodeGrantedCount || 0) / (editForm.giftCodeTotalLimit || 100)) * 100)}%</span>
+                      </div>
+                      <div className="w-full bg-stone-100 rounded-full h-2.5">
+                        <div
+                          className="bg-emerald-600 h-2.5 rounded-full transition-all duration-500"
+                          style={{ width: `${Math.min(100, ((editForm.giftCodeGrantedCount || 0) / (editForm.giftCodeTotalLimit || 100)) * 100)}%` }}
+                        />
+                      </div>
+                      <div className="flex justify-between text-[11px] text-stone-500 font-medium">
+                        <span>الأكواد المتبقية: {Math.max(0, (editForm.giftCodeTotalLimit || 100) - (editForm.giftCodeGrantedCount || 0))} كود</span>
+                        <span>الهدف: {editForm.giftCodeTotalLimit || 100} كود</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Timing & Target info */}
+                  <div className="bg-stone-50 p-4 rounded-2xl border border-stone-100 space-y-3 text-xs font-semibold text-stone-700">
+                    <div className="flex justify-between">
+                      <span className="text-stone-500">الحد الأدنى لتقييم النجوم:</span>
+                      <span className="font-bold text-stone-800 flex items-center gap-1">
+                        <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
+                        <span>{editForm.giftCodeMinStars || 1} نجوم فما فوق</span>
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between">
+                      <span className="text-stone-500">نسبة خصم الكوبون:</span>
+                      <span className="font-bold text-emerald-700">%{editForm.giftCodeDiscountPercent || 10} خصم</span>
+                    </div>
+
+                    <div className="flex justify-between">
+                      <span className="text-stone-500">الحد الأقصى لكل حساب:</span>
+                      <span className="font-bold text-stone-800">
+                        {editForm.giftCodeUserLimit === 'per_review'
+                          ? "كود لكل تقييم"
+                          : editForm.giftCodeUserLimit === 'custom'
+                          ? `${editForm.giftCodeMaxPerUser || 2} كودات كحد أقصى`
+                          : "كود واحد فقط"}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between">
+                      <span className="text-stone-500">فترة سريان البرنامج:</span>
+                      <span className="font-bold text-stone-800">
+                        {editForm.giftCodeStartDate && editForm.giftCodeEndDate ? (
+                          <>من {editForm.giftCodeStartDate} إلى {editForm.giftCodeEndDate}</>
+                        ) : (
+                          "مفتوحة دائماً"
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sticky Action Footer */}
+                <div className="p-4 sm:px-6 bg-stone-50/90 border-t border-stone-100 shrink-0 sticky bottom-0 z-10">
+                  <button
+                    type="button"
+                    onClick={() => setIsGiftCodeStatsOpen(false)}
+                    className="w-full py-3 bg-stone-800 hover:bg-stone-900 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center cursor-pointer"
+                  >
+                    إغلاق نافذة الإحصائيات
+                  </button>
+                </div>
+
+              </div>
+            </div>,
+            document.body
+          )}
+
+          {/* Awarded Gift Code Success Modal */}
+          {awardedGiftCode && typeof document !== 'undefined' && createPortal(
+            <div className="fixed inset-0 z-[300000] bg-black/80 backdrop-blur-md flex items-center justify-center p-4" dir="rtl">
+              <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-stone-100 text-center relative animate-in zoom-in-95 duration-200">
+                
+                {/* Close Button */}
+                <button
+                  onClick={() => setAwardedGiftCode(null)}
+                  className="absolute top-4 left-4 p-2 text-stone-400 hover:text-stone-600 rounded-xl hover:bg-stone-100 transition-colors"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+
+                {/* Animated Gift icon */}
+                <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto mb-4 animate-bounce">
+                  <Gift className="h-8 w-8" />
+                </div>
+
+                <h3 className="text-xl font-black text-stone-900 mb-2">تهانينا! لقد حصلت على كود خصم هدية 🎉</h3>
+                <p className="text-xs text-stone-500 font-bold mb-6">
+                  تقديراً لتقييمك المتميز ومساهمتك في دعم محلات إربد، يسر <span className="text-[#1a4d2e]">{awardedGiftCode.businessName}</span> تقديم هذه المكافأة الخاصة لك!
+                </p>
+
+                {/* Dotted Coupon Design with QR Code */}
+                <div className="relative bg-emerald-50/50 border-2 border-dashed border-emerald-300 rounded-3xl p-6 mb-6 overflow-hidden flex flex-col items-center gap-4">
+                  {/* Decorative side circles */}
+                  <div className="absolute top-1/2 -left-3 w-6 h-6 rounded-full bg-white border border-stone-200 -translate-y-1/2" />
+                  <div className="absolute top-1/2 -right-3 w-6 h-6 rounded-full bg-white border border-stone-200 -translate-y-1/2" />
+                  
+                  <div className="w-full text-center">
+                    <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-widest block mb-1">رمز QR Code خصم حصري وجديد</span>
+                    <span className="text-3xl font-black text-emerald-700 block">خصم {awardedGiftCode.discountPercent}%</span>
+                  </div>
+
+                  {/* QR Code visual */}
+                  <div className="p-3 bg-white rounded-xl border border-emerald-100 flex flex-col items-center gap-2 shadow-sm w-full max-w-[170px] relative">
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(awardedGiftCode.code)}`}
+                      alt="QR Code Coupon"
+                      className="w-32 h-32 object-contain rounded-md"
+                      referrerPolicy="no-referrer"
+                    />
+                    <div className="text-xs font-mono font-bold text-stone-600 bg-stone-50 px-2.5 py-0.5 rounded border border-stone-100 select-all tracking-wider">
+                      {awardedGiftCode.code}
+                    </div>
+                  </div>
+                  
+                  {/* Copy code link */}
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(awardedGiftCode.code);
+                      const btn = document.getElementById('copy-coupon-btn');
+                      if (btn) {
+                        btn.innerText = 'تم النسخ! ✔️';
+                        setTimeout(() => {
+                          btn.innerText = 'نسخ الرمز كتابةً 📋';
+                        }, 2000);
+                      }
+                    }}
+                    id="copy-coupon-btn"
+                    className="text-emerald-800 hover:text-emerald-950 text-xs font-bold transition-all underline cursor-pointer"
+                  >
+                    نسخ الرمز كتابةً 📋
+                  </button>
+                </div>
+
+                <div className="bg-stone-50 text-[11px] text-stone-500 p-3 rounded-xl border border-stone-100 mb-6 font-semibold">
+                  📌 يمكنك إبراز هذا الكوبون أو إدخاله عند الشراء أو الحجز للاستفادة من الخصم مباشرةً لدى المحل.
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <Link
+                    to="/profile?tab=rewards"
+                    className="py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Gift className="h-4 w-4" />
+                    <span>عرض جميع مكافآتي</span>
+                  </Link>
+                  <button
+                    onClick={() => setAwardedGiftCode(null)}
+                    className="py-3 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer"
+                  >
+                    إغلاق النافذة
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )}
+
+          {/* Owner Digital Menu Manager Modal */}
+          {business && isOwner && (
+            <DigitalMenuManagerModal
+              isOpen={isMenuManagerOpen}
+              onClose={() => setIsMenuManagerOpen(false)}
+              business={business}
+              onMenuUpdated={(updatedItems, updatedTitle, updatedDescription) => {
+                setBusiness(prev => prev ? { 
+                  ...prev, 
+                  menuItems: updatedItems,
+                  menuTitle: updatedTitle,
+                  menuDescription: updatedDescription
+                } : null);
+              }}
+            />
+          )}
+
+          {/* Owner VIP Analytics Modal */}
+          {business && isOwner && (
+            <VipAnalyticsModal
+              isOpen={isAnalyticsModalOpen}
+              onClose={() => setIsAnalyticsModalOpen(false)}
+              business={business}
+              onOpenMenuManager={() => setIsMenuManagerOpen(true)}
+            />
+          )}
+
+          {/* Owner VIP Upgrade Request Modal */}
+          {business && isOwner && (
+            <VipUpgradeRequestModal
+              isOpen={isUpgradeModalOpen}
+              onClose={() => setIsUpgradeModalOpen(false)}
+              business={business}
+            />
+          )}
+
+          {/* Full Screen Reels Overlay Player */}
+          {fullScreenReelUrl && (
+            <div className="fixed inset-0 bg-black/95 backdrop-blur-md flex items-center justify-center z-50 p-4">
+              {/* Close Button */}
+              <button 
+                onClick={() => setFullScreenReelUrl(null)}
+                className="absolute top-4 right-4 bg-white/10 hover:bg-white/20 text-white hover:text-stone-200 p-2.5 rounded-full transition-all cursor-pointer z-50 border border-white/10"
+                title="إغلاق"
+              >
+                <X className="h-6 w-6" />
+              </button>
+
+              {/* Video Wrapper */}
+              <div className="relative w-full max-w-[450px] aspect-[9/16] bg-black rounded-3xl overflow-hidden border border-white/10 shadow-2xl animate-in zoom-in-95 duration-200">
+                <div className="absolute inset-0 w-full h-full overflow-hidden rounded-3xl">
+                  <iframe 
+                    src={fullScreenReelUrl} 
+                    className="w-full h-full absolute"
+                    allowFullScreen
+                    allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
+                    style={fullScreenReelUrl.includes('instagram.com') ? {
+                      border: 'none', 
+                      overflow: 'hidden',
+                      position: 'absolute',
+                      top: '-55px',
+                      left: '-2px',
+                      width: 'calc(100% + 4px)',
+                      height: 'calc(100% + 245px)',
+                      pointerEvents: 'auto'
+                    } : { 
+                      border: 'none', 
+                      overflow: 'hidden',
+                      position: 'absolute',
+                      inset: 0,
+                      width: '100%',
+                      height: '100%'
+                    }}
+                    scrolling="no"
+                  ></iframe>
+                  {fullScreenReelUrl.includes('instagram.com') && (
+                    <div className="absolute inset-0 bg-transparent pointer-events-none rounded-3xl ring-1 ring-inset ring-black/10"></div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 1. Add Promo Deal Modal (For Business Owners) */}
+          {business && isOwner && isOfferModalOpen && typeof document !== 'undefined' && createPortal(
+            <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto" dir="rtl">
+              <div className="bg-white rounded-3xl border border-stone-200 shadow-2xl max-w-lg w-full max-h-[88vh] flex flex-col overflow-hidden relative my-auto animate-in fade-in zoom-in-95 duration-200">
+                <div className="flex items-center justify-between border-b border-stone-100 p-4 sm:p-5 bg-stone-50/80 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <Tag className="h-5 w-5 text-emerald-700" />
+                    <h3 className="text-lg font-bold text-stone-900">إضافة عرض ترويجي أو خصم جديد</h3>
+                  </div>
+                  <button
+                    onClick={() => setIsOfferModalOpen(false)}
+                    className="p-1.5 hover:bg-stone-200/80 rounded-xl transition-colors text-stone-500 hover:text-stone-800 cursor-pointer"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+
+                <form id="add-offer-form" onSubmit={handleAddOffer} className="overflow-y-auto p-4 sm:p-6 space-y-4 flex-1">
+                  {/* Honeypot field - 100% hidden from humans, bots will fill it */}
+                  <div className="absolute opacity-0 -z-50 pointer-events-none" style={{ width: 0, height: 0, overflow: 'hidden' }}>
+                    <label htmlFor="offer_website_hp">لا تقم بتعبئة هذا الحقل إذا كنت بشراً</label>
+                    <input
+                      type="text"
+                      id="offer_website_hp"
+                      name="offer_website_hp"
+                      tabIndex={-1}
+                      autoComplete="off"
+                      value={hpValue}
+                      onChange={(e) => setHpValue(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-stone-700 mb-1">عنوان العرض الترويجي الجذاب *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="مثال: خصم 30% على وجبة الشاورما العائلية"
+                      value={newOfferForm.title}
+                      onChange={(e) => setNewOfferForm(prev => ({ ...prev, title: e.target.value }))}
+                      className="w-full px-3.5 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-xs font-medium"
+                    />
+                  </div>
+
+                  {/* Menu Selection for Discount */}
+                  {business?.menuItems && business.menuItems.length > 0 && (
+                    <div className="bg-[#1a4d2e]/5 p-3.5 rounded-2xl border border-[#1a4d2e]/20 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-xs font-black text-[#1a4d2e] flex items-center gap-1.5">
+                          <UtensilsCrossed className="h-4 w-4" />
+                          <span>ربط الخصم بالكتالوج / المنيو</span>
+                        </label>
+                        <span className="text-[10px] bg-[#1a4d2e]/10 text-[#1a4d2e] font-bold px-2 py-0.5 rounded-full">
+                          {business.menuItems.length} صنف متوفر
+                        </span>
+                      </div>
+
+                      {/* 4 Scope Selector Buttons */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNewOfferForm(prev => ({
+                              ...prev,
+                              selectedScope: 'none',
+                              selectedCategories: [],
+                              selectedMenuItemIds: []
+                            }));
+                          }}
+                          className={cn(
+                            "py-2 px-2 rounded-xl border text-[11px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1 text-center",
+                            newOfferForm.selectedScope === 'none'
+                              ? "bg-[#1a4d2e] text-white border-transparent shadow-xs"
+                              : "bg-white border-stone-200 text-stone-700 hover:bg-stone-50"
+                          )}
+                        >
+                          <span>بدون ربط (عرض عام)</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const allIds = business.menuItems!.map(i => i.id);
+                            setNewOfferForm(prev => ({
+                              ...prev,
+                              selectedScope: 'all',
+                              selectedCategories: [],
+                              selectedMenuItemIds: allIds,
+                              title: prev.title || `خصم خاص على كامل الكتالوج والمنيو`
+                            }));
+                          }}
+                          className={cn(
+                            "py-2 px-2 rounded-xl border text-[11px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1 text-center",
+                            newOfferForm.selectedScope === 'all'
+                              ? "bg-[#1a4d2e] text-white border-transparent shadow-xs"
+                              : "bg-white border-stone-200 text-stone-700 hover:bg-stone-50"
+                          )}
+                        >
+                          <span>المنيو كامل ({business.menuItems.length})</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNewOfferForm(prev => ({
+                              ...prev,
+                              selectedScope: 'categories',
+                              selectedCategories: prev.selectedCategories,
+                              selectedMenuItemIds: business.menuItems!
+                                .filter(i => prev.selectedCategories.includes(i.category || 'عام'))
+                                .map(i => i.id)
+                            }));
+                          }}
+                          className={cn(
+                            "py-2 px-2 rounded-xl border text-[11px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1 text-center",
+                            newOfferForm.selectedScope === 'categories'
+                              ? "bg-amber-600 text-white border-transparent shadow-xs"
+                              : "bg-white border-stone-200 text-stone-700 hover:bg-stone-50"
+                          )}
+                        >
+                          <span>قسم / عدة أقسام</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNewOfferForm(prev => ({
+                              ...prev,
+                              selectedScope: 'custom',
+                              selectedMenuItemIds: prev.selectedScope === 'custom' ? prev.selectedMenuItemIds : []
+                            }));
+                          }}
+                          className={cn(
+                            "py-2 px-2 rounded-xl border text-[11px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1 text-center",
+                            newOfferForm.selectedScope === 'custom'
+                              ? "bg-amber-600 text-white border-transparent shadow-xs"
+                              : "bg-white border-stone-200 text-stone-700 hover:bg-stone-50"
+                          )}
+                        >
+                          <span>صنف أو أصناف محددة</span>
+                        </button>
+                      </div>
+
+                      {/* Categories Sub-Selection */}
+                      {newOfferForm.selectedScope === 'categories' && (
+                        <div className="space-y-2 bg-white p-2.5 rounded-xl border border-stone-200 animate-in fade-in duration-200">
+                          <label className="block text-[11px] font-black text-stone-700">اختر الأقسام المراد الخصم عليها:</label>
+                          <div className="flex flex-wrap gap-1.5">
+                            {menuCategories.map(cat => {
+                              const isSelected = newOfferForm.selectedCategories.includes(cat);
+                              return (
+                                <button
+                                  key={cat}
+                                  type="button"
+                                  onClick={() => {
+                                    const exists = newOfferForm.selectedCategories.includes(cat);
+                                    const updatedCats = exists
+                                      ? newOfferForm.selectedCategories.filter(c => c !== cat)
+                                      : [...newOfferForm.selectedCategories, cat];
+                                    
+                                    const matchingItemIds = business.menuItems!
+                                      .filter(i => updatedCats.includes(i.category || 'عام'))
+                                      .map(i => i.id);
+
+                                    setNewOfferForm(prev => ({
+                                      ...prev,
+                                      selectedCategories: updatedCats,
+                                      selectedMenuItemIds: matchingItemIds,
+                                      title: prev.title || (updatedCats.length > 0 ? `خصم خاص على قسم ${updatedCats.join(' و ')}` : prev.title)
+                                    }));
+                                  }}
+                                  className={cn(
+                                    "px-3 py-1.5 rounded-lg border text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5",
+                                    isSelected
+                                      ? "bg-amber-500 text-white border-amber-600 shadow-xs"
+                                      : "bg-stone-50 text-stone-700 border-stone-200 hover:bg-stone-100"
+                                  )}
+                                >
+                                  <span>{cat}</span>
+                                  <span className="text-[10px] opacity-80 bg-black/10 px-1.5 py-0.2 rounded-full">
+                                    {business.menuItems!.filter(i => (i.category || 'عام') === cat).length}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Custom Item Checkboxes */}
+                      {newOfferForm.selectedScope === 'custom' && (
+                        <div className="max-h-44 overflow-y-auto space-y-1 bg-white p-2 rounded-xl border border-stone-200 divide-y divide-stone-100 animate-in fade-in duration-200">
+                          {business.menuItems.map(item => {
+                            const isSelected = newOfferForm.selectedMenuItemIds.includes(item.id);
+                            return (
+                              <label
+                                key={item.id}
+                                className="flex items-center justify-between pt-1 first:pt-0 cursor-pointer hover:bg-stone-50 p-1.5 rounded-lg transition-colors"
+                              >
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => {
+                                      setNewOfferForm(prev => {
+                                        const exists = prev.selectedMenuItemIds.includes(item.id);
+                                        const updatedIds = exists
+                                          ? prev.selectedMenuItemIds.filter(id => id !== item.id)
+                                          : [...prev.selectedMenuItemIds, item.id];
+                                        
+                                        const singleItem = updatedIds.length === 1 ? business.menuItems?.find(i => i.id === updatedIds[0]) : null;
+                                        return {
+                                          ...prev,
+                                          selectedMenuItemIds: updatedIds,
+                                          oldPrice: singleItem ? singleItem.price : prev.oldPrice,
+                                          title: singleItem && !prev.title ? `عرض خصم على ${singleItem.name}` : prev.title
+                                        };
+                                      });
+                                    }}
+                                    className="h-4 w-4 text-[#1a4d2e] focus:ring-[#1a4d2e] border-stone-300 rounded cursor-pointer"
+                                  />
+                                  <span className="text-xs font-bold text-stone-800 truncate">{item.name}</span>
+                                </div>
+                                <span className="text-xs font-mono font-bold text-[#1a4d2e] shrink-0">{item.price} د.أ</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Dynamic Price & Discount Inputs */}
+                  {isBulkDiscount ? (
+                    <div className="bg-amber-50/80 p-3.5 rounded-2xl border border-amber-200/80 space-y-2 animate-in fade-in duration-200">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-xs font-black text-amber-900 flex items-center gap-1.5">
+                          <Percent className="h-4 w-4 text-amber-700" />
+                          <span>قيمة / نسبة الخصم المئوية المطلوبة (%) *</span>
+                        </label>
+                        <span className="text-[10px] bg-amber-200/60 text-amber-900 font-black px-2 py-0.5 rounded-full">
+                          سيتم التطبيق على {newOfferForm.selectedMenuItemIds.length} صنف
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          required
+                          placeholder="مثال: 15% أو 20%"
+                          value={newOfferForm.discountPercentage}
+                          onChange={(e) => setNewOfferForm(prev => ({ ...prev, discountPercentage: e.target.value }))}
+                          className="w-full px-3.5 py-2 rounded-xl bg-white border border-amber-300 font-black text-amber-900 focus:ring-2 focus:ring-amber-500/20 outline-none text-sm"
+                        />
+                        <div className="flex items-center gap-1 shrink-0">
+                          {['10%', '15%', '20%', '25%', '30%', '50%'].map(preset => (
+                            <button
+                              key={preset}
+                              type="button"
+                              onClick={() => setNewOfferForm(prev => ({ ...prev, discountPercentage: preset }))}
+                              className={cn(
+                                "px-2 py-1 rounded-lg border text-[10px] font-black transition-all cursor-pointer",
+                                newOfferForm.discountPercentage === preset
+                                  ? "bg-amber-600 text-white border-amber-600"
+                                  : "bg-white text-amber-900 border-amber-200 hover:bg-amber-100"
+                              )}
+                            >
+                              {preset}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-amber-800 font-medium leading-relaxed">
+                        💡 تم دمج حقل قيمة الخصم وتلقائياً لن يطلب سعر أصلي وسعر جديد مفرد، لأن الأسعار مختلفة للأصناف المختارة.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-bold text-stone-700 mb-1">نوع شارة الخصم</label>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setNewOfferForm(prev => ({ ...prev, discountType: 'percentage' }))}
+                              className={cn(
+                                "flex-1 py-1.5 px-3 rounded-xl border text-[11px] font-bold transition-all cursor-pointer",
+                                newOfferForm.discountType === 'percentage'
+                                  ? "bg-amber-100 border-amber-300 text-amber-800 shadow-xs font-black"
+                                  : "bg-white border-stone-200 text-stone-600 hover:bg-stone-50"
+                              )}
+                            >
+                              نسبة مئوية (%)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setNewOfferForm(prev => ({ ...prev, discountType: 'fixed' }))}
+                              className={cn(
+                                "flex-1 py-1.5 px-3 rounded-xl border text-[11px] font-bold transition-all cursor-pointer",
+                                newOfferForm.discountType === 'fixed'
+                                  ? "bg-amber-100 border-amber-300 text-amber-800 shadow-xs font-black"
+                                  : "bg-white border-stone-200 text-stone-600 hover:bg-stone-50"
+                              )}
+                            >
+                              مبلغ ثابت (د.أ)
+                            </button>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-stone-700 mb-1">شارة الخصم المحسوبة</label>
+                          <input
+                            type="text"
+                            placeholder="توليد تلقائي للشارة"
+                            value={newOfferForm.discountPercentage}
+                            onChange={(e) => setNewOfferForm(prev => ({ ...prev, discountPercentage: e.target.value }))}
+                            className="w-full px-3.5 py-2 rounded-xl bg-amber-50 border border-amber-200 font-black text-amber-800 focus:ring-2 focus:ring-amber-500/20 outline-none text-xs"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-bold text-stone-700 mb-1 flex items-center justify-between">
+                            <span>السعر الأصلي قبل الخصم</span>
+                            {newOfferForm.selectedScope === 'custom' && newOfferForm.selectedMenuItemIds.length === 1 && (
+                              <span className="text-[10px] text-amber-700 font-bold flex items-center gap-0.5">
+                                <LockIcon className="h-3 w-3 inline" /> ثابت من المنيو
+                              </span>
+                            )}
+                          </label>
+                          <input
+                            type="text"
+                            readOnly={newOfferForm.selectedScope === 'custom' && newOfferForm.selectedMenuItemIds.length === 1}
+                            placeholder="مثال: 12.00 د.أ"
+                            value={newOfferForm.oldPrice}
+                            onChange={(e) => setNewOfferForm(prev => ({ ...prev, oldPrice: e.target.value }))}
+                            className={cn(
+                              "w-full px-3.5 py-2 rounded-xl border outline-none text-xs font-bold transition-all",
+                              newOfferForm.selectedScope === 'custom' && newOfferForm.selectedMenuItemIds.length === 1
+                                ? "bg-stone-100 border-stone-200 text-stone-500 cursor-not-allowed"
+                                : "border-stone-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                            )}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-stone-700 mb-1">السعر الجديد بعد الخصم</label>
+                          <input
+                            type="text"
+                            placeholder="مثال: 8.50 د.أ"
+                            value={newOfferForm.newPrice}
+                            onChange={(e) => setNewOfferForm(prev => ({ ...prev, newPrice: e.target.value }))}
+                            className="w-full px-3.5 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-xs font-bold"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-stone-700 mb-1">كود الخصم (اختياري)</label>
+                      <input
+                        type="text"
+                        placeholder="مثال: IRBID20"
+                        value={newOfferForm.code}
+                        onChange={(e) => setNewOfferForm(prev => ({ ...prev, code: e.target.value }))}
+                        className="w-full px-3.5 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-xs font-medium font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-stone-700 mb-1">رقم واتساب لإرسال العرض</label>
+                      <input
+                        type="tel"
+                        dir="ltr"
+                        placeholder="رقم الهاتف للتواصل"
+                        value={newOfferForm.whatsapp}
+                        onChange={(e) => setNewOfferForm(prev => ({ ...prev, whatsapp: e.target.value }))}
+                        className="w-full px-3.5 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-xs font-medium text-right"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Dynamic Duration Settings */}
+                  <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200/60 space-y-3">
+                    <label className="block text-xs font-black text-stone-800">تحديد مدة صلاحية العرض ⏰</label>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {[
+                        { id: 'hours', label: 'بالساعات ⏳' },
+                        { id: 'days', label: 'بالأيام 📅' },
+                        { id: 'date_range', label: 'من / إلى تاريخ 📆' },
+                        { id: 'recurring_weekly', label: 'متكرر أسبوعياً 🔁' }
+                      ].map(mode => (
+                        <button
+                          key={mode.id}
+                          type="button"
+                          onClick={() => setNewOfferForm(prev => ({ ...prev, durationMode: mode.id as any }))}
+                          className={cn(
+                            "py-2 px-2.5 rounded-xl border text-[11px] font-bold transition-all text-center cursor-pointer",
+                            newOfferForm.durationMode === mode.id
+                              ? "bg-amber-500 border-transparent text-white shadow-xs font-black"
+                              : "bg-white border-stone-200 text-stone-600 hover:bg-stone-50"
+                          )}
+                        >
+                          {mode.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {newOfferForm.durationMode === 'hours' && (
+                      <div className="space-y-1 animate-in fade-in duration-200">
+                        <label className="block text-[11px] font-bold text-stone-600">صلاحية العرض بالساعات</label>
+                        <input 
+                          type="number"
+                          min="1"
+                          required
+                          value={newOfferForm.durationHours}
+                          onChange={e => setNewOfferForm(prev => ({ ...prev, durationHours: e.target.value }))}
+                          placeholder="مثال: 12"
+                          className="w-full max-w-xs bg-white border border-stone-200 rounded-xl px-3.5 py-2 text-xs focus:outline-none"
+                        />
+                      </div>
+                    )}
+
+                    {newOfferForm.durationMode === 'days' && (
+                      <div className="space-y-1 animate-in fade-in duration-200">
+                        <label className="block text-[11px] font-bold text-stone-600">صلاحية العرض بالأيام</label>
+                        <input 
+                          type="number"
+                          min="1"
+                          required
+                          value={newOfferForm.durationDays}
+                          onChange={e => setNewOfferForm(prev => ({ ...prev, durationDays: e.target.value }))}
+                          placeholder="مثال: 3"
+                          className="w-full max-w-xs bg-white border border-stone-200 rounded-xl px-3.5 py-2 text-xs focus:outline-none"
+                        />
+                      </div>
+                    )}
+
+                    {newOfferForm.durationMode === 'date_range' && (
+                      <div className="grid grid-cols-2 gap-3 max-w-md animate-in fade-in duration-200">
+                        <div>
+                          <label className="block text-[11px] font-bold text-stone-600">من تاريخ</label>
+                          <input 
+                            type="date"
+                            required
+                            value={newOfferForm.startDate}
+                            onChange={e => setNewOfferForm(prev => ({ ...prev, startDate: e.target.value }))}
+                            className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2 text-xs focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-stone-600">إلى تاريخ</label>
+                          <input 
+                            type="date"
+                            required
+                            value={newOfferForm.endDate}
+                            onChange={e => setNewOfferForm(prev => ({ ...prev, endDate: e.target.value }))}
+                            className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2 text-xs focus:outline-none"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {newOfferForm.durationMode === 'recurring_weekly' && (
+                      <div className="space-y-1.5 animate-in fade-in duration-200">
+                        <label className="block text-[11px] font-bold text-stone-600">حدد أيام الأسبوع التي يتكرر فيها هذا العرض</label>
+                        <div className="flex flex-wrap gap-2 pt-1">
+                          {['السبت', 'الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'].map(day => {
+                            const isChecked = newOfferForm.recurringDays.includes(day);
+                            return (
+                              <button
+                                key={day}
+                                type="button"
+                                onClick={() => {
+                                  const updated = isChecked
+                                    ? newOfferForm.recurringDays.filter(d => d !== day)
+                                    : [...newOfferForm.recurringDays, day];
+                                  setNewOfferForm(prev => ({ ...prev, recurringDays: updated }));
+                                }}
+                                className={cn(
+                                  "py-1.5 px-3 rounded-lg border text-xs font-medium transition-all cursor-pointer",
+                                  isChecked
+                                    ? "bg-amber-100 border-amber-400 text-amber-800 font-bold"
+                                    : "bg-white border-stone-200 text-stone-500 hover:bg-stone-50"
+                                )}
+                              >
+                                {day}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 pt-2">
+                    <label className="flex items-center gap-2 cursor-pointer p-2 bg-stone-50 rounded-xl border border-stone-200 hover:bg-stone-100 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={newOfferForm.isHot}
+                        onChange={(e) => setNewOfferForm(prev => ({ ...prev, isHot: e.target.checked }))}
+                        className="h-4 w-4 rounded text-emerald-700 focus:ring-emerald-500 border-stone-300"
+                      />
+                      <span className="text-[11px] font-bold text-stone-700">عرض ساخن 🔥</span>
+                    </label>
+
+                    <label className="flex items-center gap-2 cursor-pointer p-2 bg-stone-50 rounded-xl border border-stone-200 hover:bg-stone-100 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={newOfferForm.isStudent}
+                        onChange={(e) => setNewOfferForm(prev => ({ ...prev, isStudent: e.target.checked }))}
+                        className="h-4 w-4 rounded text-emerald-700 focus:ring-emerald-500 border-stone-300"
+                      />
+                      <span className="text-[11px] font-bold text-stone-700">خصم خاص بالطلاب 🎓</span>
+                    </label>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-stone-700 mb-1">تفاصيل وشروط العرض *</label>
+                    <textarea
+                      rows={2}
+                      required
+                      placeholder="اكتب بالتفصيل ما الذي يتضمنه العرض وكيف يمكن الاستفادة منه..."
+                      value={newOfferForm.description}
+                      onChange={(e) => setNewOfferForm(prev => ({ ...prev, description: e.target.value }))}
+                      className="w-full px-3.5 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-xs font-medium resize-none"
+                    />
+                  </div>
+
+                  {/* Menu Images Gallery Selector */}
+                  {availableMenuImages.length > 0 && (
+                    <div className="bg-stone-50 p-3 rounded-2xl border border-stone-200 space-y-2 animate-in fade-in duration-200">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-xs font-black text-stone-800 flex items-center gap-1.5">
+                          <ImageIcon className="h-4 w-4 text-emerald-700" />
+                          <span>اختر صورة العرض من صور الكتالوج والمنيو 📸</span>
+                        </label>
+                        <span className="text-[10px] text-stone-500 font-bold">
+                          {availableMenuImages.length} صورة متاحة
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-0.5 scrollbar-thin">
+                        {availableMenuImages.map(imgItem => {
+                          const isSelected = newOfferForm.image === imgItem.imageUrl;
+                          return (
+                            <button
+                              key={imgItem.id}
+                              type="button"
+                              onClick={() => setNewOfferForm(prev => ({ ...prev, image: imgItem.imageUrl! }))}
+                              className={cn(
+                                "relative group shrink-0 rounded-xl overflow-hidden border-2 transition-all cursor-pointer p-0.5",
+                                isSelected
+                                  ? "border-emerald-600 ring-2 ring-emerald-500/30 scale-105"
+                                  : "border-stone-200 hover:border-emerald-400 opacity-80 hover:opacity-100"
+                              )}
+                              title={imgItem.name}
+                            >
+                              <img src={imgItem.imageUrl} alt={imgItem.name} className="w-14 h-14 object-cover rounded-lg" />
+                              <span className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[9px] font-bold truncate px-1 text-center">
+                                {imgItem.name}
+                              </span>
+                              {isSelected && (
+                                <div className="absolute top-1 right-1 w-4 h-4 bg-emerald-600 text-white rounded-full flex items-center justify-center text-[10px] font-black shadow-xs">
+                                  ✓
+                                </div>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-xs font-bold text-stone-700 mb-1.5">أو تحميل صورة مخصصة للعرض من جهازك</label>
+                    <ImageUploader 
+                      value={newOfferForm.image}
+                      onChange={(url) => setNewOfferForm(prev => ({ ...prev, image: url }))}
+                      folder="offers"
+                      aspectRatio="cover"
+                      placeholder="اختر صورة للعرض من جهازك لتصميم بطاقة متميزة"
+                    />
+                  </div>
+                </form>
+
+                <div className="p-4 sm:p-5 border-t border-stone-100 bg-stone-50/80 flex items-center justify-end gap-3 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setIsOfferModalOpen(false)}
+                    className="px-4 py-2 rounded-xl border border-stone-200 text-stone-600 text-xs font-bold hover:bg-stone-100 cursor-pointer"
+                  >
+                    إلغاء
+                  </button>
+                  <button
+                    type="submit"
+                    form="add-offer-form"
+                    disabled={submittingOffer}
+                    className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold disabled:opacity-50 transition-colors shadow-xs cursor-pointer"
+                  >
+                    {submittingOffer ? 'جاري النشر...' : 'نشر العرض في المنصة'}
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )}
+
+          {/* 1b. Add Job Modal (For Business Owners) */}
+          {business && isOwner && isAddJobModalOpen && (
+            <JobFormModal
+              isOpen={isAddJobModalOpen}
+              onClose={() => setIsAddJobModalOpen(false)}
+              defaultBusinessId={business.id}
+              onJobSaved={(savedJob) => {
+                setActiveJobs(prev => [savedJob, ...prev]);
+                setIsAddJobModalOpen(false);
+              }}
+            />
+          )}
+
+          {/* 2. Suggest an Edit Modal */}
+          {business && isEditSuggestionOpen && typeof document !== 'undefined' && createPortal(
+            <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto" dir="rtl">
+              <div className="bg-white rounded-3xl border border-stone-200 shadow-2xl max-w-md w-full max-h-[88vh] flex flex-col overflow-hidden relative my-auto animate-in fade-in zoom-in-95 duration-200">
+                <div className="flex items-center justify-between border-b border-stone-100 p-4 sm:p-5 bg-stone-50/80 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <Edit3 className="h-5 w-5 text-amber-600" />
+                    <h3 className="text-base sm:text-lg font-bold text-stone-900">اقتراح تعديل في معلومات المحل</h3>
+                  </div>
+                  <button
+                    onClick={() => setIsEditSuggestionOpen(false)}
+                    className="p-1.5 hover:bg-stone-200/80 rounded-xl transition-colors text-stone-500 hover:text-stone-800 cursor-pointer"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+
+                <div className="overflow-y-auto p-5 sm:p-6 space-y-4 flex-1">
+                {suggestionSuccess ? (
+                  <div className="py-8 text-center space-y-3">
+                    <div className="w-12 h-12 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center mx-auto animate-bounce">
+                      <Check className="h-6 w-6" />
+                    </div>
+                    <h4 className="text-base font-bold text-stone-900">شكراً لك! تم إرسال اقتراحك بنجاح</h4>
+                    <p className="text-stone-500 text-xs max-w-xs mx-auto">
+                      سيقوم فريق مراجعة المحتوى في دليل "شو في بإربد" بالتحقق من المعلومات وتحديثها قريباً.
+                    </p>
+                  </div>
+                ) : (
+                  <form id="suggest-edit-form" onSubmit={handleSuggestEdit} className="space-y-4">
+                    {/* Honeypot field */}
+                    <div className="absolute opacity-0 -z-50 pointer-events-none" style={{ width: 0, height: 0, overflow: 'hidden' }}>
+                      <label htmlFor="suggest_website_hp">لا تقم بتعبئة هذا الحقل إذا كنت بشراً</label>
+                      <input
+                        type="text"
+                        id="suggest_website_hp"
+                        name="suggest_website_hp"
+                        tabIndex={-1}
+                        autoComplete="off"
+                        value={hpValue}
+                        onChange={(e) => setHpValue(e.target.value)}
+                      />
+                    </div>
+                    <p className="text-xs text-stone-500 leading-relaxed">
+                      هل لاحظت خطأ في بيانات المحل؟ ساعدنا في الحفاظ على صحة الدليل وموثوقيته باقتراح التعديلات الصحيحة.
+                    </p>
+
+                    <div>
+                      <label className="block text-xs font-bold text-stone-700 mb-1">رقم الهاتف الصحيح</label>
+                      <input
+                        type="text"
+                        placeholder="مثال: 0791234567"
+                        value={suggestForm.phone}
+                        onChange={(e) => setSuggestForm(prev => ({ ...prev, phone: e.target.value }))}
+                        className="w-full px-3.5 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-xs font-medium"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-stone-700 mb-1">العنوان أو الحي الصحيح</label>
+                      <input
+                        type="text"
+                        placeholder="مثال: شارع الجامعة - خلف مجمع عمان الجديد"
+                        value={suggestForm.address}
+                        onChange={(e) => setSuggestForm(prev => ({ ...prev, address: e.target.value }))}
+                        className="w-full px-3.5 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-xs font-medium"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-stone-700 mb-1">ساعات العمل الصحيحة</label>
+                      <input
+                        type="text"
+                        placeholder="مثال: من 10 صباحاً وحتى 11 مساءً"
+                        value={suggestForm.workingHours}
+                        onChange={(e) => setSuggestForm(prev => ({ ...prev, workingHours: e.target.value }))}
+                        className="w-full px-3.5 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-xs font-medium"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-stone-700 mb-1">ملاحظات أو تفاصيل إضافية</label>
+                      <textarea
+                        rows={2.5}
+                        placeholder="صف التغيير المطلوب أو أضف أي روابط أو مصادر للتحقق من المعلومة..."
+                        value={suggestForm.notes}
+                        onChange={(e) => setSuggestForm(prev => ({ ...prev, notes: e.target.value }))}
+                        className="w-full px-3.5 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-xs font-medium resize-none"
+                      />
+                    </div>
+                  </form>
+                )}
+                </div>
+
+                {!suggestionSuccess && (
+                  <div className="p-4 sm:p-5 border-t border-stone-100 bg-stone-50/80 flex items-center justify-end gap-3 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setIsEditSuggestionOpen(false)}
+                      className="px-4 py-2 rounded-xl border border-stone-200 text-stone-600 text-xs font-bold hover:bg-stone-100 cursor-pointer"
+                    >
+                      إلغاء
+                    </button>
+                    <button
+                      type="submit"
+                      form="suggest-edit-form"
+                      disabled={submittingSuggestion}
+                      className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold disabled:opacity-50 transition-colors shadow-xs cursor-pointer"
+                    >
+                      {submittingSuggestion ? 'جاري الإرسال...' : 'إرسال الاقتراح'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>,
+            document.body
+          )}
+
+          {/* 3. Report Review Modal (Review Moderation / Anti-Spam) */}
+          {business && isReportModalOpen && selectedReviewForReport && typeof document !== 'undefined' && createPortal(
+            <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto" dir="rtl">
+              <div className="bg-white rounded-3xl border border-stone-200 shadow-2xl max-w-md w-full max-h-[88vh] flex flex-col overflow-hidden relative my-auto animate-in fade-in zoom-in-95 duration-200">
+                <div className="flex items-center justify-between border-b border-stone-100 p-4 sm:p-5 bg-stone-50/80 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <EyeOff className="h-5 w-5 text-red-600" />
+                    <h3 className="text-base sm:text-lg font-bold text-stone-900">مكافحة التقييمات الكيدية والإبلاغ</h3>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setIsReportModalOpen(false);
+                      setSelectedReviewForReport(null);
+                    }}
+                    className="p-1.5 hover:bg-stone-200/80 rounded-xl transition-colors text-stone-500 hover:text-stone-800 cursor-pointer"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+
+                <div className="overflow-y-auto p-5 sm:p-6 space-y-4 flex-1">
+                {reportSuccess ? (
+                  <div className="py-8 text-center space-y-3">
+                    <div className="w-12 h-12 bg-red-100 text-red-700 rounded-full flex items-center justify-center mx-auto">
+                      <Check className="h-6 w-6" />
+                    </div>
+                    <h4 className="text-base font-bold text-stone-900">تم تسجيل بلاغك بنجاح</h4>
+                    <p className="text-stone-500 text-xs max-w-xs mx-auto">
+                      سيقوم المشرفون بالتحقق فوراً من صحة التقييم والتعليق ومراجعة سلوك الحساب. شكراً لمساعدتنا في مكافحة المحتوى الكيدي.
+                    </p>
+                  </div>
+                ) : (
+                  <form id="report-review-form" onSubmit={handleReportReview} className="space-y-4">
+                    {/* Honeypot field */}
+                    <div className="absolute opacity-0 -z-50 pointer-events-none" style={{ width: 0, height: 0, overflow: 'hidden' }}>
+                      <label htmlFor="report_website_hp">لا تقم بتعبئة هذا الحقل إذا كنت بشراً</label>
+                      <input
+                        type="text"
+                        id="report_website_hp"
+                        name="report_website_hp"
+                        tabIndex={-1}
+                        autoComplete="off"
+                        value={hpValue}
+                        onChange={(e) => setHpValue(e.target.value)}
+                      />
+                    </div>
+                    <div className="bg-stone-50 p-3 rounded-xl border border-stone-200 text-xs space-y-1">
+                      <div className="font-bold text-stone-800">التعليق المُبلَغ عنه:</div>
+                      <div className="text-stone-500 italic">"{selectedReviewForReport.comment}"</div>
+                      <div className="text-stone-400 text-[10px] pt-1">بواسطة: {selectedReviewForReport.userName}</div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-stone-700 mb-2">سبب الإبلاغ</label>
+                      <div className="space-y-2">
+                        {['تقييم كيدي/غير حقيقي', 'ألفاظ غير لائقة أو مسيئة', 'محتوى سبام / ترويجي', 'أخرى'].map((reasonOption) => (
+                          <label key={reasonOption} className="flex items-center gap-2.5 p-2.5 bg-white border border-stone-200 rounded-xl cursor-pointer hover:bg-stone-50 transition-colors">
+                            <input
+                              type="radio"
+                              name="reportReason"
+                              checked={reportReason === reasonOption}
+                              onChange={() => setReportReason(reasonOption)}
+                              className="h-4 w-4 text-red-600 focus:ring-red-500 border-stone-300"
+                            />
+                            <span className="text-xs font-medium text-stone-700">{reasonOption}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </form>
+                )}
+                </div>
+
+                {!reportSuccess && (
+                  <div className="p-4 sm:p-5 border-t border-stone-100 bg-stone-50/80 flex items-center justify-end gap-3 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsReportModalOpen(false);
+                        setSelectedReviewForReport(null);
+                      }}
+                      className="px-4 py-2 rounded-xl border border-stone-200 text-stone-600 text-xs font-bold hover:bg-stone-100 cursor-pointer"
+                    >
+                      إلغاء
+                    </button>
+                    <button
+                      type="submit"
+                      form="report-review-form"
+                      disabled={submittingReport}
+                      className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold disabled:opacity-50 transition-colors shadow-xs cursor-pointer"
+                    >
+                      {submittingReport ? 'جاري الإبلاغ...' : 'تسجيل الإبلاغ'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>,
+            document.body
+          )}
+
+
+          {/* Weekly Schedule Modal Popup */}
+          {isWeeklyHoursModalOpen && typeof document !== 'undefined' && createPortal(
+            <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200" dir="rtl">
+              <div className="absolute inset-0" onClick={() => setIsWeeklyHoursModalOpen(false)} />
+              <div className="relative w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl border border-stone-200 overflow-hidden z-10 animate-in slide-in-from-bottom-5 duration-200 max-h-[85vh] flex flex-col my-0 sm:my-auto">
+                {/* Header */}
+                <div className="p-4 sm:p-5 bg-gradient-to-l from-[#1a4d2e] to-emerald-800 text-white flex items-center justify-between shrink-0">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 bg-white/10 rounded-xl">
+                      <Clock className="h-5 w-5 text-amber-300" />
+                    </div>
+                    <div>
+                      <h3 className="font-black text-sm sm:text-base">جدول مواعيد الدوام الأسبوعي</h3>
+                      <p className="text-xs text-emerald-100 font-medium">{business.name}</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsWeeklyHoursModalOpen(false)}
+                    className="p-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+
+                {/* Live Status Badge Header */}
+                <div className="p-3.5 bg-stone-50 border-b border-stone-100 flex items-center justify-between">
+                  <span className="text-xs font-bold text-stone-600">الحالة المباشرة الآن:</span>
+                  <span className={`text-xs font-black px-3 py-1 rounded-xl border ${liveStatus.isOpen ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-rose-50 border-rose-200 text-rose-800'}`}>
+                    {liveStatus.status}
+                  </span>
+                </div>
+
+                {/* Weekly Schedule Days List */}
+                <div className="p-4 space-y-2 overflow-y-auto">
+                  {ALL_DAYS.map((d) => {
+                    const todayIndex = getJordanNow().getDay();
+                    const todayArabic = ARABIC_DAYS_MAP[todayIndex];
+                    const isToday = d.name === todayArabic;
+
+                    let dayStatusText = '';
+                    let dayIsOpen = true;
+
+                    if (business.workingHours?.hasCustomDailyHours && business.workingHours.dailySchedules) {
+                      const sched = business.workingHours.dailySchedules.find(s => s.day === d.name);
+                      if (sched) {
+                        if (!sched.isOpen) {
+                          dayIsOpen = false;
+                          dayStatusText = 'عطلة أسبوعية';
+                        } else if (sched.isOpen24Hours) {
+                          dayStatusText = 'مفتوح 24 ساعة';
+                        } else {
+                          dayStatusText = `${formatTimeToArabic(sched.openTime || '09:00')} - ${formatTimeToArabic(sched.closeTime || '23:00')}`;
+                        }
+                      }
+                    }
+
+                    if (!dayStatusText) {
+                      const isDaySelected = parseInitialDays(business.workingHours?.days, business.workingHours?.selectedDays).includes(d.name);
+                      if (!isDaySelected) {
+                        dayIsOpen = false;
+                        dayStatusText = 'عطلة أسبوعية';
+                      } else if (business.workingHours?.isOpen24Hours) {
+                        dayStatusText = 'مفتوح 24 ساعة';
+                      } else {
+                        const openStr = formatTimeToArabic(business.workingHours?.openTime || '09:00');
+                        const closeStr = formatTimeToArabic(business.workingHours?.closeTime || '23:00');
+                        dayStatusText = `${openStr} - ${closeStr}`;
+                      }
+                    }
+
+                    return (
+                      <div
+                        key={d.id}
+                        className={`p-3 rounded-2xl border flex items-center justify-between text-xs font-bold transition-all ${
+                          isToday
+                            ? 'bg-emerald-50/90 border-emerald-400 text-[#1a4d2e] ring-2 ring-emerald-500/10'
+                            : 'bg-stone-50/60 border-stone-200/80 text-stone-700'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="font-black text-stone-900 w-16">{d.name}</span>
+                          {isToday && (
+                            <span className="bg-amber-400 text-stone-950 text-[10px] px-2 py-0.5 rounded-md font-black">اليوم</span>
+                          )}
+                        </div>
+
+                        <span className={`font-black ${dayIsOpen ? 'text-emerald-800' : 'text-stone-400'}`}>
+                          {dayStatusText}
+                        </span>
+                      </div>
+                    );
+                  })}
+
+                  {Boolean(business.workingHours?.isCustomClosed) && (
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-900 font-bold space-y-1 mt-3">
+                      <span className="font-black block">تنبيه إجازة/إغلاق مؤقت:</span>
+                      <p className="text-[11px] font-medium">{business.workingHours?.vacationReason || 'المحل مغلق مؤقتاً'}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>,
+            document.body
+          )}
+
+          {/* Lightbox Modal for Gallery Images */}
+          {fullScreenImageUrl && typeof document !== 'undefined' && createPortal(
+            <div className="fixed inset-0 z-[100000] bg-black/95 backdrop-blur-md flex flex-col items-center justify-center p-4">
+              <button
+                onClick={() => setFullScreenImageUrl(null)}
+                className="absolute top-4 right-4 bg-white/10 hover:bg-white/20 text-white p-3 rounded-full transition-colors cursor-pointer"
+                title="إغلاق"
+              >
+                <X className="h-6 w-6" />
+              </button>
+              
+              <div className="max-w-4xl w-full max-h-[80vh] flex items-center justify-center relative p-2">
+                <img 
+                  src={fullScreenImageUrl} 
+                  alt="Full screen view" 
+                  className="max-w-full max-h-[80vh] object-contain rounded-xl shadow-2xl"
+                  referrerPolicy="no-referrer"
+                />
+              </div>
+
+              {/* Caption or label */}
+              {(() => {
+                const activeItem = (business.gallery || []).find((item: any) => 
+                  (typeof item === 'string' ? item : item?.url) === fullScreenImageUrl
+                ) as any;
+                const caption = activeItem && typeof activeItem !== 'string' ? activeItem.caption : 'صورة من زوايا المحل والجو العام';
+                return (
+                  <div className="bg-black/40 border border-white/10 text-white/90 px-6 py-2.5 rounded-full text-xs font-bold mt-4 max-w-md text-center leading-relaxed">
+                    {caption}
+                  </div>
+                );
+              })()}
+            </div>,
+            document.body
+          )}
+
+          {/* Comprehensive Job Details Modal */}
+          {selectedDetailJob && typeof document !== 'undefined' && createPortal(
+            <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto" dir="rtl">
+              <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[88vh] overflow-y-auto p-6 sm:p-8 shadow-2xl border border-stone-200 space-y-6 relative my-auto animate-in fade-in zoom-in-95">
+                
+                {/* Header */}
+                <div className="flex items-start justify-between border-b border-[#e5e1da] pb-4">
+                  <div className="space-y-2 text-right">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="bg-[#1a4d2e]/10 text-[#1a4d2e] text-xs font-black px-2.5 py-0.5 rounded-md">
+                        {selectedDetailJob.category}
+                      </span>
+                      <span className="bg-stone-100 text-stone-600 text-xs font-bold px-2.5 py-0.5 rounded-md">
+                        {selectedDetailJob.jobType}
+                      </span>
+                      {selectedDetailJob.isUrgent && (
+                        <span className="bg-red-600 text-white text-xs font-black px-2.5 py-0.5 rounded-md flex items-center gap-1">
+                          <Flame className="h-3 w-3 fill-white" />
+                          شاغر عاجل وفوري
+                        </span>
+                      )}
+                    </div>
+
+                    <h3 className="text-2xl font-black text-[#2d2a26]">
+                      {selectedDetailJob.title}
+                    </h3>
+                    
+                    <div className="flex flex-wrap items-center gap-3">
+                      <p className="text-sm font-bold text-stone-700 flex items-center gap-1.5">
+                        <Building2 className="h-4 w-4 text-[#ff9f1c]" />
+                        <span>{selectedDetailJob.company}</span>
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => setSelectedDetailJob(null)}
+                    className="p-2 text-stone-400 hover:text-stone-700 rounded-xl hover:bg-stone-100 transition-colors"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+
+                {/* Comprehensive Meta Specs Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 bg-stone-50 p-4 rounded-2xl border border-[#e5e1da] text-right">
+                  
+                  <div className="space-y-0.5">
+                    <span className="text-[11px] text-stone-400 font-bold block">الموقع في إربد:</span>
+                    <span className="text-xs font-bold text-stone-800 flex items-center gap-1.5 justify-start">
+                      <MapPin className="h-3.5 w-3.5 text-[#ff9f1c]" />
+                      {selectedDetailJob.location}
+                    </span>
+                  </div>
+
+                  {selectedDetailJob.salary && (
+                    <div className="space-y-0.5">
+                      <span className="text-[11px] text-stone-400 font-bold block">الراتب / الأجر:</span>
+                      <span className="text-xs font-black text-emerald-700 flex items-center gap-1.5 justify-start">
+                        <DollarSign className="h-3.5 w-3.5 text-emerald-600" />
+                        {selectedDetailJob.salary}
+                      </span>
+                    </div>
+                  )}
+
+                  {selectedDetailJob.workHours && (
+                    <div className="space-y-0.5">
+                      <span className="text-[11px] text-stone-400 font-bold block">أوقات العمل والشفت:</span>
+                      <span className="text-xs font-bold text-stone-700 flex items-center gap-1.5 justify-start">
+                        <Clock className="h-3.5 w-3.5 text-sky-600" />
+                        {selectedDetailJob.workHours}
+                      </span>
+                    </div>
+                  )}
+
+                  {selectedDetailJob.experienceLevel && (
+                    <div className="space-y-0.5">
+                      <span className="text-[11px] text-stone-400 font-bold block">الخبرة المطلوبة:</span>
+                      <span className="text-xs font-bold text-stone-700 flex items-center gap-1.5 justify-start">
+                        <Award className="h-3.5 w-3.5 text-purple-600" />
+                        {selectedDetailJob.experienceLevel}
+                      </span>
+                    </div>
+                  )}
+
+                  {selectedDetailJob.genderPreference && (
+                    <div className="space-y-0.5">
+                      <span className="text-[11px] text-stone-400 font-bold block">الجنس:</span>
+                      <span className="text-xs font-bold text-stone-700 flex items-center gap-1.5 justify-start">
+                        <Users className="h-3.5 w-3.5 text-stone-500" />
+                        {selectedDetailJob.genderPreference === 'males' ? 'ذكور فقط' : selectedDetailJob.genderPreference === 'females' ? 'إناث فقط' : 'متاح للذكور والإناث'}
+                      </span>
+                    </div>
+                  )}
+
+                </div>
+
+                {/* Benefits if available */}
+                {selectedDetailJob.benefits && selectedDetailJob.benefits.length > 0 && (
+                  <div className="space-y-2 text-right">
+                    <h4 className="font-black text-xs text-stone-700 uppercase tracking-wider">
+                      المزايا والحوافز المقدمة:
+                    </h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-emerald-50/40 p-3 rounded-2xl border border-emerald-100">
+                      {selectedDetailJob.benefits.map((benefit, idx) => (
+                        <div key={idx} className="flex items-center gap-2 text-xs font-bold text-emerald-950">
+                          <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                          <span>{benefit}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Job Description */}
+                <div className="space-y-2 text-right">
+                  <h4 className="font-black text-xs text-stone-700 uppercase tracking-wider">
+                    الوصف الوظيفي والمسؤوليات:
+                  </h4>
+                  <p className="text-stone-700 text-sm leading-relaxed whitespace-pre-line bg-white p-4 rounded-2xl border border-stone-200">
+                    {selectedDetailJob.description}
+                  </p>
+                </div>
+
+                {/* Requirements */}
+                {selectedDetailJob.requirements && selectedDetailJob.requirements.length > 0 && (
+                  <div className="space-y-2 text-right">
+                    <h4 className="font-black text-xs text-stone-700 uppercase tracking-wider">
+                      المتطلبات والشروط:
+                    </h4>
+                    <ul className="space-y-2 text-sm text-stone-700 bg-stone-50 p-4 rounded-2xl border border-stone-200">
+                      {selectedDetailJob.requirements.map((req, idx) => (
+                        <li key={idx} className="flex items-start gap-2">
+                          <CheckCircle className="h-4 w-4 text-[#1a4d2e] shrink-0 mt-0.5" />
+                          <span>{req}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* How to apply */}
+                {selectedDetailJob.howToApply && (
+                  <div className="p-3.5 bg-amber-50 rounded-2xl border border-amber-200 text-xs text-amber-900 text-right">
+                    <span className="font-black block mb-0.5">طريقة التقديم المحددة من صاحب العمل:</span>
+                    <span>{selectedDetailJob.howToApply}</span>
+                  </div>
+                )}
+
+                {/* Contact & Apply Footer */}
+                <div className="pt-4 border-t border-[#e5e1da] flex flex-col sm:flex-row items-center justify-between gap-4 text-right">
+                  <div className="text-xs text-stone-500">
+                    <span>لأي استفسار يمكنك التواصل مع جهة التوظيف مباشرة:</span>
+                    <span className="block font-black text-stone-800 text-sm mt-0.5" dir="ltr">{selectedDetailJob.contactPhone}</span>
+                  </div>
+
+                  <div className="flex items-center gap-2.5 w-full sm:w-auto">
+                    <a
+                      href={`https://wa.me/${(selectedDetailJob.contactWhatsapp || selectedDetailJob.contactPhone).replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`مرحباً، أود التقدم لوظيفة (${selectedDetailJob.title}) المعلنة على دليل شو في بإربد.`)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex-1 sm:flex-initial inline-flex justify-center items-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm rounded-xl transition-all shadow-md cursor-pointer"
+                    >
+                      <WhatsAppIcon className="h-4 w-4" />
+                      <span>قدم عبر الواتساب الآن</span>
+                    </a>
+
+                    <a
+                      href={`tel:${selectedDetailJob.contactPhone}`}
+                      className="inline-flex justify-center items-center gap-2 px-4 py-3 bg-stone-100 hover:bg-stone-200 text-stone-800 font-bold text-sm rounded-xl transition-colors cursor-pointer"
+                    >
+                      <Phone className="h-4 w-4" />
+                      <span>اتصال</span>
+                    </a>
+                  </div>
+                </div>
+
+              </div>
+            </div>,
+            document.body
+          )}
+
+      {/* Visitor VIP Interactive Welcome Popup */}
+      {business && vipInfo.isVip && business.vipPopup?.enabled && (
+        <VipWelcomePopupModal
+          business={business}
+          popupConfig={business.vipPopup}
+          isOpen={isVipWelcomePopupOpen}
+          onClose={() => {
+            setIsVipWelcomePopupOpen(false);
+          }}
+        />
+      )}
+
+      {/* Owner VIP Popup Manager Modal */}
+      {business && isVipPopupManagerOpen && (
+        <VipPopupManagerModal
+          business={business}
+          isOpen={isVipPopupManagerOpen}
+          onClose={() => setIsVipPopupManagerOpen(false)}
+          onUpdated={(newPopup) => {
+            setBusiness(prev => prev ? { ...prev, vipPopup: newPopup } : null);
+          }}
+        />
+      )}
+
+      {/* Medical Facility Appointment Booking Modal */}
+      {business && isMedical && (
+        <MedicalAppointmentModal
+          isOpen={isMedicalBookingOpen}
+          onClose={() => setIsMedicalBookingOpen(false)}
+          business={business}
+          medicalProfile={medicalProfile}
+        />
+      )}
+
+      {/* Gallery Trial Limit Alert Popup Modal */}
+      {showTrialGalleryLimitPopup && (
+        <div className="fixed inset-0 z-[110000] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in" dir="rtl">
+          <div 
+            className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-amber-200 text-center text-right"
+          >
+            <div className="w-16 h-16 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm animate-bounce">
+              <Sparkles className="h-8 w-8" />
+            </div>
+            
+            <h3 className="text-lg font-black text-stone-900 mb-2 text-center">حدود الباقة التجريبية المسموحة</h3>
+            <p className="text-sm text-stone-600 leading-relaxed mb-6 text-center">
+              نشكرك على استخدام الباقة الذهبية التجريبية (30 يوماً). 
+              <br />
+              الحد الأقصى المتاح لإضافة الصور في معرض {isMedical ? 'المنشأة الطبية' : 'المحل'} في هذه الباقة هو <span className="font-black text-amber-600">3 صور فقط</span>.
+              <br />
+              <span className="mt-2 block font-medium text-stone-500">للحصول على إمكانيات غير محدودة وتوسيع آفاق عملك، يرجى الترقية للباقة الذهبية الدائمة.</span>
+            </p>
+
+            <div className="flex flex-col gap-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowTrialGalleryLimitPopup(false);
+                }}
+                className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-amber-950 font-black rounded-xl text-xs transition-all shadow-sm active:scale-95 cursor-pointer text-center"
+              >
+                فهمت ذلك
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delivery Regions Modal (Interactive Regions Lookup) */}
+      {showDeliveryModal && business && (
+        <div className="fixed inset-0 z-[110000] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in" dir="rtl">
+          <div 
+            className="bg-white rounded-3xl p-6 max-w-lg w-full shadow-2xl border border-stone-200 text-right space-y-4 animate-scale-up"
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-stone-100">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 bg-blue-50 text-blue-600 rounded-2xl">
+                  <Truck className="h-5.5 w-5.5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-stone-900">المناطق المشمولة بالتوصيل</h3>
+                  <p className="text-[11px] text-stone-500 font-medium">المناطق والأحياء التي يخدمها ({business.name})</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDeliveryModal(false)}
+                className="p-1.5 hover:bg-stone-100 rounded-xl transition-colors text-stone-400 hover:text-stone-700 cursor-pointer text-xs font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="space-y-4 py-2">
+              <div className="p-4 bg-emerald-50/50 border border-emerald-100 rounded-2xl flex items-start gap-3">
+                <MapPin className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
+                <div className="space-y-0.5 text-xs">
+                  <span className="font-bold text-emerald-950 block">موقع المحل الرئيسي:</span>
+                  <span className="text-emerald-800 font-medium">{business.address} - {business.district || 'إربد'}</span>
+                </div>
+              </div>
+
+              {business.deliveryRegions ? (
+                <div className="space-y-3">
+                  <div className="text-xs font-bold text-stone-700 flex items-center gap-1.5">
+                    <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+                    المناطق المتاحة للتوصيل حالياً:
+                  </div>
+                  <div className="flex flex-wrap gap-2 max-h-[220px] overflow-y-auto p-1">
+                    {business.deliveryRegions.split(/[,،\n]+/).map((region, idx) => {
+                      const trimmed = region.trim();
+                      if (!trimmed) return null;
+                      return (
+                        <span 
+                          key={idx}
+                          className="bg-blue-50 hover:bg-blue-100/85 text-blue-700 border border-blue-100 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors"
+                        >
+                          <span className="w-1.5 h-1.5 bg-blue-400 rounded-full" />
+                          {trimmed}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <div className="p-5 bg-blue-50/40 border border-blue-100/50 rounded-2xl text-center space-y-2">
+                  <Truck className="h-8 w-8 text-blue-500 mx-auto animate-bounce" style={{ animationDuration: '4s' }} />
+                  <h4 className="text-xs font-black text-blue-900">خدمة التوصيل تغطي جميع المناطق!</h4>
+                  <p className="text-[11px] text-stone-600 leading-relaxed max-w-sm mx-auto font-medium">
+                    يقدم هذا المحل خدمة التوصيل السريع لجميع أحياء ومناطق مدينة إربد وضواحيها دون استثناء. يرجى الاتصال والتنسيق المباشر مع المتجر للطلب.
+                  </p>
+                </div>
+              )}
+
+              {/* Contact/Call to order button if phone is available */}
+              {business.phone && (
+                <div className="pt-2">
+                  <a
+                    href={`tel:${business.phone}`}
+                    className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-xl text-xs transition-all shadow-sm active:scale-95 cursor-pointer flex items-center justify-center gap-2 text-center"
+                  >
+                    <Phone className="h-4 w-4" />
+                    <span>اتصل الآن للطلب والتوصيل: {business.phone}</span>
+                  </a>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setShowDeliveryModal(false)}
+                className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold rounded-xl text-xs transition-colors cursor-pointer"
+              >
+                إغلاق
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default BusinessDetail;

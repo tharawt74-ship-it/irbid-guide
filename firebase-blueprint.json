@@ -1,0 +1,267 @@
+{
+  "entities": {
+    "Business": {
+      "title": "Business",
+      "description": "Directory listing for a business or shop in Irbid",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "category": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "description": { "type": "string", "maxLength": 2000 },
+        "phone": { "type": "string", "maxLength": 50 },
+        "address": { "type": "string", "maxLength": 300 },
+        "district": { "type": "string", "maxLength": 100 },
+        "rating": { "type": "number" },
+        "reviewCount": { "type": "number" },
+        "views": { "type": "number" },
+        "image": { "type": "string", "maxLength": 1000 },
+        "isFeatured": { "type": "boolean" },
+        "isVip": { "type": "boolean" },
+        "isDemo": { "type": "boolean" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["name", "category"]
+    },
+    "BusinessRequest": {
+      "title": "BusinessRequest",
+      "description": "User submission to register a new shop in the directory",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "category": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "description": { "type": "string", "maxLength": 2000 },
+        "phone": { "type": "string", "maxLength": 50 },
+        "address": { "type": "string", "maxLength": 300 },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "userId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["name", "phone", "category"]
+    },
+    "Review": {
+      "title": "Review",
+      "description": "User rating and feedback for a business",
+      "type": "object",
+      "properties": {
+        "businessId": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "userName": { "type": "string", "maxLength": 100 },
+        "rating": { "type": "number" },
+        "comment": { "type": "string", "maxLength": 1000 },
+        "deviceFingerprint": { "type": "string", "maxLength": 128 },
+        "recaptchaToken": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["businessId", "rating", "comment"]
+    },
+    "JobOffer": {
+      "title": "JobOffer",
+      "description": "Job vacancy listing in Irbid",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "company": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "category": { "type": "string", "maxLength": 100 },
+        "jobType": { "type": "string", "maxLength": 50 },
+        "location": { "type": "string", "maxLength": 200 },
+        "description": { "type": "string", "maxLength": 3000 },
+        "contactPhone": { "type": "string", "maxLength": 50 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["title", "company", "description", "contactPhone"]
+    },
+    "BannerBookingRequest": {
+      "title": "BannerBookingRequest",
+      "description": "Request submitted by users or business owners to book ad banners",
+      "type": "object",
+      "properties": {
+        "bannerId": { "type": "string", "maxLength": 128 },
+        "applicantName": { "type": "string", "maxLength": 100 },
+        "applicantPhone": { "type": "string", "maxLength": 50 },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "status": { "type": "string", "enum": ["pending", "contacted", "completed", "rejected"] },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["applicantName", "applicantPhone"]
+    },
+    "MarketingRequest": {
+      "title": "MarketingRequest",
+      "description": "Marketing and banner requests submitted by business owners",
+      "type": "object",
+      "properties": {
+        "businessId": { "type": "string", "maxLength": 128 },
+        "businessName": { "type": "string", "maxLength": 200 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "userEmail": { "type": "string", "maxLength": 150 },
+        "serviceType": { "type": "string", "maxLength": 100 },
+        "serviceName": { "type": "string", "maxLength": 200 },
+        "status": { "type": "string", "enum": ["pending", "contacted", "approved", "completed", "rejected"] },
+        "createdAt": { "type": "number" },
+        "bannerType": { "type": "string", "maxLength": 50 },
+        "bannerTitle": { "type": "string", "maxLength": 200 },
+        "bannerSubtitle": { "type": "string", "maxLength": 500 },
+        "bannerImageUrl": { "type": "string", "maxLength": 1000 },
+        "buttonText": { "type": "string", "maxLength": 100 },
+        "buttonLink": { "type": "string", "maxLength": 500 },
+        "badgeText": { "type": "string", "maxLength": 100 },
+        "promoCardLayout": { "type": "string", "enum": ["standard", "full"] }
+      },
+      "required": ["serviceType", "userId"]
+    },
+    "UserReward": {
+      "title": "UserReward",
+      "description": "Visitor gift/reward coupon earned by writing reviews",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128 },
+        "businessId": { "type": "string", "maxLength": 128 },
+        "businessName": { "type": "string", "maxLength": 200 },
+        "code": { "type": "string", "maxLength": 100 },
+        "discountPercent": { "type": "number" },
+        "createdAt": { "type": "number" },
+        "expiresAt": { "type": "number" },
+        "used": { "type": "boolean" }
+      },
+      "required": ["userId", "businessId", "businessName", "code", "discountPercent", "createdAt", "expiresAt", "used"]
+    },
+    "TransportationItem": {
+      "title": "TransportationItem",
+      "description": "Transportation hub, bus route, or taxi service listing in Irbid",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["terminal", "route", "taxi"] },
+        "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "location": { "type": "string", "maxLength": 300 },
+        "description": { "type": "string", "maxLength": 2000 },
+        "destinationTypes": { "type": "array", "items": { "type": "string" } },
+        "destinations": { "type": "array" },
+        "code": { "type": "string", "maxLength": 100 },
+        "stops": { "type": "array", "items": { "type": "string" } },
+        "fare": { "type": "string", "maxLength": 100 },
+        "time": { "type": "string", "maxLength": 150 },
+        "categoryType": { "type": "string", "maxLength": 100 },
+        "phone": { "type": "string", "maxLength": 50 },
+        "badge": { "type": "string", "maxLength": 100 },
+        "order": { "type": "number" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["type", "name"]
+    },
+    "BusinessPost": {
+      "title": "BusinessPost",
+      "description": "News/updates post published by a VIP business",
+      "type": "object",
+      "properties": {
+        "businessId": { "type": "string", "maxLength": 128 },
+        "businessName": { "type": "string", "maxLength": 200 },
+        "businessLogoUrl": { "type": "string", "maxLength": 1000 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "content": { "type": "string", "minLength": 1, "maxLength": 5000 },
+        "imageUrl": { "type": "string", "maxLength": 1000 },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" },
+        "likesCount": { "type": "number" },
+        "isPinned": { "type": "boolean" },
+        "attachedItem": { "type": "object" }
+      },
+      "required": ["businessId", "title", "content"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Customer order placed at a restaurant or cafe",
+      "type": "object",
+      "properties": {
+        "businessId": { "type": "string", "maxLength": 128 },
+        "businessName": { "type": "string", "maxLength": 200 },
+        "items": { "type": "array" },
+        "totalPrice": { "type": "number" },
+        "customerName": { "type": "string", "maxLength": 100 },
+        "customerPhone": { "type": "string", "maxLength": 50 },
+        "orderType": { "type": "string", "enum": ["dine_in", "takeaway", "delivery"] },
+        "tableNumber": { "type": "string", "maxLength": 50 },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "deviceFingerprint": { "type": "string", "maxLength": 128 },
+        "recaptchaToken": { "type": "string", "maxLength": 500 },
+        "status": { "type": "string", "enum": ["pending", "processing", "completed", "cancelled"] },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["businessId", "businessName", "items", "totalPrice", "customerName", "customerPhone", "orderType", "status", "createdAt"]
+    },
+    "PromoCard": {
+      "title": "PromoCard",
+      "description": "In-feed promotional card embedded in chosen list page",
+      "type": "object",
+      "properties": {
+        "targetPage": { "type": "string", "maxLength": 100 },
+        "targetType": { "type": "string", "maxLength": 100 },
+        "targetEntityId": { "type": "string", "maxLength": 128 },
+        "targetEntityName": { "type": "string", "maxLength": 200 },
+        "title": { "type": "string", "maxLength": 200 },
+        "subtitle": { "type": "string", "maxLength": 500 },
+        "mediaType": { "type": "string", "maxLength": 50 },
+        "imageUrl": { "type": "string", "maxLength": 1000 },
+        "videoUrl": { "type": "string", "maxLength": 1000 },
+        "badgeText": { "type": "string", "maxLength": 100 },
+        "buttonText": { "type": "string", "maxLength": 100 },
+        "buttonLink": { "type": "string", "maxLength": 500 },
+        "businessId": { "type": "string", "maxLength": 128 },
+        "businessName": { "type": "string", "maxLength": 200 },
+        "businessLogo": { "type": "string", "maxLength": 1000 },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "number" },
+        "startDate": { "type": "string", "maxLength": 100 },
+        "expiryDate": { "type": "string", "maxLength": 100 },
+        "marketingRequestId": { "type": "string", "maxLength": 128 },
+        "promoCardLayout": { "type": "string", "enum": ["standard", "full"] }
+      },
+      "required": ["targetPage", "title", "active"]
+    }
+  },
+  "firestore": {
+    "/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/Order" },
+      "description": "Real-time orders received by restaurants and cafes"
+    },
+    "/businesses/{businessId}": {
+      "schema": { "$ref": "#/entities/Business" },
+      "description": "Public directory of businesses in Irbid"
+    },
+    "/business_posts/{postId}": {
+      "schema": { "$ref": "#/entities/BusinessPost" },
+      "description": "News and posts published by VIP businesses"
+    },
+    "/businessRequests/{requestId}": {
+      "schema": { "$ref": "#/entities/BusinessRequest" },
+      "description": "User requests for adding new businesses"
+    },
+    "/reviews/{reviewId}": {
+      "schema": { "$ref": "#/entities/Review" },
+      "description": "Business reviews and ratings"
+    },
+    "/jobs/{jobId}": {
+      "schema": { "$ref": "#/entities/JobOffer" },
+      "description": "Employment listings in Irbid"
+    },
+    "/bannerBookingRequests/{bookingId}": {
+      "schema": { "$ref": "#/entities/BannerBookingRequest" },
+      "description": "Banner ad booking requests"
+    },
+    "/marketingRequests/{marketingId}": {
+      "schema": { "$ref": "#/entities/MarketingRequest" },
+      "description": "Marketing and homepage banner requests"
+    },
+    "/user_rewards/{rewardId}": {
+      "schema": { "$ref": "#/entities/UserReward" },
+      "description": "Visitor earned discount codes/coupons"
+    },
+    "/transportation/{transportId}": {
+      "schema": { "$ref": "#/entities/TransportationItem" },
+      "description": "Public transportation hubs, bus routes, and taxi apps"
+    },
+    "/promo_cards/{promoId}": {
+      "schema": { "$ref": "#/entities/PromoCard" },
+      "description": "In-feed promotional cards"
+    }
+  }
+}

@@ -1,0 +1,1835 @@
+import express from "express";
+import path from "path";
+import { createServer as createViteServer } from "vite";
+import dotenv from "dotenv";
+import ordersHandler from "./api/orders";
+import { initializeApp, getApps, getApp, cert } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
+import { getFirestore as getAdminFirestore } from "firebase-admin/firestore";
+import { GoogleGenAI } from "@google/genai";
+import rateLimit from "express-rate-limit";
+import FormData from "form-data";
+import https from "https";
+import webpush from "web-push";
+
+dotenv.config();
+
+// Web Push VAPID Configuration for Background Device Notifications
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || process.env.VITE_FIREBASE_VAPID_KEY || "BF7BlmkqjBP1Fjc5aI6SHcmZpBVOT5_Q9mSP5bhS9GVf_7vO_04WVI4nYwDI2sLUQVLXu5ZlMB2hPgbmiXeiNVk";
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || "-ACtFv4DS13hxbuxaii4HeLIAOLcHM8weKIkgHkTUNs";
+const VAPID_SUBJECT = process.env.VAPID_SUBJECT || "mailto:admin@shofibirbid.site";
+
+try {
+  webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+} catch (vapidErr) {
+  console.warn("WebPush VAPID setup warning:", vapidErr);
+}
+
+// Lazy initialized Gemini AI instance
+let geminiClient: GoogleGenAI | null = null;
+function getGeminiClient(): GoogleGenAI | null {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return null;
+  if (!geminiClient) {
+    geminiClient = new GoogleGenAI({ apiKey });
+  }
+  return geminiClient;
+}
+
+// Lazy initialized Firebase Admin instance
+let adminApp: any = null;
+
+function getAdminApp() {
+  if (adminApp) return adminApp;
+
+  try {
+    const existingApps = getApps();
+    if (existingApps.length > 0) {
+      adminApp = getApp();
+      return adminApp;
+    }
+
+    const projectId = process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID || 'irbid-7f4dd';
+    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+    let privateKey = process.env.FIREBASE_PRIVATE_KEY;
+
+    if (clientEmail && privateKey) {
+      // Clean private key: remove surrounding quotes and replace escaped \n with actual newlines
+      privateKey = privateKey.trim();
+      if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
+        privateKey = privateKey.slice(1, -1);
+      }
+      privateKey = privateKey.replace(/\\n/g, '\n');
+
+      adminApp = initializeApp({
+        credential: cert({
+          projectId,
+          clientEmail,
+          privateKey,
+        })
+      });
+      return adminApp;
+    }
+
+    // Ambient Google Cloud / AI Studio preview initialization
+    adminApp = initializeApp({
+      projectId
+    });
+    return adminApp;
+  } catch (err) {
+    console.warn("Firebase Admin initialization error:", err);
+    return null;
+  }
+}
+
+async function startServer() {
+  const app = express();
+  const PORT = 3000;
+
+  // 🛡️ Security Headers & Server Hardening 🛡️
+  app.disable('x-powered-by');
+
+  // Enforce HTTPS in production
+  app.use((req, res, next) => {
+    if (process.env.NODE_ENV === 'production' && req.headers['x-forwarded-proto'] !== 'https') {
+      return res.redirect(301, `https://${req.headers.host}${req.url}`);
+    }
+    next();
+  });
+
+  app.use((req, res, next) => {
+    // Prevent MIME-type sniffing
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    // Prevent clickjacking by allowing framing only from the same origin
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    // Enable XSS filtering in browsers that support it
+    res.setHeader('X-XSS-Protection', '1; mode=block');
+    // Control referrer information leakage
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    // Enforce HTTPS transmission via HSTS (1 year)
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    // Restrict browser features and sensors
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(self)');
+    next();
+  });
+
+  // Helper function for strict HTML & string sanitization
+  const sanitizeInput = (str: unknown, maxLength = 200): string => {
+    if (typeof str !== 'string') return '';
+    return str
+      .trim()
+      .slice(0, maxLength)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#x27;');
+  };
+
+  const isValidEmail = (email: unknown): boolean => {
+    if (typeof email !== 'string') return false;
+    const trimmed = email.trim();
+    return trimmed.length <= 100 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed);
+  };
+
+  // 🛡️ Rate Limiting Configuration 🛡️
+  const apiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // Limit each IP to 100 requests per `window`
+    message: { error: 'تم تجاوز الحد المسموح به للطلبات، يرجى المحاولة لاحقاً.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+
+  const authLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000, // 1 hour
+    max: 10, // Limit each IP to 10 auth-related requests per hour
+    message: { error: 'تم تجاوز الحد المسموح به من الطلبات. يرجى المحاولة لاحقاً.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+
+  const aiLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000, // 1 hour
+    max: 20, // Limit each IP to 20 AI requests per hour
+    message: { error: 'تم تجاوز الحد المسموح به للرسائل. يرجى المحاولة بعد قليل.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+
+  // Trust proxy if running behind a load balancer/reverse proxy (Cloud Run environment)
+  app.set('trust proxy', 1);
+
+  // Apply general API rate limiter to all API routes
+  app.use("/api/", apiLimiter);
+
+  // Apply specific rate limiters to sensitive endpoints
+  app.use("/api/auth/", authLimiter);
+  app.use("/api/ai/", aiLimiter);
+
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+  // API Route for live restaurant orders handling
+  app.all("/api/orders", (req, res) => ordersHandler(req, res));
+
+  // API Route for updating business menu items stock availability (Protected with Auth & Ownership Verification)
+  app.post("/api/business/menu-stock", async (req, res) => {
+    try {
+      const { businessId, menuItems } = req.body;
+      if (!businessId || typeof businessId !== 'string' || !Array.isArray(menuItems)) {
+        return res.status(400).json({ error: "Missing or invalid businessId or menuItems" });
+      }
+
+      if (menuItems.length > 500) {
+        return res.status(400).json({ error: "Menu items payload too large" });
+      }
+
+      const admin = getAdminApp();
+      if (!admin) {
+        return res.status(500).json({ error: "Firebase Admin not initialized" });
+      }
+
+      // Verify Caller Authorization
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return res.status(401).json({ error: "Unauthorized: Missing authentication token" });
+      }
+
+      const token = authHeader.split(" ")[1];
+      const authAdmin = getAuth(admin);
+      const decodedToken = await authAdmin.verifyIdToken(token);
+      const callerUid = decodedToken.uid;
+      const callerEmail = (decodedToken.email || "").toLowerCase().trim();
+
+      const adminDb = getAdminFirestore(admin);
+
+      const ADMIN_BOOTSTRAP_EMAILS = [
+        'princessofx2344@gmail.com',
+        'tharawt74@gmail.com'
+      ];
+
+      let isAuthorized = ADMIN_BOOTSTRAP_EMAILS.includes(callerEmail);
+      if (!isAuthorized) {
+        const adminDoc = await adminDb.collection("admins").doc(callerUid).get();
+        if (adminDoc.exists) {
+          isAuthorized = true;
+        }
+      }
+
+      // If not platform admin, verify that caller is the owner/manager of this business
+      if (!isAuthorized) {
+        const bizDoc = await adminDb.collection("businesses").doc(businessId).get();
+        if (bizDoc.exists) {
+          const bizData = bizDoc.data();
+          if (
+            bizData?.userId === callerUid ||
+            bizData?.ownerId === callerUid ||
+            (bizData?.userEmail && bizData.userEmail.toLowerCase().trim() === callerEmail) ||
+            (bizData?.ownerEmail && bizData.ownerEmail.toLowerCase().trim() === callerEmail)
+          ) {
+            isAuthorized = true;
+          }
+        }
+      }
+
+      if (!isAuthorized) {
+        return res.status(403).json({ error: "Forbidden: You are not authorized to update this business's menu stock" });
+      }
+
+      const docRef = adminDb.collection("businesses").doc(businessId);
+      await docRef.set({
+        menuItems: menuItems
+      }, { merge: true });
+      return res.status(200).json({ success: true, updated: true });
+    } catch (err: any) {
+      console.warn("API menu-stock update warning:", err?.message || err);
+      return res.status(500).json({ error: err?.message || "Failed to update menu stock" });
+    }
+  });
+
+  // API Route for custom Resend verification email
+  app.post("/api/auth/send-verification", async (req, res) => {
+    try {
+      const rawEmail = req.body?.email;
+      const rawToken = req.body?.token;
+      const rawDisplayName = req.body?.displayName;
+
+      if (!isValidEmail(rawEmail)) {
+        return res.status(400).json({ error: "عنوان بريد إلكتروني غير صالح" });
+      }
+
+      if (typeof rawToken !== 'string' || !rawToken.trim() || rawToken.length > 256) {
+        return res.status(400).json({ error: "رمز التحقق غير صالح أو مفقود" });
+      }
+
+      const email = rawEmail.trim().toLowerCase();
+      const token = encodeURIComponent(rawToken.trim());
+      const safeDisplayName = sanitizeInput(rawDisplayName || 'المستخدم الكريم', 60);
+
+      const resendApiKey = process.env.RESEND_API_KEY;
+      if (!resendApiKey) {
+        console.error("RESEND_API_KEY is not defined in environment variables");
+        return res.status(500).json({ error: "Email service not configured on server" });
+      }
+
+      // Build the verification link pointing back to our /verify route
+      const verifyUrl = `${req.protocol}://${req.get('host')}/verify?token=${token}`;
+
+      const htmlContent = `
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>تفعيل حسابك في منصة شو في بإربد؟</title>
+  <style>
+    body {
+      font-family: 'Cairo', 'Segoe UI', Tahoma, Arial, sans-serif;
+      background-color: #faf9f6;
+      margin: 0;
+      padding: 0;
+      -webkit-font-smoothing: antialiased;
+    }
+    .wrapper {
+      width: 100%;
+      background-color: #faf9f6;
+      padding: 40px 15px;
+    }
+    .container {
+      max-width: 580px;
+      margin: 0 auto;
+      background-color: #ffffff;
+      border-radius: 32px;
+      border: 1px solid #e8e4db;
+      box-shadow: 0 10px 30px rgba(26,77,46,0.04);
+      overflow: hidden;
+    }
+    .header {
+      background-color: #1a4d2e;
+      background-image: linear-gradient(135deg, #1a4d2e 0%, #11351e 100%);
+      padding: 45px 30px;
+      text-align: center;
+    }
+    .header h1 {
+      color: #ffffff;
+      margin: 0;
+      font-size: 28px;
+      font-weight: 900;
+      letter-spacing: -0.5px;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .header p {
+      color: #ff9f1c;
+      margin: 8px 0 0 0;
+      font-size: 14px;
+      font-weight: 700;
+    }
+    .security-badge {
+      display: inline-block;
+      background-color: rgba(255, 159, 28, 0.1);
+      color: #ff9f1c;
+      padding: 6px 16px;
+      border-radius: 30px;
+      font-size: 12px;
+      font-weight: 800;
+      margin-top: 15px;
+      border: 1px solid rgba(255, 159, 28, 0.2);
+    }
+    .content {
+      padding: 45px 40px;
+      text-align: right;
+    }
+    .content h2 {
+      color: #242220;
+      font-size: 22px;
+      font-weight: 800;
+      margin-top: 0;
+      margin-bottom: 15px;
+    }
+    .content p {
+      color: #5d5a55;
+      font-size: 15px;
+      line-height: 1.8;
+      margin-bottom: 25px;
+    }
+    .btn-container {
+      text-align: center;
+      margin: 40px 0;
+    }
+    .btn {
+      display: inline-block;
+      background: #1a4d2e;
+      background: linear-gradient(135deg, #1a4d2e 0%, #133b22 100%);
+      color: #ffffff !important;
+      text-decoration: none !important;
+      padding: 16px 48px;
+      font-size: 15px;
+      font-weight: 800;
+      border-radius: 20px;
+      box-shadow: 0 6px 20px rgba(26,77,46,0.25);
+      transition: all 0.3s ease;
+    }
+    .note-box {
+      background-color: #fffbeb;
+      border: 1px solid #fef3c7;
+      border-radius: 20px;
+      padding: 20px 25px;
+      margin-top: 30px;
+    }
+    .note-box p {
+      color: #b45309;
+      font-size: 13px;
+      margin: 0;
+      line-height: 1.7;
+    }
+    .footer {
+      background-color: #fbfbfa;
+      padding: 30px 20px;
+      text-align: center;
+      border-top: 1px solid #e8e4db;
+    }
+    .footer p {
+      color: #a5a29e;
+      font-size: 12px;
+      margin: 6px 0;
+      font-weight: 500;
+    }
+    .footer a {
+      color: #1a4d2e;
+      text-decoration: none;
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="container">
+      <div class="header">
+        <h1>شو في بإربد؟ 🗺️</h1>
+        <p>دليلك الرقمي الأسرع للمحلات، الوظائف، والعروض</p>
+        <div class="security-badge">تفعيل موثق للأمان</div>
+      </div>
+
+      <div class="content">
+        <h2>أهلاً بك يا ${safeDisplayName}، 👋</h2>
+        <p>
+          لقد قمت بإنشاء حسابك الجديد بنجاح في <strong>منصة شو في بإربد؟</strong>. لتأكيد ملكيتك للبريد الإلكتروني وتنشيط حسابك بالكامل، يرجى الضغط على رابط التفعيل المباشر والآمن أدناه:
+        </p>
+
+        <div class="btn-container">
+          <a href="${verifyUrl}" class="btn" target="_blank">تأكيد وتفعيل الحساب فوراً ⚡</a>
+        </div>
+
+        <div class="note-box">
+          <p>
+            <strong>💡 نصيحة هامة:</strong> بمجرد ضغطك على الزر أعلاه، سيتم تأكيد حسابك وسيفتح لك الموقع تلقائياً دون الحاجة لإعادة كتابة كلمة المرور!
+          </p>
+        </div>
+        
+        <p style="margin-top: 30px; font-size: 12px; color: #a5a29e; text-align: center;">
+          إذا لم تقم بطلب التسجيل في منصتنا، يمكنك إهمال وحذف هذه الرسالة بأمان.
+        </p>
+      </div>
+
+      <div class="footer">
+        <p>© 2026 جميع الحقوق محفوظة لـ <strong>منصة شو في بإربد؟</strong></p>
+        <p>تصفح الموقع الإلكتروني: <a href="https://shofibirbid.site" target="_blank">shofibirbid.site</a></p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+      `;
+
+      const response = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${resendApiKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          from: "منصة شو في بإربد؟ <no-reply@shofibirbid.site>",
+          to: [email],
+          subject: "تفعيل حسابك في منصة شو في بإربد؟ 🗺️",
+          html: htmlContent
+        })
+      });
+
+      const resData: any = await response.json();
+      if (!response.ok) {
+        console.error("Resend API error:", resData);
+        return res.status(response.status).json({ error: resData.message || "Failed to send email via Resend" });
+      }
+
+      return res.json({ success: true, messageId: resData.id });
+    } catch (err: any) {
+      console.error("Error in send-verification route:", err);
+      return res.status(500).json({ error: err.message || "Internal server error" });
+    }
+  });
+
+  // API Route for custom Resend password reset email
+  app.post("/api/auth/send-password-reset", async (req, res) => {
+    try {
+      const rawEmail = req.body?.email;
+      if (!isValidEmail(rawEmail)) {
+        return res.status(400).json({ error: "عنوان بريد إلكتروني غير صالح" });
+      }
+
+      const email = rawEmail.trim().toLowerCase();
+
+      const resendApiKey = process.env.RESEND_API_KEY;
+      if (!resendApiKey) {
+        return res.status(500).json({ error: "Email service not configured on server" });
+      }
+
+      let oobCode: string | null = null;
+      let authErrorDetails = "";
+
+      const app = getAdminApp();
+      if (!app) {
+        return res.status(500).json({ error: "Firebase Admin not initialized" });
+      }
+
+      const authAdmin = getAuth(app);
+      const adminDb = getAdminFirestore(app);
+
+      // 1. Verify that user actually exists in the platform
+      let userExists = false;
+      try {
+        const userRec = await authAdmin.getUserByEmail(email);
+        if (userRec && userRec.uid) {
+          userExists = true;
+        }
+      } catch (userErr: any) {
+        if (userErr?.code === 'auth/user-not-found') {
+          userExists = false;
+        }
+      }
+
+      if (!userExists) {
+        try {
+          const userSnap = await adminDb.collection('users').where('email', '==', email).limit(1).get();
+          if (!userSnap.empty) {
+            userExists = true;
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      // Also check if account was deleted by admin
+      try {
+        const delSnap = await adminDb.collection('deleted_emails').doc(email).get();
+        if (delSnap.exists) {
+          userExists = false;
+        }
+      } catch {}
+
+      if (!userExists) {
+        return res.status(404).json({ error: "هذا الحساب غير مسجل في الموقع" });
+      }
+
+      // 2. Generate password reset link
+      try {
+        const oobLink = await authAdmin.generatePasswordResetLink(email);
+        const urlParams = new URL(oobLink).searchParams;
+        oobCode = urlParams.get('oobCode');
+      } catch (err: any) {
+        console.warn("Admin SDK failed to generate reset link locally, trying REST API:", err);
+        authErrorDetails = err.message || "";
+      }
+
+      // 2. Fall back to REST API
+      if (!oobCode) {
+        const firebaseApiKey = process.env.VITE_FIREBASE_API_KEY || "AIzaSyDDswaCceyey9mjAC7ERlkPQ0dIkNsbquw";
+        const oobResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${firebaseApiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            requestType: 'PASSWORD_RESET',
+            email: email,
+            returnOobLink: true
+          })
+        });
+
+        const oobData: any = await oobResponse.json();
+        if (!oobResponse.ok) {
+          console.error("Firebase sendOobCode error:", oobData);
+          const errMessage = oobData.error?.message || "Failed to generate password reset code";
+          return res.status(oobResponse.status).json({ error: errMessage });
+        }
+
+        const oobLink = oobData.oobLink;
+        const urlParams = new URL(oobLink).searchParams;
+        oobCode = urlParams.get('oobCode');
+      }
+
+      if (!oobCode) {
+        return res.status(500).json({ error: "Failed to generate password reset code. " + authErrorDetails });
+      }
+
+      // Build custom reset URL pointing to our app
+      const resetUrl = `${req.protocol}://${req.get('host')}/reset-password?oobCode=${oobCode}`;
+
+      // Elegant, super-premium HTML content for Password Reset
+      const htmlContent = `
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>إعادة تعيين كلمة المرور - منصة شو في بإربد؟</title>
+  <style>
+    body {
+      font-family: 'Cairo', 'Segoe UI', Tahoma, Arial, sans-serif;
+      background-color: #faf9f6;
+      margin: 0;
+      padding: 0;
+      -webkit-font-smoothing: antialiased;
+    }
+    .wrapper {
+      width: 100%;
+      background-color: #faf9f6;
+      padding: 40px 15px;
+    }
+    .container {
+      max-width: 580px;
+      margin: 0 auto;
+      background-color: #ffffff;
+      border-radius: 32px;
+      border: 1px solid #e8e4db;
+      box-shadow: 0 10px 30px rgba(26,77,46,0.045);
+      overflow: hidden;
+    }
+    .header {
+      background-color: #1a4d2e;
+      background-image: linear-gradient(135deg, #1a4d2e 0%, #11351e 100%);
+      padding: 45px 30px;
+      text-align: center;
+      position: relative;
+    }
+    .header h1 {
+      color: #ffffff;
+      margin: 0;
+      font-size: 28px;
+      font-weight: 900;
+      letter-spacing: -0.5px;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .header p {
+      color: #ff9f1c;
+      margin: 8px 0 0 0;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    .security-badge {
+      display: inline-block;
+      background-color: rgba(255, 159, 28, 0.1);
+      color: #ff9f1c;
+      padding: 6px 16px;
+      border-radius: 30px;
+      font-size: 12px;
+      font-weight: 800;
+      margin-top: 15px;
+      border: 1px solid rgba(255, 159, 28, 0.2);
+    }
+    .content {
+      padding: 45px 40px;
+      text-align: right;
+    }
+    .content h2 {
+      color: #242220;
+      font-size: 22px;
+      font-weight: 800;
+      margin-top: 0;
+      margin-bottom: 15px;
+    }
+    .content p {
+      color: #5d5a55;
+      font-size: 15px;
+      line-height: 1.8;
+      margin-bottom: 25px;
+    }
+    .btn-container {
+      text-align: center;
+      margin: 40px 0;
+    }
+    .btn {
+      display: inline-block;
+      background: #1a4d2e;
+      background: linear-gradient(135deg, #1a4d2e 0%, #133b22 100%);
+      color: #ffffff !important;
+      text-decoration: none !important;
+      padding: 16px 48px;
+      font-size: 15px;
+      font-weight: 800;
+      border-radius: 20px;
+      box-shadow: 0 6px 20px rgba(26,77,46,0.25);
+      transition: all 0.3s ease;
+    }
+    .warning-box {
+      background-color: #fffbeb;
+      border: 1px solid #fef3c7;
+      border-radius: 20px;
+      padding: 20px 25px;
+      margin-top: 30px;
+    }
+    .warning-box p {
+      color: #b45309;
+      font-size: 13px;
+      margin: 0;
+      line-height: 1.7;
+    }
+    .footer {
+      background-color: #fbfbfa;
+      padding: 30px 20px;
+      text-align: center;
+      border-top: 1px solid #e8e4db;
+    }
+    .footer p {
+      color: #a5a29e;
+      font-size: 12px;
+      margin: 6px 0;
+      font-weight: 500;
+    }
+    .footer a {
+      color: #1a4d2e;
+      text-decoration: none;
+      font-weight: 700;
+    }
+    .lock-icon {
+      font-size: 40px;
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="container">
+      <div class="header">
+        <div class="lock-icon">🔒</div>
+        <h1>إعادة تعيين كلمة المرور</h1>
+        <p>منصة شو في بإربد؟</p>
+        <div class="security-badge">طلب أمان موثق</div>
+      </div>
+
+      <div class="content">
+        <h2>أهلاً بك، 👋</h2>
+        <p>
+          لقد تلقينا طلباً لإعادة تعيين كلمة المرور الخاصة بحسابك في <strong>منصة شو في بإربد؟</strong> والمرتبط بالبريد الإلكتروني (<strong>${email}</strong>). لتغيير كلمة المرور الخاصة بك واختيار كلمة مرور جديدة، يرجى الضغط على الزر المباشر والآمن أدناه:
+        </p>
+
+        <div class="btn-container">
+          <a href="${resetUrl}" class="btn" target="_blank">إعادة تعيين كلمة المرور الآن 🔑</a>
+        </div>
+
+        <div class="warning-box">
+          <p>
+            <strong>⚠️ ملاحظة أمنية هامة:</strong> إذا لم تكن أنت من طلب إعادة تعيين كلمة المرور هذه، يمكنك تجاهل هذا البريد الإلكتروني بأمان تام. لن يطرأ أي تغيير على كلمة مرورك الحالية دون النقر على الرابط وتأكيده.
+          </p>
+        </div>
+      </div>
+
+      <div class="footer">
+        <p>صلاحية هذا الرابط هي ساعة واحدة فقط لدواعي الأمان المتقدمة.</p>
+        <p>© 2026 جميع الحقوق محفوظة لـ <strong>منصة شو في بإربد؟</strong></p>
+        <p><a href="https://shofibirbid.site" target="_blank">shofibirbid.site</a></p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+      `;
+
+      const sendResponse = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${resendApiKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          from: "منصة شو في بإربد؟ <no-reply@shofibirbid.site>",
+          to: [email],
+          subject: "إعادة تعيين كلمة المرور - منصة شو في بإربد؟ 🔑",
+          html: htmlContent
+        })
+      });
+
+      const sendData: any = await sendResponse.json();
+      if (!sendResponse.ok) {
+        console.error("Resend API send error:", sendData);
+        return res.status(sendResponse.status).json({ error: sendData.message || "Failed to send reset email" });
+      }
+
+      return res.json({ success: true, messageId: sendData.id });
+    } catch (err: any) {
+      console.error("Error in reset password route:", err);
+      return res.status(500).json({ error: err.message || "Internal server error" });
+    }
+  });
+
+  // Route to delete a user completely from Firebase Authentication and Firestore
+  app.post("/api/auth/delete-user", async (req, res) => {
+    try {
+      const appInstance = getAdminApp();
+      if (!appInstance) {
+        return res.status(500).json({ error: "Firebase Admin not initialized" });
+      }
+
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return res.status(401).json({ error: "Unauthorized: Missing token" });
+      }
+
+      const token = authHeader.split(" ")[1];
+      const authAdmin = getAuth(appInstance);
+      const decodedToken = await authAdmin.verifyIdToken(token);
+      const callerEmail = (decodedToken.email || "").toLowerCase().trim();
+      const callerUid = decodedToken.uid;
+
+      const adminDb = getAdminFirestore(appInstance);
+
+      const ADMIN_BOOTSTRAP_EMAILS = [
+        'princessofx2344@gmail.com',
+        'tharawt74@gmail.com'
+      ];
+
+      let isAuthorized = ADMIN_BOOTSTRAP_EMAILS.includes(callerEmail);
+      if (!isAuthorized) {
+        const adminDoc = await adminDb.collection("admins").doc(callerUid).get();
+        if (adminDoc.exists) {
+          isAuthorized = true;
+        }
+      }
+
+      if (!isAuthorized) {
+        return res.status(403).json({ error: "Forbidden: You are not authorized as an administrator" });
+      }
+
+      const { targetUid, targetEmail } = req.body;
+      const cleanTargetEmail = (targetEmail || "").toLowerCase().trim();
+      const cleanTargetUid = (targetUid || "").trim();
+
+      if (!cleanTargetUid && !cleanTargetEmail) {
+        return res.status(400).json({ error: "Missing targetUid or targetEmail" });
+      }
+
+      if (cleanTargetEmail === 'princessofx2344@gmail.com') {
+        return res.status(400).json({ error: "Cannot delete the primary super admin account" });
+      }
+
+      // 1. Delete user from Firebase Authentication
+      let authDeleted = false;
+      if (cleanTargetUid) {
+        try {
+          await authAdmin.deleteUser(cleanTargetUid);
+          authDeleted = true;
+        } catch (authErr: any) {
+          if (authErr?.code !== 'auth/user-not-found') {
+            console.warn("Could not delete user from auth by UID:", authErr?.message);
+          }
+        }
+      }
+
+      if (!authDeleted && cleanTargetEmail) {
+        try {
+          const userRec = await authAdmin.getUserByEmail(cleanTargetEmail);
+          if (userRec && userRec.uid) {
+            await authAdmin.deleteUser(userRec.uid);
+            authDeleted = true;
+          }
+        } catch (emailErr: any) {
+          if (emailErr?.code !== 'auth/user-not-found') {
+            console.warn("Could not delete user from auth by email:", emailErr?.message);
+          }
+        }
+      }
+
+      // 2. Delete from Firestore users, supervisors, admins
+      if (cleanTargetUid) {
+        await Promise.all([
+          adminDb.collection("users").doc(cleanTargetUid).delete().catch(() => {}),
+          adminDb.collection("supervisors").doc(cleanTargetUid).delete().catch(() => {}),
+          adminDb.collection("admins").doc(cleanTargetUid).delete().catch(() => {})
+        ]);
+      }
+
+      // 3. Mark in deleted_emails so that any existing login sessions or cached tokens are blocked
+      if (cleanTargetEmail) {
+        await adminDb.collection("deleted_emails").doc(cleanTargetEmail).set({
+          email: cleanTargetEmail,
+          uid: cleanTargetUid || "",
+          deletedAt: Date.now(),
+          deletedBy: callerEmail
+        }, { merge: true }).catch(() => {});
+      }
+
+      return res.json({
+        success: true,
+        message: "User deleted permanently from authentication and database",
+        authDeleted
+      });
+    } catch (err: any) {
+      console.error("Error deleting user in /api/auth/delete-user:", err);
+      return res.status(500).json({ error: err.message || "Failed to delete user" });
+    }
+  });
+
+  // Video uploads are handled directly from the client browser to Imgur Video API for maximum speed and stability without datacenter IP blocks
+
+  // API Route to resolve Google Maps short links (e.g. maps.app.goo.gl) to exact destination coordinates/place
+  app.get("/api/resolve-map-url", async (req, res) => {
+    try {
+      const targetUrl = req.query.url as string;
+      if (!targetUrl || typeof targetUrl !== 'string') {
+        return res.status(400).json({ error: 'Valid URL is required' });
+      }
+
+      let parsed: URL;
+      try {
+        parsed = new URL(targetUrl);
+      } catch {
+        return res.status(400).json({ error: 'Invalid URL format' });
+      }
+
+      // Restrict protocol strictly to HTTP/HTTPS
+      if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+        return res.status(400).json({ error: 'Only HTTP/HTTPS URLs allowed' });
+      }
+
+      const hostname = parsed.hostname.toLowerCase();
+
+      // Whitelist of legitimate Google Maps domains
+      const ALLOWED_MAP_DOMAINS = [
+        'maps.app.goo.gl',
+        'goo.gl',
+        'maps.google.com',
+        'www.google.com',
+        'google.com',
+        'maps.google.jo'
+      ];
+
+      const isAllowedDomain = ALLOWED_MAP_DOMAINS.some(d => hostname === d || hostname.endsWith('.' + d));
+
+      // Prevent private IP ranges, localhost, and cloud metadata endpoints
+      const isPrivateOrInternal = 
+        hostname === 'localhost' ||
+        hostname.endsWith('.localhost') ||
+        hostname.endsWith('.internal') ||
+        hostname === '127.0.0.1' ||
+        hostname === '::1' ||
+        hostname === '169.254.169.254' ||
+        hostname.startsWith('10.') ||
+        hostname.startsWith('192.168.') ||
+        /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname);
+
+      if (!isAllowedDomain || isPrivateOrInternal) {
+        return res.status(403).json({ error: 'Untrusted domain or private address is not permitted' });
+      }
+
+      // Safe fetch following redirects to unwrap short links
+      const response = await fetch(parsed.toString(), {
+        method: 'GET',
+        redirect: 'follow',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+        }
+      });
+
+      const finalUrl = response.url || targetUrl;
+
+      // 1. Check for pin data: !3d(lat)!4d(lng)
+      const pinMatch = finalUrl.match(/!3d(-?\d+(?:\.\d+)?)[^!]*!4d(-?\d+(?:\.\d+)?)/);
+      if (pinMatch) {
+        return res.json({ lat: pinMatch[1], lng: pinMatch[2], finalUrl });
+      }
+
+      // 2. Check for @lat,lng
+      const atMatch = finalUrl.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+      if (atMatch) {
+        return res.json({ lat: atMatch[1], lng: atMatch[2], finalUrl });
+      }
+
+      // 3. Check for q=lat,lng or query=lat,lng
+      const qMatch = finalUrl.match(/[?&](?:q|query|ll)=(-?\d+\.\d+)[,+](-?\d+\.\d+)/);
+      if (qMatch) {
+        return res.json({ lat: qMatch[1], lng: qMatch[2], finalUrl });
+      }
+
+      // 4. Check for place name from /place/Name
+      const placeMatch = finalUrl.match(/\/place\/([^/@?]+)/);
+      if (placeMatch) {
+        const placeName = decodeURIComponent(placeMatch[1].replace(/\+/g, ' '));
+        return res.json({ query: placeName, finalUrl });
+      }
+
+      return res.json({ finalUrl });
+    } catch (err: any) {
+      console.warn('Failed to resolve map URL:', err?.message || err);
+      return res.status(500).json({ error: 'Resolution failed' });
+    }
+  });
+
+  // Server-side in-memory cache for lightning-fast system settings delivery
+  let cachedSystemSettings: any = null;
+  let cachedSystemSettingsTime = 0;
+  const SYSTEM_SETTINGS_TTL = 30 * 1000; // 30 seconds cache
+
+  // API Route for getting and setting system config with Admin bypass rules
+  app.get("/api/system-settings", async (req, res) => {
+    try {
+      res.setHeader('Cache-Control', 'public, max-age=30, s-maxage=30');
+
+      if (cachedSystemSettings && (Date.now() - cachedSystemSettingsTime < SYSTEM_SETTINGS_TTL)) {
+        return res.json({ success: true, settings: cachedSystemSettings });
+      }
+
+      const appInstance = getAdminApp();
+      if (!appInstance) {
+        return res.status(500).json({ error: "Firebase Admin not initialized" });
+      }
+      const adminDb = getAdminFirestore(appInstance);
+      const docRef = adminDb.collection("systemConfig").doc("settings");
+      const docSnap = await docRef.get();
+      if (docSnap.exists) {
+        const data = docSnap.data();
+        // Sanitize if huge base64 was sent
+        if (data?.globalSettings?.logoUrl?.startsWith('data:image')) {
+          data.globalSettings.logoUrl = '/logo.png';
+        }
+        cachedSystemSettings = data;
+        cachedSystemSettingsTime = Date.now();
+        return res.json({ success: true, settings: data });
+      } else {
+        return res.json({ success: true, settings: null });
+      }
+    } catch (err: any) {
+      console.error("Error reading system settings server-side:", err);
+      return res.status(500).json({ error: err.message || "Failed to load system settings" });
+    }
+  });
+
+  app.post("/api/system-settings", async (req, res) => {
+    try {
+      const appInstance = getAdminApp();
+      if (!appInstance) {
+        return res.status(500).json({ error: "Firebase Admin not initialized" });
+      }
+      
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return res.status(401).json({ error: "Unauthorized: Missing token" });
+      }
+      
+      const token = authHeader.split(" ")[1];
+      const authAdmin = getAuth(appInstance);
+      const decodedToken = await authAdmin.verifyIdToken(token);
+      const uid = decodedToken.uid;
+      const email = (decodedToken.email || "").toLowerCase().trim();
+      
+      const adminDb = getAdminFirestore(appInstance);
+      
+      const ADMIN_BOOTSTRAP_EMAILS = [
+        'princessofx2344@gmail.com',
+        'tharawt74@gmail.com'
+      ];
+      
+      let isAdmin = ADMIN_BOOTSTRAP_EMAILS.map(e => e.toLowerCase().trim()).includes(email);
+      
+      if (!isAdmin) {
+        const adminDoc = await adminDb.collection("admins").doc(uid).get();
+        if (adminDoc.exists) {
+          isAdmin = true;
+        }
+      }
+      
+      if (!isAdmin) {
+        return res.status(403).json({ error: "Forbidden: You are not authorized as an administrator" });
+      }
+      
+      const newSettings = req.body;
+      const docRef = adminDb.collection("systemConfig").doc("settings");
+      const cleanedSettings = JSON.parse(JSON.stringify(newSettings));
+      
+      await docRef.set(cleanedSettings, { merge: true });
+      if (cleanedSettings?.globalSettings?.enableAiAssistant !== undefined) {
+        try {
+          await adminDb.collection("settings").doc("appConfig").set({
+            enableAiAssistant: cleanedSettings.globalSettings.enableAiAssistant
+          }, { merge: true });
+        } catch (e) {
+          console.warn("Could not sync appConfig with system settings:", e);
+        }
+      }
+      cachedSystemSettings = { ...cachedSystemSettings, ...cleanedSettings };
+      cachedSystemSettingsTime = Date.now();
+      return res.json({ success: true });
+    } catch (err: any) {
+      console.error("Error saving system settings server-side:", err);
+      return res.status(500).json({ error: err.message || "Failed to save system settings" });
+    }
+  });
+
+  // API Route for AI Site Assistant (Gemini 3.8 Flash & Fallbacks)
+  app.post("/api/ai/chat", async (req, res) => {
+    try {
+      if (cachedSystemSettings && cachedSystemSettings.globalSettings?.enableAiAssistant === false) {
+        return res.status(403).json({ error: "المساعد الذكي معطل حالياً من قبل إدارة المنصة", disabled: true });
+      }
+
+      // Live verification with Firestore
+      const appInst = getAdminApp();
+      if (appInst) {
+        try {
+          const aDb = getAdminFirestore(appInst);
+          const snap = await aDb.collection("systemConfig").doc("settings").get();
+          if (snap.exists && snap.data()?.globalSettings?.enableAiAssistant === false) {
+            return res.status(403).json({ error: "المساعد الذكي معطل حالياً من قبل إدارة المنصة", disabled: true });
+          }
+          const appConfigSnap = await aDb.collection("settings").doc("appConfig").get();
+          if (appConfigSnap.exists && appConfigSnap.data()?.enableAiAssistant === false) {
+            return res.status(403).json({ error: "المساعد الذكي معطل حالياً من قبل إدارة المنصة", disabled: true });
+          }
+        } catch (e) {
+          console.warn("Firestore live check warning in /api/ai/chat:", e);
+        }
+      }
+
+      const rawMessage = req.body?.message;
+      const history = Array.isArray(req.body?.history) ? req.body.history : [];
+      if (typeof rawMessage !== 'string' || !rawMessage.trim()) {
+        return res.status(400).json({ error: "Message is required" });
+      }
+
+      // Limit message length to 1000 characters
+      const message = rawMessage.trim().slice(0, 1000);
+
+      const client = getGeminiClient();
+      if (!client) {
+        return res.status(200).json({ fallback: true });
+      }
+
+      const systemInstruction = `أنت "ربداوي الأصلي" 🤖🇯🇴 - الخبير الذكي الأول والمستشار الرقمي المحلي لكل من ينقب أو يسأل عن شو في بإربد! (shofibirbid.site).
+
+شروط اللهجة والأسلوب (صارمة جداً ومندوبة):
+1. يجب أن تتحدث وتجيب **حصراً وبشكل كامل باللهجة الأردنية الإربدية اللطيفة والمحببة للقلب** (مثال: "هلا وغلا قرابة!", "أبشر يا غالي هسا بطلّعلك الصافي من الدليل!", "شوف يا بعدي شو لقيتلك بإربد:", "بدك رخيص وإلا إشي فاخر؟", "يسعد قلبك!", "هسا بفحصلك المحلات والشغالين هسا"، "تأمر أمر يا كبير!", "ولا يهمك، جيت على الشخص الصح!").
+2. يمنع منعاً باتاً استخدام اللغة الفصحى المعقدة أو الجمل الآلية الجافة. خلك ابن البلد العارف بكل شبر بإربد (شارع الجامعة، شارع الثلاثين، اليرموك، التكنو، جدارا، إيدون، الحصن، حوارة، بيت راس، الكورة، أم قيس، ومجمعات النقل).
+3. خليك سريع البديهة، خفيف الدم، وخدوم جداً.
+
+قواعد صارمة جداً لتراكم السياق وتتابع الشات (Multi-Turn Context Continuity):
+- اقرأ الرسائل السابقة في المحادثة أولاً بتمعن! المحادثة مستمرة وليست رسائل منفصلة.
+- إذا كان الزائر يتحدث في الرسائل السابقة عن **البحث عن عمل أو وظائف** (domain: "job")، وكتب في رسالته الجديدة تخصيصاً مثل "كافتيريا" أو "مطعم" أو "مبيعات" أو "كاشير" أو "دوام جزئي" -> **يجب أن تظل في مجال الوظائف domain: "job"**، وتستخرج الكلمة النقية cleanQuery = "كافتيريا". (يمنع منعاً باتاً تحويل المجال إلى محلات تجارية business وإظهار بطاقات محلات كافتيريا عندما يطلب الزائر وظيفة كافتيريا!).
+- إذا كان الزائر يتحدث سابقاً عن **السكنات أو الشقق** (domain: "housing") وكتب "شارع الجامعة" أو "طالبات" -> **احفظ المجال domain: "housing"**.
+- لا تقم بتغيير المجال إلا إذا غير الزائر الموضوع صراحةً (مثال: "طيب شو أكل شاورما الحين؟").
+
+قواعد فهم الكلمات والمترادفات الأردنية (Dialect & Category Mapping):
+- "أواعي" / "أواعي بناتي" / "ألبسة" / "بوتيكات" / "فستان" / "موضة" -> تعني قطاع **أزياء وملابس** (category: "أزياء وملابس"). استخرج cleanQuery = "ملابس" أو الكلمة المطلوبة مع الفئة "أزياء وملابس". لا تفترض أبداً أن الزائر يبحث عن محل اسمه الحرفي "ملابس"! بل عن محلات تبيع الملابس والأواعي!
+- "شغل" / "بدور ع شغل" / "في شغل" / "بدي أشتغل" -> مجال الوظائف (domain: "job").
+- "سكن" / "شقة" / "استوديو" / "بيت للإيجار" -> مجال السكنات (domain: "housing").
+- "أكل" / "زاكي" / "جيعان" / "عشا" / "غدا" -> مجال المطاعم والمأكولات.
+- "أراجيل" / "قهوة" / "قعدة حلوة" -> مجال الكافيهات والمقاهي.
+
+تصنيف النية واستخراج البيانات:
+- إذا كان السؤال عن أي مكان، مطعم، كافيه، وجبة، شاورما، صيدلية، سكن، شقة، وظيفة، عرض، خط باص، مواقيت صلاة، أو سياحة:
+  * استخرج الكلمة الصافية المستهدفة في cleanQuery (مثل: "كافتيريا", "شاورما", "كافيه", "سكن طالبات", "كاشير", "ملابس").
+  * حدد domain المناسب ("business" | "housing" | "job" | "product" | "offer" | "tourism" | "none").
+  * حدد الفلاتر المنظمة (openNow, closedNow, lowPrice, highRating, maxPrice, category, location, university, targetType, jobType).
+  * اقترح أزرار مسارات مفيدة في actions عند الحاجة (/search, /housing, /jobs, /offers, /prayer-times, /transportation, /tourism).
+  * توليد 2-3 اقتراحات متابعة ذكية باللهجة الأردنية في suggestedPrompts.
+
+يجب أن يكون ردك بصيغة JSON صحيحة تماماً بالشكل التالي فقط:
+{
+  "text": "نص الرد المحبوب والذكي والواضح بالكامل باللهجة الأردنية الإربدية مع إيموجيز مناسبة",
+  "cleanQuery": "الكلمة النقية للبحث فقط في قواعد البيانات أو null للأسئلة العامة",
+  "domain": "business | housing | job | product | offer | tourism | none",
+  "filters": {
+    "openNow": false,
+    "closedNow": false,
+    "lowPrice": false,
+    "highRating": false,
+    "minRating": null,
+    "maxPrice": null,
+    "category": null,
+    "location": null,
+    "university": null,
+    "targetType": null,
+    "jobType": null,
+    "sortBy": "relevance"
+  },
+  "actions": [
+    { "label": "نص الزر الأردني اللطيف", "path": "/المسار" }
+  ],
+  "suggestedPrompts": [
+    "اقتراح أردني 1",
+    "اقتراح أردني 2"
+  ]
+}`;
+
+      // Build contents with conversation history
+      const formattedContents: any[] = [];
+      
+      if (Array.isArray(history) && history.length > 0) {
+        // Take last 6 messages to keep context without exceeding limits
+        const recentHistory = history.slice(-6);
+        for (const item of recentHistory) {
+          if (item && item.sender && item.text) {
+            formattedContents.push({
+              role: item.sender === 'user' ? 'user' : 'model',
+              parts: [{ text: item.text }]
+            });
+          }
+        }
+      }
+
+      // Append current user message
+      formattedContents.push({
+        role: 'user',
+        parts: [{ text: message }]
+      });
+
+      let response: any = null;
+      const aiConfig = {
+        systemInstruction,
+        responseMimeType: "application/json",
+      };
+
+      // Model candidate pool with stable Gemini models
+      const candidateModels = ['gemini-flash-latest', 'gemini-3.1-flash-lite', 'gemini-3.8-flash'];
+      for (const modelName of candidateModels) {
+        try {
+          response = await client.models.generateContent({
+            model: modelName,
+            contents: formattedContents,
+            config: aiConfig
+          });
+          if (response && response.text) {
+            break;
+          }
+        } catch (mErr: any) {
+          // Log clean warning without breaking execution flow
+          console.warn(`[AI API] Model ${modelName} temporary issue (${mErr?.status || mErr?.message || 'unavailable'}), trying fallback candidate...`);
+        }
+      }
+
+      if (!response || !response.text) {
+        return res.status(200).json({ fallback: true });
+      }
+
+      const textOutput = response.text || "{}";
+      let parsedData: any = { text: "عذراً، حدث خطأ في معالجة طلبك.", actions: [] };
+      
+      try {
+        parsedData = JSON.parse(textOutput);
+      } catch {
+        parsedData = {
+          text: textOutput,
+          cleanQuery: null,
+          domain: "none",
+          actions: [
+            { label: '🏢 دليل المحلات والأنشطة', path: '/search' },
+            { label: '🏷️ العروض والتخفيضات', path: '/offers' }
+          ]
+        };
+      }
+
+      return res.json(parsedData);
+    } catch (err) {
+      console.error("AI Chat Route Error:", err);
+      return res.status(200).json({ fallback: true });
+    }
+  });
+
+  // 🛡️ Middleware: Verify Admin Firebase Auth Token 🛡️
+  const verifyAdminToken = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'غير مصرح: رمز الجلسة مفقود' });
+    }
+    const token = authHeader.split('Bearer ')[1];
+    try {
+      const admin = getAdminApp();
+      if (!admin) {
+        return res.status(500).json({ error: 'خدمة الفايربيس غير متوفرة حالياً' });
+      }
+      const decodedToken = await getAuth(admin).verifyIdToken(token);
+      const db = getAdminFirestore(admin);
+      const adminDoc = await db.collection('admins').doc(decodedToken.uid).get();
+      const supervisorDoc = await db.collection('supervisors').doc(decodedToken.uid).get();
+      const allowedEmails = [
+        "princessofx2344@gmail.com",
+        "tharawt74@gmail.com"
+      ];
+      const isEmailAdmin = decodedToken.email && allowedEmails.includes(decodedToken.email.toLowerCase());
+
+      if (adminDoc.exists || supervisorDoc.exists || isEmailAdmin) {
+        (req as any).user = decodedToken;
+        return next();
+      }
+      return res.status(403).json({ error: 'عذراً، لا تملك صلاحيات مسؤول النظام' });
+    } catch (err) {
+      return res.status(401).json({ error: 'جلسة العمل غير صالحة أو انتهت مدتها' });
+    }
+  };
+
+  // 📡 Web Push Notification Dispatcher (Delivers to phones even when browser is closed) 📡
+  async function dispatchPushNotifications(payload: {
+    title: string;
+    body: string;
+    url?: string;
+    icon?: string;
+    badge?: string;
+    targetGroup?: string;
+    targetArea?: string;
+    targetCategory?: string;
+  }) {
+    const admin = getAdminApp();
+    if (!admin) return { sent: 0, failed: 0 };
+    const db = getAdminFirestore(admin);
+
+    const pushPayload = JSON.stringify({
+      title: payload.title,
+      body: payload.body,
+      message: payload.body,
+      url: payload.url || '/notifications',
+      link: payload.url || '/notifications',
+      icon: payload.icon || '/favicon.jpg',
+      badge: payload.badge || '/favicon.jpg',
+      timestamp: Date.now()
+    });
+
+    let sentCount = 0;
+    let failCount = 0;
+
+    // 1. Send via standard W3C Web Push Protocol to all subscribed browsers and PWAs
+    try {
+      const subscriptionsSnap = await db.collection('pushSubscriptions').get();
+      const deletePromises: Promise<any>[] = [];
+
+      const sendPromises = subscriptionsSnap.docs.map(async (docSnap) => {
+        const data = docSnap.data();
+        const sub = data.subscription || (data.endpoint && data.keys ? { endpoint: data.endpoint, keys: data.keys } : null);
+        if (!sub || !sub.endpoint) return;
+
+        // Role filtering if specific audience targeted
+        if (payload.targetGroup && payload.targetGroup !== 'all') {
+          if (data.role && data.role !== payload.targetGroup && data.userId !== payload.targetGroup) {
+            return;
+          }
+        }
+
+        try {
+          await webpush.sendNotification(sub, pushPayload, {
+            TTL: 259200, // 72 hours delivery queue for offline / turned-off devices
+            urgency: 'high'
+          });
+          sentCount++;
+        } catch (pushErr: any) {
+          failCount++;
+          // 404 or 410 indicates expired or uninstalled push subscription
+          if (pushErr.statusCode === 404 || pushErr.statusCode === 410) {
+            deletePromises.push(docSnap.ref.delete().catch(() => {}));
+          }
+        }
+      });
+
+      await Promise.all(sendPromises);
+      if (deletePromises.length > 0) {
+        await Promise.all(deletePromises);
+      }
+    } catch (err) {
+      console.error('Error in dispatchPushNotifications (webpush):', err);
+    }
+
+    // 2. Multicast via FCM if deviceTokens are present
+    try {
+      const tokensSnap = await db.collection('deviceTokens').get();
+      const fcmTokens: string[] = [];
+      tokensSnap.forEach(docSnap => {
+        const d = docSnap.data();
+        if (d.token && typeof d.token === 'string' && d.token.length > 50 && !d.token.startsWith('web_device_') && !d.token.startsWith('http')) {
+          fcmTokens.push(d.token);
+        }
+      });
+
+      if (fcmTokens.length > 0 && admin.messaging) {
+        try {
+          const messaging = admin.messaging();
+          await messaging.sendEachForMulticast({
+            tokens: fcmTokens.slice(0, 500),
+            notification: {
+              title: payload.title,
+              body: payload.body,
+              imageUrl: payload.icon || 'https://shofibirbid.site/favicon.jpg'
+            },
+            webpush: {
+              notification: {
+                title: payload.title,
+                body: payload.body,
+                icon: '/favicon.jpg',
+                badge: '/favicon.jpg'
+              },
+              fcmOptions: {
+                link: payload.url || '/notifications'
+              }
+            }
+          });
+        } catch (fcmErr) {
+          console.warn('FCM multicast warning:', fcmErr);
+        }
+      }
+    } catch (fcmQueryErr) {
+      console.warn('FCM query warning:', fcmQueryErr);
+    }
+
+    return { sent: sentCount, failed: failCount };
+  }
+
+  // 🔑 Get VAPID Public Key for Web Push Subscriptions 🔑
+  app.get("/api/push/vapid-public-key", (req, res) => {
+    res.json({ publicKey: VAPID_PUBLIC_KEY });
+  });
+
+  // 📲 Register / Sync Push Subscription (Standard W3C Web Push) 📲
+  app.post("/api/push/subscribe", express.json({ limit: "1mb" }), async (req, res) => {
+    try {
+      const { subscription, userId, platform, userAgent, role } = req.body;
+      if (!subscription || !subscription.endpoint || !subscription.keys) {
+        return res.status(400).json({ error: 'بيانات الاشتراك غير مكتملة' });
+      }
+
+      const admin = getAdminApp();
+      if (!admin) {
+        return res.status(500).json({ error: 'الفايربيس غير متصل' });
+      }
+
+      const db = getAdminFirestore(admin);
+      const subId = 'sub_' + Buffer.from(subscription.endpoint).toString('base64').replace(/[^a-zA-Z0-9_-]/g, '').slice(-40);
+
+      await db.collection('pushSubscriptions').doc(subId).set({
+        subscription,
+        endpoint: subscription.endpoint,
+        keys: subscription.keys,
+        userId: userId || 'anonymous',
+        role: role || 'user',
+        platform: platform || 'web_pwa',
+        userAgent: userAgent || req.headers['user-agent'] || '',
+        updatedAt: Date.now()
+      }, { merge: true });
+
+      // Also record in deviceTokens
+      await db.collection('deviceTokens').doc(subId).set({
+        token: subscription.endpoint,
+        type: 'web_push',
+        userId: userId || 'anonymous',
+        role: role || 'user',
+        platform: platform || 'web_pwa',
+        updatedAt: Date.now(),
+        userAgent: userAgent || req.headers['user-agent'] || ''
+      }, { merge: true });
+
+      res.json({ success: true, subId });
+    } catch (err) {
+      console.error('/api/push/subscribe Error:', err);
+      res.status(500).json({ error: 'فشل حفظ اشتراك الإشعارات' });
+    }
+  });
+
+  // 📊 Real Push Delivery & Subscriber Statistics 📊
+  app.get("/api/push/stats", verifyAdminToken, async (req, res) => {
+    try {
+      const admin = getAdminApp();
+      if (!admin) return res.status(500).json({ error: 'الفايربيس غير متصل' });
+      const db = getAdminFirestore(admin);
+
+      const [subsSnap, tokensSnap, notifsSnap, scheduledSnap] = await Promise.all([
+        db.collection('pushSubscriptions').get(),
+        db.collection('deviceTokens').get(),
+        db.collection('notifications').get(),
+        db.collection('scheduledNotifications').where('status', '==', 'pending').get().catch(() => ({ size: 0, docs: [] }))
+      ]);
+
+      let merchantsCount = 0;
+      let supervisorsCount = 0;
+      let usersCount = 0;
+
+      subsSnap.forEach(d => {
+        const data = d.data();
+        if (data.role === 'merchant') merchantsCount++;
+        else if (data.role === 'admin' || data.role === 'supervisor') supervisorsCount++;
+        else usersCount++;
+      });
+
+      res.json({
+        totalSubscriptions: subsSnap.size,
+        totalDevices: tokensSnap.size,
+        merchantsCount,
+        supervisorsCount,
+        usersCount,
+        totalSentNotifications: notifsSnap.size,
+        pendingScheduledCount: scheduledSnap.size || 0
+      });
+    } catch (err) {
+      console.error('/api/push/stats Error:', err);
+      res.status(500).json({ error: 'تعذر جلب إحصائيات الإشعارات' });
+    }
+  });
+
+  // 🎯 Send Direct Notification to Specific Single User or Merchant 🎯
+  app.post("/api/push/send-direct", verifyAdminToken, express.json({ limit: "2mb" }), async (req, res) => {
+    try {
+      const { targetUserId, targetEmail, title, body, link, badge } = req.body;
+      if (!title || !body || (!targetUserId && !targetEmail)) {
+        return res.status(400).json({ error: 'بيانات المستهدف والعنوان والمحتوى مطلوبة' });
+      }
+
+      const admin = getAdminApp();
+      if (!admin) return res.status(500).json({ error: 'الفايربيس غير متصل' });
+      const db = getAdminFirestore(admin);
+
+      // Search for user subscription
+      let targetUid = targetUserId;
+      if (!targetUid && targetEmail) {
+        try {
+          const userRecord = await getAuth(admin).getUserByEmail(targetEmail);
+          targetUid = userRecord.uid;
+        } catch {}
+      }
+
+      let sentCount = 0;
+      if (targetUid) {
+        const userSubsSnap = await db.collection('pushSubscriptions').where('userId', '==', targetUid).get();
+        const pushPayload = JSON.stringify({
+          title: sanitizeInput(title, 150),
+          body: sanitizeInput(body, 500),
+          message: sanitizeInput(body, 500),
+          url: link || '/notifications',
+          link: link || '/notifications',
+          badge: badge || 'إشعار خاص',
+          icon: '/favicon.jpg',
+          timestamp: Date.now()
+        });
+
+        const sendPromises = userSubsSnap.docs.map(async (docSnap) => {
+          const sub = docSnap.data().subscription;
+          if (sub) {
+            try {
+              await webpush.sendNotification(sub, pushPayload, { TTL: 259200, urgency: 'high' });
+              sentCount++;
+            } catch (e: any) {
+              if (e.statusCode === 404 || e.statusCode === 410) {
+                docSnap.ref.delete().catch(() => {});
+              }
+            }
+          }
+        });
+        await Promise.all(sendPromises);
+
+        // Add personal notification in database
+        await db.collection('notifications').add({
+          title: sanitizeInput(title, 150),
+          message: sanitizeInput(body, 500),
+          createdAt: new Date().toISOString(),
+          type: 'system',
+          userId: targetUid,
+          badge: badge || 'إشعار خاص',
+          link: link || '/notifications',
+          sentByAdmin: (req as any).user.uid
+        });
+      }
+
+      res.json({ success: true, sentCount, targetUid });
+    } catch (err) {
+      console.error('/api/push/send-direct Error:', err);
+      res.status(500).json({ error: 'فشل إرسال الإشعار المباشر' });
+    }
+  });
+
+  // 🧪 Send Test Web Push Notification 🧪
+  app.post("/api/push/test", express.json({ limit: "1mb" }), async (req, res) => {
+    try {
+      const { subscription } = req.body;
+      if (!subscription || !subscription.endpoint) {
+        return res.status(400).json({ error: 'بيانات الاشتراك مطلوبة' });
+      }
+
+      await webpush.sendNotification(
+        subscription,
+        JSON.stringify({
+          title: 'شو في بإربد؟',
+          body: 'تم تفعيل الإشعارات الفورية بنجاح على هاتفك.',
+          url: '/notifications',
+          icon: '/favicon.jpg',
+          badge: '/favicon.jpg',
+          timestamp: Date.now()
+        }),
+        { TTL: 60, urgency: 'high' }
+      );
+
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error('/api/push/test Error:', err);
+      res.status(500).json({ error: err.message || 'فشل إرسال الإشعار التجريبي' });
+    }
+  });
+
+  // ⏰ Schedule Notification Endpoint ⏰
+  app.post("/api/queue/schedule", apiLimiter, verifyAdminToken, express.json({ limit: "5mb" }), async (req, res) => {
+    try {
+      const { title, body, scheduledTimestamp, targetGroup, extraData, badge, type, link } = req.body;
+      if (!title || !body || !scheduledTimestamp) {
+        return res.status(400).json({ error: 'بيانات العنوان والوقت المجدول مطلوبة' });
+      }
+
+      const admin = getAdminApp();
+      if (!admin) return res.status(500).json({ error: 'الفايربيس غير متصل' });
+      const db = getAdminFirestore(admin);
+
+      const docRef = await db.collection('scheduledNotifications').add({
+        title: sanitizeInput(title, 150),
+        body: sanitizeInput(body, 500),
+        type: type || 'general',
+        badge: badge || 'إشعار مجدول',
+        link: link || '/notifications',
+        targetGroup: targetGroup || 'all',
+        scheduledTimestamp: Number(scheduledTimestamp),
+        scheduledDateStr: new Date(Number(scheduledTimestamp)).toLocaleString('ar-JO'),
+        extraData: extraData || {},
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+        createdBy: (req as any).user.email || (req as any).user.uid
+      });
+
+      res.json({ success: true, id: docRef.id });
+    } catch (err) {
+      console.error('/api/queue/schedule Error:', err);
+      res.status(500).json({ error: 'فشل جدولة الإشعار' });
+    }
+  });
+
+  // 📬 Background Queue Endpoint: Asynchronous Broadcast Notification Processor 📬
+  app.post("/api/queue/broadcast", apiLimiter, verifyAdminToken, express.json({ limit: "5mb" }), async (req, res) => {
+    try {
+      const { title, body, targetGroup, extraData } = req.body;
+      if (!title || !body) {
+        return res.status(400).json({ error: 'عنوان ومحتوى الإشعار مطلوبة' });
+      }
+
+      const admin = getAdminApp();
+      if (!admin) {
+        return res.status(500).json({ error: 'الفايربيس غير متصل بالخادم' });
+      }
+
+      const db = getAdminFirestore(admin);
+      
+      // Respond immediately to the Admin frontend so the UI never blocks!
+      res.status(202).json({
+        success: true,
+        message: 'تمت إضافة طلب البث الجماعي للإشعارات إلى طابور المعالجة بالخلفية بنجاح.',
+        status: 'processing'
+      });
+
+      // Execute asynchronously in background queue worker thread
+      setImmediate(async () => {
+        try {
+          // 1. Dispatch real Web Push notifications to devices in background
+          const pushResult = await dispatchPushNotifications({
+            title: sanitizeInput(title, 150),
+            body: sanitizeInput(body, 500),
+            url: extraData?.link || '/notifications',
+            icon: '/favicon.jpg',
+            badge: '/favicon.jpg',
+            targetGroup: targetGroup || 'all',
+            targetArea: extraData?.targetArea,
+            targetCategory: extraData?.targetCategory
+          });
+
+          // 2. Write app notification record to Firestore
+          await db.collection('notifications').add({
+            title: sanitizeInput(title, 150),
+            message: sanitizeInput(body, 500),
+            createdAt: new Date().toISOString(),
+            type: targetGroup || 'general',
+            extraData: extraData || {},
+            sentByAdmin: (req as any).user.uid
+          });
+
+          // 3. Audit log the background job completion
+          await db.collection('auditLogs').add({
+            action: 'BROADCAST_NOTIFICATION_PROCESSED',
+            performedBy: (req as any).user.email || (req as any).user.uid,
+            details: `تم معالجة بث جماعي وإرسال ${pushResult.sent} إشعار فوري للأجهزة بالخلفية بنجاح.`,
+            timestamp: new Date().toISOString(),
+            ip: req.ip
+          });
+          console.log(`[Queue Worker] Broadcast notification job finished. Sent to ${pushResult.sent} devices.`);
+        } catch (workerErr) {
+          console.error('[Queue Worker] Error in broadcast background task:', workerErr);
+        }
+      });
+    } catch (err) {
+      console.error('/api/queue/broadcast Error:', err);
+      return res.status(500).json({ error: 'حدث خطأ في جدولة الإشعار' });
+    }
+  });
+
+  // ⏰ Periodic Worker: Check & Dispatch Due Scheduled Notifications ⏰
+  setInterval(async () => {
+    try {
+      const admin = getAdminApp();
+      if (!admin) return;
+      const db = getAdminFirestore(admin);
+      const now = Date.now();
+
+      const dueSnap = await db.collection('scheduledNotifications')
+        .where('status', '==', 'pending')
+        .where('scheduledTimestamp', '<=', now)
+        .limit(10)
+        .get();
+
+      if (dueSnap.empty) return;
+
+      for (const docSnap of dueSnap.docs) {
+        const item = docSnap.data();
+        await docSnap.ref.update({ status: 'processing' });
+
+        const pushResult = await dispatchPushNotifications({
+          title: item.title,
+          body: item.body,
+          url: item.link || '/notifications',
+          icon: '/favicon.jpg',
+          badge: '/favicon.jpg',
+          targetGroup: item.targetGroup || 'all'
+        });
+
+        await db.collection('notifications').add({
+          title: item.title,
+          message: item.body,
+          createdAt: new Date().toISOString(),
+          type: item.type || 'general',
+          badge: item.badge || 'إشعار مجدول',
+          link: item.link || '/notifications',
+          isScheduled: true
+        });
+
+        await docSnap.ref.update({
+          status: 'sent',
+          executedAt: new Date().toISOString(),
+          deliveredCount: pushResult.sent
+        });
+      }
+    } catch (schedErr) {
+      // Silent error handling for background scheduled worker
+    }
+  }, 60000);
+
+  // 📜 Background Queue Endpoint: Asynchronous Audit Logging 📜
+  app.post("/api/queue/audit-log", apiLimiter, express.json({ limit: "1mb" }), async (req, res) => {
+    try {
+      const { action, performedBy, details } = req.body;
+      const admin = getAdminApp();
+      if (admin) {
+        const db = getAdminFirestore(admin);
+        // Fire-and-forget write to Firestore
+        db.collection('auditLogs').add({
+          action: sanitizeInput(action, 100),
+          performedBy: sanitizeInput(performedBy, 100) || 'system',
+          details: sanitizeInput(details, 500),
+          timestamp: new Date().toISOString(),
+          ip: req.ip
+        }).catch(err => console.error('[Async Audit Log Error]:', err));
+      }
+      return res.status(200).json({ queued: true });
+    } catch (err) {
+      return res.status(200).json({ queued: false });
+    }
+  });
+
+  // 🧾 Background Queue Endpoint: Asynchronous Order Receipt Generation & Stock Sync 🧾
+  app.post("/api/queue/process-order-receipt", apiLimiter, express.json({ limit: "2mb" }), async (req, res) => {
+    try {
+      const { orderId, businessId, totalPrice, itemsCount } = req.body;
+      if (!orderId || !businessId) {
+        return res.status(400).json({ error: 'بيانات الطلب غير مكتملة' });
+      }
+
+      res.status(202).json({ success: true, message: 'جاري معالجة الفاتورة وتحديث الإحصائيات بالخلفية.' });
+
+      setImmediate(async () => {
+        try {
+          const admin = getAdminApp();
+          if (!admin) return;
+          const db = getAdminFirestore(admin);
+
+          // Update business total order metrics in background
+          const bizRef = db.collection('businesses').doc(businessId);
+          await db.runTransaction(async (transaction) => {
+            const bizDoc = await transaction.get(bizRef);
+            if (bizDoc.exists) {
+              const currentOrders = bizDoc.data()?.totalOrders || 0;
+              const currentRevenue = bizDoc.data()?.totalRevenue || 0;
+              transaction.update(bizRef, {
+                totalOrders: currentOrders + 1,
+                totalRevenue: currentRevenue + (Number(totalPrice) || 0)
+              });
+            }
+          });
+          console.log(`[Queue Worker] Order ${orderId} receipt processed and business analytics updated.`);
+        } catch (err) {
+          console.error('[Queue Worker] Order receipt processing error:', err);
+        }
+      });
+    } catch (err) {
+      return res.status(500).json({ error: 'خطأ في المعالجة' });
+    }
+  });
+
+  // Vite middleware for development
+  let vite: any = null;
+  if (process.env.NODE_ENV !== "production") {
+    vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: "spa",
+    });
+    app.use(vite.middlewares);
+  } else {
+    const distPath = path.join(process.cwd(), 'dist');
+    app.use(express.static(distPath));
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+  }
+
+  const server = app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+
+  server.on('error', (err: any) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`Port ${PORT} is already in use.`);
+    } else {
+      console.error('Server error:', err);
+    }
+    process.exit(1);
+  });
+
+  const cleanup = async () => {
+    if (vite) {
+      try {
+        await vite.close();
+      } catch {
+        // ignore
+      }
+    }
+    server.close(() => {
+      process.exit(0);
+    });
+  };
+
+  process.on('SIGTERM', cleanup);
+  process.on('SIGINT', cleanup);
+}
+
+startServer();

@@ -1,0 +1,438 @@
+@import url('https://fonts.googleapis.com/css2?family=Alexandria:wght@300;400;500;600;700;800;900&family=Almarai:wght@300;400;700;800&family=Amiri:ital,wght@0,400;0,700;1,400;1,700&family=Cairo:wght@400;600;700;800;900&family=Changa:wght@400;600;700;800&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;600;700;800;900&family=Tajawal:wght@400;500;700;800;900&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Alexandria', ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+}
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    @apply font-sans antialiased text-[#2d2a26] bg-[#fdfcfb];
+    font-variant-numeric: lining-nums tabular-nums;
+  }
+  
+  /* Force English/Western digits across all fonts */
+  * {
+    font-feature-settings: "lnum" 1, "tnum" 1, "kern" 1;
+  }
+  
+  /* Mobile input sizing prevention of auto-zoom on iOS */
+  @media (max-width: 768px) {
+    input, select, textarea {
+      font-size: 16px !important;
+    }
+  }
+
+  /* Prevent browser-injected search cancel buttons */
+  input[type="search"]::-webkit-search-cancel-button,
+  input[type="search"]::-webkit-search-decoration,
+  input[type="search"]::-webkit-search-results-button,
+  input[type="search"]::-webkit-search-results-decoration,
+  input::-webkit-search-cancel-button {
+    -webkit-appearance: none !important;
+    appearance: none !important;
+    display: none !important;
+  }
+
+  /* Custom Scrollbar */
+  html, body {
+    scrollbar-width: thin;
+    scrollbar-color: #d6d3d1 transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-stone-300 rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-stone-400;
+  }
+  
+  /* Selection */
+  ::selection {
+    @apply bg-[#1a4d2e]/20 text-[#1a4d2e];
+  }
+}
+
+/* Scrollbar Hide Utility for Horizontal Sliders */
+.scrollbar-hide {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+  touch-action: pan-x pan-y !important;
+  -webkit-overflow-scrolling: touch !important;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* Category Square Button Marquee Ticker Loop (RTL Exact Math) */
+@keyframes marquee-exact-rtl {
+  0%, 25% {
+    transform: translateX(var(--marquee-start, 0px));
+  }
+  65%, 85% {
+    transform: translateX(var(--marquee-end, 0px));
+  }
+  100% {
+    transform: translateX(var(--marquee-start, 0px));
+  }
+}
+
+.animate-marquee-exact {
+  display: inline-block;
+  white-space: nowrap;
+  animation: marquee-exact-rtl 5s ease-in-out infinite;
+}
+
+/* Waving Hand Emoji Animation */
+@keyframes wave-hand {
+  0% { transform: rotate(0deg); }
+  15% { transform: rotate(14deg); }
+  30% { transform: rotate(-8deg); }
+  45% { transform: rotate(14deg); }
+  60% { transform: rotate(-4deg); }
+  75% { transform: rotate(10deg); }
+  100% { transform: rotate(0deg); }
+}
+
+.animate-wave-hand {
+  display: inline-block;
+  transform-origin: 70% 70%;
+  animation: wave-hand 1.8s infinite;
+}
+
+/* 
+  =============================================
+  GLOBAL MOBILE BOTTOM SHEET OVERRIDE
+  Transforms all standard popup modals into
+  mobile-friendly bottom sheets on screens < 640px.
+  =============================================
+*/
+@media (max-width: 639px) {
+  /* Target the overlay backdrop (excluding dedicated fullscreen/centered modals like ImageCropModal) */
+  div[class*="fixed"][class*="inset-0"][class*="z-"][class*="flex"]:not([data-no-bottom-sheet]) {
+    align-items: flex-end !important;
+    padding: 0 !important;
+    z-index: 9999999 !important; /* Ensure it's above everything including bottom navbar */
+  }
+  
+  /* Target the actual modal content container */
+  div[class*="fixed"][class*="inset-0"][class*="z-"][class*="flex"]:not([data-no-bottom-sheet]) > div:not([class*="absolute"]):not([class*="backdrop"]):not([class*="fixed"]):last-child,
+  div[class*="fixed"][class*="inset-0"][class*="z-"][class*="flex"]:not([data-no-bottom-sheet]) > form:last-child {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 90vh !important;
+    border-bottom-left-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+    border-top-left-radius: 28px !important;
+    border-top-right-radius: 28px !important;
+    margin: 0 !important;
+    margin-top: auto !important; /* Force it to bottom */
+    animation: mobileBottomSheetSlideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    overflow-y: auto !important;
+    /* Optional: Hide scrollbars for cleaner bottom sheet look on mobile */
+    scrollbar-width: none !important;
+  }
+  
+  div[class*="fixed"][class*="inset-0"][class*="z-"][class*="flex"]:not([data-no-bottom-sheet]) > div:not([class*="absolute"]):not([class*="backdrop"]):not([class*="fixed"]):last-child::-webkit-scrollbar,
+  div[class*="fixed"][class*="inset-0"][class*="z-"][class*="flex"]:not([data-no-bottom-sheet]) > form:last-child::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  @keyframes mobileBottomSheetSlideUp {
+    0% {
+      transform: translateY(100%);
+    }
+    100% {
+      transform: translateY(0);
+    }
+  }
+}
+
+/* Image Cropper Area & Handle Styles */
+.custom-crop-area {
+  border: 2px solid rgba(255, 255, 255, 0.92) !important;
+  box-shadow: 0 0 0 9999em rgba(0, 0, 0, 0.78), 0 0 16px rgba(16, 185, 129, 0.4) !important;
+  box-sizing: border-box !important;
+}
+
+.custom-crop-area:hover {
+  border-color: #10b981 !important;
+}
+
+.crop-handle {
+  position: absolute;
+  background-color: #ffffff;
+  border: 2.5px solid #10b981;
+  border-radius: 4px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6), 0 0 8px rgba(16, 185, 129, 0.5);
+  z-index: 100;
+  pointer-events: auto;
+  transition: transform 0.15s ease, background-color 0.15s ease;
+}
+
+.crop-handle:hover, .crop-handle:active {
+  transform: scale(1.25);
+  background-color: #d1fae5;
+  border-color: #059669;
+}
+
+.crop-handle-corner {
+  width: 14px;
+  height: 14px;
+}
+
+.crop-handle-tl {
+  top: -7px;
+  left: -7px;
+  cursor: nwse-resize;
+}
+
+.crop-handle-tr {
+  top: -7px;
+  right: -7px;
+  cursor: nesw-resize;
+}
+
+.crop-handle-bl {
+  bottom: -7px;
+  left: -7px;
+  cursor: nesw-resize;
+}
+
+.crop-handle-br {
+  bottom: -7px;
+  right: -7px;
+  cursor: nwse-resize;
+}
+
+.crop-handle-edge-h {
+  width: 28px;
+  height: 8px;
+  border-radius: 4px;
+  cursor: ns-resize;
+}
+
+.crop-handle-t {
+  top: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.crop-handle-t:hover, .crop-handle-t:active {
+  transform: translateX(-50%) scale(1.2);
+}
+
+.crop-handle-b {
+  bottom: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.crop-handle-b:hover, .crop-handle-b:active {
+  transform: translateX(-50%) scale(1.2);
+}
+
+.crop-handle-edge-v {
+  width: 8px;
+  height: 28px;
+  border-radius: 4px;
+  cursor: ew-resize;
+}
+
+.crop-handle-l {
+  left: -4px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.crop-handle-l:hover, .crop-handle-l:active {
+  transform: translateY(-50%) scale(1.2);
+}
+
+.crop-handle-r {
+  right: -4px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.crop-handle-r:hover, .crop-handle-r:active {
+  transform: translateY(-50%) scale(1.2);
+}
+
+/* Scanner Shake & Laser Animation Effects */
+@keyframes scanner-shake {
+  0%, 100% { transform: translateX(0); }
+  15%, 45%, 75% { transform: translateX(-10px) rotate(-0.5deg); }
+  30%, 60%, 90% { transform: translateX(10px) rotate(0.5deg); }
+}
+
+.animate-scanner-shake {
+  animation: scanner-shake 0.65s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+@keyframes scanner-pulse-laser {
+  0% { top: 10%; opacity: 0.7; }
+  50% { top: 85%; opacity: 1; }
+  100% { top: 10%; opacity: 0.7; }
+}
+
+.animate-laser-scan {
+  animation: scanner-pulse-laser 2.2s ease-in-out infinite;
+}
+
+/* Hide any library-generated shaded regions, inner borders, and white corners for html5-qrcode */
+#qr-shaded-region,
+[id$="__scan_region"] > div:not(video),
+[id*="qr-reader-container"] > div:not(video) {
+  display: none !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+#merchant-qr-reader-full video,
+#qr-reader-container video {
+  object-fit: cover !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* 
+  ==============================================================
+  TABLET STABILIZATION ENGINE (Across All Zoom Levels: 90%, 100%, 110%+)
+  Guarantees that tablet layouts, side menu drawer, command strip,
+  grids, and header stay identical to the 100% zoom tablet design.
+  Active ONLY in tablet mode (never affects phone or desktop).
+  ==============================================================
+*/
+html.tablet-mode header {
+  height: 72px !important;
+  top: 0 !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  transform: none !important;
+}
+
+/* Tablet Side Menu Drawer Layout Lock */
+html.tablet-mode [class*="fixed"][class*="inset-x-0"][class*="bottom-0"][class*="shadow-2xl"] {
+  top: 72px !important;
+  z-index: 40 !important;
+  background-color: #f8f7f3 !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Tablet drawer content aligns to top with standard tablet padding */
+html.tablet-mode [class*="overflow-y-auto"][class*="min-h-full"] {
+  justify-content: flex-start !important;
+  padding-bottom: 5rem !important;
+}
+
+/* Tablet drawer user profile card */
+html.tablet-mode [class*="overflow-y-auto"][class*="min-h-full"] > div:first-child {
+  margin-top: 0 !important;
+}
+html.tablet-mode [class*="overflow-y-auto"][class*="min-h-full"] > div:first-child > div {
+  border-radius: 1rem !important;
+}
+
+/* Tablet command strip tiles (Section 2) */
+html.tablet-mode [class*="overflow-y-auto"][class*="min-h-full"] .grid-cols-4 > button,
+html.tablet-mode [class*="overflow-y-auto"][class*="min-h-full"] .grid-cols-4 > a {
+  border-radius: 1rem !important;
+  aspect-ratio: auto !important;
+}
+
+html.tablet-mode [class*="overflow-y-auto"][class*="min-h-full"] .grid-cols-4 > button > div,
+html.tablet-mode [class*="overflow-y-auto"][class*="min-h-full"] .grid-cols-4 > a > div {
+  display: flex !important;
+  width: 2.25rem !important;
+  height: 2.25rem !important;
+  border-radius: 0.75rem !important;
+  background-color: #ecfdf5 !important;
+  color: #1a4d2e !important;
+}
+
+html.tablet-mode [class*="overflow-y-auto"][class*="min-h-full"] .grid-cols-4 > button:last-of-type > div {
+  background-color: rgba(16, 185, 129, 0.2) !important;
+  color: #34d399 !important;
+}
+
+/* Hide mobile-only circular buttons in Section 2 on tablet */
+html.tablet-mode [class*="overflow-y-auto"][class*="min-h-full"] .grid-cols-4 > button[class*="aspect-square"][class*="col-span-1"] {
+  display: none !important;
+}
+
+/* Show tablet merchant actions (Section 3) */
+html.tablet-mode [class*="overflow-y-auto"][class*="min-h-full"] > div.hidden.md\:block,
+html.tablet-mode [class*="overflow-y-auto"][class*="min-h-full"] > div[class*="hidden"][class*="md:block"] {
+  display: block !important;
+}
+
+/* Unconditionally hide mobile bottom navigation bar in tablet mode */
+html.tablet-mode nav[class*="bottom-4"],
+html.tablet-mode div[class*="fixed"][class*="bottom-4"][class*="pointer-events-none"],
+html.tablet-mode div[class*="fixed"][class*="bottom-[78px]"],
+html.tablet-mode [class*="md:hidden"][class*="bottom-4"] {
+  display: none !important;
+}
+
+/* Maintain tablet responsive columns & elements across pages */
+html.tablet-mode .grid.grid-cols-1.md\:grid-cols-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+
+html.tablet-mode .grid.grid-cols-1.sm\:grid-cols-2.md\:grid-cols-3,
+html.tablet-mode .grid.grid-cols-1.md\:grid-cols-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+}
+
+html.tablet-mode .hidden.md\:block {
+  display: block !important;
+}
+
+html.tablet-mode .hidden.md\:flex {
+  display: flex !important;
+}
+
+html.tablet-mode .hidden.md\:inline {
+  display: inline !important;
+}
+
+html.tablet-mode .hidden.md\:grid {
+  display: grid !important;
+}
+
+html.tablet-mode .md\:hidden:not(header *) {
+  display: none !important;
+}
+
+/* Hide Leaflet Attribution */
+.leaflet-control-attribution,
+.leaflet-control-container .leaflet-control-attribution,
+.leaflet-bottom.leaflet-right .leaflet-control-attribution,
+.leaflet-container .leaflet-control-attribution {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  height: 0 !important;
+  width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  font-size: 0 !important;
+  line-height: 0 !important;
+}
+
+

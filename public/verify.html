@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>تأكيد الحساب - شو في بإربد؟</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            cairo: ['Cairo', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              dark: '#1a4d2e',
+              primary: '#327d4c',
+              light: '#f5f7f5',
+              accent: '#d4af37'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      font-family: 'Cairo', sans-serif;
+      background-color: #fcfbf9;
+    }
+    .gradient-bg {
+      background: radial-gradient(circle at top, #eaf2eb 0%, #fcfbf9 100%);
+    }
+    /* Animated checkmark custom styles */
+    .checkmark {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      display: block;
+      stroke-width: 2;
+      stroke: #327d4c;
+      stroke-miterlimit: 10;
+      box-shadow: inset 0px 0px 0px #327d4c;
+      animation: fill .4s ease-in-out .4s forwards, scale .3s ease-in-out .9s both;
+      position: relative;
+      margin: 0 auto;
+    }
+    .checkmark__circle {
+      stroke-dasharray: 166;
+      stroke-dashoffset: 166;
+      stroke-width: 2;
+      stroke-miterlimit: 10;
+      stroke: #327d4c;
+      fill: none;
+      animation: stroke 0.6s cubic-bezier(0.65, 0, 0.45, 1) forwards;
+    }
+    .checkmark__check {
+      transform-origin: 50% 50%;
+      stroke-dasharray: 48;
+      stroke-dashoffset: 48;
+      animation: stroke 0.3s cubic-bezier(0.65, 0, 0.45, 1) 0.8s forwards;
+    }
+    @keyframes stroke {
+      100% { stroke-dashoffset: 0; }
+    }
+    @keyframes scale {
+      0%, 100% { transform: none; }
+      50% { transform: scale3d(1.1, 1.1, 1); }
+    }
+    @keyframes fill {
+      100% { box-shadow: inset 0px 0px 0px 40px #f5f7f5; }
+    }
+  </style>
+</head>
+<body class="gradient-bg min-h-screen flex items-center justify-center p-4">
+
+  <div class="w-full max-w-md bg-white rounded-3xl border border-stone-100 p-8 text-center shadow-xl shadow-stone-100/40 relative overflow-hidden">
+    <!-- Top Decorative Line -->
+    <div class="absolute top-0 left-0 right-0 h-1.5 bg-brand-dark"></div>
+
+    <!-- Header / Brand -->
+    <div class="mb-8">
+      <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-brand-light text-3xl mb-4 shadow-inner">
+        🏛️
+      </div>
+      <h1 class="text-2xl font-black text-brand-dark">شو في بإربد؟</h1>
+      <p class="text-sm text-stone-400 mt-1">دليلك والمنصة الشاملة لمدينة إربد</p>
+    </div>
+
+    <!-- Loading State -->
+    <div id="state-loading" class="space-y-6">
+      <div class="flex justify-center items-center py-6">
+        <div class="animate-spin rounded-full h-12 w-12 border-4 border-brand-light border-t-brand-primary"></div>
+      </div>
+      <div class="space-y-2">
+        <h2 class="text-lg font-bold text-stone-700">جاري التحقق من حسابك...</h2>
+        <p class="text-sm text-stone-400">يرجى الانتظار لحظة بينما نقوم بتأكيد بريدك الإلكتروني.</p>
+      </div>
+    </div>
+
+    <!-- Success State -->
+    <div id="state-success" class="hidden space-y-6">
+      <div class="py-4">
+        <svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
+          <circle class="checkmark__circle" cx="26" cy="26" r="25" fill="none"/>
+          <path class="checkmark__check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/>
+        </svg>
+      </div>
+      <div class="space-y-2">
+        <h2 class="text-xl font-bold text-brand-dark">تم تأكيد الحساب بنجاح! 🎉</h2>
+        <p class="text-sm text-stone-500">شكراً لك، بريدك الإلكتروني أصبح مؤكداً الآن.</p>
+        <p id="redirect-timer" class="text-xs text-brand-primary font-semibold mt-2">جاري تحويلك إلى صفحة تسجيل الدخول تلقائياً...</p>
+      </div>
+      <div class="pt-4">
+        <a id="btn-login-success" href="https://irbid-guide.vercel.app/login?verified=true" 
+           class="inline-flex w-full items-center justify-center bg-brand-dark hover:bg-brand-primary text-white font-bold py-3.5 px-6 rounded-2xl shadow-lg shadow-brand-dark/10 transition duration-300 gap-2">
+          الدخول للحساب مباشرة
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+          </svg>
+        </a>
+      </div>
+    </div>
+
+    <!-- Error State -->
+    <div id="state-error" class="hidden space-y-6">
+      <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-50 text-red-500 text-3xl py-4">
+        ⚠️
+      </div>
+      <div class="space-y-2">
+        <h2 class="text-lg font-bold text-red-600">عذراً، الرابط غير صالح</h2>
+        <p id="error-message" class="text-sm text-stone-500 leading-relaxed">قد يكون الرابط قد انتهت صلاحيته أو تم استخدامه مسبقاً.</p>
+      </div>
+      <div class="pt-4">
+        <a href="https://irbid-guide.vercel.app" 
+           class="inline-flex w-full items-center justify-center bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold py-3.5 px-6 rounded-2xl transition duration-300">
+          العودة للموقع الرئيسي
+        </a>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="mt-8 pt-6 border-t border-stone-100 text-xs text-stone-400">
+      منصة شو في بإربد؟ &copy; 2026
+    </div>
+  </div>
+
+  <script>
+    // Extract query parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const mode = urlParams.get('mode');
+    const oobCode = urlParams.get('oobCode');
+    const apiKey = urlParams.get('apiKey') || 'AIzaSyDDswaCceyey9mjAC7ERlkPQ0dIkNsbquw';
+    const continueUrl = urlParams.get('continueUrl') || 'https://irbid-guide.vercel.app/login?verified=true';
+
+    const stateLoading = document.getElementById('state-loading');
+    const stateSuccess = document.getElementById('state-success');
+    const stateError = document.getElementById('state-error');
+    const errorMessage = document.getElementById('error-message');
+    const btnLoginSuccess = document.getElementById('btn-login-success');
+
+    if (continueUrl) {
+      let targetUrl = continueUrl;
+      try {
+        const parsed = new URL(continueUrl);
+        parsed.searchParams.set('verified', 'true');
+        targetUrl = parsed.toString();
+      } catch (e) {}
+      btnLoginSuccess.setAttribute('href', targetUrl);
+    }
+
+    function showState(state) {
+      stateLoading.classList.add('hidden');
+      stateSuccess.classList.add('hidden');
+      stateError.classList.add('hidden');
+      
+      if (state === 'success') {
+        stateSuccess.classList.remove('hidden');
+      } else if (state === 'error') {
+        stateError.classList.remove('hidden');
+      } else {
+        stateLoading.classList.remove('hidden');
+      }
+    }
+
+    async function verifyEmail() {
+      if (!oobCode) {
+        showState('error');
+        errorMessage.innerText = 'شفرة الأمان (oobCode) مفقودة في الرابط. يرجى التأكد من الضغط على الرابط بالكامل.';
+        return;
+      }
+
+      try {
+        const response = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:update?key=${apiKey}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ oobCode: oobCode })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          showState('success');
+          
+          let seconds = 3;
+          const timerText = document.getElementById('redirect-timer');
+          const interval = setInterval(() => {
+            seconds--;
+            if (seconds <= 0) {
+              clearInterval(interval);
+              window.location.href = btnLoginSuccess.getAttribute('href');
+            } else {
+              timerText.innerText = `جاري تحويلك تلقائياً خلال ${seconds} ثوانٍ...`;
+            }
+          }, 1000);
+
+        } else {
+          showState('error');
+          if (data.error && data.error.message === 'INVALID_OOB_CODE') {
+            errorMessage.innerText = 'شفرة الأمان غير صالحة أو انتهت صلاحيتها. يرجى طلب رابط تفعيل جديد من صفحة تسجيل الدخول.';
+          } else {
+            errorMessage.innerText = data.error?.message || 'فشل التحقق من البريد الإلكتروني. يرجى المحاولة لاحقاً.';
+          }
+        }
+      } catch (err) {
+        showState('error');
+        errorMessage.innerText = 'تعذر الاتصال بخوادم التحقق. يرجى فحص الاتصال بالإنترنت والمحاولة مجدداً.';
+      }
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      verifyEmail();
+    });
+  </script>
+</body>
+</html>
